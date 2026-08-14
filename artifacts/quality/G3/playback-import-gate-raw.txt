@@ -1,0 +1,15 @@
+G3 playback hook import isolation gate
+
+$ bun tests/foundry-transaction.test.ts
+foundry transaction contracts passed
+exit 0
+
+$ bun tests/g3-animation-clock.test.ts
+ok - advances at actual RAF cadence without a policy frame budget
+ok - fallback waits for the measured genuine-stall threshold
+ok - a fallback and RAF at the same timestamp advance once
+ok - the active driver reads the latest callback without restarting
+ok - repeated RAFs keep one RAF and one watchdog pending
+ok - stop during an advance callback does not schedule another RAF
+ok - stop cancels both RAF and fallback timer
+exit 0

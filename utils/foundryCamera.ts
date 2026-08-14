@@ -110,6 +110,26 @@ export const projectFoundryOverlayPoint = (
   };
 };
 
+/** Keep a projected pointer affordance inside the clipped overlay surface. */
+export const clampFoundryOverlayPoint = (
+  point: Point | undefined,
+  size: FoundryOverlaySize = FOUNDRY_OVERLAY_SIZE,
+  padding = 12,
+): Point | undefined => {
+  if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y))
+    return undefined;
+  const width = Math.max(1, size.width);
+  const height = Math.max(1, size.height);
+  const inset = Math.min(
+    Math.max(0, Number.isFinite(padding) ? padding : 0),
+    Math.min(width, height) / 2,
+  );
+  return {
+    x: Math.min(width - inset, Math.max(inset, point.x)),
+    y: Math.min(height - inset, Math.max(inset, point.y)),
+  };
+};
+
 export const unprojectFoundryOverlayPoint = (
   point: Point,
   camera: FoundryCamera,

@@ -1,0 +1,60 @@
+$ bun tests/g3-foundry-render-submission.test.ts
+G3 Foundry render submission contract passed
+exit: 0
+
+$ bun tests/g3-frame-commit-queue.test.ts
+G3 frame commit queue contracts passed
+exit: 0
+
+$ bun tests/g3-foundry-retained-frame.test.ts
+G3 retained-frame binding contracts passed
+exit: 0
+
+$ bun tests/g3-foundry-lifecycle.test.ts
+ok - initial valid candidate attaches as the first root
+ok - valid replacement attaches before disposing the prior root
+ok - authoritative invalid replacement clears and disposes the prior root
+ok - authoritative invalid replacement with no prior root stays empty
+ok - rejected edit retains only the prior valid root
+ok - unmount removes and disposes the active root
+g3 foundry lifecycle contracts passed
+exit: 0
+
+$ bun tests/g3-camera-cadence.test.ts
+G3 camera cadence contracts passed
+exit: 0
+
+$ bunx tsc --noEmit
+exit: 0
+
+$ git diff --check
+exit: 0
+
+$ PLAYWRIGHT_PORT=5198 PLAYWRIGHT_WORKERS=3 bunx playwright test tests/browser/workflow.spec.ts --grep 'animation performance: Foundry playback stays responsive without runaway Three rebuilds|Foundry supports CAD-style 3D camera presets and drag orbit|Character tab owns separate scene objects and later tabs only render them'
+Foundry CAD camera preset and drag orbit: passed (18.7s)
+Foundry retained-root animation performance: passed (20.0s)
+Cross-stage shared scene ownership: passed (34.7s)
+3 passed (36.6s)
+exit: 0
+
+Orca production-preview render-submission measurement
+Date: 2026-08-13 America/New_York
+Page: bf4879de-b546-4574-8cd6-c085dcba0087
+Preview: http://127.0.0.1:5197/
+Terminal: term_01e001e8-c735-4093-b33e-97a8f960e70f
+Context: Orca embedded browser visible and foreground
+Duration: 35843.5 ms
+WebGL clears: 402
+RAF buckets with clears: 402
+p95 clears per RAF: 1
+max clears per RAF: 1
+clears outside wrapped RAF: 0
+dynamic structural build delta: 0
+geometry cache: 10 -> 10
+material cache: 10 -> 10
+camera result: custom, yaw 16.1, pitch 0.6, distance 20.732
+
+The first simulation-drift calculation from this probe was discarded because
+the probe began while playback was paused. A playback-only follow-up measured
+6383.9 ms, 194 observed degrees, 194.4263 expected degrees, and 0.4263 degrees
+of drift.

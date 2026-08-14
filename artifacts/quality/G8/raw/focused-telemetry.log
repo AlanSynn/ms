@@ -1,0 +1,4 @@
+Source SHA: 2adec93
+$ bun tests/study-summary-telemetry.test.ts
+study-summary-telemetry: ok
+exit 0

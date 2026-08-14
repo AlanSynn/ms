@@ -26,6 +26,12 @@ import {
   writeWorkspaceLayoutSnapshot,
 } from "../utils/projectPersistence";
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT } from "../utils/viewport";
+import {
+  recordStudyAutosaveRecovery,
+  recordStudyCommand,
+  recordStudyExport,
+  STUDY_SUMMARY_ENABLED,
+} from "../infrastructure/study-summary/browserSession";
 
 const APP_STAGE_IDS: AppStage[] = [
   "character",
@@ -107,6 +113,7 @@ export const useAppProjectCommands = ({
       serializeProject(project),
     );
     setCommandStatus(status);
+    if (STUDY_SUMMARY_ENABLED) recordStudyExport("success", "none");
   };
 
   const openLessonProject = (
@@ -135,6 +142,8 @@ export const useAppProjectCommands = ({
       !window.confirm("Discard current project and start new?")
     ) {
       setCommandStatus("Cancelled");
+      if (STUDY_SUMMARY_ENABLED)
+        recordStudyCommand("authoring", "no-op");
       return;
     }
     setPendingCharacter(null);
@@ -143,12 +152,16 @@ export const useAppProjectCommands = ({
     setCommandStatus("New project");
     setShowGettingStarted(false);
     setStage("character");
+    if (STUDY_SUMMARY_ENABLED)
+      recordStudyCommand("authoring", "accepted");
   };
 
   const openClassroomLesson = (lessonId: string) => {
     const lesson = classroomLessonById(lessonId);
     if (!lesson) {
       setCommandStatus("Lesson unavailable");
+      if (STUDY_SUMMARY_ENABLED)
+        recordStudyCommand("authoring", "rejected");
       return;
     }
     const lessonProjectBase = createLessonProject(lesson.id);
@@ -161,6 +174,8 @@ export const useAppProjectCommands = ({
     };
     openLessonProject(lessonProject, lesson.startStage);
     setCommandStatus(`${lesson.outcome ?? lessonProject.metadata.name} ready`);
+    if (STUDY_SUMMARY_ENABLED)
+      recordStudyCommand("authoring", "accepted");
   };
 
   const openSampleProject = () => {
@@ -168,6 +183,8 @@ export const useAppProjectCommands = ({
     setProject(createSampleProject(), { resetHistory: true });
     setShowGettingStarted(false);
     setStage("character");
+    if (STUDY_SUMMARY_ENABLED)
+      recordStudyCommand("authoring", "accepted");
   };
 
   const resetLesson = () => {
@@ -175,21 +192,32 @@ export const useAppProjectCommands = ({
     const resetProject = resetProjectToLessonBaseline(project);
     if (!lesson || !resetProject) {
       setCommandStatus("No lesson");
+      if (STUDY_SUMMARY_ENABLED)
+        recordStudyCommand("authoring", "no-op");
       return;
     }
     openLessonProject(resetProject, lesson.startStage);
     setCommandStatus("Lesson reset");
+    if (STUDY_SUMMARY_ENABLED)
+      recordStudyCommand("authoring", "accepted");
   };
 
   const recoverAutosave = () => {
+    const startedAt = STUDY_SUMMARY_ENABLED ? performance.now() : 0;
+    const recordRecovery = (outcome: "success" | "failure" | "no-op") => {
+      if (STUDY_SUMMARY_ENABLED)
+        recordStudyAutosaveRecovery(outcome, performance.now() - startedAt);
+    };
     try {
       const recovered = readAutosaveProject(project);
       if (recovered.status === "rejected") {
         setCommandStatus(recovered.blocker);
+        recordRecovery("failure");
         return;
       }
       if (recovered.status === "missing") {
         setCommandStatus("No autosave found");
+        recordRecovery("no-op");
         return;
       }
       const recoveredProject = recovered.project;
@@ -197,15 +225,18 @@ export const useAppProjectCommands = ({
         !projectHasUserWork(recoveredProject) && projectHasUserWork(project)
       ) {
         setCommandStatus("No autosave found");
+        recordRecovery("no-op");
         return;
       }
       setProject(recoveredProject, { resetHistory: true });
       setCommandStatus("Recovered browser autosave snapshot");
       setStage("path");
+      recordRecovery("success");
     } catch (error) {
       setCommandStatus(
         `Autosave recovery failed: ${error instanceof Error ? error.message : String(error)}`,
       );
+      recordRecovery("failure");
     }
   };
 
@@ -274,11 +305,17 @@ export const useAppProjectCommands = ({
   };
 
   const undoProject = () => {
-    setCommandStatus(undoProjectHistory() ? "Undo applied" : "Nothing to undo");
+    const applied = undoProjectHistory();
+    setCommandStatus(applied ? "Undo applied" : "Nothing to undo");
+    if (STUDY_SUMMARY_ENABLED)
+      recordStudyCommand("authoring", applied ? "accepted" : "no-op");
   };
 
   const redoProject = () => {
-    setCommandStatus(redoProjectHistory() ? "Redo applied" : "Nothing to redo");
+    const applied = redoProjectHistory();
+    setCommandStatus(applied ? "Redo applied" : "Nothing to redo");
+    if (STUDY_SUMMARY_ENABLED)
+      recordStudyCommand("authoring", applied ? "accepted" : "no-op");
   };
 
   const commandHandlers = createAppCommandHandlers({

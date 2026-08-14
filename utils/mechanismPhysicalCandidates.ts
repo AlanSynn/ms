@@ -21,11 +21,10 @@ import {
   type ConnectionSelectionSceneState,
   type MechanismConnectionHoleCandidate,
 } from "./mechanismConnectionSelections";
-import {
-  mechanismEditIsSafe,
-  resolveMechanismCandidateCommit,
-} from "./mechanismEditAuthority";
+import { mechanismEditIsSafe } from "./mechanismEditAuthority";
 import { compileMechanismGraphFabrication } from "./mechanismCompiler";
+import { normalizeGearLinkageToReference } from "./mechanismReference";
+import { validateMechanismPreviewReadiness } from "./mechanismPreviewReadiness";
 
 export type MechanismPhysicalSelectionAttempt =
   | { status: "accepted"; updates: Partial<MechanismConfig> }
@@ -49,9 +48,19 @@ const physicalFamilyUpdates = (
     rockerLength: next.at(-1) ?? next[0],
     gearTrainRadii: next,
   } satisfies Partial<MechanismConfig>;
-  return {
+  const resolved = {
     ...updates,
     groundLength: gearTrainResolvedCenterDistance({ ...mechanism, ...updates }),
+  };
+  if (mechanism.type !== "gear_linkage") return resolved;
+  const normalized = normalizeGearLinkageToReference({
+    ...mechanism,
+    ...resolved,
+  });
+  return {
+    ...resolved,
+    speed2: normalized.speed2,
+    gearRatio: normalized.gearRatio,
   };
 };
 
@@ -80,12 +89,12 @@ const compiledSelectionIsBacked = (
   );
 };
 
-export const resolveMechanismPhysicalSelectionAttempt = (
+const preflightPhysicalSelectionUpdates = (
   mechanism: MechanismConfig,
   role: ConnectionSelectionRole,
   selection: ConnectionSelection,
-  kit: PhysicalKitSettings = defaultPhysicalKit(),
-): MechanismPhysicalSelectionAttempt => {
+  kit: PhysicalKitSettings,
+): Partial<MechanismConfig> | undefined => {
   const familyUpdates = physicalFamilyUpdates(mechanism, selection);
   const prospective = { ...mechanism, ...familyUpdates };
   const updates = authorMechanismConnectionSelection(
@@ -94,21 +103,33 @@ export const resolveMechanismPhysicalSelectionAttempt = (
     selection,
     kit,
   );
-  if (updates.rejection) {
-    return { status: "rejected", blocker: MECHANISM_BINDING_BLOCKER };
-  }
+  if (updates.rejection) return undefined;
   const candidate = { ...prospective, ...updates };
-  if (!mechanismEditIsSafe(candidate, kit)) {
-    return { status: "rejected", blocker: MECHANISM_BINDING_BLOCKER };
-  }
-  const committed = resolveMechanismCandidateCommit(
+  const {
+    connectionSelectionValidation: _connectionSelectionValidation,
+    ...candidateWithoutValidation
+  } = candidate;
+  return mechanismEditIsSafe(candidateWithoutValidation, kit)
+    && validateMechanismPreviewReadiness(candidateWithoutValidation, kit).length === 0
+    && compiledSelectionIsBacked(candidateWithoutValidation, role, selection, kit)
+    ? { ...familyUpdates, ...updates }
+    : undefined;
+};
+
+export const resolveMechanismPhysicalSelectionAttempt = (
+  mechanism: MechanismConfig,
+  role: ConnectionSelectionRole,
+  selection: ConnectionSelection,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+): MechanismPhysicalSelectionAttempt => {
+  const updates = preflightPhysicalSelectionUpdates(
     mechanism,
-    candidate,
+    role,
+    selection,
     kit,
   );
-  return committed.status === "accepted" &&
-    compiledSelectionIsBacked(committed.mechanism, role, selection, kit)
-    ? { status: "accepted", updates: { ...familyUpdates, ...updates } }
+  return updates
+    ? { status: "accepted", updates }
     : { status: "rejected", blocker: MECHANISM_BINDING_BLOCKER };
 };
 
@@ -200,10 +221,10 @@ export const mechanismPhysicalConnectionCandidates = (
     kit,
   ).filter(
     (candidate) =>
-      resolveMechanismPhysicalSelectionAttempt(
+      Boolean(preflightPhysicalSelectionUpdates(
         mechanism,
         candidate.role,
         candidate.selection,
         kit,
-      ).status === "accepted",
+      )),
   );

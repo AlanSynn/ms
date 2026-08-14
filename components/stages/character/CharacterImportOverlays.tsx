@@ -1,11 +1,14 @@
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import type { AppStage, ProjectState } from "../../../types";
+import type { WebOnnxResult } from "../../../utils/webOnnxProtocol";
+import { cancelWebOnnxProcessing } from "../../../utils/webOnnx";
 import { ProgressBlock } from "./ProgressBlock";
 
 export type PendingCharacterReview = {
   project: ProjectState;
   summary: string;
   returnStage: AppStage;
+  onnxMetrics?: WebOnnxResult["metrics"];
 };
 
 const activeImportStages = new Set([
@@ -15,6 +18,14 @@ const activeImportStages = new Set([
   "extracting-parts",
   "normalizing",
   "error",
+]);
+
+const cancelableImportStages = new Set([
+  "downloading-model",
+  "loading-model",
+  "running-onnx",
+  "extracting-parts",
+  "normalizing",
 ]);
 
 const compactPackageSummary = (summary: string) =>
@@ -93,6 +104,15 @@ export const CharacterImportStatusDock = ({
         <div className="mt-3">
           <ProgressBlock project={project} />
         </div>
+        {cancelableImportStages.has(project.processing.stage) && (
+          <button
+            type="button"
+            className="btn-secondary mt-3"
+            onClick={cancelWebOnnxProcessing}
+          >
+            Cancel
+          </button>
+        )}
         {showImportChecks && (
           <details className="advanced-panel mt-6">
             <summary>Checks</summary>
@@ -131,6 +151,9 @@ export const CharacterImportReviewDialog = ({
   const pendingStats = `${pendingCharacter.project.partOrder.length} parts · ${
     Object.keys(pendingCharacter.project.skeleton?.joints ?? {}).length
   } joints`;
+  const previewUrl =
+    pendingCharacter.project.characterPackage?.sourceTextureUrl ??
+    pendingCharacter.project.parts[pendingCharacter.project.partOrder[0] ?? ""]?.textureUrl;
 
   return (
     <section
@@ -148,7 +171,35 @@ export const CharacterImportReviewDialog = ({
         <div className="character-import-review-title">
           {pendingCharacter.project.metadata.name}
         </div>
-        <div className="character-import-review-meta">
+        {previewUrl && (
+          <div className="mx-auto h-32 max-w-xs rounded-2xl bg-slate-100">
+            <img
+              className="h-full max-h-32 object-contain"
+              src={previewUrl}
+              alt="Imported character"
+              width={320}
+              height={128}
+              decoding="async"
+            />
+          </div>
+        )}
+        <div
+          className="character-import-review-meta"
+          data-testid="character-import-media-summary"
+          data-art-parts={pendingCharacter.project.partOrder.filter((id) => Boolean(pendingCharacter.project.parts[id]?.textureUrl)).length}
+          data-mask-parts={pendingCharacter.project.partOrder.filter((id) => Boolean(pendingCharacter.project.parts[id]?.maskUrl)).length}
+          data-total-parts={pendingCharacter.project.partOrder.length}
+          data-model-init-ms={pendingCharacter.onnxMetrics?.modelInitMs ?? ""}
+          data-model-path={pendingCharacter.onnxMetrics?.modelPath ?? ""}
+          data-model-reused={pendingCharacter.onnxMetrics?.modelReused ? "true" : "false"}
+          data-inference-ms={pendingCharacter.onnxMetrics?.inferenceMs ?? ""}
+          data-owned-model-buffer-references-retained={pendingCharacter.onnxMetrics?.ownedModelBufferReferencesRetained ?? ""}
+          data-retained-model-session-count={pendingCharacter.onnxMetrics?.retainedModelSessionCount ?? ""}
+          data-request-tensor-retained-bytes={pendingCharacter.onnxMetrics?.requestTensorRetainedBytes ?? ""}
+          data-image-bitmap-closed={pendingCharacter.onnxMetrics?.imageBitmapClosed ? "true" : "false"}
+          data-part-texture-data-url-chars={pendingCharacter.onnxMetrics?.partTextureDataUrlChars ?? ""}
+          data-part-mask-data-url-chars={pendingCharacter.onnxMetrics?.partMaskDataUrlChars ?? ""}
+        >
           {pendingStats || compactPackageSummary(pendingCharacter.summary)}
         </div>
         <div className="character-import-review-actions">

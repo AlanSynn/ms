@@ -7,6 +7,7 @@ import type {
 } from "../../../types";
 import { boardToScene, parseBoardCoordinateLabel, SCENE_VIEW } from "../../../utils/coordinates";
 import type { FabricationRenderPlan } from "../../../utils/fabrication";
+import { calculateLinkage } from "../../../utils/kinematics";
 import type { MechanismPreviewSimulation } from "../../../utils/mechanismPreview";
 import type { AssemblySceneFrame } from "../../../utils/assemblySceneFrame";
 
@@ -31,6 +32,33 @@ type FoundryAssemblySceneOverlayOptions = {
   pathLayerZ: number;
   pathPoints: Point[];
 };
+
+type FoundryPhysicalEnvelopeAffine = {
+  scale: number;
+  translateX: number;
+  translateY: number;
+};
+
+const foundryPhysicalEnvelopeAffine = (
+  mechanism: MechanismConfig,
+  simulation: MechanismPreviewSimulation,
+  kit: PhysicalKitSettings,
+): FoundryPhysicalEnvelopeAffine => {
+  const source = calculateLinkage(mechanism, simulation.inputAngleRad, kit).p1;
+  return {
+    scale: simulation.scale,
+    translateX: simulation.state.p1.x - source.x * simulation.scale,
+    translateY: simulation.state.p1.y + source.y * simulation.scale,
+  };
+};
+
+const mapFoundryScenePoint = (
+  point: Point,
+  affine: FoundryPhysicalEnvelopeAffine,
+): Point => ({
+  x: point.x * affine.scale + affine.translateX,
+  y: -point.y * affine.scale + affine.translateY,
+});
 
 const ACTIVE_COLOR = "#8b5cf6";
 const BOARD_COLOR = "#7c3aed";
@@ -133,19 +161,11 @@ const boardCoordToScenePoint = (
 const boardCoordToPreviewPoint = (
   coord: string,
   kit: PhysicalKitSettings,
-  mechanism: MechanismConfig,
-  simulation: MechanismPreviewSimulation,
+  affine: FoundryPhysicalEnvelopeAffine,
 ): Point | null => {
   const scenePoint = boardCoordToScenePoint(coord, kit);
   if (!scenePoint) return null;
-  const origin = {
-    x: mechanism.anchorX ?? 0,
-    y: mechanism.anchorY ?? 0,
-  };
-  return {
-    x: simulation.state.p1.x + (scenePoint.x - origin.x) * simulation.scale,
-    y: simulation.state.p1.y - (scenePoint.y - origin.y) * simulation.scale,
-  };
+  return mapFoundryScenePoint(scenePoint, affine);
 };
 
 const scenePointToPreviewPoint = (point: Point): Point => ({
@@ -167,11 +187,17 @@ const makeMaterial = (color: string, opacity = 0.92) =>
   });
 
 
-const boardPreviewPoints = (kit: PhysicalKitSettings) => {
+const boardPreviewPoints = (
+  kit: PhysicalKitSettings,
+  affine?: FoundryPhysicalEnvelopeAffine,
+) => {
   const points: Point[] = [];
+  const mapPoint = affine
+    ? (point: Point) => mapFoundryScenePoint(point, affine)
+    : scenePointToPreviewPoint;
   for (let row = 0; row < kit.boardCells; row += 1) {
     for (let col = 0; col < kit.boardCells; col += 1) {
-      points.push(scenePointToPreviewPoint(boardToScene(col, row, kit)));
+      points.push(mapPoint(boardToScene(col, row, kit)));
     }
   }
   return points;
@@ -181,16 +207,20 @@ const addAssemblyBoardSurface = (
   group: THREE.Group,
   kit: PhysicalKitSettings,
   z: number,
+  affine?: FoundryPhysicalEnvelopeAffine,
 ) => {
-  const points = boardPreviewPoints(kit);
+  const points = boardPreviewPoints(kit, affine);
   if (!points.length) return;
+  const mapPoint = affine
+    ? (point: Point) => mapFoundryScenePoint(point, affine)
+    : scenePointToPreviewPoint;
   const xs = points.map((point) => point.x);
   const ys = points.map((point) => point.y);
   const pitch =
     kit.boardCells > 1
       ? Math.abs(
-          scenePointToPreviewPoint(boardToScene(1, 0, kit)).x -
-            scenePointToPreviewPoint(boardToScene(0, 0, kit)).x,
+          mapPoint(boardToScene(1, 0, kit)).x -
+            mapPoint(boardToScene(0, 0, kit)).x,
         )
       : 0;
   const minX = Math.min(...xs) - pitch / 2;
@@ -247,6 +277,7 @@ const addVerticalGuide = (
   bottomZ: number,
   topZ: number,
   material: THREE.Material,
+  binding: "fixed" | "explode",
 ) => {
   const height = Math.max(0.24, topZ - bottomZ);
   const guide = new THREE.Mesh(
@@ -254,6 +285,7 @@ const addVerticalGuide = (
     material,
   );
   guide.name = "assembly-z-guide";
+  guide.userData.assemblyGuideBinding = binding;
   guide.rotation.x = Math.PI / 2;
   guide.position.copy(previewPointToThree(point, bottomZ + height / 2));
   group.add(guide);
@@ -305,25 +337,32 @@ export const renderFoundryAssemblySceneOverlay = ({
   const zTop = Math.max(pinTopZ + 0.2, pathLayerZ + 0.1);
   const zBottom = Math.min(pinBottomZ - 0.08, 0);
   const boardSurfaceZ = 0;
+  const fittedAffine = frame.kind === "mechanism"
+    ? foundryPhysicalEnvelopeAffine(mechanism, simulation, kit)
+    : undefined;
   if (frame.boardMode !== "hidden") {
-    addAssemblyBoardSurface(overlay, kit, boardSurfaceZ);
+    addAssemblyBoardSurface(overlay, kit, boardSurfaceZ, fittedAffine);
   }
   const activePoints =
     frame.kind === "character"
       ? (frame.activeScenePoints ?? []).map(scenePointToPreviewPoint)
       : frame.activeBoardCoords
-          .map((coord) => boardCoordToPreviewPoint(coord, kit, mechanism, simulation))
+          .map((coord) =>
+            fittedAffine ? boardCoordToPreviewPoint(coord, kit, fittedAffine) : null,
+          )
           .filter((point): point is Point => Boolean(point));
   const floatingPoints =
     frame.kind === "character"
       ? (frame.floatingReferencePoints ?? []).map(scenePointToPreviewPoint)
       : frame.floatingReferenceCoords
-          .map((coord) => boardCoordToPreviewPoint(coord, kit, mechanism, simulation))
+          .map((coord) =>
+            fittedAffine ? boardCoordToPreviewPoint(coord, kit, fittedAffine) : null,
+          )
           .filter((point): point is Point => Boolean(point));
 
   activePoints.forEach((point) => {
     addMarkerRing(overlay, point, zTop, boardMaterial, 0.34);
-    addVerticalGuide(overlay, point, zBottom, zTop, boardMaterial);
+    addVerticalGuide(overlay, point, zBottom, zTop, boardMaterial, "fixed");
   });
   floatingPoints.forEach((point) =>
     addMarkerRing(overlay, point, zTop + 0.06, floatingMaterial, 0.24),
@@ -340,6 +379,7 @@ export const renderFoundryAssemblySceneOverlay = ({
         zBottom,
         zTop + 0.5 * frame.progress,
         boardMaterial,
+        "explode",
       ),
     );
   } else if (

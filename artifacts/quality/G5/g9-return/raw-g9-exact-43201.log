@@ -1,0 +1,10 @@
+$ env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=43201 PLAYWRIGHT_WORKERS=2 bunx playwright test tests/browser/g5-web-onnx.spec.ts
+[WebServer] $ vite preview --host "127.0.0.1" --port "43201" --strictPort
+
+Running 1 test using 1 worker
+
+g5BrowserEvidence: observerSupported=true; first requestId=2; dispatch=6264; result=7088.299999952316; application=7088.399999976158-7088.899999976158; review=7409.399999904633; overlappingLongTasks=[]; modelInitMs=371.2000000476837; modelReused=false; inferenceMs=295.60000002384186; second requestId=3; dispatch=7478.5; result=7806.199999928474; application=7806.299999952316-7806.399999976158; review=8334.099999904633; overlappingLongTasks=[]; modelInitMs=0; modelReused=true; inferenceMs=286.40000009536743; processResultMarkCount=2.
+  ✓  1 [chromium] › tests/browser/g5-web-onnx.spec.ts:123:1 › Create from image upload keeps transforms off the UI thread (8.6s)
+
+1 passed (9.4s)
+exit_code=0

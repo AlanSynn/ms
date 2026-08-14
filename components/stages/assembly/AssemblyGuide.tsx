@@ -25,7 +25,13 @@ import {
   createFabricationPackage,
   validateForFabrication,
 } from "../../../utils/fabrication";
-import { isSoftReadinessBlocker } from "../../../utils/fabricationReadiness";
+import {
+  fabricationExportPolicy,
+} from "../../../utils/fabricationReadiness";
+import {
+  recordStudyExport,
+  STUDY_SUMMARY_ENABLED,
+} from "../../../infrastructure/study-summary/browserSession";
 
 export const AssemblyGuide = ({
   project,
@@ -53,9 +59,11 @@ export const AssemblyGuide = ({
   const validation = validateForFabrication(project, {
     allowSoftReadinessBlockers: true,
   });
-  const buildReady =
-    validation.readiness.status === "project-ready" ||
-    !validation.readiness.blockers.some((blocker) => !isSoftReadinessBlocker(blocker));
+  const exportPolicy = fabricationExportPolicy(
+    validation.readiness,
+    validation.errors,
+  );
+  const buildReady = exportPolicy.eligible;
   const create = () =>
     dispatch({
       type: "set_export",
@@ -107,20 +115,24 @@ export const AssemblyGuide = ({
     setStepProgress,
   });
 
-  const downloadAssemblyPdf = () =>
-    pkg &&
+  const downloadAssemblyPdf = () => {
+    if (!pkg) return;
     downloadText(
       `${pkg.id}-assembly.pdf`,
       pkg.assemblyGuidePdf,
       "application/pdf",
     );
-  const downloadCharacterPdf = () =>
-    pkg &&
+    if (STUDY_SUMMARY_ENABLED) recordStudyExport("success", "none");
+  };
+  const downloadCharacterPdf = () => {
+    if (!pkg) return;
     downloadText(
       `${pkg.id}-character-sheet.pdf`,
       pkg.customPartsPdf,
       "application/pdf",
     );
+    if (STUDY_SUMMARY_ENABLED) recordStudyExport("success", "none");
+  };
 
   const printGuide = () => {
     if (!pkg) return;
@@ -130,9 +142,11 @@ export const AssemblyGuide = ({
       popup.document.close();
       popup.focus();
       popup.print();
+      if (STUDY_SUMMARY_ENABLED) recordStudyExport("success", "none");
       return;
     }
     downloadText(`${pkg.id}-assembly.html`, pkg.assemblyGuideHtml, "text/html");
+    if (STUDY_SUMMARY_ENABLED) recordStudyExport("success", "none");
   };
 
   return (

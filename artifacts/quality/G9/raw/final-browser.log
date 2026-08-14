@@ -1,0 +1,184 @@
+$ bun run build && env -u NO_COLOR PLAYWRIGHT_SERVER=preview playwright test
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+[2Ktransforming...✓ 250 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/girl-thumb-CAdQi3RL.png                    8.20 kB
+dist/assets/boy-thumb-YC7FWjeU.png                    14.01 kB
+dist/index.html                                       86.32 kB │ gzip:    16.04 kB
+dist/assets/girl-DcnbHWJO.png                         94.86 kB
+dist/assets/webOnnxWorker-A3hq6BbQ.js                238.13 kB
+dist/assets/AppIcon-Dx9trOlC.png                     474.08 kB
+dist/assets/boy-CGof9C4m.PNG                       2,817.50 kB
+dist/assets/ort-wasm-simd-threaded-Cpm-ox6i.wasm  13,479.97 kB │ gzip: 3,498.23 kB
+dist/assets/index-Cl1KC0Z4.js                      1,584.57 kB │ gzip:   457.63 kB
+dist/assets/rapier-DS2Sl1i-.js                     2,237.59 kB │ gzip:   842.98 kB
+
+✓ built in 731ms
+[WebServer] $ vite preview --host "127.0.0.1" --port "43201" --strictPort
+
+Running 76 tests using 2 workers
+
+  ✓   2 [chromium] › tests/browser/g008-physical-authoring.spec.ts:125:1 › G008 shared physical overlay supports keyboard commit and preserves state on rejected pointer drop (9.6s)
+  ✓   1 [chromium] › tests/browser/g008-physical-authoring.spec.ts:267:1 › G018 family prospects commit atomically in Foundry and Design (13.6s)
+  ✓   3 [chromium] › tests/browser/g008-physical-authoring.spec.ts:310:1 › physical drag commits A after returning A to B to A inside the start deadzone (4.7s)
+  ✓   5 [chromium] › tests/browser/g008-physical-authoring.spec.ts:415:1 › G018 cam and planetary secondary traces stay display-only (6.5s)
+  ✓   4 [chromium] › tests/browser/g008-physical-authoring.spec.ts:358:1 › planetary coincident pivot identity commits exactly in Foundry and Design (8.1s)
+  ✓   6 [chromium] › tests/browser/g3-camera-cadence.spec.ts:17:1 › Assembly camera flushes its final pointer sample (4.4s)
+{"g5FirstEvidence":{"requestId":2,"dispatchMark":{"startTime":6994.700000047684,"duration":0,"detail":{"requestId":2}},"processResultMark":{"startTime":8009,"duration":0,"detail":{"requestId":2,"metrics":{"inputWidth":160,"inputHeight":220,"workingWidth":160,"workingHeight":220,"provider":"wasm","model":"fp32","modelBytes":135929562,"modelPath":"http://127.0.0.1:43201/onnx/pose_model.onnx","modelInitMs":489.39999997615814,"modelReused":false,"ownedModelBufferReferencesRetained":0,"retainedModelSessionCount":1,"requestTensorRetainedBytes":0,"imageBitmapClosed":true,"partTextureDataUrlChars":9018,"partMaskDataUrlChars":5108,"inferenceMs":333,"totalMs":1012.3000000715256}}},"processProgressMessageCount":7,"processProgressMarks":[{"startTime":6998.300000071526,"duration":0,"detail":{"requestId":2,"stage":"loading-model","progress":6}},{"startTime":7008,"duration":0,"detail":{"requestId":2,"stage":"downloading-model","progress":12}},{"startTime":7079.800000071526,"duration":0,"detail":{"requestId":2,"stage":"downloading-model","progress":34}},{"startTime":7571.400000095367,"duration":0,"detail":{"requestId":2,"stage":"loading-model","progress":35}},{"startTime":7572.800000071526,"duration":0,"detail":{"requestId":2,"stage":"running-onnx","progress":45}},{"startTime":7907.5,"duration":0,"detail":{"requestId":2,"stage":"extracting-parts","progress":75}},{"startTime":8006.100000023842,"duration":0,"detail":{"requestId":2,"stage":"normalizing","progress":90}}],"phaseMarks":[{"name":"motionsmith-image-result-application-start","startTime":8009,"duration":0,"detail":{"requestId":2}},{"name":"motionsmith-image-result-application-end","startTime":8009.900000095367,"duration":0,"detail":{"requestId":2}}],"reviewMark":{"startTime":8437.100000023842,"duration":0,"detail":null},"overlappingLongTasks":[{"startTime":8044.900000095367,"duration":63}],"media":{"artParts":10,"maskParts":10,"totalParts":10,"modelPath":"http://127.0.0.1:43201/onnx/pose_model.onnx","modelInitMs":489.39999997615814,"modelReused":false,"inferenceMs":333,"ownedModelBufferReferencesRetained":0,"retainedModelSessionCount":1,"requestTensorRetainedBytes":0,"imageBitmapClosed":true,"partTextureDataUrlChars":9018,"partMaskDataUrlChars":5108}}}
+  ✘   7 [chromium] › tests/browser/g5-web-onnx.spec.ts:123:1 › Create from image upload keeps transforms off the UI thread (9.5s)
+  ✓   9 [chromium] › tests/browser/responsive-workbench.spec.ts:74:3 › 1920x1080 Getting Started keeps guided choices reachable and Character can reopen it (7.0s)
+  ✓  10 [chromium] › tests/browser/responsive-workbench.spec.ts:112:3 › 1920x1080 workbench surfaces remain reachable across enabled stages (9.0s)
+  ✓  11 [chromium] › tests/browser/responsive-workbench.spec.ts:74:3 › 1200x520 Getting Started keeps guided choices reachable and Character can reopen it (4.2s)
+  ✓  12 [chromium] › tests/browser/responsive-workbench.spec.ts:112:3 › 1200x520 workbench surfaces remain reachable across enabled stages (5.3s)
+  ✓   8 [chromium] › tests/browser/quality-critical.spec.ts:81:1 › G7 isolated critical flow covers the integrated workbench (33.1s)
+  ✓  13 [chromium] › tests/browser/workflow.spec.ts:250:1 › Context help opens compact registry popovers (1.4s)
+  ✓  14 [chromium] › tests/browser/workflow.spec.ts:304:1 › Character part cut outline editor bakes and edits contour points (7.1s)
+  ✓  16 [chromium] › tests/browser/workflow.spec.ts:513:1 › Getting Started guided project opens a real editable lesson (4.0s)
+  ✓  15 [chromium] › tests/browser/workflow.spec.ts:395:1 › Character tab owns separate scene objects and later tabs only render them (20.3s)
+  ✓  17 [chromium] › tests/browser/workflow.spec.ts:591:1 › guided lessons open Design with coupled mechanism ownership (13.3s)
+  ✓  18 [chromium] › tests/browser/workflow.spec.ts:636:1 › classroom assessment slug and mechanism example video work end-to-end (5.6s)
+  ✓  19 [chromium] › tests/browser/workflow.spec.ts:900:1 › Ultragoal anatomy contracts › Ultragoal G003 built-in front character keeps anatomical right on viewer left (2.7s)
+  ✓  20 [chromium] › tests/browser/workflow.spec.ts:1187:1 › physical hole selection authors connection role and updates preview/export only through visible affordance (8.6s)
+  ✓  22 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 4bar uses the shared physical pointer flow in Foundry and Design (6.2s)
+  ✓  21 [chromium] › tests/browser/workflow.spec.ts:1289:1 › gear linkage physical hole selection authors drive/output pins and exports dedicated metadata (17.0s)
+  ✓  24 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 gear uses the shared physical pointer flow in Foundry and Design (8.4s)
+  ✓  23 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 gear_linkage uses the shared physical pointer flow in Foundry and Design (10.8s)
+  ✓  25 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 planetary_gear uses the shared physical pointer flow in Foundry and Design (7.9s)
+  ✓  26 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 cam uses the shared physical pointer flow in Foundry and Design (7.7s)
+  ✓  28 [chromium] › tests/browser/workflow.spec.ts:1464:1 › G006 short/fullscreen zoom playback and accessibility matrix stays recoverable (8.1s)
+  ✓  29 [chromium] › tests/browser/workflow.spec.ts:1596:1 › MotionSmith header logo returns to Character home (4.6s)
+  ✘  27 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 piston uses the shared physical pointer flow in Foundry and Design (17.2s)
+  ✓  30 [chromium] › tests/browser/workflow.spec.ts:1607:1 › Medium-width desktop keeps editor panes from cutting off the canvas (7.9s)
+  ✓  31 [chromium] › tests/browser/workflow.spec.ts:1634:1 › Ultragoal warning and responsive contracts › G006 student warning UX hides raw ids and fit scores in Design recommendations (19.1s)
+  ✓  33 [chromium] › tests/browser/workflow.spec.ts:1723:1 › G005 mobile Getting Started keeps actions reachable in a short viewport (964ms)
+  ✓  32 [chromium] › tests/browser/workflow.spec.ts:1693:1 › Ultragoal warning and responsive contracts › G005 responsive shell keeps primary surfaces reachable without page overflow (18.7s)
+  ✓  35 [chromium] › tests/browser/workflow.spec.ts:2282:1 › Assembly shows character pins as a separate board build stage (5.2s)
+  ✓  36 [chromium] › tests/browser/workflow.spec.ts:2359:1 › Character tab processing controls route to real browser workflows (4.2s)
+  ✓  37 [chromium] › tests/browser/workflow.spec.ts:2415:1 › animation performance: Foundry playback stays responsive without runaway Three rebuilds (7.5s)
+  ✓  38 [chromium] › tests/browser/workflow.spec.ts:2495:1 › Create from image upload creates a reviewed character package in browser (8.9s)
+  ✓  39 [chromium] › tests/browser/workflow.spec.ts:2542:1 › Load package review, accept, discard, and missing-file recovery stay in browser (4.1s)
+  ✓  34 [chromium] › tests/browser/workflow.spec.ts:1740:1 › character → path → foundry → design → blueprint runs end-to-end in browser (36.8s)
+  ✓  40 [chromium] › tests/browser/workflow.spec.ts:2607:1 › Character replacement package starts clean without keep-mechanisms toggle (7.9s)
+  ✓  41 [chromium] › tests/browser/workflow.spec.ts:2652:1 › Options and validation gates update browser blueprint output (13.8s)
+  ✓  43 [chromium] › tests/browser/workflow.spec.ts:2866:1 › Legacy storage namespace migrates to MotionSmith keys without losing autosave or workspace layout (7.5s)
+  ✓  42 [chromium] › tests/browser/workflow.spec.ts:2721:1 › Options parity updates workspace UI, canvas context, and blueprint defaults (25.9s)
+  ✓  44 [chromium] › tests/browser/workflow.spec.ts:2908:1 › Path Editor sensemaking follows selected part, lock state, and anchor handoff (15.4s)
+  ✓  46 [chromium] › tests/browser/workflow.spec.ts:3480:1 › Foundry parameter safety contracts › Foundry clamps feasible numeric parameter edits without adding jam warnings (4.5s)
+  ✓  45 [chromium] › tests/browser/workflow.spec.ts:3047:1 › Foundry sensemaking shows library, partial range, and exported metadata (21.0s)
+  ✓  47 [chromium] › tests/browser/workflow.spec.ts:3521:1 › Character tab owns body layer and skeleton edits used by design controls (25.2s)
+  ✓  48 [chromium] › tests/browser/workflow.spec.ts:3594:1 › Recommendation driver ownership contracts › Recommendation keeps a limb path on its exact owner and one physical driver (18.8s)
+  ✓  50 [chromium] › tests/browser/workflow.spec.ts:3734:1 › Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking (7.6s)
+  ✓  51 [chromium] › tests/browser/workflow.spec.ts:3818:1 › Foundry supports CAD-style 3D camera presets and drag orbit (6.3s)
+  ✓  52 [chromium] › tests/browser/workflow.spec.ts:3981:1 › Cam foundry profile points edit the shared cam simulation profile (4.1s)
+  ✓  49 [chromium] › tests/browser/workflow.spec.ts:3645:1 › Recommendation sheet applies a distinct mechanism and blueprint recipe (24.1s)
+  ✓  54 [chromium] › tests/browser/workflow.spec.ts:4039:1 › Character import surface omits browser camera capture (2.5s)
+  ✓  55 [chromium] › tests/browser/workflow.spec.ts:4052:1 › Mobile path editor keeps Draw free path action above the canvas (4.8s)
+  ✓  53 [chromium] › tests/browser/workflow.spec.ts:4006:1 › Mechanism Design cam profile edits update the integrated automata preview (14.4s)
+  ✓  56 [chromium] › tests/browser/workflow.spec.ts:4070:1 › Startup uses one boot loader and opens Getting Started over Character (2.3s)
+  ✓  58 [chromium] › tests/browser/workflow.spec.ts:4151:1 › Mobile startup shows compact Getting Started with a session opt-out (824ms)
+  ✓  57 [chromium] › tests/browser/workflow.spec.ts:4124:1 › Bug report opens a GitHub issue draft from any stage (7.9s)
+  ✓  60 [chromium] › tests/browser/workflow.spec.ts:4204:1 › Right inspector scroll does not move the center canvas (3.8s)
+  ✓  61 [chromium] › tests/browser/workflow.spec.ts:4221:1 › Narrow character right inspector remains independently scrollable (2.6s)
+  ✓  59 [chromium] › tests/browser/workflow.spec.ts:4172:1 › Shared player dock overlays the canvas, does not take layout space, and can be dragged (28.7s)
+  ✓  62 [chromium] › tests/browser/workflow.spec.ts:4252:1 › Every workflow right inspector uses the shared scroll container (20.9s)
+  ✓  63 [chromium] › tests/browser/workflow.spec.ts:4284:1 › Workflow tabs keep left workflow, center canvas, and right inspector roles (17.7s)
+  ✓  64 [chromium] › tests/browser/workflow.spec.ts:4362:1 › Workflow rail remains reachable on short desktop and mobile fallback exposes every stage (12.4s)
+  ✓  65 [chromium] › tests/browser/workflow.spec.ts:4392:1 › Animation resumes after leaving path drawing mode (6.3s)
+  ✓  67 [chromium] › tests/browser/workflow.spec.ts:4560:1 › Every top menu command is wired to a visible result (31.4s)
+  ✓  68 [chromium] › tests/browser/workflow.spec.ts:4674:1 › guided classroom lesson opens real baseline and can reset safely (5.4s)
+  ✓  66 [chromium] › tests/browser/workflow.spec.ts:4406:1 › Command menu and shared canvas zoom persist across workflow stages (53.6s)
+  ✓  69 [chromium] › tests/browser/workflow.spec.ts:4703:1 › Invalid Design target edits retain the prior valid mechanism and exact recovery blocker (11.8s)
+  ✓  71 [chromium] › tests/browser/workflow.spec.ts:4787:1 › Mechanism Design integrated automata preview keeps placed anchors on the fabrication grid (7.4s)
+  ✓  70 [chromium] › tests/browser/workflow.spec.ts:4720:1 › Mechanism Design library chips replace transactionally, delete, and export (27.1s)
+  ✓  72 [chromium] › tests/browser/workflow.spec.ts:4816:1 › Mechanism Design center workspace renders the integrated Foundry automata scene (29.3s)
+  ✓  74 [chromium] › tests/browser/workflow.spec.ts:5033:1 › Simplified shared canvas stays non-destructive and exports blueprint (22.5s)
+  ✓  73 [chromium] › tests/browser/workflow.spec.ts:4983:1 › shared Design renderer preserves exact compiled support paths for all six fabrication families (42.0s)
+  ✓  75 [chromium] › tests/browser/workflow.spec.ts:5117:1 › Shared path view supports 2D zoom and 3D direct orbit (8.9s)
+  ✓  76 [chromium] › tests/browser/workflow.spec.ts:5158:1 › Draw mode forces 2D Path view and accepts free path strokes on SceneSketch (4.3s)
+
+
+  1) [chromium] › tests/browser/g5-web-onnx.spec.ts:123:1 › Create from image upload keeps transforms off the UI thread
+
+    Error: app dispatch through review has no UI long task over 50 ms
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 6
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "duration": 63,
+    +     "startTime": 8044.900000095367,
+    +   },
+    + ]
+
+      186 |   expect(firstMedia.modelInitMs, "first import measures session initialization").toBeGreaterThan(0);
+      187 |   expect(firstEvidence.processProgressMessageCount, "download progress is coalesced per process request").toBeLessThanOrEqual(40);
+    > 188 |   expect(firstEvidence.overlappingLongTasks.filter((entry) => entry.duration > 50), "app dispatch through review has no UI long task over 50 ms").toEqual([]);
+          |                                                                                                                                                   ^
+      189 |
+      190 |   await page.getByRole("button", { name: "Skip", exact: true }).click();
+      191 |   await expect(page.getByTestId("character-import-review")).toHaveCount(0);
+        at /Users/alansynn/orca/workspaces/MechAnim/quality-sol-max-integration/tests/browser/g5-web-onnx.spec.ts:188:147
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/g5-web-onnx-Create-from-im-55e36-ransforms-off-the-UI-thread-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/g5-web-onnx-Create-from-im-55e36-ransforms-off-the-UI-thread-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/g5-web-onnx-Create-from-im-55e36-ransforms-off-the-UI-thread-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/g5-web-onnx-Create-from-im-55e36-ransforms-off-the-UI-thread-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 piston uses the shared physical pointer flow in Foundry and Design
+
+    Error: physical hole affordance is visible for piston.rod-slider-pin
+
+    physical hole affordance is visible for piston.rod-slider-pin
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "piston.rod-slider-pin:"
+    Received string:    ""
+
+    Call Log:
+    - Timeout 10000ms exceeded while waiting on the predicate
+
+      1008 |   }, {
+      1009 |     message: `${options.excludeHoleIndex === undefined ? '' : 'non-default '}physical hole affordance is visible for ${role}`,
+    > 1010 |   }).toContain(`${role}:`);
+           |      ^
+      1011 |   return target!;
+      1012 | };
+      1013 |
+        at waitForConnectionHoleTarget (/Users/alansynn/orca/workspaces/MechAnim/quality-sol-max-integration/tests/browser/workflow.spec.ts:1010:6)
+        at /Users/alansynn/orca/workspaces/MechAnim/quality-sol-max-integration/tests/browser/workflow.spec.ts:1444:31
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/workflow-G006-piston-uses--edbc8--flow-in-Foundry-and-Design-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/workflow-G006-piston-uses--edbc8--flow-in-Foundry-and-Design-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/workflow-G006-piston-uses--edbc8--flow-in-Foundry-and-Design-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/workflow-G006-piston-uses--edbc8--flow-in-Foundry-and-Design-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [chromium] › tests/browser/g5-web-onnx.spec.ts:123:1 › Create from image upload keeps transforms off the UI thread
+    [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 piston uses the shared physical pointer flow in Foundry and Design
+  74 passed (7.8m)
+error: script "test:browser" exited with code 1

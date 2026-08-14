@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useWorkspacePlaybackLoop } from "../../../hooks/useWorkspacePlaybackLoop";
 import { FoundryCanvasPane } from "./FoundryCanvasPane";
 import { FoundryInspectorPanel } from "./FoundryInspectorPanel";
 import { FoundryWorkflowPanel } from "./FoundryWorkflowPanel";
@@ -73,7 +74,6 @@ import {
   SCENE_VIEW,
 } from "../../../utils/coordinates";
 import {
-  FOUNDRY_ANIMATION_COMMIT_MS,
   FOUNDRY_OVERLAY_SIZE,
   FOUNDRY_VIEW_PRESETS,
   clampFoundryPitch,
@@ -84,6 +84,12 @@ import {
   type FoundryOverlaySize,
   type FoundryViewPreset,
 } from "../../../utils/foundryCamera";
+import {
+  createFoundryParamDragSession,
+  type FoundryParamDragSample,
+} from "./foundryParamDragSession";
+import { useFrameCommitSession } from "../../../hooks/useFrameCommitSession";
+
 import {
   FOUNDRY_MECHANISM_TYPES,
   FOUNDRY_PRESETS,
@@ -110,6 +116,8 @@ import {
   pathOwnedTargetFields,
 } from "../../../utils/pathTargets";
 
+const FOUNDRY_PLAYBACK_PERIOD_MS = (2 * Math.PI) / 0.0025;
+
 export const resolveLocalFoundryCandidate = (
   previous: MechanismConfig,
   candidate: MechanismConfig,
@@ -126,6 +134,26 @@ export const resolveLocalFoundryCandidate = (
       mechanism: previous,
       blocker: result.blocker,
     };
+};
+
+export const foundryCommandStateFor = (
+  mechanism: MechanismConfig,
+  mechanismId: string,
+  fallbackAnchor: Point,
+): MechanismConfig => {
+  const anchorX = Number.isFinite(mechanism.anchorX)
+    ? mechanism.anchorX!
+    : fallbackAnchor.x;
+  const anchorY = Number.isFinite(mechanism.anchorY)
+    ? mechanism.anchorY!
+    : fallbackAnchor.y;
+  return {
+    ...mechanism,
+    id: mechanismId,
+    anchorX,
+    anchorY,
+    sceneAnchor: mechanism.sceneAnchor ?? { x: anchorX, y: anchorY },
+  };
 };
 
 export const MechanismFoundry = ({
@@ -183,10 +211,21 @@ export const MechanismFoundry = ({
     pan: Point;
     mode: "orbit" | "zoom" | "pan";
   } | null>(null);
-  const foundryParamDragRef = useRef<{
-    pointerId: number;
-    handle: FoundryParamHandleId;
-  } | null>(null);
+  const foundryCameraFrameSession = useFrameCommitSession<FoundryCamera>(
+    setFoundryCamera,
+  );
+  const foundryParamDragCommitRef = useRef<
+    (sample: FoundryParamDragSample) => void
+  >(() => undefined);
+  const foundryParamDragSessionRef = useRef<
+    ReturnType<typeof createFoundryParamDragSession> | null
+  >(null);
+  if (!foundryParamDragSessionRef.current) {
+    foundryParamDragSessionRef.current = createFoundryParamDragSession({
+      commit: (sample) => foundryParamDragCommitRef.current(sample),
+    });
+  }
+  const foundryParamDragSession = foundryParamDragSessionRef.current;
   const targetReady = Boolean(
     (selectedPart || selectedSceneObject) &&
     selectedPath &&
@@ -258,6 +297,25 @@ export const MechanismFoundry = ({
     }),
     [foundry, foundryMechanismId, landing.x, landing.y],
   );
+  const foundryCommandRef = useRef(
+    foundryCommandStateFor(foundry, foundryMechanismId, landing),
+  );
+  const foundryCommandPendingRef = useRef(false);
+  useEffect(() => {
+    if (!foundryCommandPendingRef.current)
+      foundryCommandRef.current = foundryCommandStateFor(
+        landedFoundry,
+        foundryMechanismId,
+        landing,
+      );
+    foundryCommandPendingRef.current = false;
+  }, [foundry, foundryMechanismId, landedFoundry, landing]);
+  const currentLandedFoundry = () =>
+    foundryCommandStateFor(
+      foundryCommandRef.current,
+      foundryMechanismId,
+      landing,
+    );
   const foundrySceneMechanism = useMemo(
     () => ({ ...landedFoundry, ...targetFields }),
     [landedFoundry, targetFields],
@@ -627,8 +685,9 @@ export const MechanismFoundry = ({
     fresh = false,
     manualAnchorAfterInstall?: Point | null,
   ) => {
+    const previous = currentLandedFoundry();
     const result = resolveLocalFoundryCandidate(
-      landedFoundry,
+      previous,
       candidate,
       project.settings.physicalKit,
       fresh,
@@ -642,10 +701,13 @@ export const MechanismFoundry = ({
       ? Boolean(manualAnchor)
       : manualAnchorAfterInstall !== null;
     setManualAnchor(keepManualAnchor ? approvedAnchor : null);
+    foundryCommandRef.current = result.mechanism;
+    foundryCommandPendingRef.current = true;
     setFoundry(result.mechanism);
     return true;
   };
   const applyAnchor = (point: Point) => {
+    const current = currentLandedFoundry();
     const board = sceneToBoard(point, project.settings.physicalKit);
     const snapped = boardToScene(
       board.col,
@@ -654,15 +716,15 @@ export const MechanismFoundry = ({
     );
     installFoundryCandidate(
       {
-        ...landedFoundry,
+        ...current,
         anchorX: snapped.x,
         anchorY: snapped.y,
         sceneAnchor: snapped,
         transform: {
-          ...(landedFoundry.transform ?? {
+          ...(current.transform ?? {
             x: snapped.x,
             y: snapped.y,
-            rotation: landedFoundry.groundAngle ?? 0,
+            rotation: current.groundAngle ?? 0,
             scale: 1,
           }),
           x: snapped.x,
@@ -686,11 +748,14 @@ export const MechanismFoundry = ({
     setIsPickingAnchor(false);
   };
   const setCameraPreset = (preset: Exclude<FoundryViewPreset, "custom">) =>
-    setFoundryCamera({
-      ...FOUNDRY_VIEW_PRESETS[preset],
-      preset,
-      pan: { x: 0, y: 0 },
-    });
+    {
+      foundryCameraFrameSession.reset();
+      setFoundryCamera({
+        ...FOUNDRY_VIEW_PRESETS[preset],
+        preset,
+        pan: { x: 0, y: 0 },
+      });
+    };
   const handleFoundryPointerDown = (
     event: React.PointerEvent<HTMLDivElement>,
   ) => {
@@ -714,6 +779,7 @@ export const MechanismFoundry = ({
       pan: foundryCamera.pan ?? { x: 0, y: 0 },
       mode,
     };
+    foundryCameraFrameSession.start();
     setIsOrbitingFoundry(mode === "orbit");
     setIsZoomingFoundry(mode === "zoom");
     setIsPanningFoundry(mode === "pan");
@@ -727,7 +793,7 @@ export const MechanismFoundry = ({
     if (!start || start.pointerId !== event.pointerId) return;
     event.preventDefault();
     if (start.mode === "zoom") {
-      setFoundryCamera({
+      foundryCameraFrameSession.move({
         yaw: start.yaw,
         pitch: start.pitch,
         zoom: clampFoundryZoom(start.zoom + (start.y - event.clientY) * 0.006),
@@ -738,7 +804,7 @@ export const MechanismFoundry = ({
     }
     if (start.mode === "pan") {
       const scale = 0.018 / Math.max(0.45, start.zoom);
-      setFoundryCamera({
+      foundryCameraFrameSession.move({
         yaw: start.yaw,
         pitch: start.pitch,
         zoom: start.zoom,
@@ -750,7 +816,7 @@ export const MechanismFoundry = ({
       });
       return;
     }
-    setFoundryCamera({
+    foundryCameraFrameSession.move({
       yaw: start.yaw + (event.clientX - start.x) * 0.45,
       pitch: clampFoundryPitch(start.pitch - (event.clientY - start.y) * 0.45),
       zoom: start.zoom,
@@ -760,6 +826,7 @@ export const MechanismFoundry = ({
   };
   const finishFoundryOrbit = (event: React.PointerEvent<HTMLDivElement>) => {
     if (foundryOrbitStartRef.current?.pointerId === event.pointerId) {
+      foundryCameraFrameSession.finish();
       foundryOrbitStartRef.current = null;
       setIsOrbitingFoundry(false);
       setIsZoomingFoundry(false);
@@ -789,14 +856,16 @@ export const MechanismFoundry = ({
   };
   const applyDirectFoundryUpdates = (updates: Partial<MechanismConfig>) => {
     if (!Object.keys(updates).length) return false;
+    const current = currentLandedFoundry();
     const candidate = updates.connectionSelections
-      ? { ...landedFoundry, ...updates }
-      : refreshEditedFoundryMechanism({ ...landedFoundry, ...updates });
+      ? { ...current, ...updates }
+      : refreshEditedFoundryMechanism({ ...current, ...updates });
     return installFoundryCandidate(candidate);
   };
   const applySafeFoundryUpdates = (updates: Partial<MechanismConfig>) => {
+    const current = currentLandedFoundry();
     const constrainedUpdates = constrainMechanismUpdate(
-      landedFoundry,
+      current,
       updates,
       project.settings.physicalKit,
     );
@@ -804,19 +873,20 @@ export const MechanismFoundry = ({
     applyDirectFoundryUpdates(constrainedUpdates);
   };
   const updateFoundryParam = (key: keyof MechanismConfig, value: number) => {
+    const current = currentLandedFoundry();
     if (key === "anchorX" || key === "anchorY") {
       const anchor = {
-        x: key === "anchorX" ? value : (landedFoundry.anchorX ?? landing.x),
-        y: key === "anchorY" ? value : (landedFoundry.anchorY ?? landing.y),
+        x: key === "anchorX" ? value : (current.anchorX ?? landing.x),
+        y: key === "anchorY" ? value : (current.anchorY ?? landing.y),
       };
       applySafeFoundryUpdates({
         [key]: value,
         sceneAnchor: anchor,
         transform: {
-          ...(landedFoundry.transform ?? {
+          ...(current.transform ?? {
             x: anchor.x,
             y: anchor.y,
-            rotation: landedFoundry.groundAngle ?? 0,
+            rotation: current.groundAngle ?? 0,
             scale: 1,
           }),
           x: anchor.x,
@@ -893,6 +963,12 @@ export const MechanismFoundry = ({
       return;
     }
   };
+  foundryParamDragCommitRef.current = ({ handle, point }) =>
+    applyFoundryParamHandleDrag(handle, point);
+  useEffect(
+    () => () => foundryParamDragSession.reset(),
+    [foundryParamDragSession],
+  );
 
   const connectionInteraction = useMechanismConnectionDrag({
     mechanism: landedFoundry,
@@ -907,28 +983,33 @@ export const MechanismFoundry = ({
     (event: React.PointerEvent<SVGCircleElement>) => {
       event.preventDefault();
       event.stopPropagation();
-      foundryParamDragRef.current = { pointerId: event.pointerId, handle };
+      foundryParamDragSession.start(event.pointerId, handle);
       setFoundryPlaying(false);
       event.currentTarget.setPointerCapture(event.pointerId);
     };
   const handleFoundryParamPointerMove = (
     event: React.PointerEvent<SVGCircleElement>,
   ) => {
-    const drag = foundryParamDragRef.current;
+    const drag = foundryParamDragSession.current();
     if (!drag || drag.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopPropagation();
     const point = foundryPointFromOverlayEvent(event, drag.handle);
-    if (point) applyFoundryParamHandleDrag(drag.handle, point);
+    if (point) foundryParamDragSession.move(event.pointerId, point);
   };
   const handleFoundryParamPointerUp = (
     event: React.PointerEvent<SVGCircleElement>,
   ) => {
-    if (foundryParamDragRef.current?.pointerId === event.pointerId) {
-      foundryParamDragRef.current = null;
-      if (event.currentTarget.hasPointerCapture(event.pointerId))
-        event.currentTarget.releasePointerCapture(event.pointerId);
-    }
+    if (!foundryParamDragSession.finish(event.pointerId)) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId))
+      event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+  const handleFoundryParamPointerCancel = (
+    event: React.PointerEvent<SVGCircleElement>,
+  ) => {
+    if (!foundryParamDragSession.cancel(event.pointerId)) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId))
+      event.currentTarget.releasePointerCapture(event.pointerId);
   };
   const keepCurrentAnchor = (mechanism: MechanismConfig): MechanismConfig => ({
     ...mechanism,
@@ -992,7 +1073,7 @@ export const MechanismFoundry = ({
       selectedPath.id,
     );
   };
-  const applyPathFit = (mechanism = foundry) => {
+  const applyPathFit = (mechanism = foundryCommandRef.current) => {
     setFoundryPlaying(false);
     setFoundryPhase(0);
     setSelectedOutputTraceId(null);
@@ -1001,6 +1082,7 @@ export const MechanismFoundry = ({
     installFoundryCandidate(createPathFittedFoundry(mechanism), false, null);
   };
   const resetFoundryPreview = () => {
+    const current = foundryCommandRef.current;
     setFoundryPlaying(false);
     setFoundryPhase(0);
     setSelectedOutputTraceId(null);
@@ -1018,8 +1100,8 @@ export const MechanismFoundry = ({
     });
     setFreshAnchoredFoundry(
       {
-        ...createDefaultMechanism(foundry.type, "foundry-preview"),
-        color: foundry.color,
+        ...createDefaultMechanism(current.type, "foundry-preview"),
+        color: current.color,
         presetId: "balanced",
         recommendation: FOUNDRY_PRESETS.balanced.recommendation,
       },
@@ -1031,28 +1113,18 @@ export const MechanismFoundry = ({
     setFoundryPlaying(false);
     setFoundryPhase(0);
   }, [foundryProjectDriveEnabled]);
-  useEffect(() => {
-    if (!foundryPlaying) return;
-    let frame = 0;
-    let last = performance.now();
-    const tick = (time: number) => {
-      const elapsed = time - last;
-      if (elapsed >= FOUNDRY_ANIMATION_COMMIT_MS) {
-        last = time - (elapsed % FOUNDRY_ANIMATION_COMMIT_MS);
-        setFoundryPhase(
-          (prev) =>
-            (prev +
-              Math.min(96, elapsed) *
-                0.0025 *
-                project.settings.animationSpeed) %
-            (Math.PI * 2),
-        );
-      }
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [foundryPlaying, project.settings.animationSpeed]);
+  useWorkspacePlaybackLoop({
+    stage: "foundry",
+    isPlaying: foundryPlaying && foundryProjectDriveEnabled,
+    drawMode: false,
+    optimizerBusy: false,
+    showGettingStarted: false,
+    playbackDurationMs: FOUNDRY_PLAYBACK_PERIOD_MS,
+    animationSpeed: project.settings.animationSpeed,
+    timingProfile: "linear",
+    setAngle: setFoundryPhase,
+    driverStage: "foundry",
+  });
   const makePackage = (): FoundryExportPackage => {
     const mechanismId = landedFoundry.id;
     const state = calculateLinkage(
@@ -1113,9 +1185,18 @@ export const MechanismFoundry = ({
   };
   const selectFoundryMechanismType = (type: MechanismType) => {
     setSelectedOutputTraceId(null);
+    const current = foundryCommandRef.current;
     const next = {
       ...createDefaultMechanism(type, "foundry-preview"),
-      color: foundry.color,
+      ...(type === "4bar"
+        ? {
+            groundLength: FOUNDRY_PRESETS.balanced.groundLength,
+            crankLength: FOUNDRY_PRESETS.balanced.crankLength,
+            couplerLength: FOUNDRY_PRESETS.balanced.couplerLength,
+            rockerLength: FOUNDRY_PRESETS.balanced.rockerLength,
+          }
+        : {}),
+      color: current.color,
       presetId: "balanced",
       recommendation: FOUNDRY_PRESETS.balanced.recommendation,
     };
@@ -1125,13 +1206,14 @@ export const MechanismFoundry = ({
     setSelectedOutputTraceId(null);
     const preset = FOUNDRY_PRESETS[presetId];
     const { label: _label, ...updates } = preset;
+    const current = foundryCommandRef.current;
     const base =
       presetId === "balanced"
-        ? createDefaultMechanism(foundry.type, "foundry-preview")
-        : foundry;
+        ? createDefaultMechanism(current.type, "foundry-preview")
+        : current;
     const next = {
       ...base,
-      color: foundry.color,
+      color: current.color,
       ...updates,
       presetId,
       recommendation: preset.recommendation,
@@ -1248,6 +1330,7 @@ export const MechanismFoundry = ({
             onParamPointerDown={handleFoundryParamPointerDown}
             onParamPointerMove={handleFoundryParamPointerMove}
             onParamPointerUp={handleFoundryParamPointerUp}
+            onParamPointerCancel={handleFoundryParamPointerCancel}
             onConnectionHoleSelect={connectionInteraction.selectHandle}
             onConnectionHoleInteractionStart={connectionInteraction.beginInteraction}
             onConnectionHolePointerDown={connectionInteraction.onPointerDown}

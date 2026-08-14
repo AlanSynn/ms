@@ -841,10 +841,28 @@ export const resolveFabricationCandidate = (
 ): FabricationCandidateResolution => {
   if (!usesFabricationCombinationResolver(candidate))
     return { status: "accepted", mechanism: candidate };
-  const candidateWithoutValidation = withoutCandidateConnectionValidation(candidate);
-  if (rebuiltCandidateIsReady(candidateWithoutValidation, kit)) {
-    return { status: "accepted", mechanism: candidateWithoutValidation };
-  }
+  const candidateWithoutValidation = withoutDefaultedConnectionSelections(
+    previous,
+    candidate,
+  );
+  const connectionState = normalizeMechanismConnectionSelections(
+    candidateWithoutValidation,
+    candidateWithoutValidation.connectionSelections,
+    undefined,
+    { kit },
+  );
+  const completeCandidate = {
+    ...candidateWithoutValidation,
+    ...mechanismConnectionCompatibilityUpdates(
+      candidateWithoutValidation,
+      connectionState,
+    ),
+    ...connectionState,
+  };
+  if (
+    explicitConnectionSelectionsArePreserved(previous, candidate, completeCandidate)
+    && rebuiltCandidateIsReady(completeCandidate, kit)
+  ) return { status: "accepted", mechanism: completeCandidate };
   const canonical = normalizeMechanismWithFabricationSelections(candidateWithoutValidation, kit);
   if (!explicitConnectionSelectionsArePreserved(previous, candidate, canonical))
     return { status: "rejected", blocker: "No kit fit" };
@@ -886,9 +904,14 @@ export type NewMechanismCandidateResult =
   | { status: "rejected"; blocker: string };
 
 export type MechanismEditAttemptResult =
-  | { status: "accepted"; mechanism: MechanismConfig }
+  | {
+      status: "accepted";
+      outcome: "accepted" | "no-op";
+      mechanism: MechanismConfig;
+    }
   | {
       status: "rejected";
+      outcome: "rejected";
       mechanism: MechanismConfig;
       blocker: string;
       recoveryCandidates: MechanismRecoveryCandidates;
@@ -1034,9 +1057,10 @@ export const resolveMechanismEditAttempt = (
   if (previous === candidate) {
     const binding = assessMechanismTargetBinding(project, candidate);
     return binding.valid
-      ? { status: "accepted", mechanism: previous }
+      ? { status: "accepted", outcome: "no-op", mechanism: previous }
       : {
           status: "rejected",
+          outcome: "rejected",
           mechanism: previous,
           blocker: MECHANISM_BINDING_BLOCKER,
           recoveryCandidates: binding.recoveryCandidates,
@@ -1059,6 +1083,7 @@ export const resolveMechanismEditAttempt = (
   if (physical.status !== "accepted") {
     return {
       status: "rejected",
+      outcome: "rejected",
       mechanism: previous ?? candidate,
       blocker: physical.blocker,
       recoveryCandidates,
@@ -1068,17 +1093,23 @@ export const resolveMechanismEditAttempt = (
   if (!binding.valid) {
     return {
       status: "rejected",
+      outcome: "rejected",
       mechanism: previous ?? candidate,
       blocker: MECHANISM_BINDING_BLOCKER,
       recoveryCandidates: binding.recoveryCandidates,
     };
   }
+  const accepted = {
+    ...physical.mechanism,
+    activeVisualPartIds: binding.activeVisualPartIds,
+  };
+  if (previous && sameCandidateValue(previous, accepted)) {
+    return { status: "accepted", outcome: "no-op", mechanism: previous };
+  }
   return {
     status: "accepted",
-    mechanism: {
-      ...physical.mechanism,
-      activeVisualPartIds: binding.activeVisualPartIds,
-    },
+    outcome: "accepted",
+    mechanism: accepted,
   };
 };
 

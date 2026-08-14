@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import type {
   CanvasViewport,
@@ -23,6 +23,7 @@ import {
 } from "../../../utils/viewport";
 import { formatGridLabel } from "../../../utils/units";
 import { PartShape } from "./PartShape";
+import { createPathPointerFrameSession } from "./pathPointerFrameSession";
 
 export const SceneSketch = ({
   project,
@@ -30,8 +31,7 @@ export const SceneSketch = ({
   selectedPath,
   dragPoint,
   selectedPoint,
-  setDragPoint,
-  setSelectedPoint,
+  onPointDragStart,
   onPointMove,
   onPointUp,
   onCanvasDown,
@@ -49,8 +49,7 @@ export const SceneSketch = ({
   selectedPath?: ProjectMotionPath;
   dragPoint: number | null;
   selectedPoint: number | null;
-  setDragPoint: (i: number | null) => void;
-  setSelectedPoint: (i: number | null) => void;
+  onPointDragStart: (index: number) => void;
   onPointMove: (e: React.MouseEvent<SVGSVGElement>) => void;
   onPointUp: () => void;
   onCanvasDown: (e: React.MouseEvent<SVGSVGElement>) => void;
@@ -183,6 +182,22 @@ export const SceneSketch = ({
     y: number;
     offset: Point;
   } | null>(null);
+  const setViewportRef = useRef(setViewport);
+  setViewportRef.current = setViewport;
+  const panFrameSessionRef = useRef<
+    ReturnType<typeof createPathPointerFrameSession<Point>> | null
+  >(null);
+  if (!panFrameSessionRef.current) {
+    panFrameSessionRef.current = createPathPointerFrameSession<Point>({
+      commit: (offset) =>
+        setViewportRef.current((previous) => ({ ...previous, offset })),
+    });
+  }
+  const panFrameSession = panFrameSessionRef.current;
+  useEffect(
+    () => () => panFrameSession.reset(),
+    [panFrameSession],
+  );
   const handlePanOrDrawDown = (e: React.MouseEvent<SVGSVGElement>) => {
     if (
       !drawMode &&
@@ -192,6 +207,7 @@ export const SceneSketch = ({
         e.target.closest('[data-canvas-interactive="true"]')
       )
     ) {
+      panFrameSession.start();
       setPanStart({ x: e.clientX, y: e.clientY, offset: viewport.offset });
       e.preventDefault();
       return;
@@ -209,15 +225,13 @@ export const SceneSketch = ({
         rect: svgRef.current?.getBoundingClientRect(),
         scene: SCENE_VIEW,
       });
-      setViewport((prev) => ({
-        ...prev,
-        offset,
-      }));
+      panFrameSession.move(offset);
       return;
     }
     onPointMove(e);
   };
   const finishInteraction = () => {
+    panFrameSession.finish();
     setPanStart(null);
     onPointUp();
   };
@@ -245,6 +259,9 @@ export const SceneSketch = ({
       onMouseMove={handleMove}
       onMouseUp={finishInteraction}
       onMouseLeave={finishInteraction}
+      onPointerUp={finishInteraction}
+      onPointerCancel={finishInteraction}
+      onLostPointerCapture={finishInteraction}
       onWheel={handleWheel}
     >
       <defs>
@@ -429,10 +446,7 @@ export const SceneSketch = ({
               onClick={(e) => e.stopPropagation()}
               onMouseDown={(e) => {
                 e.stopPropagation();
-                if (!pathLocked) {
-                  setSelectedPoint(i);
-                  setDragPoint(i);
-                }
+                if (!pathLocked) onPointDragStart(i);
               }}
             />
           );

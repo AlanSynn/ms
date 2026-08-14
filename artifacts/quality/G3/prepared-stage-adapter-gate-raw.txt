@@ -1,0 +1,19 @@
+G3 prepared Design/Assembly stage adapter gate
+
+$ bun tests/g3-prepared-automata-scene.test.ts
+prepared automata scene contracts passed
+exit 0
+
+$ bun tests/project-contract.test.ts
+project contracts ok
+exit 0
+
+$ bunx tsc --noEmit
+exit 0
+
+$ bun run build
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+✓ 239 modules transformed.
+✓ built in 952ms
+exit 0

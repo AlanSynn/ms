@@ -10,6 +10,10 @@ import { fabricationBoardCoordinateCallout, fabricationRecipeTitle, fabricationV
 import { downloadText } from "../../../utils/project";
 import { StageLeftSummary } from "../stageLayout";
 import { ContextHelp } from "../../ui/ContextHelp";
+import {
+  recordStudyExport,
+  STUDY_SUMMARY_ENABLED,
+} from "../../../infrastructure/study-summary/browserSession";
 
 type BlueprintValidation = {
   issues: FabricationIssue[];
@@ -40,25 +44,34 @@ export const BlueprintControlPanel = ({
   const visibleIssues = validation.issues.filter((issue, index, issues) =>
     issues.findIndex((candidate) => fabricationVisibleIssueKey(candidate) === fabricationVisibleIssueKey(issue)) === index,
   );
-  const downloadSvg = () =>
-    pkg && downloadText(`${pkg.id}.svg`, pkg.svg, "image/svg+xml");
-  const downloadCutSheetPdf = () =>
-    pkg &&
+  const downloadSvg = () => {
+    if (!pkg) return;
+    downloadText(`${pkg.id}.svg`, pkg.svg, "image/svg+xml");
+    if (STUDY_SUMMARY_ENABLED) recordStudyExport("success", "none");
+  };
+  const downloadCutSheetPdf = () => {
+    if (!pkg) return;
     downloadText(`${pkg.id}-cut-sheet.pdf`, pkg.cutSheetPdf, "application/pdf");
-  const downloadCustomSvg = () =>
-    pkg &&
+    if (STUDY_SUMMARY_ENABLED) recordStudyExport("success", "none");
+  };
+  const downloadCustomSvg = () => {
+    if (!pkg) return;
     downloadText(
       `${pkg.id}-custom-parts.svg`,
       pkg.customPartsSvg,
       "image/svg+xml",
     );
-  const downloadCustomPdf = () =>
-    pkg &&
+    if (STUDY_SUMMARY_ENABLED) recordStudyExport("success", "none");
+  };
+  const downloadCustomPdf = () => {
+    if (!pkg) return;
     downloadText(
       `${pkg.id}-custom-parts.pdf`,
       pkg.customPartsPdf,
       "application/pdf",
     );
+    if (STUDY_SUMMARY_ENABLED) recordStudyExport("success", "none");
+  };
 
   return (
     <div className="stage-pane-stack" data-testid="blueprint-control-panel">

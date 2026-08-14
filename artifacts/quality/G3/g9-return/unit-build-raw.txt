@@ -1,0 +1,28 @@
+G3 g9-return unit, contract, and build verification
+
+Command
+bun run build
+
+Output
+tsc passed
+vite v8.1.0 building client environment for production...
+✓ 245 modules transformed.
+✓ built in 822ms
+Exit code: 0
+
+Command
+bunx tsc --noEmit && bun tests/g3-assembly-scene-preparation.test.ts && bun tests/mechanism-edit-authority.test.ts && bun tests/foundry-transaction.test.ts && bun tests/project-contract.test.ts
+
+Output
+G3 assembly scene preparation contracts passed
+mechanism edit authority contracts passed
+foundry transaction contracts passed
+project contracts ok
+Exit code: 0
+
+Command
+git diff --check
+
+Output
+(no output)
+Exit code: 0

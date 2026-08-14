@@ -1,0 +1,29 @@
+G3 exact-once resource disposal gate evidence
+Captured: 2026-08-13 America/New_York
+Workspace: /Users/alansynn/orca/workspaces/MechAnim/luna-preview
+
+$ bun tests/g3-three-resource-kit.test.ts
+exit: 0
+ok - shared geometry/material/texture resources dispose exactly once
+ok - Foundry cache teardown deduplicates resources and clears every cache
+ok - owned material teardown deduplicates shared materials and maps
+g3 Three resource disposal contracts passed
+
+$ bun tests/mechanism-renderer-envelope-parity.test.ts
+exit: 0
+mechanism-renderer-envelope-parity passed
+
+$ bun tests/project-contract.test.ts
+exit: 0
+project contracts ok
+
+$ bunx tsc --noEmit
+exit: 0
+(no output)
+
+$ bun run build
+exit: 0
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+239 modules transformed.
+✓ built in 1.55s

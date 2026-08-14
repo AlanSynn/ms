@@ -1,6 +1,11 @@
-import { useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import type { StarterImageTemplate } from "../components/AppShell";
-import { processingLabel } from "../components/stages/character/ProgressBlock";
 import type { PendingCharacterReview } from "../components/stages/character/CharacterImportOverlays";
 import type {
   AppStage,
@@ -15,10 +20,17 @@ import {
 } from "../utils/project";
 import {
   processImageWithWebOnnx,
-  type WebOnnxCacheStatus,
+  WebOnnxError,
+  type WebOnnxResult,
 } from "../utils/webOnnx";
+import { setWebOnnxCacheStatus } from "../utils/webOnnxStatusStore";
 import { loadCharacterPackage } from "../utils/packageLoader";
 import { foundryPreviewFromProject } from "../utils/mechanismDefaults";
+import {
+  recordStudyCommand,
+  recordStudyImageInference,
+  STUDY_SUMMARY_ENABLED,
+} from "../infrastructure/study-summary/browserSession";
 
 type SetProjectOptions = {
   history?: boolean;
@@ -34,7 +46,6 @@ type UseAppCharacterImportActionsParams = {
   setStage: (stage: AppStage) => void;
   setCommandStatus: (status: string) => void;
   setShowGettingStarted: (show: boolean) => void;
-  setOnnxCacheStatus: Dispatch<SetStateAction<WebOnnxCacheStatus>>;
 };
 
 export const useAppCharacterImportActions = ({
@@ -46,16 +57,38 @@ export const useAppCharacterImportActions = ({
   setStage,
   setCommandStatus,
   setShowGettingStarted,
-  setOnnxCacheStatus,
 }: UseAppCharacterImportActionsParams) => {
   const [pendingCharacter, setPendingCharacter] =
     useState<PendingCharacterReview | null>(null);
+  const activeImageImport = useRef<AbortController | null>(null);
+  const imageImportGeneration = useRef(0);
 
-  const queueCharacterReview = (next: ProjectState, summary: string) => {
+  const beginImageImport = () => {
+    imageImportGeneration.current += 1;
+    activeImageImport.current?.abort();
+    activeImageImport.current = null;
+    return imageImportGeneration.current;
+  };
+
+  useEffect(
+    () => () => {
+      imageImportGeneration.current += 1;
+      activeImageImport.current?.abort();
+      activeImageImport.current = null;
+    },
+    [],
+  );
+
+  const queueCharacterReview = (
+    next: ProjectState,
+    summary: string,
+    onnxMetrics?: WebOnnxResult["metrics"],
+  ) => {
     setPendingCharacter({
       project: next,
       summary,
       returnStage: "character",
+      onnxMetrics,
     });
     dispatch({
       type: "set_processing",
@@ -68,7 +101,15 @@ export const useAppCharacterImportActions = ({
     setStage("character");
   };
 
-  const runWebOnnx = async (file: File) => {
+  const runWebOnnx = async (
+    file: File,
+    requestedGeneration?: number,
+  ) => {
+    const generation = requestedGeneration ?? beginImageImport();
+    if (generation !== imageImportGeneration.current) return;
+    const startedAt = STUDY_SUMMARY_ENABLED ? performance.now() : 0;
+    const controller = new AbortController();
+    activeImageImport.current = controller;
     dispatch({
       type: "set_processing",
       processing: {
@@ -81,29 +122,49 @@ export const useAppCharacterImportActions = ({
       const result = await processImageWithWebOnnx(
         file,
         (stageName, progress) => {
+          if (
+            controller.signal.aborted ||
+            activeImageImport.current !== controller ||
+            imageImportGeneration.current !== generation
+          ) {
+            return;
+          }
           if (stageName === "downloading-model")
-            setOnnxCacheStatus((prev) => ({
+            setWebOnnxCacheStatus((prev) => ({
               ...prev,
               stage: "downloading",
               progress,
             }));
-          if (stageName === "loading-model")
-            setOnnxCacheStatus((prev) => ({
+          if (stageName === "loading-model" && progress >= 35)
+            setWebOnnxCacheStatus((prev) => ({
               ...prev,
               stage: "cached",
               progress: 100,
             }));
-          const stageId = stageName as ProjectState["processing"]["stage"];
-          dispatch({
-            type: "set_processing",
-            processing: {
-              stage: stageId,
-              message: processingLabel(stageId, ""),
-              progress,
-            },
-          });
+          // Keep the full ProjectState/App tree stable while the worker runs.
+          // The compact ONNX status pill owns model-acquisition progress; the
+          // project changes only for the initial, terminal, and error states.
         },
+        { signal: controller.signal },
       );
+      if (
+        controller.signal.aborted ||
+        activeImageImport.current !== controller ||
+        imageImportGeneration.current !== generation
+      ) {
+        return;
+      }
+      const processResultMark = typeof performance !== "undefined"
+        ? performance.getEntriesByName("motionsmith-image-process-result").at(-1)
+        : undefined;
+      const processRequestId = processResultMark && "detail" in processResultMark
+        ? (processResultMark as PerformanceMark & { detail?: { requestId?: number } }).detail?.requestId
+        : undefined;
+      if (typeof performance !== "undefined") {
+        performance.mark("motionsmith-image-result-application-start", {
+          detail: { requestId: processRequestId },
+        });
+      }
       const next = createProjectFromProcessed({
         name: file.name.replace(/\.[^.]+$/, "") || "Processed character",
         sourceImageName: file.name,
@@ -121,21 +182,75 @@ export const useAppCharacterImportActions = ({
       queueCharacterReview(
         next,
         `${next.partOrder.length} parts · ${Object.keys(next.skeleton?.joints ?? {}).length} joints · ready`,
+        result.metrics,
       );
+      if (STUDY_SUMMARY_ENABLED)
+        recordStudyImageInference("success", performance.now() - startedAt);
+      if (typeof performance !== "undefined") {
+        performance.mark("motionsmith-image-result-application-end", {
+          detail: { requestId: processRequestId },
+        });
+      }
     } catch (error) {
+      if (
+        activeImageImport.current !== controller ||
+        imageImportGeneration.current !== generation
+      ) {
+        return;
+      }
+      const code =
+        error instanceof WebOnnxError
+          ? error.code
+          : "image-processing-failed";
+      const canceled = code === "canceled" || code === "superseded";
+      if (
+        code === "model-download-failed" ||
+        code === "model-download-stalled" ||
+        code === "model-invalid" ||
+        code === "wasm-unavailable" ||
+        code === "worker-unavailable"
+      ) {
+        setWebOnnxCacheStatus({
+          stage: "error",
+          label: "AI pose model",
+          progress: 0,
+          error: code,
+        });
+      }
       dispatch({
         type: "set_processing",
         processing: {
-          stage: "error",
-          message: "Image processing failed",
+          stage: canceled ? "idle" : "error",
+          message: canceled ? "Import canceled" : "Image processing failed",
           progress: 0,
-          error: error instanceof Error ? error.message : String(error),
+          error: canceled
+            ? undefined
+            : error instanceof Error
+              ? error.message
+              : String(error),
         },
       });
+      setCommandStatus(
+        canceled
+          ? "Import canceled"
+          : code === "worker-unavailable" ||
+              code === "model-download-failed" ||
+              code === "model-invalid" ||
+              code === "wasm-unavailable"
+            ? "AI unavailable — use Starter rig or Try again"
+            : "Image processing failed",
+      );
+      if (STUDY_SUMMARY_ENABLED && !canceled)
+        recordStudyImageInference("failure", performance.now() - startedAt);
+    } finally {
+      if (activeImageImport.current === controller) {
+        activeImageImport.current = null;
+      }
     }
   };
 
   const loadStarterImage = async (template: StarterImageTemplate) => {
+    const generation = beginImageImport();
     setCommandStatus(`Opening ${template.label}`);
     dispatch({
       type: "set_processing",
@@ -149,10 +264,13 @@ export const useAppCharacterImportActions = ({
       const response = await fetch(template.url);
       if (!response.ok) throw new Error(`Could not load ${template.fileName}`);
       const blob = await response.blob();
+      if (generation !== imageImportGeneration.current) return;
       await runWebOnnx(
         new File([blob], template.fileName, { type: blob.type || "image/png" }),
+        generation,
       );
     } catch (error) {
+      if (generation !== imageImportGeneration.current) return;
       const message = error instanceof Error ? error.message : String(error);
       dispatch({
         type: "set_processing",
@@ -168,18 +286,24 @@ export const useAppCharacterImportActions = ({
   };
 
   const importCharacterPackage = async (files: FileList | File[]) => {
+    beginImageImport();
     setCommandStatus("Loading character…");
     try {
       queueCharacterReview(await loadCharacterPackage(files), "Ready to use.");
+      if (STUDY_SUMMARY_ENABLED)
+        recordStudyCommand("authoring", "accepted");
     } catch (error) {
       setCommandStatus(
         `Couldn’t load character: ${error instanceof Error ? error.message : String(error)}`,
       );
       setStage("character");
+      if (STUDY_SUMMARY_ENABLED)
+        recordStudyCommand("authoring", "rejected");
     }
   };
 
   const importProject = async (file: File) => {
+    beginImageImport();
     try {
       const raw = JSON.parse(await file.text());
       const loaded = loadProjectSnapshot(raw, project);
@@ -193,12 +317,16 @@ export const useAppCharacterImportActions = ({
       setCommandStatus(`Loaded project ${file.name}`);
       setShowGettingStarted(false);
       setStage("path");
+      if (STUDY_SUMMARY_ENABLED)
+        recordStudyCommand("authoring", "accepted");
     } catch (error) {
       setCommandStatus(
         `Project import failed: ${error instanceof Error ? error.message : String(error)}`,
       );
       setShowGettingStarted(false);
       setStage("character");
+      if (STUDY_SUMMARY_ENABLED)
+        recordStudyCommand("authoring", "rejected");
     }
   };
 

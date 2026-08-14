@@ -1,14 +1,16 @@
 import type { MechanismConfig, PhysicalKitSettings } from '../types';
 import { defaultPhysicalKit } from './coordinates';
 import {
-  calculateLinkage,
+  calculatePreparedLinkage,
   mechanismTraceDefinitionsForState,
   planetaryCarrierOutputRatio,
   planetaryPlanetSpinRatio,
+  prepareMechanismKinematics,
   type MechanismPointTrace,
+  type PreparedMechanismKinematics,
 } from './kinematics';
 import {
-  fitMechanismSimulationWithContext,
+  fitPreparedMechanismSimulationWithContext,
   type MechanismFitContext,
   type MechanismPreviewSimulation,
 } from './mechanismPreview';
@@ -45,12 +47,12 @@ export const foundryPlaybackPhaseToInputAngle = (
   );
 };
 
-export const createFoundryPlaybackFrame = (
-  mechanism: MechanismConfig,
+export const createPreparedFoundryPlaybackFrame = (
+  prepared: PreparedMechanismKinematics,
   playbackPhaseRad: number,
   context: MechanismFitContext,
-  kit: PhysicalKitSettings = defaultPhysicalKit(),
 ): FoundryPlaybackFrame => {
+  const { mechanism } = prepared;
   const inputAngleRad = foundryPlaybackPhaseToInputAngle(
     mechanism,
     playbackPhaseRad,
@@ -58,14 +60,24 @@ export const createFoundryPlaybackFrame = (
   return {
     playbackPhaseRad,
     inputAngleRad,
-    simulation: fitMechanismSimulationWithContext(
-      mechanism,
+    simulation: fitPreparedMechanismSimulationWithContext(
+      prepared,
       inputAngleRad,
       context,
-      kit,
     ),
   };
 };
+
+export const createFoundryPlaybackFrame = (
+  mechanism: MechanismConfig,
+  playbackPhaseRad: number,
+  context: MechanismFitContext,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+): FoundryPlaybackFrame => createPreparedFoundryPlaybackFrame(
+  prepareMechanismKinematics(mechanism, kit),
+  playbackPhaseRad,
+  context,
+);
 
 export const foundryPlanetaryPlanetRotationDeg = (
   mechanism: Pick<MechanismConfig, 'crankLength' | 'rockerLength' | 'phase'>,
@@ -88,11 +100,11 @@ const foundryPlaybackTraceLoops = (mechanism: MechanismConfig) =>
  * solver-angle traces make the path/physics overlay drift from the rendered
  * mechanism.
  */
-export const generateFoundryPlaybackPointTraces = (
-  mechanism: MechanismConfig,
+export const generatePreparedFoundryPlaybackPointTraces = (
+  prepared: PreparedMechanismKinematics,
   resolution = 36,
-  kit: PhysicalKitSettings = defaultPhysicalKit(),
 ): { traces: MechanismPointTrace[]; percentValid: number } => {
+  const { mechanism } = prepared;
   const samplesPerCycle = Math.max(1, Math.floor(resolution));
   const loops = foundryPlaybackTraceLoops(mechanism);
   const totalSamples = samplesPerCycle * loops;
@@ -105,7 +117,7 @@ export const generateFoundryPlaybackPointTraces = (
       mechanism,
       playbackPhaseRad,
     );
-    const state = calculateLinkage(mechanism, inputAngleRad, kit);
+    const state = calculatePreparedLinkage(prepared, inputAngleRad);
     if (!state.isValid) continue;
     validCount += 1;
     mechanismTraceDefinitionsForState(mechanism.type, state).forEach((def) => {
@@ -134,6 +146,16 @@ export const generateFoundryPlaybackPointTraces = (
     allTraces[allTraces.length - 1].primary = true;
   return { traces: allTraces, percentValid: validCount / totalSamples };
 };
+
+export const generateFoundryPlaybackPointTraces = (
+  mechanism: MechanismConfig,
+  resolution = 36,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+): { traces: MechanismPointTrace[]; percentValid: number } =>
+  generatePreparedFoundryPlaybackPointTraces(
+    prepareMechanismKinematics(mechanism, kit),
+    resolution,
+  );
 
 export const resolveFoundryPlaybackTraceAuthority = (
   mechanism: MechanismConfig,

@@ -1,0 +1,128 @@
+G0 baseline characterization
+Baseline: main 4f3f7cc4906c2fef49b5796c2c6e43988466b9d2
+Worktree: quality/sol-max-integration
+Toolchain: Bun 1.3.14, macOS arm64
+
+COMMAND: bun install --frozen-lockfile
+EXIT: 0
+OUTPUT:
+bun install v1.3.14 (d1632b29)
+
++ @playwright/test@1.61.1
++ @tauri-apps/cli@2.11.3
++ @types/node@26.0.1
++ @types/react@19.2.17
++ @types/react-dom@19.2.3
++ @types/three@0.185.0
++ @vitejs/plugin-react@6.0.3
++ esbuild@0.28.1
++ typescript@6.0.3
++ vite@8.1.0
++ @dimforge/rapier3d-compat@0.19.3
++ gifuct-js@2.1.2
++ lucide-react@1.21.0
++ onnxruntime-web@1.27.0
++ react@19.2.7
++ react-dom@19.2.7
++ three@0.185.0
+
+64 packages installed [16.74s]
+
+COMMAND: bun run test
+EXIT: 1
+OUTPUT:
+$ find tests -maxdepth 1 -type f -name '*.test.ts' -print | LC_ALL=C sort | while IFS= read -r file; do bun "$file" || exit; done
+foundry transaction contracts passed
+G008 physical review contracts passed
+g008 ProjectState ingress/runtime/scene contracts passed
+112 | assert.deepEqual(
+113 |   { crankLength: fitted.crankLength, rockerLength: fitted.rockerLength },
+114 |   expected,
+115 |   'existing-mechanism sheet fit keeps authored selected-hole lengths authoritative',
+116 | );
+117 | assert(connectionSelectionAccepted(fitted.connectionSelectionValidation, '4bar.input-joint'));
+      ^
+AssertionError: false == true
+ generatedMessage: true,
+     actual: false,
+   expected: true,
+   operator: "==",
+       code: "ERR_ASSERTION"
+
+      at /Users/alansynn/orca/workspaces/MechAnim/quality-sol-max-integration/tests/mechanism-authored-authority-boundaries.test.ts:117:1
+
+Bun v1.3.14 (macOS arm64)
+error: script "test" exited with code 1
+
+COMMAND: bun tests/mechanism-authored-authority-boundaries.test.ts
+EXIT: 1
+OUTPUT:
+112 | assert.deepEqual(
+113 |   { crankLength: fitted.crankLength, rockerLength: fitted.rockerLength },
+114 |   expected,
+115 |   'existing-mechanism sheet fit keeps authored selected-hole lengths authoritative',
+116 | );
+117 | assert(connectionSelectionAccepted(fitted.connectionSelectionValidation, '4bar.input-joint'));
+      ^
+AssertionError: false == true
+ generatedMessage: true,
+     actual: false,
+   expected: true,
+   operator: "==",
+       code: "ERR_ASSERTION"
+
+      at /Users/alansynn/orca/workspaces/MechAnim/quality-sol-max-integration/tests/mechanism-authored-authority-boundaries.test.ts:117:1
+
+Bun v1.3.14 (macOS arm64)
+
+COMMAND: bun run build
+EXIT: 0
+OUTPUT:
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+transforming... 235 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/girl-thumb-CAdQi3RL.png                         8.20 kB
+dist/assets/boy-thumb-YC7FWjeU.png                         14.01 kB
+dist/index.html                                            86.97 kB | gzip:    16.20 kB
+dist/assets/girl-DcnbHWJO.png                              94.86 kB
+dist/assets/AppIcon-Dx9trOlC.png                          474.08 kB
+dist/assets/boy-CGof9C4m.PNG                            2,817.50 kB
+dist/assets/ort-wasm-simd-threaded.jsep-DC5y_g6C.wasm  26,827.54 kB | gzip: 6,400.68 kB
+dist/assets/ort.bundle.min-DFsymTZk.js                    400.74 kB | gzip:   110.41 kB
+dist/assets/index-L-r2ehwh.js                           1,558.47 kB | gzip:   449.53 kB
+dist/assets/rapier-DS2Sl1i-.js                          2,237.59 kB | gzip:   842.98 kB
+built in 1.70s
+
+COMMAND: bun run build:tauri-frontend
+EXIT: 0
+OUTPUT:
+$ tsc && vite build --base ./
+vite v8.1.0 building client environment for production...
+transforming...
+./fonts/manrope-800-latin.woff2 referenced in ./fonts/manrope-800-latin.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime
+235 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/girl-thumb-CAdQi3RL.png                         8.20 kB
+dist/assets/boy-thumb-YC7FWjeU.png                         14.01 kB
+dist/index.html                                            86.97 kB | gzip:    16.20 kB
+dist/assets/girl-DcnbHWJO.png                              94.86 kB
+dist/assets/AppIcon-Dx9trOlC.png                          474.08 kB
+dist/assets/boy-CGof9C4m.PNG                            2,817.50 kB
+dist/assets/ort-wasm-simd-threaded.jsep-DC5y_g6C.wasm  26,827.54 kB | gzip: 6,400.68 kB
+dist/assets/ort.bundle.min-B8aiVQey.js                    400.81 kB | gzip:   110.40 kB
+dist/assets/index-Cuos_4E4.js                           1,558.67 kB | gzip:   449.57 kB
+dist/assets/rapier-DS2Sl1i-.js                          2,237.59 kB | gzip:   842.98 kB
+built in 1.07s
+
+COMMAND: ledger and ownership audit
+EXIT: 0
+OUTPUT:
+commit_rows=82
+unique_commits=82
+hunk_rows=346
+hunk_unique_commits=82
+unassigned=0
+ownership_rows=70

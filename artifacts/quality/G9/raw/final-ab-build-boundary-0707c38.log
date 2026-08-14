@@ -1,0 +1,10 @@
+source_sha=0707c38aaf2ddc121cdfc550a2067812354b0123
+off_index=/tmp/motionsmith-quality-final.bRMbtn/off/assets/index-DRE-s1S6.js
+on_index=/tmp/motionsmith-quality-final.bRMbtn/on/assets/index-CKcxagcC.js
+off_index_bytes=1584865
+on_index_bytes=1594105
+off_marker_scan=PASS
+4270:study-summary-v1
+4270:127.0.0.1:43197/summary
+on_marker_scan=PASS
+exit_code=0

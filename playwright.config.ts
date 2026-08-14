@@ -6,6 +6,9 @@ import { availableParallelism } from 'node:os';
 if (process.env.FORCE_COLOR && process.env.NO_COLOR) delete process.env.NO_COLOR;
 
 const MAX_BROWSER_WORKERS = 4;
+const previewPort = Number(process.env.PLAYWRIGHT_PORT ?? 5173);
+if (!Number.isInteger(previewPort) || previewPort < 1 || previewPort > 65_535)
+  throw new Error('PLAYWRIGHT_PORT must be a valid TCP port');
 const parseWorkerCount = (value: string | undefined) => {
   if (!value) return Math.max(1, Math.min(MAX_BROWSER_WORKERS, availableParallelism()));
   const parsed = Number(value);
@@ -14,10 +17,13 @@ const parseWorkerCount = (value: string | undefined) => {
 };
 const workerCount = parseWorkerCount(process.env.PLAYWRIGHT_WORKERS);
 const serverMode = process.env.PLAYWRIGHT_SERVER ?? 'preview';
+if (serverMode !== 'preview' && serverMode !== 'dev')
+  throw new Error('PLAYWRIGHT_SERVER must be preview or dev');
 const cleanColorEnv = 'env -u NO_COLOR ';
+const previewUrl = `http://127.0.0.1:${previewPort}`;
 const webServerCommand = serverMode === 'preview'
-  ? `${cleanColorEnv}bun run preview -- --host 127.0.0.1 --port 5173 --strictPort`
-  : `${cleanColorEnv}bun run dev -- --host 127.0.0.1 --port 5173`;
+  ? `${cleanColorEnv}bun run preview -- --host 127.0.0.1 --port ${previewPort} --strictPort`
+  : `${cleanColorEnv}bun run dev -- --host 127.0.0.1 --port ${previewPort} --strictPort`;
 
 export default defineConfig({
   testDir: './tests/browser',
@@ -27,7 +33,7 @@ export default defineConfig({
   workers: workerCount,
   reporter: [['list']],
   use: {
-    baseURL: 'http://127.0.0.1:5173',
+    baseURL: previewUrl,
     acceptDownloads: true,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
@@ -35,11 +41,22 @@ export default defineConfig({
   },
   webServer: {
     command: webServerCommand,
-    url: 'http://127.0.0.1:5173',
-    reuseExistingServer: !process.env.CI,
+    url: previewUrl,
+    // Only explicit dev debugging may attach to an existing Vite HMR server.
+    reuseExistingServer: serverMode === 'dev',
     timeout: 120_000
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } }
+    {
+      name: 'chromium',
+      testIgnore: /g5-web-onnx\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] }
+    },
+    {
+      name: 'chromium-performance',
+      testMatch: /g5-web-onnx\.spec\.ts/,
+      dependencies: ['chromium'],
+      use: { ...devices['Desktop Chrome'] }
+    }
   ]
 });

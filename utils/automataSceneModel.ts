@@ -9,9 +9,21 @@ import type {
 } from '../types';
 import { mechanismFeature, type MechanismFeatureIssue } from './mechanismFeatureRegistry';
 import { buildProjectMechanismSceneContract, type MechanismSceneContract } from './mechanismSceneContract';
-import { buildFoundryMechanismPreviewModel, type FoundryMechanismPreviewModel } from './foundryPreviewModel';
+import {
+    prepareFoundryMechanismPreviewModel,
+    samplePreparedFoundryMechanismPreviewModel,
+    type FoundryMechanismPreviewModel,
+    type PreparedFoundryMechanismPreviewModel,
+} from './foundryPreviewModel';
 import { resolveMechanismRuntimeGate, runtimeMechanisms } from './mechanismRuntimePolicy';
-import { mechanismBindingWarnings, motionPreviewForProject, pointOnGeneratedMechanismPath, pointOnProjectPath } from './motion';
+import {
+    mechanismBindingWarnings,
+    pointOnGeneratedMechanismPath,
+    pointOnProjectPath,
+    prepareMotionPreviewForProject,
+    samplePreparedMotionPreview,
+    type PreparedProjectMotionPreview,
+} from './motion';
 
 export type AutomataSceneMode = 'design-live' | 'assembly-live';
 
@@ -35,6 +47,28 @@ export type AutomataSceneModel = {
     pathFitThreshold?: number;
     pathFitStatus: 'fit' | 'mismatch' | 'unmeasured';
     motionSource: 'generatedPath' | 'linkage-effector' | 'missing-target' | 'none';
+    featureLabel?: string;
+    featureIssues: MechanismFeatureIssue[];
+    warnings: Record<string, string[]>;
+};
+
+export type PreparedAutomataSceneModel = {
+    kind: 'empty' | 'hidden' | 'recovery' | 'active';
+    mode: AutomataSceneMode;
+    project: ProjectState;
+    activeMechanism?: MechanismConfig;
+    recoveryMechanism?: MechanismConfig;
+    mechanisms: MechanismConfig[];
+    foundryPreview?: PreparedFoundryMechanismPreviewModel;
+    staticFoundryPreview?: FoundryMechanismPreviewModel;
+    mechanismContract?: MechanismSceneContract;
+    fullMotion?: PreparedProjectMotionPreview;
+    selectedMotion?: PreparedProjectMotionPreview;
+    userPath?: ProjectMotionPath;
+    mechanismPath?: ProjectMotionPath;
+    pathFitError?: number;
+    pathFitThreshold?: number;
+    pathFitStatus: AutomataSceneModel['pathFitStatus'];
     featureLabel?: string;
     featureIssues: MechanismFeatureIssue[];
     warnings: Record<string, string[]>;
@@ -86,24 +120,22 @@ const generatedPathPhaseError = (generatedPath: Point[] | undefined, userPath: P
     return total / sampleCount;
 };
 
-export const buildAutomataSceneModel = (
+export const prepareAutomataSceneModel = (
     project: ProjectState,
     mechanism: MechanismConfig | undefined,
-    angle: number,
-    mode: AutomataSceneMode = 'design-live'
-): AutomataSceneModel => {
+    mode: AutomataSceneMode = 'design-live',
+    contractAngleRad = 0,
+): PreparedAutomataSceneModel => {
     if (!mechanism) {
         return {
+            kind: 'empty',
             mode,
+            project,
             mechanisms: [],
-            animatedParts: {},
-            animatedSceneObjects: {},
-            skeleton: project.skeleton,
-            motionSource: 'none',
             pathFitStatus: 'unmeasured',
             featureIssues: [],
-        warnings: {}
-    };
+            warnings: {},
+        };
     }
 
     const authoredMechanisms = Object.values(project.mechanisms);
@@ -113,63 +145,64 @@ export const buildAutomataSceneModel = (
     const selectedGate = authoredCandidate
         ? resolveMechanismRuntimeGate(project, authoredCandidate)
         : undefined;
+    const fullMotion = prepareMotionPreviewForProject(project, activeMechanisms);
     if (!activeMechanism && selectedGate?.projection !== 'static-recovery') {
-        const fullMotionPreview = motionPreviewForProject(project, activeMechanisms, angle);
         return {
+            kind: 'hidden',
             mode,
+            project,
             mechanisms: activeMechanisms,
-            animatedParts: fullMotionPreview.parts,
-            animatedSceneObjects: fullMotionPreview.sceneObjects ?? {},
-            skeleton: fullMotionPreview.skeleton ?? project.skeleton,
-            motionSource: 'none',
+            fullMotion,
             pathFitStatus: 'unmeasured',
             featureIssues: [],
-        warnings: mechanismBindingWarnings(project, activeMechanisms)
+            warnings: mechanismBindingWarnings(project, activeMechanisms),
         };
     }
     if (!activeMechanism && authoredCandidate && selectedGate?.projection === 'static-recovery') {
         const staticMechanism = { ...authoredCandidate, generatedPath: undefined };
-        const fullMotionPreview = motionPreviewForProject(project, activeMechanisms, angle);
-        const foundryPreview = buildFoundryMechanismPreviewModel(
-            staticMechanism,
-            0,
-            project.settings,
-            [],
-            360,
-            240,
-            96,
-            'scene'
-        );
+        const preparedFoundry = prepareFoundryMechanismPreviewModel({
+            mechanism: staticMechanism,
+            settings: project.settings,
+            frame: 'scene',
+        });
         const feature = mechanismFeature(staticMechanism.type);
         return {
+            kind: 'recovery',
             mode,
+            project,
             recoveryMechanism: authoredCandidate,
             mechanisms: activeMechanisms,
-            foundryPreview,
+            staticFoundryPreview: samplePreparedFoundryMechanismPreviewModel(
+                preparedFoundry,
+                0,
+            ),
             mechanismContract: buildProjectMechanismSceneContract(project, authoredCandidate.id, undefined, 0),
-            animatedParts: fullMotionPreview.parts,
-            animatedSceneObjects: fullMotionPreview.sceneObjects ?? {},
-            skeleton: fullMotionPreview.skeleton ?? project.skeleton,
-            motionSource: 'none',
+            fullMotion,
             pathFitStatus: 'unmeasured',
             featureLabel: feature.label,
             featureIssues: feature.validate(staticMechanism),
-            warnings: mechanismBindingWarnings(project, authoredMechanisms)
+            warnings: mechanismBindingWarnings(project, authoredMechanisms),
         };
     }
     if (!activeMechanism) throw new Error('Active mechanism lookup failed');
     const mechanisms = activeMechanisms;
     const userPath = targetPathForMechanism(project, activeMechanism);
-    const foundryPreview = buildFoundryMechanismPreviewModel(
-        activeMechanism,
-        angle,
-        project.settings,
-        userPath?.points ?? [],
-        360,
-        240,
-        96,
-        'scene'
+    const preparedByMechanismId = new Map(
+        fullMotion.mechanisms.map(entry => [entry.mechanism.id, entry.kinematics]),
     );
+    const selectedMotion = prepareMotionPreviewForProject(
+        project,
+        [activeMechanism],
+        preparedByMechanismId,
+    );
+    const selectedKinematics = selectedMotion.mechanisms[0]?.kinematics;
+    const foundryPreview = prepareFoundryMechanismPreviewModel({
+        mechanism: activeMechanism,
+        settings: project.settings,
+        userPathPoints: userPath?.points ?? [],
+        frame: 'scene',
+        ...(selectedKinematics ? { kinematics: selectedKinematics } : {}),
+    });
     const mechanismPath = generatedPathForMechanism(activeMechanism);
     const pathFitError = generatedPathPhaseError(activeMechanism.generatedPath, userPath);
     const pathFitThreshold = userPath ? generatedPathFitThreshold(userPath) : undefined;
@@ -178,19 +211,6 @@ export const buildAutomataSceneModel = (
         : pathFitError > pathFitThreshold
             ? 'mismatch'
             : 'fit';
-    const fullMotionPreview = motionPreviewForProject(project, mechanisms, angle);
-    const selectedMotionPreview = motionPreviewForProject(project, [activeMechanism], angle);
-    const generatedTarget = mechanismPath ? pointOnGeneratedMechanismPath(mechanismPath.points, angle) : undefined;
-    const targetError = generatedTarget && selectedMotionPreview.target
-        ? distance(selectedMotionPreview.target, generatedTarget)
-        : undefined;
-    const motionSource = generatedTarget && selectedMotionPreview.target
-        ? 'generatedPath'
-        : generatedTarget
-            ? 'missing-target'
-            : selectedMotionPreview.target
-                ? 'linkage-effector'
-                : 'none';
     const feature = mechanismFeature(activeMechanism.type);
     const warnings = mechanismBindingWarnings(project, mechanisms);
     if (pathFitStatus === 'mismatch') {
@@ -201,26 +221,136 @@ export const buildAutomataSceneModel = (
     }
 
     return {
+        kind: 'active',
         mode,
-        mechanism: activeMechanism,
+        project,
+        activeMechanism,
         mechanisms,
         foundryPreview,
-        mechanismContract: buildProjectMechanismSceneContract(project, activeMechanism.id, undefined, angle),
+        mechanismContract: buildProjectMechanismSceneContract(
+            project,
+            activeMechanism.id,
+            undefined,
+            contractAngleRad,
+        ),
+        fullMotion,
+        selectedMotion,
+        userPath,
+        mechanismPath,
+        pathFitError,
+        pathFitThreshold,
+        pathFitStatus,
+        featureLabel: feature.label,
+        featureIssues: feature.validate(activeMechanism),
+        warnings,
+    };
+};
+
+export const samplePreparedAutomataSceneModel = (
+    prepared: PreparedAutomataSceneModel,
+    angle: number,
+): AutomataSceneModel => {
+    const { project } = prepared;
+    if (prepared.kind === 'empty') {
+        return {
+            mode: prepared.mode,
+            mechanisms: [],
+            animatedParts: {},
+            animatedSceneObjects: {},
+            skeleton: project.skeleton,
+            motionSource: 'none',
+            pathFitStatus: 'unmeasured',
+            featureIssues: [],
+            warnings: {},
+        };
+    }
+
+    const fullMotionPreview = prepared.fullMotion
+        ? samplePreparedMotionPreview(prepared.fullMotion, angle)
+        : { parts: {}, sceneObjects: {}, skeleton: project.skeleton };
+    if (prepared.kind === 'hidden') {
+        return {
+            mode: prepared.mode,
+            mechanisms: prepared.mechanisms,
+            animatedParts: fullMotionPreview.parts,
+            animatedSceneObjects: fullMotionPreview.sceneObjects ?? {},
+            skeleton: fullMotionPreview.skeleton ?? project.skeleton,
+            motionSource: 'none',
+            pathFitStatus: 'unmeasured',
+            featureIssues: [],
+            warnings: prepared.warnings,
+        };
+    }
+    if (prepared.kind === 'recovery') {
+        return {
+            mode: prepared.mode,
+            recoveryMechanism: prepared.recoveryMechanism,
+            mechanisms: prepared.mechanisms,
+            foundryPreview: prepared.staticFoundryPreview,
+            mechanismContract: prepared.mechanismContract,
+            animatedParts: fullMotionPreview.parts,
+            animatedSceneObjects: fullMotionPreview.sceneObjects ?? {},
+            skeleton: fullMotionPreview.skeleton ?? project.skeleton,
+            motionSource: 'none',
+            pathFitStatus: 'unmeasured',
+            featureLabel: prepared.featureLabel,
+            featureIssues: prepared.featureIssues,
+            warnings: prepared.warnings,
+        };
+    }
+
+    const activeMechanism = prepared.activeMechanism!;
+    const selectedMotionPreview = samplePreparedMotionPreview(
+        prepared.selectedMotion!,
+        angle,
+    );
+    const generatedTarget = prepared.mechanismPath
+        ? pointOnGeneratedMechanismPath(prepared.mechanismPath.points, angle)
+        : undefined;
+    const targetError = generatedTarget && selectedMotionPreview.target
+        ? distance(selectedMotionPreview.target, generatedTarget)
+        : undefined;
+    const motionSource = generatedTarget && selectedMotionPreview.target
+        ? 'generatedPath'
+        : generatedTarget
+            ? 'missing-target'
+            : selectedMotionPreview.target
+                ? 'linkage-effector'
+                : 'none';
+    return {
+        mode: prepared.mode,
+        mechanism: activeMechanism,
+        mechanisms: prepared.mechanisms,
+        foundryPreview: samplePreparedFoundryMechanismPreviewModel(
+            prepared.foundryPreview!,
+            angle,
+        ),
+        mechanismContract: prepared.mechanismContract,
         animatedParts: fullMotionPreview.parts,
         animatedSceneObjects: fullMotionPreview.sceneObjects ?? {},
         skeleton: fullMotionPreview.skeleton ?? project.skeleton,
-        userPath,
-        mechanismPath,
+        userPath: prepared.userPath,
+        mechanismPath: prepared.mechanismPath,
         target: selectedMotionPreview.target,
         generatedTarget,
         targetJointId: selectedMotionPreview.targetJointId,
         targetError,
-        pathFitError,
-        pathFitThreshold,
-        pathFitStatus,
+        pathFitError: prepared.pathFitError,
+        pathFitThreshold: prepared.pathFitThreshold,
+        pathFitStatus: prepared.pathFitStatus,
         motionSource,
-        featureLabel: feature.label,
-        featureIssues: feature.validate(activeMechanism),
-        warnings
+        featureLabel: prepared.featureLabel,
+        featureIssues: prepared.featureIssues,
+        warnings: prepared.warnings,
     };
 };
+
+export const buildAutomataSceneModel = (
+    project: ProjectState,
+    mechanism: MechanismConfig | undefined,
+    angle: number,
+    mode: AutomataSceneMode = 'design-live'
+): AutomataSceneModel => samplePreparedAutomataSceneModel(
+    prepareAutomataSceneModel(project, mechanism, mode, angle),
+    angle,
+);

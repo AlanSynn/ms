@@ -45,6 +45,14 @@ export type AssemblySceneFrame = {
     mechanismContract?: MechanismSceneContract;
 };
 
+export const withAssemblySceneProgress = (
+    frame: AssemblySceneFrame | undefined,
+    progress: number
+): AssemblySceneFrame | undefined => {
+    if (!frame || frame.progress === progress) return frame;
+    return { ...frame, progress };
+};
+
 const unique = (values: string[]) => [...new Set(values.filter(Boolean))];
 
 const boardModeForMechanismStep = (step: AssemblyPlaybackStep, activeBoardCoords: string[]): AssemblyBoardMode => {

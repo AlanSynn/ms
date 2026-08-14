@@ -1,0 +1,17 @@
+$ tsc && vite build --base ./
+vite v8.1.0 building client environment for production...
+[2Ktransforming...✓ 250 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/girl-thumb-CAdQi3RL.png                    8.20 kB
+dist/assets/boy-thumb-YC7FWjeU.png                    14.01 kB
+dist/index.html                                       86.33 kB │ gzip:    16.04 kB
+dist/assets/girl-DcnbHWJO.png                         94.86 kB
+dist/assets/webOnnxWorker-DLPIvHzw.js                238.22 kB
+dist/assets/AppIcon-Dx9trOlC.png                     474.08 kB
+dist/assets/boy-CGof9C4m.PNG                       2,817.50 kB
+dist/assets/ort-wasm-simd-threaded-Cpm-ox6i.wasm  13,479.97 kB │ gzip: 3,498.23 kB
+dist/assets/index-CcYzVUj1.js                      1,584.76 kB │ gzip:   457.66 kB
+dist/assets/rapier-DS2Sl1i-.js                     2,237.59 kB │ gzip:   842.98 kB
+
+✓ built in 728ms

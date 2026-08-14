@@ -1,0 +1,4 @@
+$ rg -n 'study-summary-v1|stageDurationMs|commandAccepted|normalFlushAttempted|MOTIONSMITH_SUMMARY_TARGET|127\\.0\\.0\\.1:43197' dist
+rg_exit_code=1
+match_output=<empty>
+default_dist_boundary=PASS

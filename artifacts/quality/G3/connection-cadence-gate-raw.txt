@@ -1,0 +1,221 @@
+G3 connection cadence slice — raw gate evidence
+Date: 2026-08-13
+
+Base synchronization
+
+$ git rebase --onto bc6aa84eb426f7c81b03b93fe0995b0c6b3ab416 d5f18b7f85ce19409cfa89ddd8fbe346e735859f quality/luna-preview
+Successfully rebased and updated refs/heads/quality/luna-preview.
+exit 0
+
+$ git rev-parse HEAD
+bc6aa84eb426f7c81b03b93fe0995b0c6b3ab416
+exit 0
+
+The five pre-existing unrelated untracked G3 artifacts were preserved byte-for-byte and left unstaged:
+18d397a7d05afc5beb5ac30a1ee6921023c5ab11a8d02544f7dc204b400c304b  artifacts/quality/G3/atomic-clock-gate-raw.txt
+d39e2894129a780927a1b993b9df4967e9c84a67383382f28c508b1ccfaedff4  artifacts/quality/G3/baseline-build.txt
+520b192e98d1801dff9d7299f70ce075071e6db7fe15c7d0d01cc04797ddf7d6  artifacts/quality/G3/baseline-performance.json
+38dae9f7830a9da4534eca23ee3c299e63a2577bb7267568bcb495ed1f1c05e8  artifacts/quality/G3/lifecycle-gate-raw.txt
+fceff45e2ed63c9654ed308547ef09a1ef384f5c26afcbd83df47ff42012f604  artifacts/quality/G3/resource-gate-raw.txt
+
+Owned scope
+
+Production: components/stages/mechanism/MechanismConnectionOverlay.tsx
+Test: tests/g3-connection-cadence.test.ts
+Evidence: artifacts/quality/G3/connection-cadence-gate-raw.txt
+No ThreeFoundryPreview, primitive/render-layer, Path, Puppet, Foundry/Design stage, domain-authority, ledger, or other production file was changed. The existing browser contract was sufficient, so tests/browser/workflow.spec.ts was not edited.
+
+Implementation claim
+
+The overlay now uses the existing utils/frameCommitQueue.ts through a small same-file drag-session seam. Pointer moves update the latest same-role target synchronously but queue transient dragging state once per display frame. Pointer-up flushes that latest value before resolving the existing authoritative selection path. Pointer-cancel discards the queued value, clears transient blocker/recovery state, and performs no authoritative commit or rejection mutation. Mechanism identity/type changes, disabled transitions, and reset cleanup cancel pending work through a replay-safe reset path that permits later reuse. Pointer capture remains best effort; click-without-move, candidate filtering, selected/recovery state, and keyboard access remain on the existing paths.
+
+Dedicated behavioral test
+
+$ bun tests/g3-connection-cadence.test.ts
+G3 connection cadence contracts passed
+exit 0
+
+The dedicated test directly proves one queued callback/latest burst value, synchronous pointer-up flush and exactly one terminal target, pointer-cancel discard even when the canceled callback is invoked afterward, and reset cleanup stale-callback suppression followed by reset-then-reuse under a StrictMode cleanup/replay model.
+
+Relevant direct-manipulation and transaction contracts
+
+$ bun tests/mechanism-direct-manipulation.test.ts
+mechanism direct-manipulation contracts passed
+exit 0
+
+$ bun tests/g008-physical-review.test.ts
+G008 physical review contracts passed
+exit 0
+
+$ bun tests/foundry-transaction.test.ts
+foundry transaction contracts passed
+exit 0
+
+$ bun tests/project-contract.test.ts
+project contracts ok
+exit 0
+
+Typecheck
+
+$ bunx tsc --noEmit
+exit 0
+
+Production build
+
+$ bun run build
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+transforming...✓ 242 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/girl-thumb-CAdQi3RL.png                    8.20 kB
+dist/assets/boy-thumb-YC7FWjeU.png                    14.01 kB
+dist/index.html                                       86.25 kB │ gzip:    16.03 kB
+dist/assets/girl-DcnbHWJO.png                         94.86 kB
+dist/assets/webOnnxWorker-A3hq6BbQ.js                238.13 kB
+dist/assets/AppIcon-Dx9trOlC.png                       474.08 kB
+dist/assets/boy-CGof9C4m.PNG                       2,817.50 kB
+dist/assets/ort-wasm-simd-threaded-Cpm-ox6i.wasm  13,479.97 kB │ gzip: 3,498.23 kB
+dist/assets/index-S1l2bbce.js                      1,577.89 kB │ gzip:   455.25 kB
+dist/assets/rapier-DS2Sl1i-.js                     2,237.59 kB │ gzip:   842.98 kB
+
+✓ built in 1.40s
+exit 0
+
+Diff check
+
+$ git diff --check
+exit 0
+
+Production-preview pointer and keyboard flow
+
+$ PLAYWRIGHT_PORT=5201 PLAYWRIGHT_WORKERS=1 bunx playwright test tests/browser/g008-physical-authoring.spec.ts
+[WebServer] $ vite preview --host "127.0.0.1" --port "5201" --strictPort
+Running 5 tests using 1 worker
+
+(node:1487) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' environment variable being set.
+(Use `node --trace-warnings ...` to show where the warning was found.)
+  ✓  1 [chromium] › tests/browser/g008-physical-authoring.spec.ts:125:1 › G008 shared physical overlay supports keyboard commit and preserves state on rejected pointer drop (28.7s)
+  ✓  2 [chromium] › tests/browser/g008-physical-authoring.spec.ts:267:1 › G018 family prospects commit atomically in Foundry and Design (2.6m)
+  ✓  3 [chromium] › tests/browser/g008-physical-authoring.spec.ts:310:1 › physical drag commits A after returning A to B to A inside the start deadzone (27.9s)
+  ✓  4 [chromium] › tests/browser/g008-physical-authoring.spec.ts:358:1 › planetary coincident pivot identity commits exactly in Foundry and Design (7.7s)
+  ✓  5 [chromium] › tests/browser/g008-physical-authoring.spec.ts:415:1 › G018 cam and planetary secondary traces stay display-only (5.6s)
+exit 0
+
+The browser gate used isolated port 5201 and did not require a product retry. The only untracked path created locally for dependency reuse was node_modules; it is removed before staging and is never committed.
+
+Post-review final rerun
+
+The terminal target lookup was rechecked against the existing projected interactionHandles path (preserving coincident-handle behavior), and the following final gates were rerun.
+
+$ bun tests/g3-connection-cadence.test.ts
+G3 connection cadence contracts passed
+exit 0
+
+$ bun tests/mechanism-direct-manipulation.test.ts && bun tests/g008-physical-review.test.ts && bun tests/foundry-transaction.test.ts && bun tests/project-contract.test.ts
+mechanism direct-manipulation contracts passed
+G008 physical review contracts passed
+foundry transaction contracts passed
+project contracts ok
+exit 0
+
+$ bunx tsc --noEmit
+exit 0
+
+$ git diff --check
+exit 0
+
+$ bun run build
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+transforming...✓ 242 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/girl-thumb-CAdQi3RL.png                    8.20 kB
+dist/assets/boy-thumb-YC7FWjeU.png                    14.01 kB
+dist/index.html                                       86.25 kB │ gzip:   16.03 kB
+dist/assets/girl-DcnbHWJO.png                         94.86 kB
+dist/assets/webOnnxWorker-A3hq6BbQ.js                238.13 kB
+dist/assets/AppIcon-Dx9trOlC.png                       474.08 kB
+dist/assets/boy-CGof9C4m.PNG                       2,817.50 kB
+dist/assets/ort-wasm-simd-threaded-Cpm-ox6i.wasm  13,479.97 kB │ gzip: 3,498.23 kB
+dist/assets/index-ssfxS7P0.js                      1,577.87 kB │ gzip:   455.24 kB
+dist/assets/rapier-DS2Sl1i-.js                     2,237.59 kB │ gzip:   842.98 kB
+
+✓ built in 1.48s
+exit 0
+
+$ PLAYWRIGHT_PORT=5203 PLAYWRIGHT_WORKERS=1 bunx playwright test tests/browser/g008-physical-authoring.spec.ts -g 'G008 shared physical overlay supports keyboard commit and preserves state on rejected pointer drop|physical drag commits A after returning A to B to A inside the start deadzone'
+[WebServer] $ vite preview --host "127.0.0.1" --port "5203" --strictPort
+
+Running 2 tests using 1 worker
+
+(node:62522) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' environment variable being set.
+(Use `node --trace-warnings ...` to show where the warning was found.)
+  ✓  1 [chromium] › tests/browser/g008-physical-authoring.spec.ts:125:1 › G008 shared physical overlay supports keyboard commit and preserves state on rejected pointer drop (9.5s)
+  ✓  2 [chromium] › tests/browser/g008-physical-authoring.spec.ts:310:1 › physical drag commits A after returning A to B to A inside the start deadzone (4.3s)
+
+  2 passed (45.7s)
+exit 0
+
+Amendment after review
+
+The rejected permanent disposed flag and terminal dispose path were removed. Mechanism identity/type, disabled, and unmount cleanup now use the same replay-safe reset, so a StrictMode cleanup/replay can be followed by a fresh drag. Pointer-cancel now clears blocker and recovery state after canceling the queued frame; it does not call the rejection path or authoritative commit path.
+
+Final focused rerun for the amendment
+
+$ bun tests/g3-connection-cadence.test.ts
+G3 connection cadence contracts passed
+exit 0
+
+$ bun tests/mechanism-direct-manipulation.test.ts
+mechanism direct-manipulation contracts passed
+exit 0
+
+$ bun tests/g008-physical-review.test.ts
+G008 physical review contracts passed
+exit 0
+
+$ bun tests/foundry-transaction.test.ts
+foundry transaction contracts passed
+exit 0
+
+$ bun tests/project-contract.test.ts
+project contracts ok
+exit 0
+
+$ bunx tsc --noEmit
+exit 0
+
+$ bun run build
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+transforming...✓ 242 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/girl-thumb-CAdQi3RL.png                    8.20 kB
+dist/assets/boy-thumb-YC7FWjeU.png                    14.01 kB
+dist/index.html                                       86.25 kB │ gzip:    16.03 kB
+dist/assets/girl-DcnbHWJO.png                         94.86 kB
+dist/assets/webOnnxWorker-A3hq6BbQ.js                238.13 kB
+dist/assets/AppIcon-Dx9trOlC.png                     474.08 kB
+dist/assets/boy-CGof9C4m.PNG                       2,817.50 kB
+dist/assets/ort-wasm-simd-threaded-Cpm-ox6i.wasm  13,479.97 kB │ gzip: 3,498.23 kB
+dist/assets/index-CY-MdM9g.js                      1,577.79 kB │ gzip:   455.21 kB
+dist/assets/rapier-DS2Sl1i-.js                     2,237.59 kB │ gzip:   842.98 kB
+✓ built in 916ms
+exit 0
+
+$ git diff --check
+exit 0
+
+$ PLAYWRIGHT_PORT=5204 PLAYWRIGHT_WORKERS=1 bunx playwright test tests/browser/g008-physical-authoring.spec.ts -g 'G008 shared physical overlay supports keyboard commit and preserves state on rejected pointer drop|physical drag commits A after returning A to B to A inside the start deadzone'
+[WebServer] $ vite preview --host "127.0.0.1" --port "5204" --strictPort
+Running 2 tests using 1 worker
+
+(node:30953) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' environment variable being set.
+  ✓  1 [chromium] › tests/browser/g008-physical-authoring.spec.ts:125:1 › G008 shared physical overlay supports keyboard commit and preserves state on rejected pointer drop (6.8s)
+  ✓  2 [chromium] › tests/browser/g008-physical-authoring.spec.ts:310:1 › physical drag commits A after returning A to B to A inside the start deadzone (4.3s)
+
+  2 passed (42.9s)
+exit 0

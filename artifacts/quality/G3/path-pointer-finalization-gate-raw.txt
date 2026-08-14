@@ -1,0 +1,13 @@
+Command: bun tests/g3-path-pointer-finalization.test.ts && bunx tsc --noEmit && bun run build && git diff --check
+Exit: 0
+
+G3 path pointer finalization contracts passed
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+239 modules transformed.
+dist/assets/index-DRLkTHKp.js 1,565.51 kB | gzip: 451.00 kB
+built in 781ms
+
+Verified SceneSketch terminates the active interaction on mouse up/leave,
+pointer up/cancel, and lost pointer capture. TypeScript, production build, and
+whitespace checks pass.

@@ -6,7 +6,10 @@ import type {
   Point,
   ProjectState,
 } from "../../../types";
-import { buildAutomataSceneModel } from "../../../utils/automataSceneModel";
+import {
+  prepareAutomataSceneModel,
+  samplePreparedAutomataSceneModel,
+} from "../../../utils/automataSceneModel";
 import {
   FOUNDRY_OVERLAY_SIZE,
   FOUNDRY_VIEW_PRESETS,
@@ -15,6 +18,7 @@ import {
   type FoundryCamera,
   type FoundryOverlaySize,
 } from "../../../utils/foundryCamera";
+import { useFrameCommitSession } from "../../../hooks/useFrameCommitSession";
 import type {
   AssemblyPlaybackStep,
   CharacterAssemblyStep,
@@ -31,6 +35,18 @@ const stepLift = (motion: string, progress: number, playing: boolean) =>
   motion === "explode_z" && (playing || progress > 0)
     ? Math.max(0, 0.38 * (1 - progress))
     : 0;
+
+const assemblyFramePresentationFor = (frame: AssemblySceneFrame, progress: number) => ({
+  zGuideExtension: frame.motion === "explode_z" ? Math.max(0, 0.5 * progress) : 0,
+  automataLift:
+    frame.kind === "character" && frame.explodeAxis === "z"
+      ? 0.3 + progress * 0.8
+      : 0,
+  travelProgress:
+    frame.motion === "mount_travel_xy" || frame.motion === "connect_travel_xy"
+      ? progress
+      : 0,
+});
 
 const cameraLabel = (camera: FoundryCamera) =>
   camera.preset === "custom"
@@ -60,6 +76,7 @@ const useAssemblyFoundryCamera = () => {
     pan: Point;
     mode: "orbit" | "zoom" | "pan";
   } | null>(null);
+  const cameraFrameSession = useFrameCommitSession<FoundryCamera>(setCamera);
 
   const updateProjectionSize = (size: FoundryOverlaySize) =>
     setProjectionSize((prev) =>
@@ -89,6 +106,7 @@ const useAssemblyFoundryCamera = () => {
       pan: camera.pan ?? noPoint,
       mode,
     };
+    cameraFrameSession.start();
     setIsOrbiting(mode === "orbit");
     setIsZooming(mode === "zoom");
     setIsPanning(mode === "pan");
@@ -104,17 +122,21 @@ const useAssemblyFoundryCamera = () => {
     event.preventDefault();
     const dx = event.clientX - start.x;
     const dy = event.clientY - start.y;
-    setCamera((prev) => {
+    cameraFrameSession.move((() => {
       if (start.mode === "zoom") {
         return {
-          ...prev,
+          yaw: start.yaw,
+          pitch: start.pitch,
           zoom: clampFoundryZoom(start.zoom * (1 - dy * 0.006)),
           preset: "custom",
+          pan: start.pan,
         };
       }
       if (start.mode === "pan") {
         return {
-          ...prev,
+          yaw: start.yaw,
+          pitch: start.pitch,
+          zoom: start.zoom,
           pan: {
             x: start.pan.x - dx * 0.018,
             y: start.pan.y + dy * 0.018,
@@ -123,18 +145,20 @@ const useAssemblyFoundryCamera = () => {
         };
       }
       return {
-        ...prev,
         yaw: start.yaw + dx * 0.38,
         pitch: clampFoundryPitch(start.pitch + dy * 0.28),
+        zoom: start.zoom,
         preset: "custom",
+        pan: start.pan,
       };
-    });
+    })());
   };
 
   const finishPointerMove: React.PointerEventHandler<HTMLDivElement> = (
     event,
   ) => {
     if (orbitStartRef.current?.pointerId !== event.pointerId) return;
+    cameraFrameSession.finish();
     orbitStartRef.current = null;
     setIsOrbiting(false);
     setIsZooming(false);
@@ -182,15 +206,17 @@ export const AssemblyCharacterThreePreview = ({
 }) => {
   const angle = step.phase === "test-character" ? progress * Math.PI * 2 : 0;
   const mechanism = assemblyMechanismForProject(project);
+  const assemblyFramePresentation = useMemo(
+    () => assemblyFramePresentationFor(sceneFrame, progress),
+    [progress, sceneFrame],
+  );
+  const preparedSceneModel = useMemo(
+    () => prepareAutomataSceneModel(project, mechanism, "assembly-live"),
+    [mechanism, project],
+  );
   const sceneModel = useMemo(
-    () =>
-      buildAutomataSceneModel(
-        project,
-        mechanism,
-        angle,
-        "assembly-live",
-      ),
-    [angle, mechanism, project],
+    () => samplePreparedAutomataSceneModel(preparedSceneModel, angle),
+    [angle, preparedSceneModel],
   );
   const previewModel = sceneModel.foundryPreview;
   const {
@@ -229,7 +255,7 @@ export const AssemblyCharacterThreePreview = ({
         data-assembly-three-mode="character"
         data-assembly-three-phase={step.phase}
         data-assembly-three-progress={Math.round(progress * 100)}
-        data-automata-model-source="buildAutomataSceneModel"
+        data-automata-model-source="prepareAutomataSceneModel/samplePreparedAutomataSceneModel"
       >
         Add a mechanism.
       </section>
@@ -253,7 +279,7 @@ export const AssemblyCharacterThreePreview = ({
       data-assembly-three-progress={Math.round(progress * 100)}
       data-assembly-frame-version={sceneFrame.version}
       data-assembly-motion-kind={sceneFrame.motion}
-      data-automata-model-source="buildAutomataSceneModel"
+      data-automata-model-source="prepareAutomataSceneModel/samplePreparedAutomataSceneModel"
       data-assembly-explode-axis={sceneFrame.explodeAxis}
       data-active-board-coords={sceneFrame.activeBoardCoords.join(",")}
       data-floating-reference-count={sceneFrame.floatingReferencePoints?.length ?? 0}
@@ -297,6 +323,7 @@ export const AssemblyCharacterThreePreview = ({
         onWheel={handleWheel}
         onProjectionSizeChange={updateProjectionSize}
         assemblySceneFrame={sceneFrame}
+        assemblyFramePresentation={assemblyFramePresentation}
         viewerTab="assembly"
         automataContext={automataContext}
       >
@@ -329,6 +356,10 @@ export const AssemblyMechanismThreePreview = ({
 }) => {
   const angle = progress * Math.PI * 2;
   const explode = stepLift(step.motion, progress, playing);
+  const assemblyFramePresentation = useMemo(
+    () => assemblyFramePresentationFor(sceneFrame, progress),
+    [progress, sceneFrame],
+  );
   const {
     camera,
     projectionSize,
@@ -341,9 +372,13 @@ export const AssemblyMechanismThreePreview = ({
     finishPointerMove,
     handleWheel,
   } = useAssemblyFoundryCamera();
+  const preparedSceneModel = useMemo(
+    () => prepareAutomataSceneModel(project, mechanism, "assembly-live"),
+    [mechanism, project],
+  );
   const sceneModel = useMemo(
-    () => buildAutomataSceneModel(project, mechanism, angle, "assembly-live"),
-    [angle, mechanism, project],
+    () => samplePreparedAutomataSceneModel(preparedSceneModel, angle),
+    [angle, preparedSceneModel],
   );
   const previewModel = sceneModel.foundryPreview;
   const showAutomataContext =
@@ -372,7 +407,7 @@ export const AssemblyMechanismThreePreview = ({
         data-assembly-three-mode="mechanism"
         data-assembly-three-phase={step.phase}
         data-assembly-three-progress={Math.round(progress * 100)}
-        data-automata-model-source="buildAutomataSceneModel"
+        data-automata-model-source="prepareAutomataSceneModel/samplePreparedAutomataSceneModel"
       >
         Add a mechanism.
       </section>
@@ -395,7 +430,7 @@ export const AssemblyMechanismThreePreview = ({
       data-assembly-three-phase={step.phase}
       data-assembly-three-progress={Math.round(progress * 100)}
       data-assembly-three-explode={Math.round(explode * 100)}
-      data-automata-model-source="buildAutomataSceneModel"
+      data-automata-model-source="prepareAutomataSceneModel/samplePreparedAutomataSceneModel"
       data-assembly-one-scene-automata={
         showAutomataContext ? "shown" : "mechanism-only"
       }
@@ -448,6 +483,7 @@ export const AssemblyMechanismThreePreview = ({
         onWheel={handleWheel}
         onProjectionSizeChange={updateProjectionSize}
         assemblySceneFrame={sceneFrame}
+        assemblyFramePresentation={assemblyFramePresentation}
         viewerTab="assembly"
         automataContext={automataContext}
       >

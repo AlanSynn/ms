@@ -1,0 +1,40 @@
+Atomic clock slice gate evidence
+Date: 2026-08-13
+Worktree: /Users/alansynn/orca/workspaces/MechAnim/luna-preview
+
+Command: bun tests/g3-animation-clock.test.ts
+Exit: 0
+Raw output:
+ok - advances at actual RAF cadence without a policy frame budget
+ok - fallback waits for the measured genuine-stall threshold
+ok - a fallback and RAF at the same timestamp advance once
+ok - the active driver reads the latest callback without restarting
+ok - repeated RAFs keep one RAF and one watchdog pending
+ok - stop during an advance callback does not schedule another RAF
+ok - stop cancels both RAF and fallback timer
+
+Command: bun tests/project-contract.test.ts
+Exit: 0
+Raw output:
+project contracts ok
+
+Command: bun run build
+Exit: 0
+Raw output:
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+transforming...✓ 239 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/girl-thumb-CAdQi3RL.png                    8.20 kB
+dist/assets/boy-thumb-YC7FWjeU.png                    14.01 kB
+dist/index.html                                       86.25 kB │ gzip:    16.03 kB
+dist/assets/girl-DcnbHWJO.png                         94.86 kB
+dist/assets/webOnnxWorker-A3hq6BbQ.js                238.13 kB
+dist/assets/AppIcon-Dx9trOlC.png                     474.08 kB
+dist/assets/boy-CGof9C4m.PNG                       2,817.50 kB
+dist/assets/ort-wasm-simd-threaded-Cpm-ox6i.wasm  13,479.97 kB │ gzip: 3,498.23 kB
+dist/assets/index-D6jz88dP.js                      1,560.12 kB │ gzip:   449.39 kB
+dist/assets/rapier-DS2Sl1i-.js                     2,237.59 kB │ gzip:   842.98 kB
+
+✓ built in 779ms

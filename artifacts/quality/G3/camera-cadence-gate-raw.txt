@@ -1,0 +1,48 @@
+G3 camera pointer cadence gate
+Date: 2026-08-13
+Integration branch: quality/sol-max-integration
+
+Implementation contract
+- Foundry, Design, Assembly, and ThreePuppet orbit/pan gestures queue only the latest absolute camera sample per display frame.
+- Pointer up, pointer cancel, and lost pointer capture synchronously flush the final sample.
+- Preset replacement and unmount cancel stale queued work.
+- ThreePuppet select-only pointer events remain immediate and do not enter the camera frame queue.
+- Wheel zoom remains discrete.
+
+Focused gate
+$ bun tests/g3-camera-cadence.test.ts
+G3 camera cadence contracts passed
+exit 0
+
+$ bun tests/g3-frame-commit-queue.test.ts
+G3 frame commit queue contracts passed
+exit 0
+
+$ bun tests/g3-path-cadence.test.ts
+G3 Path cadence contracts passed
+exit 0
+
+$ bun tests/g3-path-pointer-finalization.test.ts
+G3 path pointer finalization contracts passed
+exit 0
+
+$ bun tests/project-contract.test.ts
+project contracts ok
+exit 0
+
+$ bun run build
+tsc && vite build
+245 modules transformed; production build completed in 983ms
+exit 0
+
+$ git diff --check
+exit 0
+
+Production-preview deciding gate
+$ PLAYWRIGHT_PORT=5194 PLAYWRIGHT_WORKERS=4 bunx playwright test tests/browser/g3-camera-cadence.spec.ts tests/browser/workflow.spec.ts --grep "Assembly camera flushes its final pointer sample|Foundry supports CAD-style 3D camera presets and drag orbit|Shared path view supports 2D zoom and 3D direct orbit|Character tab owns separate scene objects and later tabs only render them"
+4 passed (33.6s)
+exit 0
+
+Non-deciding broad scenarios observed during triage
+- The existing Assembly scenario reached line 2331 after its camera surface mounted, then failed because fill("0.45") is malformed for its integer step-index range (min 0, max 4, current 1). This is unrelated to camera cadence.
+- The existing long Design scenario passed camera pan, then later measured 1.720465px against a >2px animation threshold. The focused Design scenario at workflow.spec.ts:395, including real orbit drag, passed unchanged.

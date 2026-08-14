@@ -1,8 +1,17 @@
-import type { WebOnnxCacheStatus } from '../../utils/webOnnx';
+import { useSyncExternalStore } from "react";
+import {
+  getWebOnnxCacheStatus,
+  subscribeWebOnnxCacheStatus,
+} from '../../utils/webOnnxStatusStore';
 
 const formatBytes = (bytes?: number) => (bytes ? `${Math.round(bytes / 1024 / 1024)}MB` : '');
 
-export const OnnxCacheStatusPill = ({ status, onDownload }: { status: WebOnnxCacheStatus; onDownload: () => void }) => {
+export const OnnxCacheStatusPill = ({ onDownload }: { onDownload: () => void }) => {
+  const status = useSyncExternalStore(
+    subscribeWebOnnxCacheStatus,
+    getWebOnnxCacheStatus,
+    getWebOnnxCacheStatus,
+  );
   const busy = status.stage === 'checking' || status.stage === 'downloading';
   const label = status.stage === 'cached'
     ? 'AI ready'

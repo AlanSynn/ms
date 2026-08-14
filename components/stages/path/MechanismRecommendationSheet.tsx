@@ -26,6 +26,16 @@ type MechanismRecommendationSheetProps = {
   onApply: (mechanism: MechanismConfig) => void;
 };
 
+type MechanismRecommendationBuilder = typeof buildMechanismRecommendations;
+
+export const buildOpenMechanismRecommendations = (
+  isOpen: boolean,
+  project: ProjectState,
+  selectedPart?: BodyPartLayer,
+  selectedPath?: ProjectMotionPath,
+  build: MechanismRecommendationBuilder = buildMechanismRecommendations,
+) => isOpen ? build(project, selectedPart, selectedPath) : [];
+
 const RecommendationFitPreview = ({
   option,
   project,
@@ -140,8 +150,13 @@ export const MechanismRecommendationSheet = ({
   onApply,
 }: MechanismRecommendationSheetProps) => {
   const recommendations = useMemo(
-    () => buildMechanismRecommendations(project, selectedPart, selectedPath),
-    [project, selectedPart, selectedPath],
+    () => buildOpenMechanismRecommendations(
+      isOpen,
+      project,
+      selectedPart,
+      selectedPath,
+    ),
+    [isOpen, project, selectedPart, selectedPath],
   );
 
   const apply = (option: MechanismRecommendation) => {

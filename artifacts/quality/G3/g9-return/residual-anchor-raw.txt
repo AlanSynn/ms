@@ -1,0 +1,41 @@
+G3 g9-return residual stale-command edge
+
+Concrete source audit
+Before this return patch, currentLandedFoundry() called landedFoundryFor(foundryCommandRef.current), and landedFoundryFor unconditionally assigned anchorX: landing.x, anchorY: landing.y, and sceneAnchor: landing. An accepted anchor command followed immediately by a parameter command therefore rebuilt the second candidate from the prior render's landing closure.
+
+Focused command-state test
+$ bun tests/g3-foundry-command-sequencing.test.ts
+G3 Foundry command sequencing contracts passed
+Exit code: 0
+
+The test resolves an accepted anchor command, retains that accepted anchor through foundryCommandStateFor(), resolves a second accepted phase command, and asserts the anchor remains unchanged. It also asserts path-fit and reset default to foundryCommandRef.current.
+
+Production-preview exact Foundry regression
+$ PLAYWRIGHT_PORT=4180 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_SERVER=preview bunx playwright test tests/browser/workflow.spec.ts -g 'Foundry sensemaking shows library, partial range, and exported metadata|Foundry clamps feasible numeric parameter edits without adding jam warnings'
+[WebServer] $ vite preview --host "127.0.0.1" --port "4180" --strictPort
+Running 2 tests using 1 worker
+✓ tests/browser/workflow.spec.ts:3045 Foundry sensemaking shows library, partial range, and exported metadata (18.9s)
+✓ tests/browser/workflow.spec.ts:3478 Foundry parameter safety contracts (4.3s)
+2 passed (24.4s)
+Exit code: 0
+
+Production-preview Assembly regression
+$ PLAYWRIGHT_PORT=4181 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_SERVER=preview bunx playwright test tests/browser/workflow.spec.ts -g 'Assembly shows character pins as a separate board build stage'
+[WebServer] $ vite preview --host "127.0.0.1" --port "4181" --strictPort
+Running 1 test using 1 worker
+✓ tests/browser/workflow.spec.ts:2282 Assembly shows character pins as a separate board build stage (4.7s)
+1 passed (5.8s)
+Exit code: 0
+
+Additional gates
+$ bunx tsc --noEmit
+Exit code: 0
+$ bun tests/foundry-transaction.test.ts
+foundry transaction contracts passed
+Exit code: 0
+$ bun tests/project-contract.test.ts
+project contracts ok
+Exit code: 0
+$ git diff --check
+(no output)
+Exit code: 0

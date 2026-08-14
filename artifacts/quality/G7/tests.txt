@@ -1,0 +1,24 @@
+# G7 verification commands
+
+$ bunx tsc --noEmit
+exit_code=0
+
+$ git diff --check
+exit_code=0
+
+$ bun run build
+exit_code=0
+raw: artifacts/quality/G7/raw/final-build.log
+
+$ PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=43179 PLAYWRIGHT_WORKERS=2 bunx playwright test tests/browser/quality-critical.spec.ts
+exit_code=0
+result: 1 passed (28.7s)
+raw: artifacts/quality/G7/raw/critical-flow-final-production-preview.log
+
+Characterization run retained for completeness:
+
+$ PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=43179 PLAYWRIGHT_WORKERS=2 bun run test:browser
+exit_code=1
+result: 66 passed, 10 failed (9.1m)
+raw: artifacts/quality/G7/raw/final-production-preview.log
+note: this ran before the final portable item-12 replacement; its raw failures are preserved and were not used as the deciding G7 gate.

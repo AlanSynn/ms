@@ -1,0 +1,24 @@
+G3 g9-return Assembly scrubber verification
+
+Baseline command
+PLAYWRIGHT_PORT=4175 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_SERVER=preview bunx playwright test tests/browser/workflow.spec.ts -g 'Assembly shows character pins as a separate board build stage|Foundry sensemaking shows library, partial range, and exported metadata|Foundry clamps feasible numeric parameter edits without adding jam warnings'
+
+Baseline deciding output
+1) tests/browser/workflow.spec.ts:2282 Assembly shows character pins as a separate board build stage
+Error: locator.fill: Error: Malformed value
+Locator: getByLabel('Assembly scrubber')
+Resolved input: min="0" max="4" value="1" type="range" aria-valuetext="Step 2 of 5" aria-label="Assembly scrubber"
+Attempt: fill("0.45")
+Exit code: 1
+
+Final command
+PLAYWRIGHT_PORT=4179 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_SERVER=preview bunx playwright test tests/browser/workflow.spec.ts -g 'Assembly shows character pins as a separate board build stage'
+
+Final output
+[WebServer] $ vite preview --host "127.0.0.1" --port "4179" --strictPort
+Running 1 test using 1 worker
+✓ tests/browser/workflow.spec.ts:2282 Assembly shows character pins as a separate board build stage (4.6s)
+1 passed (5.8s)
+Exit code: 0
+
+The deciding assertion filled 0.45, observed the within-step progress advance, retained the prepared structural frame version and dynamic build count, and then continued through discrete step changes.

@@ -1,0 +1,100 @@
+$ env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=43216 PLAYWRIGHT_WORKERS=2 bunx playwright test tests/browser/g5-web-onnx.spec.ts --repeat-each=2
+[WebServer] $ vite preview --host "127.0.0.1" --port "43216" --strictPort
+
+Running 2 tests using 2 workers
+
+{"g5FirstEvidence":{"requestId":2,"dispatchMark":{"startTime":10241.100000023842,"duration":0,"detail":{"requestId":2}},"processResultMark":{"startTime":12349.400000095367,"duration":0,"detail":{"requestId":2,"metrics":{"inputWidth":160,"inputHeight":220,"workingWidth":160,"workingHeight":220,"provider":"wasm","model":"fp32","modelBytes":135929562,"modelPath":"http://127.0.0.1:43216/onnx/pose_model.onnx","modelInitMs":1414.6000000238419,"modelReused":false,"ownedModelBufferReferencesRetained":0,"retainedModelSessionCount":1,"requestTensorRetainedBytes":0,"imageBitmapClosed":true,"partTextureDataUrlChars":9018,"partMaskDataUrlChars":5108,"inferenceMs":385.60000002384186,"totalMs":2106.5999999046326}}},"processProgressMessageCount":7,"processProgressMarks":[{"startTime":10246,"duration":0,"detail":{"requestId":2,"stage":"loading-model","progress":6}},{"startTime":10260.600000023842,"duration":0,"detail":{"requestId":2,"stage":"downloading-model","progress":12}},{"startTime":10380.400000095367,"duration":0,"detail":{"requestId":2,"stage":"downloading-model","progress":34}},{"startTime":11796.5,"duration":0,"detail":{"requestId":2,"stage":"loading-model","progress":35}},{"startTime":11799.600000023842,"duration":0,"detail":{"requestId":2,"stage":"running-onnx","progress":45}},{"startTime":12186.100000023842,"duration":0,"detail":{"requestId":2,"stage":"extracting-parts","progress":75}},{"startTime":12344.100000023842,"duration":0,"detail":{"requestId":2,"stage":"normalizing","progress":90}}],"phaseMarks":[{"name":"motionsmith-image-result-application-start","startTime":12349.400000095367,"duration":0,"detail":{"requestId":2}},{"name":"motionsmith-image-result-application-end","startTime":12350.300000071526,"duration":0,"detail":{"requestId":2}}],"reviewMark":{"startTime":12724.700000047684,"duration":0,"detail":null},"overlappingLongTasks":[],"media":{"artParts":10,"maskParts":10,"totalParts":10,"modelPath":"http://127.0.0.1:43216/onnx/pose_model.onnx","modelInitMs":1414.6000000238419,"modelReused":false,"inferenceMs":385.60000002384186,"ownedModelBufferReferencesRetained":0,"retainedModelSessionCount":1,"requestTensorRetainedBytes":0,"imageBitmapClosed":true,"partTextureDataUrlChars":9018,"partMaskDataUrlChars":5108}}}
+{"g5FirstEvidence":{"requestId":2,"dispatchMark":{"startTime":10188.100000023842,"duration":0,"detail":{"requestId":2}},"processResultMark":{"startTime":12405.600000023842,"duration":0,"detail":{"requestId":2,"metrics":{"inputWidth":160,"inputHeight":220,"workingWidth":160,"workingHeight":220,"provider":"wasm","model":"fp32","modelBytes":135929562,"modelPath":"http://127.0.0.1:43216/onnx/pose_model.onnx","modelInitMs":1494.3999999761581,"modelReused":false,"ownedModelBufferReferencesRetained":0,"retainedModelSessionCount":1,"requestTensorRetainedBytes":0,"imageBitmapClosed":true,"partTextureDataUrlChars":9018,"partMaskDataUrlChars":5108,"inferenceMs":381.5,"totalMs":2216.3000000715256}}},"processProgressMessageCount":7,"processProgressMarks":[{"startTime":10191.100000023842,"duration":0,"detail":{"requestId":2,"stage":"loading-model","progress":6}},{"startTime":10204.299999952316,"duration":0,"detail":{"requestId":2,"stage":"downloading-model","progress":12}},{"startTime":10359.600000023842,"duration":0,"detail":{"requestId":2,"stage":"downloading-model","progress":34}},{"startTime":11856.799999952316,"duration":0,"detail":{"requestId":2,"stage":"loading-model","progress":35}},{"startTime":11860.100000023842,"duration":0,"detail":{"requestId":2,"stage":"running-onnx","progress":45}},{"startTime":12242.5,"duration":0,"detail":{"requestId":2,"stage":"extracting-parts","progress":75}},{"startTime":12402.399999976158,"duration":0,"detail":{"requestId":2,"stage":"normalizing","progress":90}}],"phaseMarks":[{"name":"motionsmith-image-result-application-start","startTime":12405.799999952316,"duration":0,"detail":{"requestId":2}},{"name":"motionsmith-image-result-application-end","startTime":12407,"duration":0,"detail":{"requestId":2}}],"reviewMark":{"startTime":12951.5,"duration":0,"detail":null},"overlappingLongTasks":[{"startTime":12455.799999952316,"duration":144}],"media":{"artParts":10,"maskParts":10,"totalParts":10,"modelPath":"http://127.0.0.1:43216/onnx/pose_model.onnx","modelInitMs":1494.3999999761581,"modelReused":false,"inferenceMs":381.5,"ownedModelBufferReferencesRetained":0,"retainedModelSessionCount":1,"requestTensorRetainedBytes":0,"imageBitmapClosed":true,"partTextureDataUrlChars":9018,"partMaskDataUrlChars":5108}}}
+  ✘  2 [chromium] › tests/browser/g5-web-onnx.spec.ts:123:1 › Create from image upload keeps transforms off the UI thread (14.3s)
+  ✘  1 [chromium] › tests/browser/g5-web-onnx.spec.ts:123:1 › Create from image upload keeps transforms off the UI thread (14.7s)
+
+
+  1) [chromium] › tests/browser/g5-web-onnx.spec.ts:123:1 › Create from image upload keeps transforms off the UI thread
+
+    Error: sustained app dispatch through review has no UI long task over 50 ms
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  -  1
+    + Received  + 10
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "duration": 245,
+    +     "startTime": 12984.600000023842,
+    +   },
+    +   Object {
+    +     "duration": 64,
+    +     "startTime": 13466.100000023842,
+    +   },
+    + ]
+
+      215 |   expect(secondMedia.modelInitMs, "reused import does not recreate the model session").toBe(0);
+      216 |   expect(secondEvidence.processProgressMessageCount, "reused request still has bounded progress reporting").toBeLessThanOrEqual(40);
+    > 217 |   expect(secondEvidence.overlappingLongTasks.filter((entry) => entry.duration > 50), "sustained app dispatch through review has no UI long task over 50 ms").toEqual([]);
+          |                                                                                                                                                              ^
+      218 |   const processMarkCount = await page.evaluate(() => performance.getEntriesByName("motionsmith-image-process-result").length);
+      219 |   expect(processMarkCount, "warm completion is not counted as image processing").toBe(2);
+      220 |   expect(pageErrors, "image import has no uncaught browser errors").toEqual([]);
+        at /Users/alansynn/orca/workspaces/MechAnim/luna-ai-g9/tests/browser/g5-web-onnx.spec.ts:217:158
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/g5-web-onnx-Create-from-im-55e36-ransforms-off-the-UI-thread-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/g5-web-onnx-Create-from-im-55e36-ransforms-off-the-UI-thread-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/g5-web-onnx-Create-from-im-55e36-ransforms-off-the-UI-thread-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/g5-web-onnx-Create-from-im-55e36-ransforms-off-the-UI-thread-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium] › tests/browser/g5-web-onnx.spec.ts:123:1 › Create from image upload keeps transforms off the UI thread
+
+    Error: app dispatch through review has no UI long task over 50 ms
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 6
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "duration": 144,
+    +     "startTime": 12455.799999952316,
+    +   },
+    + ]
+
+      186 |   expect(firstMedia.modelInitMs, "first import measures session initialization").toBeGreaterThan(0);
+      187 |   expect(firstEvidence.processProgressMessageCount, "download progress is coalesced per process request").toBeLessThanOrEqual(40);
+    > 188 |   expect(firstEvidence.overlappingLongTasks.filter((entry) => entry.duration > 50), "app dispatch through review has no UI long task over 50 ms").toEqual([]);
+          |                                                                                                                                                   ^
+      189 |
+      190 |   await page.getByRole("button", { name: "Skip", exact: true }).click();
+      191 |   await expect(page.getByTestId("character-import-review")).toHaveCount(0);
+        at /Users/alansynn/orca/workspaces/MechAnim/luna-ai-g9/tests/browser/g5-web-onnx.spec.ts:188:147
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/g5-web-onnx-Create-from-im-55e36-ransforms-off-the-UI-thread-chromium-repeat1/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/g5-web-onnx-Create-from-im-55e36-ransforms-off-the-UI-thread-chromium-repeat1/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/g5-web-onnx-Create-from-im-55e36-ransforms-off-the-UI-thread-chromium-repeat1/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/g5-web-onnx-Create-from-im-55e36-ransforms-off-the-UI-thread-chromium-repeat1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [chromium] › tests/browser/g5-web-onnx.spec.ts:123:1 › Create from image upload keeps transforms off the UI thread
+    [chromium] › tests/browser/g5-web-onnx.spec.ts:123:1 › Create from image upload keeps transforms off the UI thread
+
+exit_code=1

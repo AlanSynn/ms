@@ -1,0 +1,230 @@
+{
+  "sourceSha": "0707c38aaf2ddc121cdfc550a2067812354b0123",
+  "runtime": {
+    "tool": "orca 1.4.181 built-in browser",
+    "runtimeId": "5aa221c2-d1ac-4e04-b0a8-30e23faa79d1",
+    "worktree": "/Users/alansynn/orca/workspaces/MechAnim/quality-sol-max-integration",
+    "worktreeWasActivatedBeforeDecidingRuns": true,
+    "defaultUrl": "http://127.0.0.1:43195/",
+    "enabledUrl": "http://127.0.0.1:43196/",
+    "sinkUrl": "http://127.0.0.1:43197/summary"
+  },
+  "buildBoundary": {
+    "defaultMainBundleBytes": 1584865,
+    "enabledMainBundleBytes": 1594105,
+    "enabledDeltaBytes": 9240,
+    "defaultMarkerScanMatches": 0,
+    "enabledContainsSchemaAndTarget": true
+  },
+  "input": {
+    "protocol": "Each fresh page receives 500 sequential unmeasured input-to-playhead mutations, followed by 1000 measured mutations. Builds run in default/enabled/enabled/default order and cross browser-page identities. The arithmetic mean of the two per-build p95 values is the deciding estimate.",
+    "rounds": [
+      {
+        "order": 1,
+        "profile": "default",
+        "browserPageId": "804d5cd0-b48b-48e6-bef7-84db878b286e",
+        "p50Ms": 40.199999928474426,
+        "p95Ms": 43.300000071525574,
+        "p99Ms": 45.59999990463257,
+        "meanMs": 40.570600001335144,
+        "maxMs": 64.60000002384186,
+        "latencyBands": [0, 0, 454, 994, 6],
+        "webglClears": 1,
+        "structuralBuildDelta": 0,
+        "longTasksOver50Ms": []
+      },
+      {
+        "order": 2,
+        "profile": "study",
+        "browserPageId": "4aa85da1-bf04-44a6-ae2b-ce8c508428fa",
+        "p50Ms": 39.5,
+        "p95Ms": 42,
+        "p99Ms": 45.39999997615814,
+        "meanMs": 39.81590000009537,
+        "maxMs": 60.59999990463257,
+        "latencyBands": [0, 0, 679, 993, 7],
+        "webglClears": 1,
+        "structuralBuildDelta": 0,
+        "longTasksOver50Ms": []
+      },
+      {
+        "order": 3,
+        "profile": "study",
+        "browserPageId": "804d5cd0-b48b-48e6-bef7-84db878b286e",
+        "p50Ms": 40.5,
+        "p95Ms": 43.5,
+        "p99Ms": 46.300000071525574,
+        "meanMs": 40.78429999959469,
+        "maxMs": 67.20000004768372,
+        "latencyBands": [0, 0, 379, 993, 7],
+        "webglClears": 1,
+        "structuralBuildDelta": 0,
+        "longTasksOver50Ms": []
+      },
+      {
+        "order": 4,
+        "profile": "default",
+        "browserPageId": "4aa85da1-bf04-44a6-ae2b-ce8c508428fa",
+        "p50Ms": 39.5,
+        "p95Ms": 42.700000047683716,
+        "p99Ms": 46.39999997615814,
+        "meanMs": 39.928399999141696,
+        "maxMs": 61.800000071525574,
+        "latencyBands": [0, 0, 682, 993, 7],
+        "webglClears": 1,
+        "structuralBuildDelta": 0,
+        "longTasksOver50Ms": []
+      }
+    ],
+    "aggregate": {
+      "defaultP95Ms": 43.000000059604645,
+      "enabledP95Ms": 42.75,
+      "deltaMs": -0.2500000596046448,
+      "deltaPercent": -0.5813954866467583,
+      "maxDeltaMs": 1,
+      "maxDeltaPercent": 2,
+      "decision": "pass"
+    }
+  },
+  "playback": {
+    "protocol": "Each run plays 120 unmeasured requestAnimationFrame intervals, then measures 360 intervals. Runs use default/enabled/enabled/default order. The arithmetic mean of the two per-build p95 values is the deciding estimate.",
+    "rounds": [
+      {
+        "order": 1,
+        "profile": "default",
+        "p50Ms": 83.30000000001746,
+        "p95Ms": 85.69999999998254,
+        "p99Ms": 90.10000000000582,
+        "meanMs": 82.40499999999997,
+        "maxMs": 108.69999999998254,
+        "webglClears": 360,
+        "structuralBuildDelta": 0,
+        "longTasksOver50Ms": []
+      },
+      {
+        "order": 2,
+        "profile": "study",
+        "p50Ms": 83.29999999998836,
+        "p95Ms": 87.29999999998836,
+        "p99Ms": 89.29999999998836,
+        "meanMs": 82.41916666666657,
+        "maxMs": 112.70000000001164,
+        "webglClears": 360,
+        "structuralBuildDelta": 0,
+        "longTasksOver50Ms": []
+      },
+      {
+        "order": 3,
+        "profile": "study",
+        "p50Ms": 83.29999999998836,
+        "p95Ms": 87.20000000001164,
+        "p99Ms": 88.29999999998836,
+        "meanMs": 81.95638888888902,
+        "maxMs": 91.79999999998836,
+        "webglClears": 360,
+        "structuralBuildDelta": 0,
+        "longTasksOver50Ms": []
+      },
+      {
+        "order": 4,
+        "profile": "default",
+        "p50Ms": 83.29999999998836,
+        "p95Ms": 87.29999999998836,
+        "p99Ms": 90.5,
+        "meanMs": 81.94583333333334,
+        "maxMs": 91.5,
+        "webglClears": 360,
+        "structuralBuildDelta": 0,
+        "longTasksOver50Ms": []
+      }
+    ],
+    "aggregate": {
+      "defaultP95Ms": 86.49999999998545,
+      "enabledP95Ms": 87.25,
+      "deltaMs": 0.7500000000145519,
+      "deltaPercent": 0.8670520231383565,
+      "maxDeltaPercent": 2,
+      "defaultMeasuredWebglClears": 720,
+      "enabledMeasuredWebglClears": 720,
+      "attributableLongTasksOver50Ms": 0,
+      "decision": "pass"
+    }
+  },
+  "transport": {
+    "default": {
+      "afterExportRequestCount": 0,
+      "afterPageHideRequestCount": 0,
+      "resourceEntriesToSink": 0,
+      "decision": "pass"
+    },
+    "enabled": {
+      "requestCount": 2,
+      "modes": ["cors", "no-cors"],
+      "bytes": [1114, 1114],
+      "normalRequests": 1,
+      "exitBeacons": 1,
+      "schema": "study-summary-v1",
+      "buildSha": "0707c38aaf2ddc121cdfc550a2067812354b0123",
+      "profile": "study",
+      "exactAllowlist": true,
+      "sensitiveSentinelsAbsent": true,
+      "decision": "pass"
+    }
+  },
+  "criticalFlow": {
+    "profile": "default",
+    "character": {
+      "heading": "Character",
+      "ownership": "Make it yoursMake a hand waveSelect a partPlace jointsEdit rigReset"
+    },
+    "foundry": {
+      "control": "Pause",
+      "phaseDegrees": 281,
+      "renderable": "ready",
+      "renderer": "webgl",
+      "physics": "ready",
+      "dynamicBuildCount": 1,
+      "partCount": 11,
+      "holeCount": 21,
+      "physicalErrors": 0,
+      "stackErrors": 0
+    },
+    "design": {
+      "heading": "Mechanism Design",
+      "renderable": "ready",
+      "renderer": "webgl",
+      "dynamicBuildCount": 1,
+      "mechanism": "4bar",
+      "partCount": 14,
+      "physicalErrors": 0,
+      "stackErrors": 0,
+      "pathSource": "moving-joints"
+    },
+    "blueprint": {
+      "heading": "Blueprint",
+      "generated": ["Download PDF cut sheet default", "Download SVG default"]
+    },
+    "assembly": {
+      "heading": "Assembly",
+      "phase": "prepare-parts"
+    },
+    "consoleMessages": [],
+    "httpFailures": [],
+    "summaryResourceEntries": 0,
+    "decision": "pass"
+  },
+  "excludedPilots": [
+    {
+      "reason": "cold pages and unbalanced JIT warm-up",
+      "result": "Several 500-sample input pairs exceeded the p95 gate despite zero per-input telemetry work; later rounds on the same pages became faster. All exact values remain in orca-final-session.log."
+    },
+    {
+      "reason": "integration worktree hidden in Orca",
+      "result": "The embedded webview was throttled, producing playback maxima near 1000 ms. Orca worktree ps reported isActive=false. These runs were rejected before the worktree was activated."
+    },
+    {
+      "reason": "unbalanced lifecycle-isolation experiment",
+      "result": "A temporary uncommitted removal of the lifecycle mount compared a fresh candidate page with a heavily warmed default page. It did not improve latency and was fully reverted; git diff for the production file returned empty."
+    }
+  ]
+}

@@ -1,0 +1,88 @@
+G5 deterministic evidence log
+=============================
+
+Baseline before this lane: e55f9cf3c9b16753e89218e059c75a56ddb7adf8
+
+Focused executable tests
+------------------------
+$ bun tests/g5-image-dimensions.test.ts
+exit_code=0
+{"bounded":{"width":1024,"height":768},"limits":{"maxWorkingEdge":1024,"maxWorkingPixels":1000000,"maxSourceTextureEdge":512,"maxSourceTextureBytes":262144,"maxMaskBytes":131072}
+The test also exercised an unknown image format and confirmed that createImageBitmap was not called before the recoverable unsupported-image error.
+
+$ bun tests/g5-web-onnx-cancellation.test.ts
+exit_code=0
+{"cancellation":{"latencyMs":2.733708,"workerTerminated":3,"supersededRequestRejected":true,"newerRequestResolved":true},"recoverableModelError":{"code":"model-invalid","failedWorkerRetired":true,"freshWorkerRetryResolved":true,"warmProcessWorkerReused":true,"genericFetchCode":"model-download-failed","sessionCreateCode":"wasm-unavailable"}}
+This fake-worker test executes typed model failure -> worker retirement -> fresh retry, generic download classification, session-create classification, and warm/process serialization.
+
+$ bun tests/g5-web-onnx.test.ts
+exit_code=0
+G5 web ONNX contracts passed; model quality measurement is opt-in and uses local model bytes only.
+The executable contract covered document bases /, /ms/, and ./, the copy-manifest FP32 source record, pointer/materialized INT8 provenance, candidate non-deployment, bounded inputs/outputs, Python/TypeScript foreground-crop agreement, protocol/runtime ownership, and status-store ownership.
+
+Model quality
+-------------
+$ G5_RUN_MODEL_QUALITY=1 G5_INT8_MODEL=/Users/alansynn/Workspace/MechAnim/.git/lfs/objects/50/97/50973d96bc0dcee28035aefe147fdd589f5556d3c1a43d661e3ba2894e172058 bun tests/g5-web-onnx.test.ts
+exit_code=0
+modelBytes: fp32=135929562, int8=34339384
+initializationMs: fp32=414.4989579999999, int8=35.5486249999999
+inferenceMs: fp32=[310.6839580000001,289.4523750000003,273.5811669999998], int8=[295.81841600000007,291.4049580000001,285.2849590000001]
+inferenceMeanMs: fp32=291.23916666666673, int8=290.8361110000001
+fixtures: stick mean=0.14705882352941177%, girl mean=0.14705882352941177%, boy mean=0.22058823529411764%
+aggregate: samples=51, mean=0.1715686274509804%, p95=1.25%, max=1.25%, exactArgmaxMatch=86.27450980392157%
+The current raw run is effectively tied/noisy; historical/raw runs measured INT8 slower. Because the candidate was not regenerated and remains legacy/evaluation-only, no deployment replacement is justified.
+
+Quantizer checks
+---------------
+$ python3 scripts/quantize-pose-model.py --help
+exit_code=0
+The stable CLI parsed without importing numpy, Pillow, onnx, or onnxruntime at module startup.
+
+$ python3 scripts/quantize-pose-model.py --preprocess-contract --calibration-fixtures tests/fixtures/stick-character.png
+exit_code=0
+The emitted JSON policy was cleaned-foreground-bbox+20%-margin and the executable G5 contract matched its foreground bbox/crop to TypeScript on the committed fixture.
+
+$ python3 scripts/quantize-pose-model.py --quality-only
+exit_code=2
+Pose quantization is blocked: missing Python package 'onnxruntime'. Install numpy, Pillow, onnx, and onnxruntime in the active Python environment, then rerun this command.
+
+Builds and static scope
+-----------------------
+$ bun run build
+exit_code=0
+tsc && vite build; 235 modules transformed; production build completed.
+
+$ bun run build:tauri-frontend
+exit_code=0
+tsc && vite build --base ./; 235 modules transformed; production build completed.
+The packaged model was dist/onnx/pose_model.onnx, 135929562 bytes, SHA-256 9fd0dc927f41d1981c64d1ac7f5b22545f369c16b95944d60d93495c5a68eb74; dist/onnx/pose_model.int8.ort was absent.
+
+$ G5_TAURI_BUILD=1 bun tests/g5-web-onnx.test.ts
+exit_code=0
+The Tauri document-relative package assertion passed.
+
+$ git diff --check
+exit_code=0
+output empty
+
+Production-preview browser gate
+-------------------------------
+$ bunx playwright test tests/browser/g5-web-onnx.spec.ts --config=/tmp/g5-playwright.config.ts
+exit_code=0
+1 passed (9.0s)
+
+Raw first evidence: requestId=2; dispatch=5845; result=6606.200000047684; application=6606.300000071526-6606.700000047684; review=6876.800000071526; progress messages=7 at 5849, 5858.700000047684, 5924.200000047684, 6271.300000071526, 6272.700000047684, 6563.200000047684, 6603.700000047684; modelInitMs=345.10000002384186; reused=false; inferenceMs=289.7999999523163; totalMs=759.5; artParts=10; maskParts=10; totalParts=10; artChars=9018; maskChars=5108; overlappingLongTasks=[]; retainedSessionCount=1; ownedModelBufferReferencesRetained=0; requestTensorRetainedBytes=0; imageBitmapClosed=true.
+Raw second evidence: requestId=3; dispatch=6930.399999976158; result=7366.100000023842; application=7366.200000047684-7366.399999976158; review=7745.300000071526; progress messages=6 at 6932.600000023842, 6935.700000047684, 6935.800000071526, 6935.899999976158, 7318.300000071526, 7363.600000023842; modelInitMs=0; reused=true; inferenceMs=381; totalMs=435.3000000715256; artParts=10; maskParts=10; totalParts=10; artChars=9018; maskChars=5108; overlappingLongTasks=[]; retainedSessionCount=1; ownedModelBufferReferencesRetained=0; requestTensorRetainedBytes=0; imageBitmapClosed=true.
+Browser assertions also required the visible review thumbnail to be <=320px wide and <=128px high, no page errors, exactly two process-result marks, and no Long Task >50ms from each app-owned dispatch through review completion. Warm completion uses a distinct mark and is not counted as process completion.
+
+Historical failing timing retained for causal comparison: dispatch=968.8ms; Long Task=981.7-1033.7ms (52ms); first progress=1038.2ms; result=7073.3ms; application=7073.3-7073.9ms; review=7402.1ms; artChars=9018; maskChars=5108. The warm/process lifecycle fix removed this overlap; the final raw arrays above are the deciding evidence.
+
+Shared project contract
+-----------------------
+$ bun tests/project-contract.test.ts
+exit_code=1
+The test reaches the G5 owner assertions, then stops at the unrelated existing dense-fabrication assertion. No G3/G6/config file was changed to address that baseline failure.
+
+Final scope checks
+------------------
+The candidate index is staged as a three-line pointer with oid sha256:50973d96bc0dcee28035aefe147fdd589f5556d3c1a43d661e3ba2894e172058 and size 34339384. public/onnx/pose_model.onnx and .gitattributes have no diff. The final standard git status check is recorded after staging/commit, not inferred from the artifact.

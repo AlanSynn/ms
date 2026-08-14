@@ -1,0 +1,63 @@
+G5 changed-files
+=================
+
+Production-owned paths
+components/AppWorkspaceShell.tsx
+components/shell/OnnxCacheStatusPill.tsx
+components/stages/character/CharacterImportOverlays.tsx
+components/stages/character/CharacterSelection.tsx
+hooks/useAppCharacterImportActions.ts
+hooks/useAppOnnxBootstrap.ts
+hooks/useMotionSmithAppController.ts
+index.html
+models/candidates/pose_model.int8.ort
+models/pose-model-int8.json
+scripts/quantize-pose-model.py
+scripts/pose_model_preprocessing.py
+utils/imageDimensions.ts
+utils/webOnnx.ts
+utils/webOnnxImagePipeline.ts
+utils/webOnnxModelRuntime.ts
+utils/webOnnxPreprocess.ts
+utils/webOnnxProtocol.ts
+utils/webOnnxStatusStore.ts
+utils/webOnnxWorker.ts
+
+New production helper paths (explicit)
+utils/webOnnxProtocol.ts
+utils/webOnnxModelRuntime.ts
+utils/webOnnxImagePipeline.ts
+utils/webOnnxPreprocess.ts
+utils/imageDimensions.ts
+utils/webOnnxStatusStore.ts
+scripts/pose_model_preprocessing.py
+
+Approved UI/bootstrap scope
+components/stages/character/CharacterSelection.tsx (bounded result-first review preview)
+index.html (static boot-loader ownership)
+
+Goal-local tests
+tests/browser/g5-web-onnx.spec.ts
+tests/g5-image-dimensions.test.ts
+tests/g5-web-onnx-cancellation.test.ts
+tests/g5-web-onnx.test.ts
+tests/project-contract.test.ts (G5 owner assertions)
+
+Required quality artifacts
+artifacts/quality/G5/changed-files.txt
+artifacts/quality/G5/result.md
+artifacts/quality/G5/tests.txt
+
+Excluded tracked/deployment paths
+public/onnx/pose_model.onnx remains the canonical materialized FP32 LFS object in the worktree and is not staged.
+.gitattributes is unchanged; G6/Sol owns the production *.ort LFS rule.
+No G6 or config files are included.
+
+Removed omitted inputs
+models/source/pose_model.fp32.onnx and models/calibration/pose-inputs.npz are absent.
+
+Model policy
+public/onnx/pose_model.onnx is the sole deployed model. models/candidates/pose_model.int8.ort is a non-deployed candidate outside public/; the default Vite build cannot copy it into dist/.
+
+Candidate checkout policy
+The candidate is tracked through LFS. This G0 worktree uses a worktree-local $GIT_DIR/info/attributes rule for *.ort; the staged form is a three-line pointer with the manifest oid/size. Integration may materialize the same bytes, and the executable provenance test accepts either exact pointer metadata or exact materialized SHA-256/length.

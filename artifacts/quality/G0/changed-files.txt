@@ -1,0 +1,15 @@
+artifacts/quality/base-branch.txt
+artifacts/quality/base-sha.txt
+artifacts/quality/base-status.txt
+artifacts/quality/baseline-exclusions.md
+artifacts/quality/input-sha256.txt
+artifacts/quality/commit-ledger.tsv
+artifacts/quality/hunk-ledger.tsv
+artifacts/quality/ledger-schema.md
+artifacts/quality/production-file-ownership.tsv
+artifacts/quality/ownership-audit.md
+artifacts/quality/G0/tests.txt
+artifacts/quality/G0/orca-report.md
+artifacts/quality/G0/interface-freeze.md
+artifacts/quality/G0/result.md
+artifacts/quality/G0/changed-files.txt

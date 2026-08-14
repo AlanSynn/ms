@@ -1,0 +1,73 @@
+$ find tests -maxdepth 1 -type f -name '*.test.ts' -print | LC_ALL=C sort | while IFS= read -r file; do bun "$file" || exit; done
+foundry transaction contracts passed
+G008 physical review contracts passed
+g008 ProjectState ingress/runtime/scene contracts passed
+G2 coordinate, readiness, and export contracts passed
+ok - advances at actual RAF cadence without a policy frame budget
+ok - fallback waits for the measured genuine-stall threshold
+ok - a fallback and RAF at the same timestamp advance once
+ok - the active driver reads the latest callback without restarting
+ok - repeated RAFs keep one RAF and one watchdog pending
+ok - stop during an advance callback does not schedule another RAF
+ok - stop cancels both RAF and fallback timer
+G3 assembly scene preparation contracts passed
+G3 cam profile cadence contracts passed
+G3 camera cadence contracts passed
+G3 connection cadence contracts passed
+G3 Foundry command sequencing contracts passed
+ok - initial valid candidate attaches as the first root
+ok - valid replacement attaches before disposing the prior root
+ok - authoritative invalid replacement clears and disposes the prior root
+ok - authoritative invalid replacement with no prior root stays empty
+ok - rejected edit retains only the prior valid root
+ok - unmount removes and disposes the active root
+g3 foundry lifecycle contracts passed
+G3 Foundry overlay bounds contracts passed
+G3 Foundry parameter cadence contracts passed
+G3 Foundry render submission contract passed
+G3 retained-frame binding contracts passed
+G3 frame commit queue contracts passed
+G3 Path cadence contracts passed
+G3 path pointer finalization contracts passed
+prepared automata scene contracts passed
+prepared Foundry support-point contracts passed
+prepared physical envelope contracts passed
+prepared foundry preview sampling contracts passed
+G3 puppet prepared-frame contracts passed
+ok - shared geometry/material/texture resources dispose exactly once
+ok - Foundry cache teardown deduplicates resources and clears every cache
+ok - owned material teardown deduplicates shared materials and maps
+g3 Three resource disposal contracts passed
+{"bounded":{"width":1024,"height":768},"limits":{"maxWorkingEdge":1024,"maxWorkingPixels":1000000,"maxSourceTextureEdge":512,"maxSourceTextureBytes":262144,"maxMaskBytes":131072}}
+{"cancellation":{"latencyMs":2.0592919999999992,"workerTerminated":3,"supersededRequestRejected":true,"newerRequestResolved":true},"recoverableModelError":{"code":"model-invalid","failedWorkerRetired":true,"freshWorkerRetryResolved":true,"warmProcessWorkerReused":true,"genericFetchCode":"model-download-failed","sessionCreateCode":"wasm-unavailable"}}
+G5 web ONNX contracts passed; model quality measurement is opt-in and uses local model bytes only.
+g6 release contracts ok
+G8 study-summary wiring contracts passed
+mechanism authored authority boundary contracts passed
+mechanism build gates passed
+mechanism collision contracts passed
+mechanism command feedback contracts passed
+mechanism connection provenance contracts passed
+mechanism connection-selection policy contracts passed
+mechanism control range matrix contracts passed
+mechanism direct-manipulation contracts passed
+mechanism edit authority contracts passed
+mechanism fabrication-combination contracts passed
+mechanism Fit boundary contracts passed
+mechanism fit readiness contracts passed
+mechanism physical envelope contract passed
+mechanism physical instance contracts passed
+prepared mechanism kinematics contracts passed
+mechanism project consumer parity contracts passed
+mechanism readiness contracts passed
+mechanism recovery consumer contracts passed
+mechanism-renderer-envelope-parity passed
+mechanism runtime import-cycle contracts passed
+mechanism safety matrix contracts passed
+mechanism structural resolver contracts passed
+mechanism v2 schema and physical inventory contracts passed
+mechanism warning presentation contracts passed
+project contracts ok
+study-summary-analyze: ok
+study-summary-telemetry: ok
+exit_code=0

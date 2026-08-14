@@ -29,6 +29,11 @@ import { useProjectAutosave } from "./useProjectAutosave";
 import { useProjectHistory } from "./useProjectHistory";
 import { useWorkspacePlaybackLoop } from "./useWorkspacePlaybackLoop";
 import { useWorkspacePlayerDock } from "./useWorkspacePlayerDock";
+import {
+  recordStudyAutosave,
+  recordStudyCommand,
+  STUDY_SUMMARY_ENABLED,
+} from "../infrastructure/study-summary/browserSession";
 
 type FoundryState = MechanismConfig;
 
@@ -100,12 +105,15 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     DEFAULT_CANVAS_VIEWPORT,
   );
   const [commandStatus, setCommandStatus] = useState("Ready");
-  const { onnxCacheStatus, setOnnxCacheStatus, cacheOnnxModel } =
+  const { cacheOnnxModel } =
     useAppOnnxBootstrap(setCommandStatus);
   const projectInputRef = useRef<HTMLInputElement>(null);
   const appShellRef = useRef<HTMLDivElement>(null);
   const assessmentQueryApplied = useRef(false);
-  useProjectAutosave(project);
+  useProjectAutosave(
+    project,
+    STUDY_SUMMARY_ENABLED ? recordStudyAutosave : undefined,
+  );
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -137,7 +145,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     }
   }, [dispatch, project.settings.classroomAssessmentKey]);
 
-  const goStage = createStageNavigator({
+  const navigateStage = createStageNavigator({
     project,
     dispatch,
     setStage,
@@ -145,6 +153,12 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     stageLabel: (item) =>
       STAGES.find((stageItem) => stageItem.id === item)?.label ?? item,
   });
+  const goStage = (target: AppStage) => {
+    const result = navigateStage(target);
+    if (STUDY_SUMMARY_ENABLED)
+      recordStudyCommand("navigation", result.ok ? "accepted" : "rejected");
+    return result;
+  };
   const {
     sortedParts,
     selectedPart,
@@ -191,7 +205,6 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     setStage,
     setCommandStatus,
     setShowGettingStarted,
-    setOnnxCacheStatus,
   });
   const activeClassroomLesson = classroomLessonById(
     project.metadata.classroomLessonId,
@@ -378,7 +391,6 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     stageRouterProps,
     workflowStatus,
     commandStatus,
-    onnxCacheStatus,
     cacheOnnxModel,
     showGettingStarted,
     hideGettingStartedThisSession,

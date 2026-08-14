@@ -1,0 +1,78 @@
+Listing tests:
+  [chromium] › g008-physical-authoring.spec.ts:125:1 › G008 shared physical overlay supports keyboard commit and preserves state on rejected pointer drop
+  [chromium] › g008-physical-authoring.spec.ts:267:1 › G018 family prospects commit atomically in Foundry and Design
+  [chromium] › g008-physical-authoring.spec.ts:310:1 › physical drag commits A after returning A to B to A inside the start deadzone
+  [chromium] › g008-physical-authoring.spec.ts:358:1 › planetary coincident pivot identity commits exactly in Foundry and Design
+  [chromium] › g008-physical-authoring.spec.ts:415:1 › G018 cam and planetary secondary traces stay display-only
+  [chromium] › g3-camera-cadence.spec.ts:17:1 › Assembly camera flushes its final pointer sample
+  [chromium] › quality-critical.spec.ts:81:1 › G7 isolated critical flow covers the integrated workbench
+  [chromium] › responsive-workbench.spec.ts:74:3 › 1920x1080 Getting Started keeps guided choices reachable and Character can reopen it
+  [chromium] › responsive-workbench.spec.ts:112:3 › 1920x1080 workbench surfaces remain reachable across enabled stages
+  [chromium] › responsive-workbench.spec.ts:74:3 › 1200x520 Getting Started keeps guided choices reachable and Character can reopen it
+  [chromium] › responsive-workbench.spec.ts:112:3 › 1200x520 workbench surfaces remain reachable across enabled stages
+  [chromium] › workflow.spec.ts:250:1 › Context help opens compact registry popovers
+  [chromium] › workflow.spec.ts:304:1 › Character part cut outline editor bakes and edits contour points
+  [chromium] › workflow.spec.ts:395:1 › Character tab owns separate scene objects and later tabs only render them
+  [chromium] › workflow.spec.ts:513:1 › Getting Started guided project opens a real editable lesson
+  [chromium] › workflow.spec.ts:591:1 › guided lessons open Design with coupled mechanism ownership
+  [chromium] › workflow.spec.ts:636:1 › classroom assessment slug and mechanism example video work end-to-end
+  [chromium] › workflow.spec.ts:900:1 › Ultragoal anatomy contracts › Ultragoal G003 built-in front character keeps anatomical right on viewer left
+  [chromium] › workflow.spec.ts:1187:1 › physical hole selection authors connection role and updates preview/export only through visible affordance
+  [chromium] › workflow.spec.ts:1289:1 › gear linkage physical hole selection authors drive/output pins and exports dedicated metadata
+  [chromium] › workflow.spec.ts:1408:3 › G006 4bar uses the shared physical pointer flow in Foundry and Design
+  [chromium] › workflow.spec.ts:1408:3 › G006 gear_linkage uses the shared physical pointer flow in Foundry and Design
+  [chromium] › workflow.spec.ts:1408:3 › G006 gear uses the shared physical pointer flow in Foundry and Design
+  [chromium] › workflow.spec.ts:1408:3 › G006 planetary_gear uses the shared physical pointer flow in Foundry and Design
+  [chromium] › workflow.spec.ts:1408:3 › G006 cam uses the shared physical pointer flow in Foundry and Design
+  [chromium] › workflow.spec.ts:1408:3 › G006 piston uses the shared physical pointer flow in Foundry and Design
+  [chromium] › workflow.spec.ts:1464:1 › G006 short/fullscreen zoom playback and accessibility matrix stays recoverable
+  [chromium] › workflow.spec.ts:1596:1 › MotionSmith header logo returns to Character home
+  [chromium] › workflow.spec.ts:1607:1 › Medium-width desktop keeps editor panes from cutting off the canvas
+  [chromium] › workflow.spec.ts:1634:1 › Ultragoal warning and responsive contracts › G006 student warning UX hides raw ids and fit scores in Design recommendations
+  [chromium] › workflow.spec.ts:1693:1 › Ultragoal warning and responsive contracts › G005 responsive shell keeps primary surfaces reachable without page overflow
+  [chromium] › workflow.spec.ts:1723:1 › G005 mobile Getting Started keeps actions reachable in a short viewport
+  [chromium] › workflow.spec.ts:1740:1 › character → path → foundry → design → blueprint runs end-to-end in browser
+  [chromium] › workflow.spec.ts:2282:1 › Assembly shows character pins as a separate board build stage
+  [chromium] › workflow.spec.ts:2359:1 › Character tab processing controls route to real browser workflows
+  [chromium] › workflow.spec.ts:2415:1 › animation performance: Foundry playback stays responsive without runaway Three rebuilds
+  [chromium] › workflow.spec.ts:2495:1 › Create from image upload creates a reviewed character package in browser
+  [chromium] › workflow.spec.ts:2542:1 › Load package review, accept, discard, and missing-file recovery stay in browser
+  [chromium] › workflow.spec.ts:2607:1 › Character replacement package starts clean without keep-mechanisms toggle
+  [chromium] › workflow.spec.ts:2652:1 › Options and validation gates update browser blueprint output
+  [chromium] › workflow.spec.ts:2721:1 › Options parity updates workspace UI, canvas context, and blueprint defaults
+  [chromium] › workflow.spec.ts:2866:1 › Legacy storage namespace migrates to MotionSmith keys without losing autosave or workspace layout
+  [chromium] › workflow.spec.ts:2908:1 › Path Editor sensemaking follows selected part, lock state, and anchor handoff
+  [chromium] › workflow.spec.ts:3047:1 › Foundry sensemaking shows library, partial range, and exported metadata
+  [chromium] › workflow.spec.ts:3480:1 › Foundry parameter safety contracts › Foundry clamps feasible numeric parameter edits without adding jam warnings
+  [chromium] › workflow.spec.ts:3521:1 › Character tab owns body layer and skeleton edits used by design controls
+  [chromium] › workflow.spec.ts:3594:1 › Recommendation driver ownership contracts › Recommendation keeps a limb path on its exact owner and one physical driver
+  [chromium] › workflow.spec.ts:3645:1 › Recommendation sheet applies a distinct mechanism and blueprint recipe
+  [chromium] › workflow.spec.ts:3734:1 › Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking
+  [chromium] › workflow.spec.ts:3818:1 › Foundry supports CAD-style 3D camera presets and drag orbit
+  [chromium] › workflow.spec.ts:3981:1 › Cam foundry profile points edit the shared cam simulation profile
+  [chromium] › workflow.spec.ts:4006:1 › Mechanism Design cam profile edits update the integrated automata preview
+  [chromium] › workflow.spec.ts:4039:1 › Character import surface omits browser camera capture
+  [chromium] › workflow.spec.ts:4052:1 › Mobile path editor keeps Draw free path action above the canvas
+  [chromium] › workflow.spec.ts:4070:1 › Startup uses one boot loader and opens Getting Started over Character
+  [chromium] › workflow.spec.ts:4124:1 › Bug report opens a GitHub issue draft from any stage
+  [chromium] › workflow.spec.ts:4151:1 › Mobile startup shows compact Getting Started with a session opt-out
+  [chromium] › workflow.spec.ts:4172:1 › Shared player dock overlays the canvas, does not take layout space, and can be dragged
+  [chromium] › workflow.spec.ts:4204:1 › Right inspector scroll does not move the center canvas
+  [chromium] › workflow.spec.ts:4221:1 › Narrow character right inspector remains independently scrollable
+  [chromium] › workflow.spec.ts:4252:1 › Every workflow right inspector uses the shared scroll container
+  [chromium] › workflow.spec.ts:4284:1 › Workflow tabs keep left workflow, center canvas, and right inspector roles
+  [chromium] › workflow.spec.ts:4362:1 › Workflow rail remains reachable on short desktop and mobile fallback exposes every stage
+  [chromium] › workflow.spec.ts:4392:1 › Animation resumes after leaving path drawing mode
+  [chromium] › workflow.spec.ts:4406:1 › Command menu and shared canvas zoom persist across workflow stages
+  [chromium] › workflow.spec.ts:4560:1 › Every top menu command is wired to a visible result
+  [chromium] › workflow.spec.ts:4674:1 › guided classroom lesson opens real baseline and can reset safely
+  [chromium] › workflow.spec.ts:4703:1 › Invalid Design target edits retain the prior valid mechanism and exact recovery blocker
+  [chromium] › workflow.spec.ts:4720:1 › Mechanism Design library chips replace transactionally, delete, and export
+  [chromium] › workflow.spec.ts:4787:1 › Mechanism Design integrated automata preview keeps placed anchors on the fabrication grid
+  [chromium] › workflow.spec.ts:4816:1 › Mechanism Design center workspace renders the integrated Foundry automata scene
+  [chromium] › workflow.spec.ts:4983:1 › shared Design renderer preserves exact compiled support paths for all six fabrication families
+  [chromium] › workflow.spec.ts:5033:1 › Simplified shared canvas stays non-destructive and exports blueprint
+  [chromium] › workflow.spec.ts:5117:1 › Shared path view supports 2D zoom and 3D direct orbit
+  [chromium] › workflow.spec.ts:5158:1 › Draw mode forces 2D Path view and accepts free path strokes on SceneSketch
+  [chromium-performance] › g5-web-onnx.spec.ts:123:1 › Create from image upload keeps transforms off the UI thread
+Total: 76 tests in 6 files

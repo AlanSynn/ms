@@ -1,0 +1,17 @@
+$ env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=43213 PLAYWRIGHT_WORKERS=2 bunx playwright test tests/browser/g5-web-onnx.spec.ts --repeat-each=2
+[WebServer] $ vite preview --host "127.0.0.1" --port "43213" --strictPort
+
+Running 2 tests using 2 workers
+
+g5FirstEvidence repeat=1: requestId=2; dispatch=7593.299999952316; result=8759.399999976158; application=8759.599999904633-8761; review=9219.099999904633; overlappingLongTasks=[{"startTime":8826.5,"duration":191}]; modelInitMs=561; inferenceMs=313.5.
+g5FirstEvidence repeat=2: requestId=2; dispatch=7592.399999976158; result=8848.100000023842; application=8848.199999928474-8849.100000023842; review=9286.5; overlappingLongTasks=[{"startTime":8886.299999952316,"duration":217}]; modelInitMs=590.5999999046326; inferenceMs=314.10000002384186.
+  ✘  2 [chromium] › tests/browser/g5-web-onnx.spec.ts:123:1 › Create from image upload keeps transforms off the UI thread (10.1s)
+  ✘  1 [chromium] › tests/browser/g5-web-onnx.spec.ts:123:1 › Create from image upload keeps transforms off the UI thread (10.1s)
+
+Error: app dispatch through review has no UI long task over 50 ms
+Received repeat=1: [{"duration":191,"startTime":8826.5}]
+Received repeat=2: [{"duration":217,"startTime":8886.299999952316}]
+at tests/browser/g5-web-onnx.spec.ts:188:147
+
+2 failed
+exit_code=1

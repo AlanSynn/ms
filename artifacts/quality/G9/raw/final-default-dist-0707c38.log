@@ -1,0 +1,16 @@
+$ rg -n study-summary-v1|stageDurationMs|commandAccepted|normalFlushAttempted|MOTIONSMITH_SUMMARY_TARGET|127.0.0.1:43197 dist
+default_dist_boundary=PASS
+168104	dist
+dist/assets/AppIcon-Dx9trOlC.png
+dist/assets/boy-CGof9C4m.PNG
+dist/assets/boy-thumb-YC7FWjeU.png
+dist/assets/girl-DcnbHWJO.png
+dist/assets/girl-thumb-CAdQi3RL.png
+dist/assets/index-DRE-s1S6.js
+dist/assets/ort-wasm-simd-threaded-Cpm-ox6i.wasm
+dist/assets/rapier-DS2Sl1i-.js
+dist/assets/webOnnxWorker-A3hq6BbQ.js
+dist/fonts/manrope-800-latin.woff2
+dist/index.html
+dist/onnx/pose_model.onnx
+exit_code=0

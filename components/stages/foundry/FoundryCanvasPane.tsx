@@ -124,6 +124,7 @@ type FoundryCanvasPaneProps = {
   draggingConnectionSelection?: DraggingMechanismConnectionSelection;
   onParamPointerMove: React.PointerEventHandler<SVGCircleElement>;
   onParamPointerUp: React.PointerEventHandler<SVGCircleElement>;
+  onParamPointerCancel: React.PointerEventHandler<SVGCircleElement>;
 };
 
 export const FoundryCanvasPane = ({
@@ -204,6 +205,7 @@ export const FoundryCanvasPane = ({
   onParamPointerDown,
   onParamPointerMove,
   onParamPointerUp,
+  onParamPointerCancel,
   onConnectionHoleSelect,
   onConnectionHoleInteractionStart,
   onConnectionHolePointerDown,
@@ -399,6 +401,7 @@ export const FoundryCanvasPane = ({
         onParamPointerDown={onParamPointerDown}
         onParamPointerMove={onParamPointerMove}
         onParamPointerUp={onParamPointerUp}
+        onParamPointerCancel={onParamPointerCancel}
       />
       <MechanismConnectionOverlay
         surface="foundry"

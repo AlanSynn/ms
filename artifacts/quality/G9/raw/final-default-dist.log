@@ -1,0 +1,3 @@
+$ rg -a study-summary markers dist
+default bundle contains no study-summary runtime marker or endpoint
+exit_code=0

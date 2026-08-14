@@ -49,9 +49,11 @@ export const camProfileSmoothnessWarning = (samples?: number[]) => {
     return steepEdge ? 'Cam edge too steep. Smooth the profile.' : null;
 };
 
-export const sampledCamProfileScale = (angleRad: number, samples?: number[]) => {
-    if (!samples || samples.length < 4) return camProfileScale(angleRad);
-    const profile = normalizeCamProfileSamples(samples);
+const sampleNormalizedCamProfileScale = (
+    angleRad: number,
+    profile: readonly number[],
+) => {
+    if (profile.length < 4) return camProfileScale(angleRad);
     const turns = (((angleRad / (Math.PI * 2)) % 1) + 1) % 1;
     const scaled = turns * profile.length;
     const i0 = Math.floor(scaled) % profile.length;
@@ -59,6 +61,12 @@ export const sampledCamProfileScale = (angleRad: number, samples?: number[]) => 
     const t = scaled - Math.floor(scaled);
     return profile[i0] + (profile[i1] - profile[i0]) * t;
 };
+
+export const sampledCamProfileScale = (angleRad: number, samples?: number[]) =>
+    sampleNormalizedCamProfileScale(
+        angleRad,
+        samples && samples.length >= 4 ? normalizeCamProfileSamples(samples) : [],
+    );
 
 export const camFollowerRise = (liftLength: number, angleRad: number, samples?: number[]) => {
     const lift = Math.max(1, liftLength);
@@ -201,6 +209,102 @@ export const animationDeltaRadians = (
     return cycle(nextEased - currentEased) * Math.PI * 2;
 };
 
+type PreparedGearKinematics = {
+    radii: number[];
+    centers: Point[];
+    outputRatio: number;
+    meshPhaseRad: number;
+};
+
+type PreparedGearLinkageKinematics = PreparedGearKinematics & {
+    reference: MechanismConfig;
+    physicalConnections: ReturnType<typeof resolveMechanismPhysicalConnections>;
+};
+
+export type PreparedMechanismKinematics = {
+    mechanism: MechanismConfig;
+    kit: PhysicalKitSettings;
+    physicalConnections: ReturnType<typeof resolveMechanismPhysicalConnections>;
+    camProfileSamples?: number[];
+    gear?: PreparedGearKinematics;
+    gearLinkage?: PreparedGearLinkageKinematics;
+};
+
+type MechanismKinematicsPreparationDependencies = {
+    resolvePhysicalConnections: typeof resolveMechanismPhysicalConnections;
+    normalizeGearLinkage: typeof normalizeGearLinkageToReference;
+    normalizeCamProfile: typeof normalizeCamProfileSamples;
+    gearMeshPhaseAt: typeof gearTrainMeshPhaseRadAt;
+};
+
+const defaultPreparationDependencies: MechanismKinematicsPreparationDependencies = {
+    resolvePhysicalConnections: resolveMechanismPhysicalConnections,
+    normalizeGearLinkage: normalizeGearLinkageToReference,
+    normalizeCamProfile: normalizeCamProfileSamples,
+    gearMeshPhaseAt: gearTrainMeshPhaseRadAt,
+};
+
+/**
+ * Resolve catalog-backed structural inputs once per immutable mechanism edit.
+ * Animation callers keep this object and sample only the numeric frame model.
+ */
+export const prepareMechanismKinematics = (
+    mechanism: MechanismConfig,
+    kit: PhysicalKitSettings = defaultPhysicalKit(),
+    dependencies: Partial<MechanismKinematicsPreparationDependencies> = {},
+): PreparedMechanismKinematics => {
+    const resolve = { ...defaultPreparationDependencies, ...dependencies };
+    const physicalConnections = resolve.resolvePhysicalConnections(mechanism, kit);
+    const camProfileSamples = mechanism.type === 'cam'
+        && mechanism.camProfileSamples
+        && mechanism.camProfileSamples.length >= 4
+        ? resolve.normalizeCamProfile(mechanism.camProfileSamples)
+        : undefined;
+    const gear = mechanism.type === 'gear'
+        ? (() => {
+            const radii = gearTrainPitchRadii(mechanism);
+            return {
+                radii,
+                centers: gearTrainCenters(mechanism),
+                outputRatio: gearTrainOutputRatio(radii),
+                meshPhaseRad: resolve.gearMeshPhaseAt(radii, radii.length - 1),
+            };
+        })()
+        : undefined;
+    const gearLinkage = mechanism.type === 'gear_linkage'
+        ? (() => {
+            const reference = resolve.normalizeGearLinkage(mechanism);
+            const radii = gearTrainPitchRadii(reference);
+            const hasInsertedIdlers = radii.length > 2;
+            const directOutputRatio = Number.isFinite(reference.speed2)
+                ? (reference.speed2 ?? 1)
+                : Number.isFinite(reference.gearRatio)
+                    ? (reference.gearRatio ?? 1)
+                    : gearTrainOutputRatio(radii);
+            return {
+                reference,
+                physicalConnections: resolve.resolvePhysicalConnections(reference, kit),
+                radii,
+                centers: gearTrainCenters(reference),
+                outputRatio: hasInsertedIdlers
+                    ? gearTrainOutputRatio(radii)
+                    : directOutputRatio,
+                meshPhaseRad: hasInsertedIdlers
+                    ? resolve.gearMeshPhaseAt(radii, radii.length - 1)
+                    : 0,
+            };
+        })()
+        : undefined;
+    return {
+        mechanism,
+        kit,
+        physicalConnections,
+        ...(camProfileSamples ? { camProfileSamples } : {}),
+        ...(gear ? { gear } : {}),
+        ...(gearLinkage ? { gearLinkage } : {}),
+    };
+};
+
 /**
  * Calculates the intersection of two circles with safety epsilon. 
  */
@@ -234,11 +338,11 @@ function getCircleIntersection(p0: Point, r0: number, p1: Point, r1: number, fli
     }
 }
 
-export const calculateLinkage = (
-    config: MechanismConfig,
+export const calculatePreparedLinkage = (
+    prepared: PreparedMechanismKinematics,
     crankAngleRad: number,
-    kit: PhysicalKitSettings = defaultPhysicalKit(),
 ): JointState => {
+    const { mechanism: config, physicalConnections } = prepared;
     // P1: Anchor Point (Main Crank Pivot)
     const p1: Point = { 
         x: config.anchorX ?? 0, 
@@ -250,7 +354,6 @@ export const calculateLinkage = (
     const s1 = config.speed1 ?? 1;
     const driverPhaseOffset = config.driverPhaseOffset ?? 0;
     const angle1 = crankAngleRad * s1 + driverPhaseOffset;
-    const physicalConnections = resolveMechanismPhysicalConnections(config, kit);
     const invalidPhysicalSelection = !physicalConnections.valid;
     if (invalidPhysicalSelection) return { p1, p2: p1, j1: p1, j2: p1, effector: p1, isValid: false };
     const fourBarInput = physicalConnectionForRole(physicalConnections, '4bar.input-joint')?.local;
@@ -281,7 +384,10 @@ export const calculateLinkage = (
         const followerRadius = Math.max(0, config.sliderOffset || 0);
         const axis = { x: Math.cos(trackAngle), y: Math.sin(trackAngle) };
         const contactProfileAngle = trackAngle - angle1;
-        const contactRadius = radius * sampledCamProfileScale(contactProfileAngle, config.camProfileSamples);
+        const contactRadius = radius * sampleNormalizedCamProfileScale(
+            contactProfileAngle,
+            prepared.camProfileSamples ?? [],
+        );
         const guideProjection = (p1.x - guideMount.center.x) * axis.x + (p1.y - guideMount.center.y) * axis.y;
         const contactPoint: Point = {
             x: guideMount.center.x + axis.x * (guideProjection + contactRadius),
@@ -328,11 +434,11 @@ export const calculateLinkage = (
 
     // --- SIMPLE GEAR OUTPUT ---
     else if (config.type === 'gear') {
-        const radii = gearTrainPitchRadii(config);
-        const centers = gearTrainCenters(config);
+        const gear = prepared.gear;
+        if (!gear) return { p1, p2: p1, j1: p1, j2: p1, effector: p1, isValid: false };
+        const { radii, centers } = gear;
         const p2 = centers.at(-1) ?? p1;
-        const ratio = gearTrainOutputRatio(radii);
-        const outAngle = angle1 * ratio + gearTrainMeshPhaseRadAt(radii, radii.length - 1) + (config.phase ?? 0);
+        const outAngle = angle1 * gear.outputRatio + gear.meshPhaseRad + (config.phase ?? 0);
         const drivePin = physicalConnectionForRole(physicalConnections, 'gear.drive-pin')?.local;
         const outputPin = physicalConnectionForRole(physicalConnections, 'gear.output-pin')?.local;
         if (!drivePin || !outputPin) return { p1, p2, j1: p1, j2: p2, effector: p2, isValid: false };
@@ -350,23 +456,14 @@ export const calculateLinkage = (
         // Paper-style gear linkage: separated endpoint gear crank pins drive two
         // fabricated rods; inserted idlers are the only gear-coupling path. Both
         // crank pins are real off-center attachment holes.
-        const referencePair = normalizeGearLinkageToReference(config);
-        const radii = gearTrainPitchRadii(referencePair);
-        const centers = gearTrainCenters(referencePair);
+        const gearLinkage = prepared.gearLinkage;
+        if (!gearLinkage) return { p1, p2: p1, j1: p1, j2: p1, effector: p1, isValid: false };
+        const { reference: referencePair, radii, centers } = gearLinkage;
         const p2 = centers.at(-1) ?? p1;
-        const hasInsertedIdlers = radii.length > 2;
-        const directOutputRatio = Number.isFinite(referencePair.speed2)
-            ? (referencePair.speed2 ?? 1)
-            : Number.isFinite(referencePair.gearRatio)
-                ? (referencePair.gearRatio ?? 1)
-                : gearTrainOutputRatio(radii);
-        const ratio = hasInsertedIdlers ? gearTrainOutputRatio(radii) : directOutputRatio;
-        const meshPhase = hasInsertedIdlers ? gearTrainMeshPhaseRadAt(radii, radii.length - 1) : 0;
-        const outAngle = angle1 * ratio + meshPhase + (config.phase ?? 0);
-        const resolved = resolveMechanismPhysicalConnections(referencePair, kit);
-        const driveConnection = physicalConnectionForRole(resolved, 'gear_linkage.drive-pin')?.local;
-        const outputConnection = physicalConnectionForRole(resolved, 'gear_linkage.output-pin')?.local;
-        if (!resolved.valid || !driveConnection || !outputConnection) {
+        const outAngle = angle1 * gearLinkage.outputRatio + gearLinkage.meshPhaseRad + (config.phase ?? 0);
+        const driveConnection = physicalConnectionForRole(gearLinkage.physicalConnections, 'gear_linkage.drive-pin')?.local;
+        const outputConnection = physicalConnectionForRole(gearLinkage.physicalConnections, 'gear_linkage.output-pin')?.local;
+        if (!gearLinkage.physicalConnections.valid || !driveConnection || !outputConnection) {
             return { p1, p2, j1: p1, j2: p2, effector: p1, isValid: false };
         }
         const drivePin = connectionPointAt(driveConnection, centers[0] ?? p1, angle1).position;
@@ -603,14 +700,23 @@ export const calculateLinkage = (
     return { p1, p2: p1, j1, j2: p1, effector: p1, isValid: false };
 };
 
-export const camFollowerConstraintError = (
+export const calculateLinkage = (
     config: MechanismConfig,
-    state: JointState,
+    crankAngleRad: number,
     kit: PhysicalKitSettings = defaultPhysicalKit(),
+): JointState => calculatePreparedLinkage(
+    prepareMechanismKinematics(config, kit),
+    crankAngleRad,
+);
+
+export const preparedCamFollowerConstraintError = (
+    prepared: PreparedMechanismKinematics,
+    state: JointState,
 ): number => {
+    const { mechanism: config, physicalConnections } = prepared;
     if (config.type !== 'cam' || !state.isValid) return Number.POSITIVE_INFINITY;
     const guideMount = physicalConnectionForRole(
-        resolveMechanismPhysicalConnections(config, kit),
+        physicalConnections,
         'cam.guide-mount',
     )?.boardMount;
     if (!guideMount) return Number.POSITIVE_INFINITY;
@@ -627,13 +733,22 @@ export const camFollowerConstraintError = (
     return Math.max(contactGap, guideError(state.j1), guideError(state.j2));
 };
 
-export const generateCurvePoints = (
+export const camFollowerConstraintError = (
     config: MechanismConfig,
-    resolution: number = 36,
+    state: JointState,
     kit: PhysicalKitSettings = defaultPhysicalKit(),
+): number => preparedCamFollowerConstraintError(
+    prepareMechanismKinematics(config, kit),
+    state,
+);
+
+export const generatePreparedCurvePoints = (
+    prepared: PreparedMechanismKinematics,
+    resolution: number = 36,
 ): { points: Point[], percentValid: number } => {
     const points: Point[] = [];
     let validCount = 0;
+    const { mechanism: config } = prepared;
     
     // For 5-bar, use more loops to ensure closure for complex ratios
     let loops = 1;
@@ -643,7 +758,7 @@ export const generateCurvePoints = (
 
     for (let i = 0; i < res; i++) {
         const angle = (i / resolution) * 2 * Math.PI;
-        const state = calculateLinkage(config, angle, kit);
+        const state = calculatePreparedLinkage(prepared, angle);
         if (state.isValid) {
             points.push(state.effector);
             validCount++;
@@ -652,6 +767,15 @@ export const generateCurvePoints = (
 
     return { points, percentValid: validCount / res };
 };
+
+export const generateCurvePoints = (
+    config: MechanismConfig,
+    resolution: number = 36,
+    kit: PhysicalKitSettings = defaultPhysicalKit(),
+): { points: Point[], percentValid: number } => generatePreparedCurvePoints(
+    prepareMechanismKinematics(config, kit),
+    resolution,
+);
 
 export interface MechanismPointTrace {
     id: string;
@@ -717,13 +841,14 @@ export const generateMechanismPointTraces = (
 ): { traces: MechanismPointTrace[], percentValid: number } => {
     const traces = new Map<string, MechanismPointTrace>();
     let validCount = 0;
+    const prepared = prepareMechanismKinematics(config, kit);
     let loops = 1;
     if (config.type === '5bar' || config.type === '6bar' || config.type === 'planetary_gear') loops = 8;
     const res = resolution * loops;
 
     for (let i = 0; i < res; i++) {
         const angle = (i / resolution) * 2 * Math.PI;
-        const state = calculateLinkage(config, angle, kit);
+        const state = calculatePreparedLinkage(prepared, angle);
         if (!state.isValid) continue;
         validCount++;
         mechanismTraceDefinitionsForState(config.type, state).forEach(def => {

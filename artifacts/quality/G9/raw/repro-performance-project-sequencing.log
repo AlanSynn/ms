@@ -1,0 +1,16 @@
+[WebServer] $ vite preview --host "127.0.0.1" --port "43205" --strictPort
+
+Running 76 tests using 2 workers
+
+(node:37175) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:37176) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium] › tests/browser/g008-physical-authoring.spec.ts:125:1 › G008 shared physical overlay supports keyboard commit and preserves state on rejected pointer drop (9.3s)
+  ✓   3 [chromium] › tests/browser/g008-physical-authoring.spec.ts:310:1 › physical drag commits A after returning A to B to A inside the start deadzone (4.2s)
+  ✓   2 [chromium] › tests/browser/g008-physical-authoring.spec.ts:267:1 › G018 family prospects commit atomically in Foundry and Design (13.7s)
+  ✓   5 [chromium] › tests/browser/g008-physical-authoring.spec.ts:415:1 › G018 cam and planetary secondary traces stay display-only (6.4s)
+  ✓   4 [chromium] › tests/browser/g008-physical-authoring.spec.ts:358:1 › planetary coincident pivot identity commits exactly in Foundry and Design (8.4s)
+  ✓   6 [chromium] › tests/browser/g3-camera-cadence.spec.ts:17:1 › Assembly camera flushes its final pointer sample (5.1s)
+  ✓   8 [chromium] › tests/browser/responsive-workbench.spec.ts:74:3 › 1920x1080 Getting Started keeps guided choices reachable and Character can reopen it (5.7s)
+  ✓   9 [chromium] › tests/browser/responsive-workbench.spec.ts:112:3 › 1920x1080 workbench surfaces remain reachable across enabled stages (7.0s)

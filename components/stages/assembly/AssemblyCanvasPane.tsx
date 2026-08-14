@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { AssemblySceneFrame } from "./AssemblySceneFrame";
 import {
   AssemblyCharacterThreePreview,
@@ -17,6 +18,7 @@ import type {
 import {
   buildCharacterAssemblySceneFrame,
   buildMechanismAssemblySceneFrame,
+  withAssemblySceneProgress,
 } from "../../../utils/assemblySceneFrame";
 
 type AssemblyMode = "mechanism" | "character";
@@ -46,49 +48,68 @@ export const AssemblyCanvasPane = ({
   playing: boolean;
   hasCharacterAssembly: boolean;
 }) => {
-  const selectedMechanism = selectedRecipe
-    ? project.mechanisms.find(
-        (mechanism) => mechanism.id === selectedRecipe.mechanismId,
-      )
-    : undefined;
-  const characterFrame = currentCharacterStep
-    ? buildCharacterAssemblySceneFrame({
-        plan: characterAssemblyPlan,
-        step: currentCharacterStep,
-        kit,
-        progress,
-      })
-    : undefined;
-  const mechanismFrame =
-    selectedRecipe && currentStep && selectedMechanism
-      ? buildMechanismAssemblySceneFrame({
-          recipe: selectedRecipe,
-          mechanism: selectedMechanism,
-          project,
-          step: currentStep,
-          lane,
-          kit,
-          progress,
-        })
-      : undefined;
+  const selectedMechanism = useMemo(
+    () =>
+      selectedRecipe
+        ? project.mechanisms.find(
+            (mechanism) => mechanism.id === selectedRecipe.mechanismId,
+          )
+        : undefined,
+    [project.mechanisms, selectedRecipe],
+  );
+  const characterFrameBase = useMemo(
+    () =>
+      currentCharacterStep
+        ? buildCharacterAssemblySceneFrame({
+            plan: characterAssemblyPlan,
+            step: currentCharacterStep,
+            kit,
+            progress: 0,
+          })
+        : undefined,
+    [characterAssemblyPlan, currentCharacterStep, kit],
+  );
+  const mechanismFrameBase = useMemo(
+    () =>
+      selectedRecipe && currentStep && selectedMechanism
+        ? buildMechanismAssemblySceneFrame({
+            recipe: selectedRecipe,
+            mechanism: selectedMechanism,
+            project,
+            step: currentStep,
+            lane,
+            kit,
+            progress: 0,
+          })
+        : undefined,
+    [selectedRecipe, currentStep, selectedMechanism, project, lane, kit],
+  );
+  const characterFrame = useMemo(
+    () => withAssemblySceneProgress(characterFrameBase, progress),
+    [characterFrameBase, progress],
+  );
+  const mechanismFrame = useMemo(
+    () => withAssemblySceneProgress(mechanismFrameBase, progress),
+    [mechanismFrameBase, progress],
+  );
 
   return (
     <div
       className="assembly-canvas-document canvas-workspace"
       data-testid="assembly-canvas-preview"
     >
-      {activeAssemblyMode === "character" && currentCharacterStep && characterFrame ? (
+      {activeAssemblyMode === "character" && currentCharacterStep && characterFrameBase && characterFrame ? (
         <div className="assembly-simulation-stack" data-testid="assembly-character-simulation-stack">
           <AssemblyCharacterThreePreview
             project={project}
             step={currentCharacterStep}
             progress={progress}
             playing={playing}
-            sceneFrame={characterFrame}
+            sceneFrame={characterFrameBase}
           />
           <AssemblySceneFrame frame={characterFrame} />
         </div>
-      ) : selectedRecipe && currentStep && selectedMechanism && mechanismFrame ? (
+      ) : selectedRecipe && currentStep && selectedMechanism && mechanismFrameBase && mechanismFrame ? (
         <div className="assembly-simulation-stack" data-testid="assembly-mechanism-simulation-stack">
           <AssemblyMechanismThreePreview
             project={project}
@@ -96,7 +117,7 @@ export const AssemblyCanvasPane = ({
             step={currentStep}
             progress={progress}
             playing={playing}
-            sceneFrame={mechanismFrame}
+            sceneFrame={mechanismFrameBase}
           />
           <AssemblySceneFrame frame={mechanismFrame} />
         </div>

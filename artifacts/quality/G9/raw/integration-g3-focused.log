@@ -1,0 +1,9 @@
+[WebServer] $ vite preview --host "127.0.0.1" --port "43208" --strictPort
+
+Running 1 test using 1 worker
+
+(node:58856) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › tests/browser/g3-piston-pointer-diagnostic.spec.ts:3:1 › G3 piston Design connection handle stays a hit target after Foundry export (6.4s)
+
+  1 passed (7.4s)

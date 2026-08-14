@@ -1,0 +1,25 @@
+G3 g9-return RAW transcript: six-family production-preview G006 gate
+
+Command
+$ PLAYWRIGHT_PORT=4190 PLAYWRIGHT_WORKERS=2 PLAYWRIGHT_SERVER=preview bunx playwright test tests/browser/workflow.spec.ts -g 'G006 (4bar|gear_linkage|gear|planetary_gear|cam|piston) uses the shared physical pointer flow' 2>&1
+
+Combined stdout/stderr (unfiltered)
+[WebServer] $ vite preview --host "127.0.0.1" --port "4190" --strictPort
+
+Running 6 tests using 2 workers
+
+(node:54611) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:54612) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 4bar uses the shared physical pointer flow in Foundry and Design (8.0s)
+  ✓  1 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 gear_linkage uses the shared physical pointer flow in Foundry and Design (13.1s)
+  ✓  3 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 gear uses the shared physical pointer flow in Foundry and Design (9.1s)
+  ✓  4 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 planetary_gear uses the shared physical pointer flow in Foundry and Design (8.7s)
+  ✓  5 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 cam uses the shared physical pointer flow in Foundry and Design (8.6s)
+  ✓  6 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 piston uses the shared physical pointer flow in Foundry and Design (8.4s)
+
+  6 passed (31.8s)
+
+Exit code
+0

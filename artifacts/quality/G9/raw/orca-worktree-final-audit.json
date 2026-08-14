@@ -1,0 +1,113 @@
+{
+  "runtime": "5aa221c2-d1ac-4e04-b0a8-30e23faa79d1",
+  "worktrees": [
+    {
+      "path": "/Users/alansynn/orca/workspaces/MechAnim/luna-ai",
+      "branch": "refs/heads/quality/luna-ai",
+      "displayName": "luna-ai",
+      "workspaceStatus": "in-review",
+      "status": "active",
+      "isActive": false,
+      "comment": "G5 evidence refreshed 90e9957; exact tests/build/diff pass; worktree clean"
+    },
+    {
+      "path": "/Users/alansynn/orca/workspaces/MechAnim/luna-preview",
+      "branch": "refs/heads/quality/luna-preview",
+      "displayName": "luna-preview",
+      "workspaceStatus": "in-progress",
+      "status": "active",
+      "isActive": false,
+      "comment": "Blocked: parameter overlay exposes only onParamPointerUp; distinct cancel requires out-of-scope CanvasPane/Overlay edits"
+    },
+    {
+      "path": "/Users/alansynn/orca/workspaces/MechAnim/luna-persistence",
+      "branch": "refs/heads/quality/luna-persistence",
+      "displayName": "luna-persistence",
+      "workspaceStatus": "in-progress",
+      "status": "active",
+      "isActive": false,
+      "comment": "Luna C / G4 persistence lane"
+    },
+    {
+      "path": "/Users/alansynn/orca/workspaces/MechAnim/luna-release",
+      "branch": "refs/heads/quality/luna-release",
+      "displayName": "luna-release",
+      "workspaceStatus": "in-progress",
+      "status": "active",
+      "isActive": false,
+      "comment": "Luna E / G6 release hygiene lane"
+    },
+    {
+      "path": "/Users/alansynn/Workspace/MechAnim",
+      "branch": "refs/heads/main",
+      "displayName": "MotionSmith for Young Makers",
+      "workspaceStatus": "in-progress",
+      "status": "working",
+      "isActive": false,
+      "comment": ""
+    },
+    {
+      "path": "/Users/alansynn/orca/workspaces/MechAnim/luna-ai-g9",
+      "branch": "refs/heads/quality/luna-ai-g9",
+      "displayName": "luna-ai-g9",
+      "workspaceStatus": "in-progress",
+      "status": "active",
+      "isActive": false,
+      "comment": "G5 QA returns: align package-review and boot-loader browser assertions with accepted canonical-canvas and nonblocking-ONNX contracts."
+    },
+    {
+      "path": "/Users/alansynn/orca/workspaces/MechAnim/luna-preview-g9",
+      "branch": "refs/heads/quality/luna-preview-g9",
+      "displayName": "luna-preview-g9",
+      "workspaceStatus": "in-progress",
+      "status": "active",
+      "isActive": false,
+      "comment": "Evidence-only raw G9 gates committed as da975ec; fresh six-family preview and focused G3 regression both passed; worktree clean"
+    },
+    {
+      "path": "/Users/alansynn/orca/workspaces/MechAnim/luna-telemetry",
+      "branch": "refs/heads/quality/luna-telemetry",
+      "displayName": "luna-telemetry",
+      "workspaceStatus": "in-progress",
+      "status": "active",
+      "isActive": false,
+      "comment": "G8 Luna T new-files-only lean study-summary module; base c2dbdca"
+    },
+    {
+      "path": "/Users/alansynn/orca/workspaces/MechAnim/luna-qa-recovery",
+      "branch": "refs/heads/AlanSynn/luna-qa-recovery",
+      "displayName": "luna-qa-recovery",
+      "workspaceStatus": "in-progress",
+      "status": "active",
+      "isActive": false,
+      "comment": "G7 harness corrections applied; build verified via integration dependencies; preparing Orca production-preview validation"
+    },
+    {
+      "path": "/Users/alansynn/orca/workspaces/MechAnim/luna-qa",
+      "branch": "refs/heads/quality/luna-qa",
+      "displayName": "luna-qa",
+      "workspaceStatus": "in-progress",
+      "status": "active",
+      "isActive": false,
+      "comment": "G7 real ONNX and path draw passed; corrected point-count assertion, rerunning on isolated port 5189"
+    },
+    {
+      "path": "/Users/alansynn/orca/workspaces/MechAnim/quality-sol-max-integration",
+      "branch": "refs/heads/quality/sol-max-integration",
+      "displayName": "quality-sol-max-integration",
+      "workspaceStatus": "in-progress",
+      "status": "active",
+      "isActive": true,
+      "comment": "Wave 4 complete: G2-G8 accepted, telemetry default-erased, raw evidence committed. G9 final ledgers, Orca A/B, and release gates in progress."
+    },
+    {
+      "path": "/Users/alansynn/orca/workspaces/MechAnim/luna-board",
+      "branch": "refs/heads/quality/luna-board",
+      "displayName": "luna-board",
+      "workspaceStatus": "in-progress",
+      "status": "active",
+      "isActive": false,
+      "comment": ""
+    }
+  ]
+}

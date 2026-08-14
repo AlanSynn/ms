@@ -44,6 +44,9 @@ export const useWorkspacePlayerDock = ({
     setAssemblyStepProgress(0);
     setAssemblyStepIndex(Math.max(0, Math.min(maxStepIndex, index)));
   };
+  const setSharedAssemblyProgress = (progress: number) => {
+    setAssemblyStepProgress(Math.max(0, Math.min(1, progress)));
+  };
   const isAssemblyStage = editorStage === "assembly";
   const showsWorkspacePlayer =
     editorStage === "path" ||
@@ -63,7 +66,9 @@ export const useWorkspacePlayerDock = ({
             ? {
                 stepIndex: assemblyStepIndex,
                 stepCount: assemblyStepCount,
+                stepProgress: assemblyStepProgress,
                 onStepChange: goSharedAssemblyStep,
+                onStepProgressChange: setSharedAssemblyProgress,
               }
             : undefined
         }

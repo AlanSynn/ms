@@ -1,0 +1,150 @@
+{
+  "testId": "e11c79d33e7a64046abf-ae8781d3e5f7636d0ef4",
+  "status": "passed",
+  "pageErrors": [],
+  "consoleErrors": [],
+  "failedRequests": [],
+  "pageState": {
+    "url": "http://127.0.0.1:43179/",
+    "visibilityState": "visible",
+    "stage": "Mechanism Foundry",
+    "status": "Opened Mechanism FoundryAI ready",
+    "performanceEntries": []
+  },
+  "attachments": [],
+  "evidence": {
+    "guidedProject": {
+      "card": "waving-arm",
+      "counts": "Waving arm: 14 parts, 1 paths, 1 mechanisms, 20 millimeter grid",
+      "editableOwnership": "hand path"
+    },
+    "imageImport": {
+      "totalParts": 10,
+      "artParts": 10,
+      "maskParts": 10,
+      "modelPath": "http://127.0.0.1:43179/onnx/pose_model.onnx",
+      "inferenceMs": 280.2999999523163,
+      "modelResponse": {
+        "status": 200,
+        "url": "http://127.0.0.1:43179/onnx/pose_model.onnx",
+        "contentLength": null,
+        "assetBytes": 135929562
+      }
+    },
+    "path": {
+      "pointCount": "17",
+      "closed": true,
+      "smoothness": "24"
+    },
+    "commandOutcomes": {
+      "accepted": {
+        "control": "Visible",
+        "from": true,
+        "to": false,
+        "restored": true
+      },
+      "rejected": {
+        "control": "Mechanism target",
+        "attempted": "head",
+        "retained": "right_hand_part"
+      },
+      "noOp": {
+        "control": "Mechanism target",
+        "value": "right_hand_part",
+        "signaturePreserved": true,
+        "warnings": 0
+      }
+    },
+    "designFit": {
+      "status": "fit",
+      "targetError": 0
+    },
+    "playback": {
+      "foundryPhaseBefore": "0",
+      "foundryPhaseAfter": "62",
+      "design": {
+        "before": "0",
+        "after": "54"
+      },
+      "path": "started and stopped"
+    },
+    "boardPolicy": {
+      "constrainedBoardReadout": "Grid\n2cm between board holes\n12×12 board grid · 215.9×279.4mm sheet",
+      "restored": "letter-15x15-2cm"
+    },
+    "blueprint": {
+      "metadataBytes": 75007,
+      "assemblyGuideHtmlBytes": 11246,
+      "assemblyGuidePdfBytes": 1756,
+      "cutSheetFilename": "fab-mss994p0-cut-sheet.pdf"
+    },
+    "assembly": {
+      "step": "prepare-parts",
+      "progressBefore": 0,
+      "progressAfter": 14,
+      "stack": ""
+    },
+    "persistence": {
+      "savedFilename": "Waving-arm.motionsmith.json",
+      "savedVersion": 2,
+      "autosavePresent": true,
+      "reloadedCounts": "Waving arm: 14 parts, 1 paths, 1 mechanisms, 20 millimeter grid",
+      "undoRestoredToolbar": false,
+      "redoRestoredToolbar": true
+    },
+    "invalidImport": {
+      "status": "Fix: Update project",
+      "stateRetained": true
+    },
+    "tabLifecycle": {
+      "backgroundTab": "foregrounded",
+      "restored": true,
+      "backgroundVisibility": "visible",
+      "hiddenVisibilitySupported": false,
+      "restoredVisibility": "visible",
+      "renderable": "ready",
+      "signature": "stable",
+      "dynamicBuildCount": "stable"
+    },
+    "performance": {
+      "before": {
+        "label": "foundry-idle",
+        "startedAt": 2721.3000000715256,
+        "elapsedMs": 251,
+        "requestedFrames": 30,
+        "frames": 30,
+        "frameIntervalMs": {
+          "p50": 8.400000000000091,
+          "p95": 9.600000000000364,
+          "max": 10.599999999999909
+        },
+        "longTasks": [],
+        "visibilityState": "visible",
+        "viewport": {
+          "width": 900,
+          "height": 520,
+          "devicePixelRatio": 1
+        }
+      },
+      "during": {
+        "label": "foundry-playing",
+        "startedAt": 3073.100000023842,
+        "elapsedMs": 2360.2000000476837,
+        "requestedFrames": 45,
+        "frames": 45,
+        "frameIntervalMs": {
+          "p50": 50.69999999999982,
+          "p95": 63.100000000000364,
+          "max": 68.69999999999982
+        },
+        "longTasks": [],
+        "visibilityState": "visible",
+        "viewport": {
+          "width": 900,
+          "height": 520,
+          "devicePixelRatio": 1
+        }
+      }
+    }
+  }
+}

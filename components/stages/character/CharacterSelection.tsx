@@ -276,8 +276,11 @@ export const CharacterSelection = ({
                   setViewport={setViewport}
                 />
                 <ThreePuppetPreview
-                  project={reviewedProject}
-                  skeleton={reviewedProject.skeleton}
+                  // Keep the canonical scene unchanged until Use it. The pending
+                  // result remains in the compact review surface, so importing
+                  // ten cropped textures cannot synchronously rebuild the 3D view.
+                  project={project}
+                  skeleton={project.skeleton}
                   mechanisms={[]}
                   angle={0}
                   viewport={viewport}

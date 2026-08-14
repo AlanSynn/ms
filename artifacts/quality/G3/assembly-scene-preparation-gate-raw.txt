@@ -1,0 +1,21 @@
+Commands:
+  bun tests/g3-assembly-scene-preparation.test.ts
+  bunx tsc --noEmit
+  bun tests/project-contract.test.ts
+  bun run build
+  git diff --check
+Exit: 0
+
+G3 assembly scene preparation contracts passed
+project contracts ok
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+239 modules transformed.
+dist/assets/index-Cogeiz-b.js 1,565.45 kB | gzip: 450.97 kB
+built in 851ms
+
+Verified:
+- mechanism and character scene frames are structurally prepared outside the progress hot path;
+- progress sampling preserves the prepared mechanism-contract identity;
+- unchanged progress preserves the frame identity;
+- TypeScript, project contracts, production build, and whitespace checks pass.

@@ -1,0 +1,30 @@
+Accepted product commit: a52ef5dc5bf3f6d0dce43b525f19b7fd0e0690a4
+
+Production and command boundary:
+components/stages/mechanism/MechanismParametricEditor.tsx
+components/stages/path/MechanismRecommendationSheet.tsx
+hooks/useAppMechanismActions.ts
+utils/kinematics.ts
+utils/mechanismConnectionSelections.ts
+utils/mechanismEditAuthority.ts
+utils/mechanismPhysicalCandidates.ts
+utils/project.ts
+
+Contract tests:
+tests/mechanism-command-feedback.test.ts
+tests/mechanism-direct-manipulation.test.ts
+tests/mechanism-fit-readiness.test.ts
+tests/mechanism-prepared-kinematics.test.ts
+tests/mechanism-renderer-envelope-parity.test.ts
+
+Quality evidence and routing:
+artifacts/quality/G1/changed-files.txt
+artifacts/quality/G1/historical-dispositions.md
+artifacts/quality/G1/interface-freeze.md
+artifacts/quality/G1/orca-report.md
+artifacts/quality/G1/result.md
+artifacts/quality/G1/tests.txt
+artifacts/quality/commit-ledger.tsv
+artifacts/quality/hunk-ledger.tsv
+artifacts/quality/ownership-audit.md
+artifacts/quality/production-file-ownership.tsv

@@ -1,0 +1,4 @@
+Source SHA: 2adec93
+$ if rg -n -i 'study-summary|collector.invalid|ms-study|study telemetry' dist; then unexpected; exit 1; else echo no runtime telemetry; fi
+default dist telemetry boundary: no study-summary runtime or endpoint
+exit 0

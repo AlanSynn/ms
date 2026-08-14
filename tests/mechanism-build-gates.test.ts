@@ -152,19 +152,17 @@ for (const project of blockedProjects) {
 
 {
   const readiness = projectMechanismReadiness(softBlockedProject);
-  assert.equal(readiness.status, 'blocked', 'off-board project remains blocked');
-  assert(readiness.blockers.includes('Fit inside board.'), 'off-board project exposes the board-fit blocker');
-  assert(readiness.blockers.some(blocker => !isSoftReadinessBlocker(blocker)), 'board fit cannot be softened');
+  assert.equal(readiness.status, 'blocked', 'authoring remains blocked for the visible cut-part warning');
+  assert(readiness.blockers.includes('Fit mechanism parts.'), 'tiny-sheet project exposes the individual-part fit warning');
+  assert(readiness.blockers.every(isSoftReadinessBlocker), 'tiny-sheet project has no hard readiness blockers');
   const validation = validateForFabrication(softBlockedProject, {
     allowSoftReadinessBlockers: true,
   });
-  assert(validation.errors.includes('Fit inside board.'), 'board fit remains a fabrication error when soft blockers are allowed');
-  assert.throws(
-    () => createFabricationPackage(softBlockedProject, {
-      allowSoftReadinessBlockers: true,
-    }),
-    'board fit cannot create a package through the soft-blocker path',
-  );
+  assert.equal(validation.errors.length, 0, 'soft cut-part readiness has no hard fabrication errors');
+  const softPackage = createFabricationPackage(softBlockedProject, {
+    allowSoftReadinessBlockers: true,
+  });
+  assert.equal(softPackage.recipes.length, 1, 'soft cut-part readiness still creates a fabrication package');
 
   for (const target of ['blueprint', 'assembly'] as AppStage[]) {
     const dispatches: ProjectAction[] = [];
@@ -177,13 +175,14 @@ for (const project of blockedProjects) {
       setCommandStatus: () => {},
       stageLabel: value => value,
     });
-    assert.equal(gate.ok, false, `board fit cannot open ${target}`);
-    assert.equal(stage, 'design', `${target} returns to Design for board recovery`);
-    assert.equal(dispatches[0]?.type, 'set_processing', `${target} reports board recovery processing`);
-  }
+    assert.equal(gate.ok, true, `${target} navigation permits soft authoring readiness while export remains eligible`);
+    assert.equal(stage, target, `${target} reaches its stage for soft cut-part readiness`);
+    assert.equal(dispatches.length, 0, `${target} does not dispatch hard-blocker recovery for soft readiness`);
 
-  const status = workflowStatusFor('blueprint', 'Blueprint', softBlockedProject);
-  assert.equal(status.nextAction, 'Fix', 'workflow status blocks sheets for off-board geometry');
+    const status = workflowStatusFor(target, target, softBlockedProject);
+    assert.equal(status.blocker, readiness.blockers[0], `${target} shows the canonical soft readiness blocker`);
+    assert.equal(status.nextAction, target === 'blueprint' ? 'Make sheets' : 'Build', `${target} keeps its export action for soft readiness`);
+  }
 }
 
 for (const target of ['blueprint', 'assembly'] as AppStage[]) {

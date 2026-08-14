@@ -1,0 +1,3 @@
+Source SHA: 2adec93
+$ bunx tsc --noEmit
+exit 0

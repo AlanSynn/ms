@@ -1,0 +1,17 @@
+Command: bun tests/g3-foundry-overlay-bounds.test.ts && bunx tsc --noEmit && bun run build && git diff --check
+Exit: 0
+
+G3 Foundry overlay bounds contracts passed
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+239 modules transformed.
+dist/assets/index-IAZsbVXj.js  1,565.23 kB | gzip: 450.90 kB
+dist/assets/rapier-DS2Sl1i-.js 2,237.59 kB | gzip: 842.98 kB
+built in 759ms
+
+Verified:
+- finite projected handles clamp to the visible 360 x 240 overlay with 12 px padding;
+- already-visible coordinates remain unchanged;
+- non-finite projections remain unavailable;
+- excessive padding remains bounded for small overlay sizes;
+- TypeScript, production build, and diff whitespace checks pass.

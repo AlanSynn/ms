@@ -18,8 +18,7 @@ interface PathCanvasPaneProps {
   selectedPath?: ProjectMotionPath;
   dragPoint: number | null;
   selectedPoint: number | null;
-  setDragPoint: (value: number | null) => void;
-  setSelectedPoint: (value: number | null) => void;
+  onPointDragStart: (index: number) => void;
   onPointMove: (e: React.MouseEvent<SVGSVGElement>) => void;
   onPointUp: () => void;
   onCanvasDown: (e: React.MouseEvent<SVGSVGElement>) => void;
@@ -42,8 +41,7 @@ export const PathCanvasPane = ({
   selectedPath,
   dragPoint,
   selectedPoint,
-  setDragPoint,
-  setSelectedPoint,
+  onPointDragStart,
   onPointMove,
   onPointUp,
   onCanvasDown,
@@ -94,8 +92,7 @@ export const PathCanvasPane = ({
         selectedPath={selectedPath}
         dragPoint={dragPoint}
         selectedPoint={selectedPoint}
-        setDragPoint={setDragPoint}
-        setSelectedPoint={setSelectedPoint}
+        onPointDragStart={onPointDragStart}
         onPointMove={onPointMove}
         onPointUp={onPointUp}
         onCanvasDown={onCanvasDown}

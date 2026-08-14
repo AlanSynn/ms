@@ -1,0 +1,47 @@
+Goal-ID: G3
+Slice: Path canonical pointer and 2D pan cadence
+Date: 2026-08-13
+
+Implementation contract
+- Free-draw samples and existing-point drag samples commit only the latest value per display frame through utils/frameCommitQueue.ts.
+- Path sample construction remains owned by addDrawSamplePoint and normalizeDrawTimedPoints.
+- All existing terminal routes synchronously flush the latest canonical sample before gesture state clears.
+- Target/path identity changes and unmount cleanup cancel stale canonical samples.
+- SceneSketch pan offsets commit only the latest value per display frame and flush on terminal routes.
+- Wheel zoom remains a discrete update outside this slice.
+
+$ bun tests/g3-path-cadence.test.ts
+G3 Path cadence contracts passed
+exit 0
+
+$ bun tests/g3-path-pointer-finalization.test.ts
+G3 path pointer finalization contracts passed
+exit 0
+
+$ bun tests/g3-frame-commit-queue.test.ts
+G3 frame commit queue contracts passed
+exit 0
+
+$ bunx tsc --noEmit
+exit 0
+
+$ bun tests/project-contract.test.ts
+project contracts ok
+exit 0
+
+$ bun run build
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+244 modules transformed
+build completed
+exit 0
+
+$ PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=5191 PLAYWRIGHT_WORKERS=2 bunx playwright test tests/browser/workflow.spec.ts --grep "Path Editor sensemaking follows selected part, lock state, and anchor handoff|Draw mode forces 2D Path view and accepts free path strokes on SceneSketch" --workers=2
+Running 2 tests using 2 workers
+passed: Draw mode forces 2D Path view and accepts free path strokes on SceneSketch
+passed: Path Editor sensemaking follows selected part, lock state, and anchor handoff
+2 passed
+exit 0
+
+$ git diff --check
+exit 0

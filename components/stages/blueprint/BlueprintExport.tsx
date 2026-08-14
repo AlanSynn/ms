@@ -6,7 +6,9 @@ import {
   makeBlueprintPreviewSvg,
   validateForFabrication,
 } from "../../../utils/fabrication";
-import { isSoftReadinessBlocker } from "../../../utils/fabricationReadiness";
+import {
+  fabricationExportPolicy,
+} from "../../../utils/fabricationReadiness";
 import {
   EditorStageFrame,
   canvasPane,
@@ -39,9 +41,8 @@ export const BlueprintExport = ({
     allowSoftReadinessBlockers: true,
   });
   const { readiness } = validation;
-  const buildReady =
-    readiness.status === "project-ready" ||
-    !readiness.blockers.some((blocker) => !isSoftReadinessBlocker(blocker));
+  const exportPolicy = fabricationExportPolicy(readiness, validation.errors);
+  const buildReady = exportPolicy.eligible;
   const create = () =>
     dispatch({
       type: "set_export",

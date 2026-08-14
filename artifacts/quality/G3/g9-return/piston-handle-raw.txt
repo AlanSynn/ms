@@ -1,0 +1,84 @@
+G3 g9-return CURATED SUMMARY (not unfiltered raw): piston Design connection-handle verification
+
+Integration raw failure (read-only source)
+Source: /Users/alansynn/orca/workspaces/MechAnim/quality-sol-max-integration/artifacts/quality/G9/raw/final-browser.log
+The integration production-preview run reported the other five G006 mechanism families passed and the piston Design wait failed:
+
+2) [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 piston uses the shared physical pointer flow in Foundry and Design
+
+Error: physical hole affordance is visible for piston.rod-slider-pin
+Expected substring: "piston.rod-slider-pin:"
+Received string:    ""
+Timeout 10000ms exceeded while waiting on the predicate
+at workflow.spec.ts:1010
+at workflow.spec.ts:1444:31
+Exit code: 1
+
+The retained integration trace identifies the rendered Design marker as visible in the DOM but projected outside the clipped overlay: SVG viewBox 536x518, marker transform translate(311.261, 540.436). This is a phase-dependent renderer hit-surface failure, not a G1 selection-policy rejection and not suite-order contention.
+
+Local baseline reproduction before the patch
+$ PLAYWRIGHT_PORT=4182 PLAYWRIGHT_WORKERS=1 bunx playwright test tests/browser/workflow.spec.ts -g 'G006 piston uses the shared physical pointer flow in Foundry and Design'
+[WebServer] $ vite preview --host "127.0.0.1" --port "4182" --strictPort
+Running 1 test using 1 worker
+✘  1 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 piston uses the shared physical pointer flow in Foundry and Design (17.5s)
+Error: physical hole affordance is visible for piston.rod-slider-pin
+Expected substring: "piston.rod-slider-pin:"
+Received string:    ""
+at workflow.spec.ts:1010:6
+at workflow.spec.ts:1444:31
+1 failed
+Exit code: 1
+
+Final production-preview shared workflow (all six G006 families)
+$ PLAYWRIGHT_PORT=4187 PLAYWRIGHT_WORKERS=2 bunx playwright test tests/browser/workflow.spec.ts -g 'G006 (4bar|gear_linkage|gear|planetary_gear|cam|piston) uses the shared physical pointer flow'
+[WebServer] $ vite preview --host "127.0.0.1" --port "4187" --strictPort
+Running 6 tests using 2 workers
+✓  2 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 4bar uses the shared physical pointer flow in Foundry and Design (8.2s)
+✓  1 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 gear_linkage uses the shared physical pointer flow in Foundry and Design (12.4s)
+✓  3 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 gear uses the shared physical pointer flow in Foundry and Design (8.7s)
+✓  4 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 planetary_gear uses the shared physical pointer flow in Foundry and Design (8.2s)
+✓  5 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 cam uses the shared physical pointer flow in Foundry and Design (7.9s)
+✓  6 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 piston uses the shared physical pointer flow in Foundry and Design (7.7s)
+6 passed (29.6s)
+Exit code: 0
+
+Focused G3 regression
+$ PLAYWRIGHT_PORT=4189 PLAYWRIGHT_WORKERS=1 bunx playwright test tests/browser/g3-piston-pointer-diagnostic.spec.ts
+[WebServer] $ vite preview --host "127.0.0.1" --port "4189" --strictPort
+Running 1 test using 1 worker
+✓  1 [chromium] › tests/browser/g3-piston-pointer-diagnostic.spec.ts:3:1 › G3 piston Design connection handle stays a hit target after Foundry export (6.8s)
+1 passed (8.0s)
+Exit code: 0
+
+The focused test repeats Foundry piston selection, drags to a second physical rod hole, exports to Design, and asserts every rod marker is visible, inside the clipped SVG, and the marker center resolves to that physical circle.
+
+Unit and contract gates
+$ bun tests/g3-foundry-overlay-bounds.test.ts
+G3 Foundry overlay bounds contracts passed
+Exit code: 0
+$ bun tests/g3-foundry-command-sequencing.test.ts
+G3 Foundry command sequencing contracts passed
+Exit code: 0
+$ bun tests/mechanism-connection-selection-policy.test.ts
+mechanism connection-selection policy contracts passed
+Exit code: 0
+$ bun tests/foundry-transaction.test.ts
+foundry transaction contracts passed
+Exit code: 0
+$ bun tests/project-contract.test.ts
+project contracts ok
+Exit code: 0
+
+Type/build gates
+$ bunx tsc --noEmit
+Exit code: 0
+$ bun run build
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+✓ 245 modules transformed.
+✓ built in 863ms
+Exit code: 0
+
+$ git diff --check
+(no output)
+Exit code: 0

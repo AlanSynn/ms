@@ -1,0 +1,37 @@
+# G2 changed files
+
+Owned production:
+
+- components/stages/assembly/AssemblyGuide.tsx
+- components/stages/blueprint/BlueprintExport.tsx
+- components/stages/foundry/foundryAssemblySceneOverlay.ts
+- scripts/fabrication/source/board-final.svg
+- utils/coordinates.ts
+- utils/fabricationReadiness.ts
+- utils/mechanismCollision.ts
+
+G2 tests:
+
+- tests/g2-coordinate-readiness.test.ts
+- tests/mechanism-build-gates.test.ts (authorized correction of the stale tiny-sheet assertion block; the true off-board `blockedProjects` case is unchanged)
+
+G2 evidence:
+
+- artifacts/quality/G2/changed-files.txt
+- artifacts/quality/G2/result.md
+- artifacts/quality/G2/tests.txt
+
+Reviewed authoritative files intentionally unchanged:
+
+- fabrication/board-final.svg (already matched the reviewed artifact; verified hash)
+- fabrication/fabrication-v2-reviewed-oracle.json (reviewed hash retained)
+- utils/fabricationBoardTemplate.tsx (generator already emits the reviewed 300 mm outline)
+- utils/mechanismPhysicalEnvelope.ts
+- utils/mechanismReadiness.ts
+
+Out of scope and unchanged:
+
+- tests/project-contract.test.ts
+- Playwright configuration
+- shared config and package files
+- G1 authority files and other lane artifacts/ledgers

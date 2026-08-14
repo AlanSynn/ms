@@ -32,6 +32,14 @@ import {
   mechanismForTargetFields,
   pathOwnedTargetFields,
 } from "../utils/pathTargets";
+import {
+  recordStudyCommand,
+  recordStudyExport,
+  recordStudyFit,
+  recordStudyMechanism,
+  studyExportBlocker,
+  STUDY_SUMMARY_ENABLED,
+} from "../infrastructure/study-summary/browserSession";
 
 const GENERATED_PATH_GEOMETRY_KEYS = new Set<keyof MechanismConfig>([
   "anchorX",
@@ -98,7 +106,11 @@ export const useAppMechanismActions = ({
   const updateMechanism = useCallback(
     (id: string, updates: Partial<MechanismConfig>) => {
       const mechanism = project.mechanisms.find((m) => m.id === id);
-      if (!mechanism) return false;
+      if (!mechanism) {
+        if (STUDY_SUMMARY_ENABLED)
+          recordStudyCommand("mechanism", "rejected");
+        return false;
+      }
       const nextUpdates = { ...updates };
       const pathUpdate = updates.targetPathId
         ? project.paths[updates.targetPathId]
@@ -146,6 +158,11 @@ export const useAppMechanismActions = ({
         );
         if (attempt.status === "accepted") {
           setMechanismEditFeedback(null);
+          if (STUDY_SUMMARY_ENABLED)
+            recordStudyMechanism(
+              mechanism.type,
+              attempt.outcome === "no-op" ? "no-op" : "accepted",
+            );
           return true;
         }
         const blocker = attempt.blocker;
@@ -155,6 +172,8 @@ export const useAppMechanismActions = ({
           recoveryCandidates: attempt.recoveryCandidates,
         });
         setCommandStatus(blocker);
+        if (STUDY_SUMMARY_ENABLED)
+          recordStudyMechanism(mechanism.type, "rejected");
         return false;
       }
       const next = { ...mechanism, ...constrainedUpdates };
@@ -172,11 +191,20 @@ export const useAppMechanismActions = ({
           recoveryCandidates: attempt.recoveryCandidates,
         });
         setCommandStatus(blocker);
+        if (STUDY_SUMMARY_ENABLED)
+          recordStudyMechanism(mechanism.type, "rejected");
         return false;
+      }
+      if (attempt.outcome === "no-op") {
+        setMechanismEditFeedback(null);
+        if (STUDY_SUMMARY_ENABLED)
+          recordStudyMechanism(mechanism.type, "no-op");
+        return true;
       }
       const preserveGeneratedPath =
         hasStoredGeneratedPath(mechanism) &&
         !changesGeneratedPathGeometry(constrainedUpdates);
+      const fitStartedAt = STUDY_SUMMARY_ENABLED ? performance.now() : 0;
       const fitResult = constrainedUpdates.targetPathId
         ? fitMechanismToTargetPathResult(
             project,
@@ -184,6 +212,11 @@ export const useAppMechanismActions = ({
             constrainedUpdates.targetPathId,
           )
         : undefined;
+      if (STUDY_SUMMARY_ENABLED && fitResult)
+        recordStudyFit(
+          fitResult.accepted ? "accepted" : "rejected",
+          performance.now() - fitStartedAt,
+        );
       if (fitResult && !fitResult.accepted) {
         if (fitResult.recoveryCandidates) {
           setMechanismEditFeedback({
@@ -193,6 +226,8 @@ export const useAppMechanismActions = ({
           });
         }
         setCommandStatus(fitResult.blockers[0] ?? MECHANISM_BINDING_BLOCKER);
+        if (STUDY_SUMMARY_ENABLED)
+          recordStudyMechanism(mechanism.type, "rejected");
         return false;
       }
       const fitted = fitResult?.mechanism ?? mechanismWithGeneratedPath(
@@ -220,20 +255,37 @@ export const useAppMechanismActions = ({
           recoveryCandidates: committedAttempt.recoveryCandidates,
         });
         setCommandStatus(blocker);
+        if (STUDY_SUMMARY_ENABLED)
+          recordStudyMechanism(mechanism.type, "rejected");
         return false;
+      }
+      if (committedAttempt.outcome === "no-op") {
+        setMechanismEditFeedback(null);
+        if (STUDY_SUMMARY_ENABLED)
+          recordStudyMechanism(mechanism.type, "no-op");
+        return true;
       }
       dispatch({ type: "upsert_mechanism", mechanism: committedAttempt.mechanism });
       setMechanismEditFeedback(null);
+      if (fitResult?.snapped && fitResult.summary) {
+        setCommandStatus(fitResult.summary);
+      }
+      if (STUDY_SUMMARY_ENABLED)
+        recordStudyMechanism(committedAttempt.mechanism.type, "accepted");
       return true;
     },
     [dispatch, project, setCommandStatus],
   );
 
   const optimizeSelectedMechanism = useCallback(async () => {
+    const startedAt = STUDY_SUMMARY_ENABLED ? performance.now() : 0;
     const fitPath = selectedMechanism?.targetPathId
       ? project.paths[selectedMechanism.targetPathId]
       : selectedPath;
-    if (!selectedMechanism || !fitPath || fitPath.points.length < 3) return;
+    if (!selectedMechanism || !fitPath || fitPath.points.length < 3) {
+      if (STUDY_SUMMARY_ENABLED) recordStudyFit("no-op", 0);
+      return;
+    }
     setOptimizerBusy(true);
     try {
       await new Promise((resolve) => setTimeout(resolve, 16));
@@ -255,10 +307,21 @@ export const useAppMechanismActions = ({
             result.blockers[0] ??
             "Fit blocked.",
         );
+        if (STUDY_SUMMARY_ENABLED)
+          recordStudyFit("rejected", performance.now() - startedAt);
         return;
       }
       dispatch({ type: "upsert_mechanism", mechanism: result.mechanism });
       setMechanismEditFeedback(null);
+      if (result.snapped && result.summary) {
+        setCommandStatus(result.summary);
+      }
+      if (STUDY_SUMMARY_ENABLED)
+        recordStudyFit("accepted", performance.now() - startedAt);
+    } catch (error) {
+      if (STUDY_SUMMARY_ENABLED)
+        recordStudyFit("error", performance.now() - startedAt);
+      throw error;
     } finally {
       setOptimizerBusy(false);
     }
@@ -274,6 +337,11 @@ export const useAppMechanismActions = ({
     const result = generateProjectReadySVG(project, angle);
     if (!result.ok) {
       setCommandStatus(result.blockers[0] ?? "Project not ready");
+      if (STUDY_SUMMARY_ENABLED)
+        recordStudyExport(
+          "failure",
+          studyExportBlocker(result.blockers[0]),
+        );
       return;
     }
     downloadText(
@@ -282,12 +350,18 @@ export const useAppMechanismActions = ({
       "image/svg+xml",
     );
     setCommandStatus("Exported mechanism SVG");
+    if (STUDY_SUMMARY_ENABLED) recordStudyExport("success", "none");
   }, [angle, project, setCommandStatus]);
 
   const exportMechanismDxf = useCallback(() => {
     const result = generateProjectReadyDXF(project, angle);
     if (!result.ok) {
       setCommandStatus(result.blockers[0] ?? "Project not ready");
+      if (STUDY_SUMMARY_ENABLED)
+        recordStudyExport(
+          "failure",
+          studyExportBlocker(result.blockers[0]),
+        );
       return;
     }
     downloadText(
@@ -296,6 +370,7 @@ export const useAppMechanismActions = ({
       "application/dxf",
     );
     setCommandStatus("Exported mechanism DXF");
+    if (STUDY_SUMMARY_ENABLED) recordStudyExport("success", "none");
   }, [angle, project, setCommandStatus]);
 
   const exportFoundryMechanism = useCallback(
@@ -382,6 +457,8 @@ export const useAppMechanismActions = ({
       });
       if (result.status === "ready") {
         setCommandStatus("Package generation required");
+        if (STUDY_SUMMARY_ENABLED)
+          recordStudyMechanism(candidate.type, "no-op");
         return;
       }
       dispatch({ type: "commit_mechanism_candidate", result });
@@ -393,6 +470,8 @@ export const useAppMechanismActions = ({
             : "Mechanism ready"),
         );
         setStage("design");
+        if (STUDY_SUMMARY_ENABLED)
+          recordStudyMechanism(result.mechanism.type, "accepted");
       } else {
         if (result.recoveryCandidates) {
           setMechanismEditFeedback({
@@ -402,6 +481,8 @@ export const useAppMechanismActions = ({
           });
         }
         setCommandStatus(result.blocker ?? "Mechanism blocked");
+        if (STUDY_SUMMARY_ENABLED)
+          recordStudyMechanism(result.mechanism.type, "rejected");
       }
     },
     [dispatch, foundry, project, setCommandStatus, setStage],
@@ -418,12 +499,19 @@ export const useAppMechanismActions = ({
           recoveryCandidates: attempt.recoveryCandidates,
         });
         setCommandStatus(attempt.blocker);
+        if (STUDY_SUMMARY_ENABLED)
+          recordStudyMechanism(mechanism.type, "rejected");
         return;
       }
       dispatch({ type: "upsert_mechanism", mechanism: attempt.mechanism });
       setMechanismEditFeedback(null);
       setShowRecommendations(false);
       setStage("design");
+      if (STUDY_SUMMARY_ENABLED)
+        recordStudyMechanism(
+          attempt.mechanism.type,
+          attempt.outcome === "no-op" ? "no-op" : "accepted",
+        );
     },
     [dispatch, project, setCommandStatus, setShowRecommendations, setStage],
   );

@@ -1,0 +1,74 @@
+Goal-ID: G3
+Slice: Foundry parameter-handle display-frame cadence
+Date: 2026-08-13
+
+Implementation contract
+- Pointer-move samples are coalesced through utils/frameCommitQueue.ts.
+- Pointer-up flushes the latest sample before pointer-capture release.
+- Pointer-cancel discards the latest sample before pointer-capture release.
+- Effect cleanup and a replacement drag cancel stale queued work.
+- The existing applyFoundryParamHandleDrag function remains the authoritative domain update boundary.
+
+Focused verification
+$ bun tests/g3-foundry-param-cadence.test.ts
+G3 Foundry parameter cadence contracts passed
+exit 0
+
+$ bun tests/g3-frame-commit-queue.test.ts
+G3 frame commit queue contracts passed
+exit 0
+
+$ bunx tsc --noEmit
+exit 0
+
+$ bun tests/foundry-transaction.test.ts
+foundry transaction contracts passed
+exit 0
+
+$ bun tests/project-contract.test.ts
+project contracts ok
+exit 0
+
+$ bun run build
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+243 modules transformed
+build completed
+exit 0
+
+Production-preview browser verification
+$ PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=5187 PLAYWRIGHT_WORKERS=1 bunx playwright test tests/browser/workflow.spec.ts --grep "Foundry sensemaking shows library, partial range, and exported metadata" --workers=1
+
+The trace proves the relevant boundary passed:
+- M-handle bounding box resolved.
+- mouse down, move, and up completed.
+- the assertion "dragging the M handle repositions gear linkage on the fabrication board" passed after pointer-up.
+
+The broad scenario later failed at workflow.spec.ts:3435:
+- expected compact preset ground number: 120
+- received: 160
+
+The untouched quality/luna-preview checkout reproduced that exact late failure with the same expected/received values, so it predates this cadence slice and is not accepted as evidence against the handle boundary.
+
+Orca embedded production-preview verification
+- Built bundle served with `bun run preview -- --host 127.0.0.1 --port 5190 --strictPort`.
+- Orca browser opened the guided "Make a hand wave" project and entered Mechanism Foundry.
+- Advanced mechanism selector changed the authoritative preview to `gear_linkage`.
+- Before gesture:
+  - data-mechanism-type: gear_linkage
+  - data-handle-ids: M
+  - data-fit-anchor-grid: -3,-1
+- Orca viewport set to 1440x1000 so elementFromPoint resolved to `foundry-param-handle-M` rather than an overlapping narrow-pane card.
+- Orca pointer commands:
+  - mouse move 429 769
+  - mouse down
+  - mouse move 509 789
+  - mouse up
+- After terminal flush:
+  - data-mechanism-type: gear_linkage
+  - data-handle-ids: M
+  - data-fit-anchor-grid: -2,-1
+- Orca page console: no messages.
+
+$ git diff --check
+exit 0

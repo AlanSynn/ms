@@ -1,0 +1,20 @@
+# G6 changed files
+
+## Owned production paths
+.github/workflows/deploy.yml
+.gitattributes
+.gitignore
+docs/deployment.md
+docs/macos-distribution.md
+playwright.config.ts
+vite.config.ts
+
+## New goal-local test
+tests/g6-release-contract.test.ts
+
+## Required evidence artifacts
+artifacts/quality/G6/result.md
+artifacts/quality/G6/tests.txt
+artifacts/quality/G6/changed-files.txt
+
+No existing shared test/helper, product UI/domain/runtime module, or version file was changed.

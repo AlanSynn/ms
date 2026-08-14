@@ -20,9 +20,15 @@ import {
 } from "../../../utils/mechanismPreviewStacks";
 import type {
   FoundryFabricationMeshMetadata,
+  FoundryFrameOwner,
   FoundryThreePrimitiveFactory,
 } from "./foundryThreePrimitives";
-import { resolveFourBarLinkageBlankPoses } from "../../../utils/mechanismConnectionSelections";
+import {
+  disposeFoundryThreeObject,
+} from "./foundryThreePrimitives";
+import {
+  resolveFourBarLinkageBlankPoses,
+} from "../../../utils/mechanismConnectionSelections";
 import {
   foundryAssemblyLayerState,
   type FoundryAssemblySceneFrame,
@@ -39,6 +45,134 @@ export type FoundryPhysicalEnvelopeAffine = {
 };
 
 export type FoundryPhysicalEnvelopePreview = MechanismPhysicalEnvelopeDescriptor["envelope"];
+
+export type FoundryDynamicRootCandidateStatus =
+  | "valid"
+  | "invalid"
+  | "rejected";
+
+export type FoundryDynamicRootLifecycleState =
+  | "empty"
+  | "valid-mounted"
+  | "replacement-staged"
+  | "replacement-committed"
+  | "rejected-retained"
+  | "disposed";
+
+export type FoundryDynamicRootLifecycleObserver = (
+  state: FoundryDynamicRootLifecycleState,
+) => void;
+
+export type FoundryDynamicRootReplacementOptions = {
+  scene: THREE.Scene;
+  previousRoot: THREE.Group | null;
+  candidateRoot: THREE.Group;
+  status: FoundryDynamicRootCandidateStatus;
+  onLifecycleState?: FoundryDynamicRootLifecycleObserver;
+  disposeRoot?: (root: THREE.Group) => void;
+};
+
+const emitFoundryLifecycleState = <State extends FoundryDynamicRootLifecycleState>(
+  state: State,
+  onLifecycleState: FoundryDynamicRootLifecycleObserver | undefined,
+): State => {
+  onLifecycleState?.(state);
+  return state;
+};
+
+const detachAndDisposeFoundryRoot = (
+  root: THREE.Group,
+  disposeRoot: (root: THREE.Group) => void,
+) => {
+  root.parent?.remove(root);
+  disposeRoot(root);
+};
+
+/**
+ * Commit the renderer candidate after its authority result is known. A valid
+ * candidate is attached before the prior root is detached; an authoritative
+ * invalid candidate clears the visible root, while an edit rejected upstream
+ * is the only candidate state that retains it.
+ */
+export const replaceFoundryDynamicRoot = ({
+  scene,
+  previousRoot,
+  candidateRoot,
+  status,
+  onLifecycleState,
+  disposeRoot = disposeFoundryThreeObject,
+}: FoundryDynamicRootReplacementOptions): {
+  root: THREE.Group | null;
+  transitions: readonly FoundryDynamicRootLifecycleState[];
+} => {
+  if (status === "rejected") {
+    detachAndDisposeFoundryRoot(candidateRoot, disposeRoot);
+    const lifecycle = emitFoundryLifecycleState(
+      "rejected-retained",
+      onLifecycleState,
+    );
+    return {
+      root: previousRoot,
+      transitions: [lifecycle],
+    };
+  }
+
+  if (status === "invalid" || candidateRoot.children.length === 0) {
+    detachAndDisposeFoundryRoot(candidateRoot, disposeRoot);
+    if (previousRoot) {
+      scene.remove(previousRoot);
+      disposeRoot(previousRoot);
+    }
+    const lifecycle = emitFoundryLifecycleState("empty", onLifecycleState);
+    return {
+      root: null,
+      transitions: [lifecycle],
+    };
+  }
+
+  if (previousRoot) {
+    const staged = emitFoundryLifecycleState(
+      "replacement-staged",
+      onLifecycleState,
+    );
+    scene.add(candidateRoot);
+    const committed = emitFoundryLifecycleState(
+      "replacement-committed",
+      onLifecycleState,
+    );
+    scene.remove(previousRoot);
+    disposeRoot(previousRoot);
+    return {
+      root: candidateRoot,
+      transitions: [staged, committed],
+    };
+  }
+
+  scene.add(candidateRoot);
+  const lifecycle = emitFoundryLifecycleState("valid-mounted", onLifecycleState);
+  return {
+    root: candidateRoot,
+    transitions: [lifecycle],
+  };
+};
+
+export const disposeFoundryDynamicRoot = ({
+  scene,
+  root,
+  onLifecycleState,
+  disposeRoot = disposeFoundryThreeObject,
+}: {
+  scene: THREE.Scene;
+  root: THREE.Group | null;
+  onLifecycleState?: FoundryDynamicRootLifecycleObserver;
+  disposeRoot?: (root: THREE.Group) => void;
+}): void => {
+  if (root) {
+    scene.remove(root);
+    disposeRoot(root);
+  }
+  emitFoundryLifecycleState("disposed", onLifecycleState);
+};
 
 export const mapPhysicalEnvelopeToFoundryPreview = (
   descriptor: MechanismPhysicalEnvelopeDescriptor,
@@ -164,10 +298,29 @@ export const renderFoundryDynamicLayers = ({
       ]),
   );
   const envelopeForLayer = (layerId: string) => mappedLayerEnvelopes.get(layerId);
+  const frameOwnerForLayer = (
+    layer: Pick<FabricationRenderLayer, "layerId">,
+    role: FoundryFrameOwner["role"] = "layer",
+  ): FoundryFrameOwner => ({
+    bindingId: `foundry:layer:${layer.layerId}`,
+    role,
+    sourceId: layer.layerId,
+  });
+  const frameOwnerForPin = (
+    pinSpanId: string,
+    role: FoundryFrameOwner["role"],
+    ordinal?: number,
+  ): FoundryFrameOwner => ({
+    bindingId: `foundry:pin:${pinSpanId}`,
+    role,
+    sourceId: pinSpanId,
+    ...(ordinal === undefined ? {} : { ordinal }),
+  });
   const metadataForLayer = (layer: FabricationRenderLayer): FoundryFabricationMeshMetadata => ({
     fabricationLayerId: layer.layerId,
     supportPathIds: [...layer.supportPathIds],
     primitiveKind: "layer",
+    frameOwner: frameOwnerForLayer(layer),
     pinSpanIds: layer.supportPathIds.flatMap((pathId) => {
       const pinSpanId = supportPathById.get(pathId)?.pinSpanId;
       return pinSpanId ? [pinSpanId] : [];
@@ -419,6 +572,7 @@ export const renderFoundryDynamicLayers = ({
             supportPathIds: [pin.pathId],
             pinSpanIds: [pin.pinSpanId],
             primitiveKind: "layer",
+            frameOwner: frameOwnerForPin(pin.pinSpanId, "spacer", index),
           }),
         );
     else if (layerItem.renderKind === "linkage")
@@ -476,8 +630,8 @@ export const renderFoundryDynamicLayers = ({
         heightPx: envelope.height,
       } : undefined);
       if (envelope?.kind !== "oriented-box") {
-        addEndStop(s.j2, -2.55, z, metadata);
-        addEndStop(s.j2, 2.55, z, metadata);
+        addEndStop(s.j2, -2.55, z, metadata, 0);
+        addEndStop(s.j2, 2.55, z, metadata, 1);
       }
     } else if (layerItem.renderKind === "follower")
     {
@@ -504,7 +658,7 @@ export const renderFoundryDynamicLayers = ({
     }
   });
   pinStacks.forEach((pinStack) => {
-    pinStack.retainerZ.forEach((z) => {
+    pinStack.retainerZ.forEach((z, retainerIndex) => {
       const clipLayerIndex = pinStack.clipLayerIndexes.find((index) => Math.abs((renderedLayerZ[index] ?? renderPlan.layers[index]?.z ?? 0) - z) <= 1e-6);
       const clipLayer = clipLayerIndex === undefined ? undefined : renderPlan.layers[clipLayerIndex];
       addClipCap(pinStack.point, z, clipMat, 1.35, {
@@ -512,12 +666,14 @@ export const renderFoundryDynamicLayers = ({
         supportPathIds: [pinStack.pathId],
         pinSpanIds: [pinStack.pinSpanId],
         primitiveKind: "retainer",
+        frameOwner: frameOwnerForPin(pinStack.pinSpanId, "clip", retainerIndex),
       });
     });
     addPin(pinStack.point, pinStack.centerZ, pinStack.lengthZ, {
       supportPathIds: [pinStack.pathId],
       pinSpanIds: [pinStack.pinSpanId],
       primitiveKind: "pin",
+      frameOwner: frameOwnerForPin(pinStack.pinSpanId, "pin"),
     });
   });
 };

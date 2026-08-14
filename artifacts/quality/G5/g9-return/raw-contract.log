@@ -1,0 +1,4 @@
+$ bun tests/project-contract.test.ts
+project contracts ok
+
+exit_code=0

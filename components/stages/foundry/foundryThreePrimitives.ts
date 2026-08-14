@@ -34,11 +34,37 @@ import {
 
 export const FOUNDRY_CACHE_MARKER = "foundryCached";
 
+export type FoundryFrameOwnerRole =
+  | "layer"
+  | "hole-group"
+  | "pin"
+  | "spacer"
+  | "clip"
+  | "end-stop";
+
+export type FoundryFrameOwner = {
+  bindingId: string;
+  role: FoundryFrameOwnerRole;
+  sourceId?: string;
+  ordinal?: number;
+};
+
+export const FOUNDRY_FRAME_OWNER_KEY = "foundryFrameOwner";
+
+export const tagFoundryFrameOwner = (
+  object: THREE.Object3D,
+  owner: FoundryFrameOwner,
+) => {
+  object.userData[FOUNDRY_FRAME_OWNER_KEY] = owner;
+  return object;
+};
+
 export type FoundryFabricationMeshMetadata = {
   fabricationLayerId?: string;
   supportPathIds?: readonly string[];
   pinSpanIds?: readonly string[];
   primitiveKind?: "layer" | "pin" | "retainer";
+  frameOwner?: FoundryFrameOwner;
 };
 
 export const disposeFoundryThreeObject = (object: THREE.Object3D) =>
@@ -160,6 +186,18 @@ export const createFoundryThreePrimitiveFactory = ({
     mesh.userData.fabricationPinSpanIds = [...(metadata.pinSpanIds ?? [])];
     mesh.userData.fabricationPrimitiveKind = metadata.primitiveKind ?? (metadata.fabricationLayerId ? "layer" : undefined);
   };
+  const companionOwner = (
+    owner: FoundryFrameOwner | undefined,
+    role: FoundryFrameOwnerRole,
+    ordinal?: number,
+  ): FoundryFrameOwner | undefined => owner
+    ? {
+        bindingId: owner.bindingId,
+        role,
+        ...(owner.sourceId === undefined ? {} : { sourceId: owner.sourceId }),
+        ...(ordinal === undefined ? {} : { ordinal }),
+      }
+    : undefined;
   const circularHole = (x: number, y: number, r = holeR) => {
     const hole = new THREE.Path();
     hole.absellipse(x, y, r, r, 0, Math.PI * 2, true);
@@ -209,6 +247,7 @@ export const createFoundryThreePrimitiveFactory = ({
     washer.position.set(p.x, p.y, z - spacerDepth / 2);
     washer.castShadow = true;
     tagFabricationMesh(washer, metadata);
+    if (metadata?.frameOwner) tagFoundryFrameOwner(washer, metadata.frameOwner);
     addEdges(washer, geometryKey);
     root.add(washer);
   };
@@ -232,6 +271,7 @@ export const createFoundryThreePrimitiveFactory = ({
     clip.position.copy(p);
     clip.position.z = z;
     tagFabricationMesh(clip, metadata);
+    if (metadata?.frameOwner) tagFoundryFrameOwner(clip, metadata.frameOwner);
     root.add(clip);
   };
   const addBar = (
@@ -302,6 +342,7 @@ export const createFoundryThreePrimitiveFactory = ({
     const group = new THREE.Group();
     group.position.copy(center);
     group.rotation.z = angle;
+    if (metadata?.frameOwner) tagFoundryFrameOwner(group, metadata.frameOwner);
     const geometryKey = `bar:${linkageSpec.key}:${linkageSpec.pitchMm}:${outlineLen.toFixed(3)}:${outlineWidth.toFixed(3)}:${thickness.toFixed(3)}:${effectiveSceneLength.toFixed(3)}:${exactRadiusPx?.toFixed(3) ?? 'auto'}`;
     const mesh = new THREE.Mesh(
       cachedGeometry(geometryKey, () => {
@@ -381,9 +422,16 @@ export const createFoundryThreePrimitiveFactory = ({
     mesh.rotation.z = (rotation * Math.PI) / 180;
     mesh.castShadow = true;
     tagFabricationMesh(mesh, metadata);
+    if (metadata?.frameOwner) tagFoundryFrameOwner(mesh, metadata.frameOwner);
     addEdges(mesh, geometryKey);
     root.add(mesh);
     const holes = new THREE.Group();
+    if (metadata?.frameOwner) {
+      tagFoundryFrameOwner(
+        holes,
+        companionOwner(metadata.frameOwner, "hole-group")!,
+      );
+    }
     holes.position.set(c.x, c.y, z);
     holes.rotation.z = mesh.rotation.z;
     addHoleRing(holes, 0, 0, 0);
@@ -442,9 +490,16 @@ export const createFoundryThreePrimitiveFactory = ({
     mesh.rotation.z = (rotation * Math.PI) / 180;
     mesh.castShadow = true;
     tagFabricationMesh(mesh, metadata);
+    if (metadata?.frameOwner) tagFoundryFrameOwner(mesh, metadata.frameOwner);
     addEdges(mesh, geometryKey);
     root.add(mesh);
     const holes = new THREE.Group();
+    if (metadata?.frameOwner) {
+      tagFoundryFrameOwner(
+        holes,
+        companionOwner(metadata.frameOwner, "hole-group")!,
+      );
+    }
     holes.position.set(c.x, c.y, z);
     profile.mountHoleCenters.forEach((point) => addHoleRing(holes, point.x * ringScale, point.y * ringScale, 0));
     root.add(holes);
@@ -491,6 +546,7 @@ export const createFoundryThreePrimitiveFactory = ({
     mesh.rotation.z = rotation;
     mesh.castShadow = true;
     tagFabricationMesh(mesh, metadata);
+    if (metadata?.frameOwner) tagFoundryFrameOwner(mesh, metadata.frameOwner);
     addEdges(mesh, geometryKey);
     root.add(mesh);
   };
@@ -510,6 +566,7 @@ export const createFoundryThreePrimitiveFactory = ({
     const group = new THREE.Group();
     group.position.copy(c);
     group.rotation.z = rotation;
+    if (metadata?.frameOwner) tagFoundryFrameOwner(group, metadata.frameOwner);
     const plateLengthWorld = outerDimensions ? outerDimensions.widthPx / 18 : length;
     const plateHeightWorld = outerDimensions ? outerDimensions.heightPx / 18 : barW * 1.35;
     const geometryKey = `slot:${length.toFixed(3)}:${barW.toFixed(3)}:${plateLengthWorld.toFixed(3)}:${plateHeightWorld.toFixed(3)}:${thickness.toFixed(3)}`;
@@ -546,6 +603,7 @@ export const createFoundryThreePrimitiveFactory = ({
     const group = new THREE.Group();
     group.position.copy(c);
     group.rotation.z = rotation;
+    if (metadata?.frameOwner) tagFoundryFrameOwner(group, metadata.frameOwner);
     const blockWidth = outerDimensions ? outerDimensions.widthPx / 18 : barW * 1.45;
     const blockHeight = outerDimensions ? outerDimensions.heightPx / 18 : barW * 1.8;
     const blockKey = `follower-block:${barW.toFixed(3)}:${outerDimensions ? `${blockWidth.toFixed(3)}:${blockHeight.toFixed(3)}` : thickness.toFixed(3)}:${thickness.toFixed(3)}`;
@@ -570,7 +628,13 @@ export const createFoundryThreePrimitiveFactory = ({
     group.add(roller);
     root.add(group);
   };
-  const addEndStop = (center: Point, offset: number, z: number, metadata?: FoundryFabricationMeshMetadata) => {
+  const addEndStop = (
+    center: Point,
+    offset: number,
+    z: number,
+    metadata?: FoundryFabricationMeshMetadata,
+    ordinal = 0,
+  ) => {
     const c = to3(center, z);
     const stopKey = `end-stop:${barW.toFixed(3)}:${thickness.toFixed(3)}`;
     const stop = new THREE.Mesh(
@@ -579,6 +643,12 @@ export const createFoundryThreePrimitiveFactory = ({
     );
     stop.position.set(c.x + offset, c.y, z);
     tagFabricationMesh(stop, metadata);
+    if (metadata?.frameOwner) {
+      tagFoundryFrameOwner(
+        stop,
+        companionOwner(metadata.frameOwner, "end-stop", ordinal)!,
+      );
+    }
     addEdges(stop, stopKey);
     root.add(stop);
   };
@@ -600,6 +670,7 @@ export const createFoundryThreePrimitiveFactory = ({
     const group = new THREE.Group();
     group.position.copy(c);
     group.rotation.z = outerDimensions ? -(outerDimensions.rotation ?? 0) : 0;
+    if (metadata?.frameOwner) tagFoundryFrameOwner(group, metadata.frameOwner);
     const rackHeightWorld = outerDimensions ? outerDimensions.heightPx / 18 : barW;
     const rackWidthWorld = outerDimensions ? outerDimensions.widthPx / 18 : 4.6;
     const rackKey = `rack:${barW.toFixed(3)}:${rackWidthWorld.toFixed(3)}:${rackHeightWorld.toFixed(3)}:${thickness.toFixed(3)}:${exact.toString()}`;
@@ -645,6 +716,7 @@ export const createFoundryThreePrimitiveFactory = ({
     pin.rotation.x = Math.PI / 2;
     pin.position.copy(p);
     tagFabricationMesh(pin, metadata);
+    if (metadata?.frameOwner) tagFoundryFrameOwner(pin, metadata.frameOwner);
     root.add(pin);
   };
   const addPath = (points: Point[], z: number, mat: THREE.Material) => {

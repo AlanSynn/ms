@@ -1,19 +1,40 @@
 import { useEffect, useRef } from "react";
 import type { ProjectState } from "../types";
-import { writeAutosaveSnapshot } from "../utils/projectPersistence";
+import {
+  writeAutosaveSnapshot,
+  type AutosaveWriteResult,
+} from "../utils/projectPersistence";
 
-export const useProjectAutosave = (project: ProjectState) => {
+type AutosaveWriteObserver = (
+  result: AutosaveWriteResult,
+  durationMs: number,
+) => void;
+
+export const useProjectAutosave = (
+  project: ProjectState,
+  onWrite?: AutosaveWriteObserver,
+) => {
   const latestProjectRef = useRef<ProjectState>(project);
+  const writeProject = (nextProject: ProjectState) => {
+    if (!onWrite) return writeAutosaveSnapshot(nextProject);
+    const startedAt = performance.now();
+    const result = writeAutosaveSnapshot(nextProject);
+    try {
+      onWrite(result, performance.now() - startedAt);
+    } catch {
+      // Observation cannot change the completed local write result.
+    }
+    return result;
+  };
 
   useEffect(() => {
     latestProjectRef.current = project;
-    if (project.settings.autosave) writeAutosaveSnapshot(project);
-  }, [project]);
+    if (project.settings.autosave) writeProject(project);
+  }, [project, onWrite]);
 
   useEffect(() => {
     if (!project.settings.autosave) return;
-    const writeAutosave = () => writeAutosaveSnapshot(latestProjectRef.current);
-    writeAutosave();
+    const writeAutosave = () => writeProject(latestProjectRef.current);
     const intervalMs = Math.max(
       1000,
       project.settings.autosaveIntervalSeconds * 1000,
@@ -26,5 +47,9 @@ export const useProjectAutosave = (project: ProjectState) => {
       window.removeEventListener("pagehide", writeAutosave);
       window.removeEventListener("beforeunload", writeAutosave);
     };
-  }, [project.settings.autosave, project.settings.autosaveIntervalSeconds]);
+  }, [
+    onWrite,
+    project.settings.autosave,
+    project.settings.autosaveIntervalSeconds,
+  ]);
 };

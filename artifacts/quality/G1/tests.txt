@@ -1,0 +1,90 @@
+G1 final-tree verification
+Product commit: a52ef5dc5bf3f6d0dce43b525f19b7fd0e0690a4
+Toolchain: Bun 1.3.14, macOS arm64
+
+COMMAND: bun run test
+EXIT: 1 (routed G2 failure)
+OUTPUT:
+$ find tests -maxdepth 1 -type f -name '*.test.ts' -print | LC_ALL=C sort | while IFS= read -r file; do bun "$file" || exit; done
+foundry transaction contracts passed
+G008 physical review contracts passed
+g008 ProjectState ingress/runtime/scene contracts passed
+mechanism authored authority boundary contracts passed
+mechanism build gates passed
+mechanism collision contracts passed
+mechanism command feedback contracts passed
+mechanism connection provenance contracts passed
+mechanism connection-selection policy contracts passed
+mechanism control range matrix contracts passed
+mechanism direct-manipulation contracts passed
+mechanism edit authority contracts passed
+mechanism fabrication-combination contracts passed
+mechanism Fit boundary contracts passed
+mechanism fit readiness contracts passed
+mechanism physical envelope contract passed
+mechanism physical instance contracts passed
+prepared mechanism kinematics contracts passed
+mechanism project consumer parity contracts passed
+mechanism readiness contracts passed
+mechanism recovery consumer contracts passed
+mechanism-renderer-envelope-parity passed
+mechanism runtime import-cycle contracts passed
+mechanism safety matrix contracts passed
+mechanism structural resolver contracts passed
+AssertionError: board-final.svg is pinned by the explicit v2 reviewed delta
+actual: 05aeb4f2d274545ab5db064424dac135dfe53be4cae1aac49f20c37c9cd77d33
+expected: 9d0202b80395c555be87e0abb91ff10910d3c4ffdd580484e49c6368baa33568
+at tests/mechanism-v2-schema-inventory.test.ts:261:10
+
+COMMAND: for file in $(find tests -maxdepth 1 -type f -name '*.test.ts' -print | LC_ALL=C sort); do case "$file" in tests/mechanism-v2-schema-inventory.test.ts|tests/project-contract.test.ts) continue ;; esac; bun "$file" || exit; done
+EXIT: 0
+OUTPUT:
+All 28 selected contract files passed. Their exact success lines are the `bun run test` lines above plus:
+mechanism warning presentation contracts passed
+
+COMMAND: bun tests/project-contract.test.ts
+EXIT: 1 (routed G2 failure)
+OUTPUT:
+AssertionError: graph fabrication compiler keeps the same mechanism buildable on a larger dense-pitch kit
+actual: false
+expected: true
+at tests/project-contract.test.ts:1679:10
+
+COMMAND: bun tests/mechanism-prepared-kinematics.test.ts && bun tests/mechanism-direct-manipulation.test.ts && bun tests/mechanism-authored-authority-boundaries.test.ts && bun tests/mechanism-fit-readiness.test.ts && guided cam sheet-fit assertion
+EXIT: 0
+OUTPUT:
+prepared mechanism kinematics contracts passed
+mechanism direct-manipulation contracts passed
+mechanism authored authority boundary contracts passed
+mechanism fit readiness contracts passed
+guided cam sheet-fit boundary passed
+
+COMMAND: bun run build
+EXIT: 0
+OUTPUT:
+$ tsc && vite build
+235 modules transformed.
+dist/assets/index-CepJP9Np.js  1,560.55 kB | gzip: 450.17 kB
+dist/assets/rapier-DS2Sl1i-.js 2,237.59 kB | gzip: 842.98 kB
+built in 1.19s
+
+COMMAND: bun run build:tauri-frontend
+EXIT: 0
+OUTPUT:
+$ tsc && vite build --base ./
+./fonts/manrope-800-latin.woff2 referenced in ./fonts/manrope-800-latin.woff2 didn't resolve at build time, it will remain unchanged to be resolved at runtime
+235 modules transformed.
+dist/assets/index-qBKpB3BV.js  1,560.74 kB | gzip: 450.21 kB
+dist/assets/rapier-DS2Sl1i-.js 2,237.59 kB | gzip: 842.98 kB
+built in 1.05s
+
+COMMAND: git diff --check
+EXIT: 0
+OUTPUT:
+
+COMMAND: production ownership overlap audit
+EXIT: 0
+OUTPUT:
+ownership_rows=73
+exact_cross_lane=0
+ancestor_cross_lane=0

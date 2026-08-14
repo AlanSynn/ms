@@ -64,6 +64,7 @@ export const compactStudentActionForFabricationDiagnostic = (
         if (/^No motion\b/i.test(text)) return 'No full motion. Try reset or smaller links.';
         if (/^Motion \d+%(?:\s|$)/i.test(text)) return 'Motion may jam. Try a smaller move.';
         if (/mechanisms? collide|collision/i.test(text)) return 'Move one mechanism. Mechanisms collide.';
+        if (/physical envelope outside sheet|cut part|part dimensions/i.test(text)) return 'Fit mechanism parts.';
         if (/outside sheet|off[- ]sheet|off board|outside board|placement off board/i.test(text)) return 'Fit inside board.';
         if (/choose another target|duplicate target|target.+(?:used|occupied)/i.test(text)) return 'Choose another target.';
         if (/choose (?:this target's )?path|missing path|no path/i.test(text)) return 'Choose a path.';
@@ -102,6 +103,40 @@ export const isSoftReadinessBlocker = (
 export const hasHardReadinessBlockers = (
   blockers: readonly string[],
 ): boolean => blockers.some((blocker) => !isSoftReadinessBlocker(blocker));
+
+export type FabricationReadinessInput = {
+  status: 'project-ready' | 'blocked';
+  blockers: readonly string[];
+};
+
+export type FabricationExportPolicy = {
+  eligible: boolean;
+  severity: 'ready' | 'warning' | 'blocked';
+  softBlockers: string[];
+  hardBlockers: string[];
+};
+
+/**
+ * Export policy is deliberately narrower than authoring readiness. A warning
+ * may remain visible in an authored project and still permit a package, while
+ * an error always blocks both Blueprint and Assembly export actions.
+ */
+export const fabricationExportPolicy = (
+  readiness: FabricationReadinessInput,
+  validationErrors: readonly string[] = [],
+): FabricationExportPolicy => {
+  const softBlockers = [...new Set(readiness.blockers.filter(isSoftReadinessBlocker))];
+  const hardBlockers = [...new Set([
+    ...validationErrors,
+    ...readiness.blockers.filter((blocker) => !isSoftReadinessBlocker(blocker)),
+  ])];
+  return {
+    eligible: hardBlockers.length === 0,
+    severity: hardBlockers.length ? 'blocked' : softBlockers.length ? 'warning' : 'ready',
+    softBlockers,
+    hardBlockers,
+  };
+};
 
 export const physicalTolerance = (value: number) => Math.max(1, Math.abs(value) * 0.03);
 

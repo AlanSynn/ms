@@ -1,38 +1,54 @@
-import type { AppStage, CanvasViewport, ProjectSnapshotLoadResult, ProjectState } from "../types";
-import { loadProjectSnapshot, serializeProject } from "./project";
+import type {
+  AppStage,
+  CanvasViewport,
+} from "../types";
 import { normalizeCanvasViewport } from "./viewport";
+import {
+  AUTOSAVE_STORAGE_KEYS,
+  LEGACY_STORAGE_KEYS,
+  browserStorage,
+  readStorageWithLegacy,
+  type AutosaveStorage,
+} from "./projectAutosaveFormat";
+
+export { readStorageWithLegacy } from "./projectAutosaveFormat";
+export { LEGACY_STORAGE_KEYS } from "./projectAutosaveFormat";
+export type {
+  AutosaveFailureReason,
+  AutosaveRecovery,
+  AutosaveRecoveryOutcome,
+  AutosaveStorage,
+  AutosaveWriteResult,
+} from "./projectAutosaveFormat";
+export {
+  commitAutosaveSnapshot,
+  markAutosaveDirty,
+  prepareAutosaveSnapshot,
+  writeAutosaveSnapshot,
+} from "./projectAutosaveTransactions";
+export type {
+  AutosaveDirtyResult,
+  AutosavePreparationResult,
+  PreparedAutosaveSnapshot,
+} from "./projectAutosaveTransactions";
+export { readAutosaveProject } from "./projectAutosaveRecovery";
+export type { AutosaveProjectReadResult } from "./projectAutosaveRecovery";
 
 export const STORAGE_KEYS = {
-  autosave: "motionsmith.autosave",
+  ...AUTOSAVE_STORAGE_KEYS,
   workspace: "motionsmith.workspace",
 } as const;
 
-const LEGACY_STORAGE_PREFIX = ["mech", "anim"].join("");
-export const LEGACY_STORAGE_KEYS = {
-  autosave: `${LEGACY_STORAGE_PREFIX}.autosave`,
-  workspace: `${LEGACY_STORAGE_PREFIX}.workspace`,
-} as const;
-
-type StoredStorageValue = {
-  value: string | null;
-  fromLegacy: boolean;
-};
-
-export const readStorageWithLegacy = (
+export const migrateStorageValue = (
   key: string,
-  legacyKey: string,
-): StoredStorageValue => {
-  const current = localStorage.getItem(key);
-  if (current !== null) return { value: current, fromLegacy: false };
-  const legacy = localStorage.getItem(legacyKey);
-  return { value: legacy, fromLegacy: legacy !== null };
-};
-
-export const migrateStorageValue = (key: string, value: string) => {
+  value: string,
+  storage: AutosaveStorage = browserStorage(),
+) => {
   try {
-    localStorage.setItem(key, value);
+    storage.setItem(key, value);
   } catch {
-    // ponytail: migration is best-effort; legacy read fallback still works.
+    // Workspace migration remains a compatibility fallback; autosave migration
+    // below reports its completion state instead of hiding a failed commit.
   }
 };
 
@@ -43,39 +59,6 @@ const projectFileStem = (name: string) =>
 
 export const projectSnapshotFileName = (projectName: string, suffix: string) =>
   `${projectFileStem(projectName)}${suffix}.motionsmith.json`;
-
-export const writeAutosaveSnapshot = (project: ProjectState) => {
-  try {
-    localStorage.setItem(STORAGE_KEYS.autosave, serializeProject(project));
-  } catch {
-    // ponytail: browser autosave is best-effort; manual snapshot download stays available.
-  }
-};
-
-export type AutosaveProjectReadResult =
-  | ProjectSnapshotLoadResult
-  | { status: "missing" };
-
-export const readAutosaveProject = (
-  currentProject: ProjectState,
-): AutosaveProjectReadResult => {
-  const stored = readStorageWithLegacy(
-    STORAGE_KEYS.autosave,
-    LEGACY_STORAGE_KEYS.autosave,
-  );
-  if (!stored.value) return { status: "missing" };
-  let raw: unknown;
-  try {
-    raw = JSON.parse(stored.value);
-  } catch {
-    return loadProjectSnapshot(undefined, currentProject);
-  }
-  const loaded = loadProjectSnapshot(raw, currentProject);
-  if (loaded.status === "loaded" && stored.fromLegacy) {
-    migrateStorageValue(STORAGE_KEYS.autosave, stored.value);
-  }
-  return loaded;
-};
 
 export type WorkspaceLayoutSnapshot = {
   stage: AppStage;
@@ -129,17 +112,12 @@ export const readWorkspaceLayoutSnapshot = ({
 
   const warnings: string[] = [];
   const restored: RestoredWorkspaceLayout = { warnings };
-
   if (layout.viewport !== undefined) {
     const viewport = normalizeCanvasViewport(layout.viewport);
     if (viewport) restored.viewport = viewport;
     else warnings.push("ignored invalid workspace viewport");
   }
-
-  if (
-    layout.toolbarVisible !== undefined ||
-    layout.partPanelVisible !== undefined
-  ) {
+  if (layout.toolbarVisible !== undefined || layout.partPanelVisible !== undefined) {
     const toolbarVisible =
       typeof layout.toolbarVisible === "boolean"
         ? layout.toolbarVisible
@@ -148,25 +126,17 @@ export const readWorkspaceLayoutSnapshot = ({
       typeof layout.partPanelVisible === "boolean"
         ? layout.partPanelVisible
         : currentPartPanelVisible;
-    if (
-      layout.toolbarVisible !== undefined &&
-      typeof layout.toolbarVisible !== "boolean"
-    ) {
+    if (layout.toolbarVisible !== undefined && typeof layout.toolbarVisible !== "boolean") {
       warnings.push("ignored invalid toolbar visibility");
     }
-    if (
-      layout.partPanelVisible !== undefined &&
-      typeof layout.partPanelVisible !== "boolean"
-    ) {
+    if (layout.partPanelVisible !== undefined && typeof layout.partPanelVisible !== "boolean") {
       warnings.push("ignored invalid panel visibility");
     }
     restored.visibility = { toolbarVisible, partPanelVisible };
   }
-
   if (layout.stage !== undefined) {
     if (isAppStage(layout.stage)) restored.stage = layout.stage;
     else warnings.push("ignored invalid workspace stage");
   }
-
   return restored;
 };

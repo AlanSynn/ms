@@ -1,0 +1,279 @@
+G4 verification evidence
+========================
+
+The following blocks preserve command output and exit codes. The production
+preview Playwright attempt was not retried after the lane-local EPERM.
+
+COMMAND: TMPDIR=/private/tmp bun install --frozen-lockfile
+EXIT: 0
+OUTPUT:
+bun install v1.3.14 (d1632b29)
+
++ @playwright/test@1.61.1
++ @tauri-apps/cli@2.11.3
++ @types/node@26.0.1
++ @types/react@19.2.17
++ @types/react-dom@19.2.3
++ @types/three@0.185.0
++ @vitejs/plugin-react@6.0.3
++ esbuild@0.28.1
++ typescript@6.0.3
++ vite@8.1.0
++ @dimforge/rapier3d-compat@0.19.3
++ gifuct-js@2.1.2
++ lucide-react@1.21.0
++ onnxruntime-web@1.27.0
++ react@19.2.7
++ react-dom@19.2.7
++ three@0.185.0
+
+64 packages installed [219.00ms]
+
+COMMAND: TMPDIR=/private/tmp bun tests/g4-persistence.test.ts
+EXIT: 0
+OUTPUT:
+
+G4 REVIEW FOLLOW-UP: contract ownership and single legacy namespace owner
+=========================================================================
+
+COMMAND: bun tests/g4-persistence-golden.test.ts
+EXIT: 0
+OUTPUT:
+
+COMMAND: bun tests/g4-persistence.test.ts
+EXIT: 0
+OUTPUT:
+
+COMMAND: bun tests/g008-project-review.test.ts
+EXIT: 0
+OUTPUT:
+g008 ProjectState ingress/runtime/scene contracts passed
+
+COMMAND: bun tests/project-contract.test.ts
+EXIT: 1
+OUTPUT:
+1690 |   assert(tinyInventory.compilerBlockers > 0 && tinyInventory.parts > 0, 'graph inventory exposes compiler blockers instead of silently returning an empty build inventory');
+1691 |   const denseKit = { ...sample.settings.physicalKit, gridPitchMm: 10, boardCells: 30 };
+1692 |   const defaultFabrication = compileMechanismGraphFabrication(mechanism, sample.settings.physicalKit);
+1693 |   const denseFabrication = compileMechanismGraphFabrication(mechanism, denseKit);
+1694 |   const partKeys = (recipe = defaultFabrication.recipe) => recipe?.requiredParts.map(part => part.part ?? part.name).sort() ?? [];
+1695 |   assert.equal(denseFabrication.buildable, true, 'graph fabrication compiler keeps the same mechanism buildable on a larger dense-pitch kit');
+                ^
+AssertionError: graph fabrication compiler keeps the same mechanism buildable on a larger dense-pitch kit
+
+false !== true
+
+      at /Users/alansynn/orca/workspaces/MechAnim/luna-persistence/tests/project-contract.test.ts:1695:10
+
+Bun v1.3.14 (macOS arm64)
+
+COMMAND: bun run build
+EXIT: 0
+OUTPUT:
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+transforming...✓ 238 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/girl-thumb-CAdQi3RL.png                         8.20 kB
+dist/assets/boy-thumb-YC7FWjeU.png                         14.01 kB
+dist/index.html                                            86.97 kB │ gzip:    16.20 kB
+dist/assets/girl-DcnbHWJO.png                              94.86 kB
+dist/assets/AppIcon-Dx9trOlC.png                          474.08 kB
+dist/assets/boy-CGof9C4m.PNG                            2,817.50 kB
+dist/assets/ort-wasm-simd-threaded.jsep-DC5y_g6C.wasm  26,827.54 kB
+dist/assets/ort.bundle.min-un2p-Ofj.js                    400.74 kB
+dist/assets/index-n6Q3OF7-.js                           1,567.82 kB
+dist/assets/rapier-DS2Sl1i-.js                          2,237.59 kB
+✓ built in 1.61s
+
+COMMAND: git diff --check
+EXIT: 0
+OUTPUT:
+
+G4 CONTINUATION: deterministic golden gate and pure persistence extraction
+==========================================================================
+
+BASELINE: a13899a61c4787b141f033c98a3d637aa251f92e
+GOLDEN GATE COMMIT: dc57109fda08ba6d0cc4ca16c5c1e690ef0b737a
+EXTRACTION COMMIT: EXTRACTION_COMMIT_SELF (this commit)
+GOLDEN SHA-256: 7e6898e0a3f7890e4ef26c68ce4570c62c922b5d4d5f2df300392e6752568254
+
+COMMAND: bun tests/g4-persistence-golden.test.ts
+EXIT: 0
+OUTPUT:
+
+COMMAND: bun tests/g4-persistence.test.ts
+EXIT: 0
+OUTPUT:
+
+COMMAND: bun tests/g008-project-review.test.ts
+EXIT: 0
+OUTPUT:
+g008 ProjectState ingress/runtime/scene contracts passed
+
+COMMAND: bun run build
+EXIT: 0
+OUTPUT:
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+transforming...✓ 238 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/girl-thumb-CAdQi3RL.png                         8.20 kB
+dist/assets/boy-thumb-YC7FWjeU.png                         14.01 kB
+dist/index.html                                            86.97 kB │ gzip:    16.20 kB
+dist/assets/girl-DcnbHWJO.png                              94.86 kB
+dist/assets/AppIcon-Dx9trOlC.png                          474.08 kB
+dist/assets/boy-CGof9C4m.PNG                            2,817.50 kB
+dist/assets/ort-wasm-simd-threaded.jsep-DC5y_g6C.wasm  26,827.54 kB
+dist/assets/ort.bundle.min-knEGfTHl.js                    400.74 kB
+dist/assets/index-BmT_Z1os.js                           1,567.85 kB
+dist/assets/rapier-DS2Sl1i-.js                          2,237.59 kB
+✓ built in 1.03s
+
+COMMAND: git diff --check
+EXIT: 0
+OUTPUT:
+
+COMMAND: TMPDIR=/private/tmp bun tests/g008-project-review.test.ts
+EXIT: 0
+OUTPUT:
+g008 ProjectState ingress/runtime/scene contracts passed
+
+COMMAND: TMPDIR=/private/tmp bun run build
+EXIT: 0
+OUTPUT:
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+transforming...✓ 235 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/girl-thumb-CAdQi3RL.png                         8.20 kB
+dist/assets/boy-thumb-YC7FWjeU.png                         14.01 kB
+dist/index.html                                            86.97 kB │ gzip:    16.20 kB
+dist/assets/girl-DcnbHWJO.png                              94.86 kB
+dist/assets/AppIcon-Dx9trOlC.png                          474.08 kB
+dist/assets/boy-CGof9C4m.PNG                            2,817.50 kB
+dist/assets/ort-wasm-simd-threaded.jsep-DC5y_g6C.wasm  26,827.54 kB │ gzip: 6,400.68 kB
+dist/assets/ort.bundle.min-DisxLyH7.js                    400.74 kB │ gzip:   110.41 kB
+dist/assets/index-DwTQhu-N.js                           1,567.81 kB │ gzip:   452.10 kB
+dist/assets/rapier-DS2Sl1i-.js                          2,237.59 kB │ gzip:   842.98 kB
+
+✓ built in 994ms
+
+COMMAND: git -c core.fsmonitor=false -c filter.lfs.process= -c filter.lfs.required=false diff --check
+EXIT: 0
+OUTPUT:
+
+COMMAND: TMPDIR=/private/tmp bun run test
+EXIT: 1
+OUTPUT:
+$ find tests -maxdepth 1 -type f -name '*.test.ts' -print | LC_ALL=C sort | while IFS= read -r file; do bun "$file" || exit; done
+foundry transaction contracts passed
+G008 physical review contracts passed
+g008 ProjectState ingress/runtime/scene contracts passed
+112 | assert.deepEqual(
+113 |   { crankLength: fitted.crankLength, rockerLength: fitted.rockerLength },
+114 |   expected,
+115 |   'existing-mechanism sheet fit keeps authored selected-hole lengths authoritative',
+116 | );
+117 | assert(connectionSelectionAccepted(fitted.connectionSelectionValidation, '4bar.input-joint'));
+      ^
+AssertionError: false == true
+ generatedMessage: true
+ actual: false
+ expected: true
+ operator: "=="
+
+      at /Users/alansynn/orca/workspaces/MechAnim/luna-persistence/tests/mechanism-authored-authority-boundaries.test.ts:117:1
+
+Bun v1.3.14 (macOS arm64)
+error: script "test" exited with code 1
+
+COMMAND: TMPDIR=/private/tmp bun tests/mechanism-v2-schema-inventory.test.ts
+EXIT: 1
+OUTPUT:
+256 | assert.equal(v2Oracle.schema_version, 2);
+257 | assert.equal(v2Oracle.baseline_kind, 'reviewed-source-delta');
+258 | assert.equal(v2Oracle.base_oracle, 'fabrication-python-oracle.json');
+259 | assert.deepEqual(v2Oracle.managed_file_additions, ['cam_modules/gravity-follower-module-v2.svg']);
+260 | for (const relativePath of Object.keys(v2Oracle.files)) {
+261 |   assert.equal(
+               ^
+AssertionError: board-final.svg is pinned by the explicit v2 reviewed delta
+ generatedMessage: true
+ actual: "05aeb4f2d274545ab5db064424dac135dfe53be4cae1aac49f20c37c9cd77d33"
+ expected: "9d0202b80395c555be87e0abb91ff10910d3c4ffdd580484e49c6368baa33568"
+ operator: "strictEqual"
+ code: "ERR_ASSERTION"
+
+      at /Users/alansynn/orca/workspaces/MechAnim/luna-persistence/tests/mechanism-v2-schema-inventory.test.ts:261:10
+
+Bun v1.3.14 (macOS arm64)
+
+COMMAND: TMPDIR=/private/tmp bun tests/project-contract.test.ts
+EXIT: 1
+OUTPUT:
+1674 |   assert(tinyInventory.compilerBlockers > 0 && tinyInventory.parts > 0, 'graph inventory exposes compiler blockers instead of silently returning an empty build inventory');
+1675 |   const denseKit = { ...sample.settings.physicalKit, gridPitchMm: 10, boardCells: 30 };
+1676 |   const defaultFabrication = compileMechanismGraphFabrication(mechanism, sample.settings.physicalKit);
+1677 |   const denseFabrication = compileMechanismGraphFabrication(mechanism, denseKit);
+1678 |   const partKeys = (recipe = defaultFabrication.recipe) => recipe?.requiredParts.map(part => part.part ?? part.name).sort() ?? [];
+1679 |   assert.equal(denseFabrication.buildable, true, 'graph fabrication compiler keeps the same mechanism buildable on a larger dense-pitch kit');
+      ^
+AssertionError: graph fabrication compiler keeps the same mechanism buildable on a larger dense-pitch kit
+ generatedMessage: true
+ actual: false
+ expected: true
+ operator: "strictEqual"
+ code: "ERR_ASSERTION"
+
+      at /Users/alansynn/orca/workspaces/MechAnim/luna-persistence/tests/project-contract.test.ts:1679:10
+
+Bun v1.3.14 (macOS arm64)
+
+COMMAND: TMPDIR=/private/tmp PLAYWRIGHT_SERVER=preview bunx playwright test tests/browser/workflow.spec.ts --grep "Legacy storage namespace migrates|Options parity updates workspace UI" --workers=1
+EXIT: 1
+OUTPUT:
+[WebServer] $ vite preview --host "127.0.0.1" --port "5173" --strictPort
+[WebServer] error when starting preview server:
+[WebServer] Error: listen EPERM: operation not permitted 127.0.0.1:5173
+[WebServer]     at Server.setupListenHandle [as _listen2] (node:net:2145:16)
+[WebServer]     at listenInCluster (node:internal/cluster:1145:12)
+[WebServer]     at doListen (node:net:2117:7)
+[WebServer]     at process.processTicksAndRejections (node:internal/process/task_queues:83:21)
+[WebServer] error: script "preview" exited with code 1
+Error: Process from config.webServer was not able to start. Exit code: 1
+
+FINAL PRE-COMMIT GATE
+=====================
+
+COMMAND: git -c core.fsmonitor=false -c filter.lfs.process= -c filter.lfs.required=false diff --check
+EXIT: 0
+OUTPUT:
+
+COMMAND: TMPDIR=/private/tmp bun run build
+EXIT: 0
+OUTPUT:
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+transforming...✓ 235 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/girl-thumb-CAdQi3RL.png                         8.20 kB
+dist/assets/boy-thumb-YC7FWjeU.png                         14.01 kB
+dist/index.html                                            86.97 kB │ gzip:   16.20 kB
+dist/assets/girl-DcnbHWJO.png                              94.86 kB
+dist/assets/AppIcon-Dx9trOlC.png                          474.08 kB
+dist/assets/boy-CGof9C4m.PNG                            2,817.50 kB
+dist/assets/ort-wasm-simd-threaded.jsep-DC5y_g6C.wasm  26,827.54 kB │ gzip: 6,400.68 kB
+dist/assets/ort.bundle.min-DisxLyH7.js                    400.74 kB │ gzip:   110.41 kB
+dist/assets/index-DwTQhu-N.js                           1,567.81 kB │ gzip:   452.10 kB
+dist/assets/rapier-DS2Sl1i-.js                          2,237.59 kB │ gzip:   842.98 kB
+
+✓ built in 1.14s
+
+COMMAND: TMPDIR=/private/tmp bun tests/g4-persistence.test.ts
+EXIT: 0
+OUTPUT:

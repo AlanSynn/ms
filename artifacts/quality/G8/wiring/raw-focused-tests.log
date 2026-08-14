@@ -1,0 +1,14 @@
+Integrated commit: ed4396ac490b82d6fa43d5912d7d01fbaf27a5cf
+$ bun tests/g8-study-summary-wiring.test.ts
+$ bun tests/study-summary-telemetry.test.ts
+$ bun tests/study-summary-analyze.test.ts
+$ bun tests/g4-persistence.test.ts
+$ bun tests/g5-web-onnx.test.ts
+$ bun tests/project-contract.test.ts
+$ git diff --check
+G8 study-summary wiring contracts passed
+study-summary-telemetry: ok
+study-summary-analyze: ok
+G5 web ONNX contracts passed; model quality measurement is opt-in and uses local model bytes only.
+project contracts ok
+exit_code=0

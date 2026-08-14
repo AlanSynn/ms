@@ -66,7 +66,7 @@ export type AppStageRouterProps = {
   onFoundryExport: (pkg: FoundryExportPackage) => void;
 
   selectedMechanism?: MechanismConfig;
-  updateMechanism: (id: string, updates: Partial<MechanismConfig>) => void;
+  updateMechanism: (id: string, updates: Partial<MechanismConfig>) => boolean;
   mechanismEditFeedback: MechanismEditFeedback | null;
   showTrace: boolean;
   setShowTrace: (v: boolean) => void;

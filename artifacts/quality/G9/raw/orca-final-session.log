@@ -1,0 +1,1314 @@
+$ orca runtime status --json
+{
+  "id": "local",
+  "ok": false,
+  "error": {
+    "code": "invalid_argument",
+    "message": "Unknown command: runtime status",
+    "data": {
+      "suggestions": [],
+      "nextSteps": []
+    }
+  },
+  "_meta": {
+    "runtimeId": null
+  }
+}
+$ orca browser --help
+Unknown command: browser
+
+orca
+
+Usage: orca <command> [options]
+
+Startup:
+  open                      Launch Orca and wait for the runtime to be reachable
+  serve                     Start a headless Orca runtime server
+  status                    Show app/runtime/graph readiness
+
+Diagnostics:
+  diagnostics memory        Collect a memory snapshot for Orca and managed terminals
+
+Agent Discovery:
+  agent-context             Print the machine-readable command schema for agents
+
+Accounts:
+  account add               Add a managed Claude or Codex account on this Orca host
+  account list              List managed Claude and Codex accounts on this Orca host
+
+Skills:
+  skills list               List version-matched skill guides bundled with this Orca CLI
+  skills get                Print a version-matched skill guide as Markdown
+  skills install            Install bundled Orca skills globally via the community skills CLI
+  skills update             Update already-installed Orca skills via the community skills CLI
+
+Environments:
+  environment add           Save a remote Orca runtime from a pairing code
+  environment list          List saved remote Orca runtimes
+  environment show          Show one saved remote Orca runtime
+  environment rm            Remove a saved remote Orca runtime
+
+Environment Recipes:
+  vm recipe doctor          Validate a per-workspace environment recipe
+
+Automations:
+  automations list          List scheduled Orca automations
+  automations show          Show one Orca automation
+  automations create        Create a scheduled Orca automation
+  automations edit          Edit an Orca automation
+  automations remove        Remove an Orca automation and its run history
+  automations run           Run an Orca automation now
+  automations runs          List automation run history
+
+Projects:
+  project list              List durable projects known to Orca
+  project setups            List project host setups
+  project setup-existing-folder Make a project available on a host by importing an existing folder
+  project setup-clone       Make a project available on a host by cloning a repository
+  project setup-create      Create independent project host setup metadata
+  project setup-update      Update project host setup metadata
+  project setup-delete      Remove a project host setup
+
+Repos:
+  repo list                 List repos registered in Orca
+  repo add                  Add a project to Orca by filesystem path
+  repo show                 Show one registered repo
+  repo set-base-ref         Set the repo's default base ref for future worktrees
+  repo search-refs          Search branch/tag refs within a repo
+
+Worktrees:
+  worktree list             List Orca-managed worktrees
+  worktree show             Show one worktree
+  worktree current          Show the Orca-managed worktree for the current directory
+  worktree create           Create a new Orca-managed worktree
+  worktree set              Update Orca metadata for a worktree
+  worktree rm               Remove a worktree from Orca and git
+  worktree ps               Show a compact orchestration summary across worktrees
+
+Files:
+  file open                 Open a workspace file in the Orca editor
+  file diff                 Open a workspace file diff in the Orca editor
+  file open-changed         Open all git-changed files for a workspace
+
+Terminals:
+  terminal list             List live Orca-managed terminals
+  terminal show             Show terminal metadata and preview
+  terminal read             Read bounded terminal output
+  terminal send             Send input to a live terminal
+  terminal wait             Wait for a terminal condition (exit, tui-idle)
+  terminal stop             Stop terminals for a worktree
+  terminal create           Create a terminal session in a worktree
+  terminal rename           Set or clear the title of a terminal tab
+  terminal split            Split an existing terminal pane
+  terminal switch           Bring a terminal tab to the foreground
+  terminal focus            Alias for terminal switch
+  terminal close            Close a terminal pane/session, or its whole tab with --tab
+
+Orchestration:
+  orchestration run-create  Create and bind a lightweight orchestration Run
+  orchestration run-use     Bind this coordinator terminal to an existing Run
+  orchestration run-current Show this terminal's bound Run
+  orchestration run-list    List lightweight orchestration Runs
+  orchestration run-show    Show one lightweight orchestration Run
+  orchestration send        Send an inter-agent message
+  orchestration check       Check the bound Run mailbox
+  orchestration ask         Ask the coordinator a blocking question
+  orchestration reply       Reply to a message
+  orchestration inbox       Show all messages across recipients
+  orchestration task-create Create an orchestration task
+  orchestration task-list   List orchestration tasks
+  orchestration task-update Update a task status
+  orchestration dispatch    Dispatch a task to a terminal
+  orchestration dispatch-show Show dispatch context for a task
+  orchestration worker-start Start a supervised worker locally or on a connected Orca server
+  orchestration worker-show Inspect one supervised worker
+  orchestration worker-read Read bounded output from one supervised worker
+  orchestration worker-stop Fence one Dispatch; stop only its supervised worker
+  orchestration worker-abandon Fence an uncertain worker without claiming it stopped
+  orchestration worker-release Release a settled worker's terminal after archiving its output
+  orchestration worker-retain Keep a worker terminal live for debugging
+  orchestration worker-list Report worker terminal resource accounting
+  orchestration coordinator-start Start the legacy automatic coordinator loop
+  orchestration coordinator-stop Stop the legacy automatic coordinator loop
+  orchestration gate-create Create a decision gate blocking a task
+  orchestration gate-resolve Resolve a pending decision gate
+  orchestration gate-list   List decision gates
+  orchestration reset       Reset orchestration state
+
+Computer Use:
+  computer capabilities     Show computer-use provider capabilities
+  computer permissions      Show or open computer-use permission setup
+  computer list-apps        List running apps available to computer-use
+  computer list-windows     List visible windows for a target app
+  computer get-app-state    Capture a compact accessibility snapshot of an app
+  computer click            Click an app element or window coordinate
+  computer perform-secondary-action Run an advertised accessibility action
+  computer scroll           Scroll an app element
+  computer drag             Drag between app elements or window coordinates
+  computer type-text        Type literal text at the current app focus
+  computer press-key        Press a single key such as Return or Escape
+  computer hotkey           Press a shortcut combination such as CmdOrCtrl+A
+  computer paste-text       Paste text through the native clipboard path
+  computer set-value        Set the value of a settable app element
+
+Linear:
+  linear                    Read Linear ticket context for agents
+
+Mobile Emulator (iOS Simulator):
+  emulator list             List available/running emulators (Orca-managed + raw serve-sim)
+  emulator attach <device>  Attach/start helper and make active for the worktree
+  emulator tap <x> <y>      Tap at normalized 0..1 coords (preferred for single taps)
+  emulator type <text>      Type text (US ASCII only)
+  emulator gesture <json>   Send begin/move/end touch points
+  emulator button <name>    Hardware button (home, side_button, etc.)
+  emulator rotate <o>       Rotate device (portrait|landscape_left|...)
+  emulator exec --command   Raw serve-sim subcommand passthrough (no "serve-sim" prefix)
+  emulator kill             Stop helper for device
+
+Browser Automation:
+  tab create                Create a new browser tab (navigates to --url)
+  tab list                  List open browser tabs
+  tab show                  Show one browser tab by page id
+  tab current               Show the current browser tab
+  tab profile list          List browser session profiles
+  tab profile create        Create a browser session profile
+  tab profile delete        Delete a browser session profile
+  tab profile set           Switch a browser tab to a different profile
+  tab profile show          Show the profile bound to a browser tab
+  tab profile use-default   Switch a browser tab back to the default profile
+  tab profile clone         Clone a browser tab into another profile
+  tab switch                Switch the active browser tab by --index or --page
+  tab close                 Close a browser tab by --index/--page or the current tab
+  snapshot                  Accessibility snapshot with element refs (e.g. @e1, @e2)
+  goto                      Navigate the active tab to --url
+  click                     Click element by --element ref
+  fill                      Clear and fill input by --element ref with --value
+  type                      Type --input text at the current focus (no element needed)
+  select                    Select dropdown option by --element ref and --value
+  hover                     Hover element by --element ref
+  keypress                  Press a key (e.g. --key Enter, --key Tab)
+  scroll                    Scroll --direction (up/down) by --amount pixels
+  back                      Navigate back in browser history
+  reload                    Reload the active browser tab
+  screenshot                Capture viewport screenshot (--format png|jpeg)
+  eval                      Evaluate --expression JavaScript in the page context
+  wait                      Wait for page idle or --timeout ms
+  check                     Check a checkbox by --element ref
+  uncheck                   Uncheck a checkbox by --element ref
+  focus                     Focus an element by --element ref
+  clear                     Clear an input by --element ref
+  drag                      Drag --from ref to --to ref
+  upload                    Upload --files to a file input by --element ref
+  dblclick                  Double-click element by --element ref
+  forward                   Navigate forward in browser history
+  scrollintoview            Scroll --element into view
+  get                       Get element property (--what: text, html, value, url, title)
+  is                        Check element state (--what: visible, enabled, checked)
+  inserttext                Insert text without key events
+  mouse move                Move mouse to --x --y coordinates
+  mouse down                Press mouse button
+  mouse up                  Release mouse button
+  mouse wheel               Scroll wheel --dy [--dx]
+  find                      Find element by locator (--locator role|text|label --value <v>)
+  set device                Emulate device (--name "iPhone 12")
+  set offline               Toggle offline mode (--state on|off)
+  set headers               Set HTTP headers (--headers '{"key":"val"}')
+  set credentials           Set HTTP auth (--user <u> --pass <p>)
+  set media                 Set color scheme (--color-scheme dark|light)
+  clipboard read            Read clipboard contents
+  clipboard write           Write --text to clipboard
+  dialog accept             Accept browser dialog (--text for prompt response)
+  dialog dismiss            Dismiss browser dialog
+  storage local get         Get localStorage value by --key
+  storage local set         Set localStorage --key --value
+  storage local clear       Clear localStorage
+  storage session get       Get sessionStorage value by --key
+  storage session set       Set sessionStorage --key --value
+  storage session clear     Clear sessionStorage
+  download                  Download file via --selector to --path
+  highlight                 Highlight --selector on page
+  exec                      Run any agent-browser command (--command "...")
+
+Common Commands:
+  orca open [--json]
+  orca serve [--port <port>] [--pairing-address <host>] [--mobile-pairing] [--no-pairing] [--project-root <path>] [--recipe-json] [--json]
+  orca status [--json]
+  orca diagnostics memory [--json]
+  orca agent-context [--json]
+  orca account add [--agent claude|codex] [--json]
+  orca account list [--json]
+  orca environment add --name <name> --pairing-code <code> [--json]
+  orca environment list [--json]
+  orca environment show --environment <selector> [--json]
+  orca environment rm --environment <selector> [--json]
+  orca worktree list [--repo <selector>] [--limit <n>] [--json]
+  orca worktree create --name <name> [--repo <selector>|--project <id> [--host <host-id>]|--project-host-setup <id>] [--agent <id>] [--prompt <text>] [--setup run|skip|inherit] [--base-branch <ref>] [--issue <number>] [--linear-issue <identifier-or-url>] [--comment <text>] [--parent-worktree <selector>] [--no-parent] [--run-hooks] [--activate] [--json]
+  orca worktree show --worktree <selector> [--json]
+  orca worktree current [--json]
+  orca worktree set --worktree <selector> [--display-name <name>] [--issue <number|null>] [--linear-issue <identifier-or-url|null>] [--comment <text>] [--workspace-status <id>] [--parent-worktree <selector>|--no-parent] [--json]
+  orca worktree rm --worktree <selector> [--force] [--run-hooks] [--json]
+  orca worktree ps [--limit <n>] [--json]
+  orca file open <path> [--worktree <selector>] [--json]
+  orca file diff <path> [--staged] [--worktree <selector>] [--json]
+  orca file open-changed [--mode edit|diff|both] [--worktree <selector>] [--json]
+  orca terminal list [--worktree <selector>] [--limit <n>] [--include-visual-layouts] [--json]
+  orca terminal show [--terminal <handle>] [--json]
+  orca terminal read [--terminal <handle>] [--cursor <n>] [--limit <n>] [--json]
+  orca terminal send [--terminal <handle>] [--text <text>] [--enter] [--interrupt] [--json]
+  orca terminal wait [--terminal <handle>] --for exit|tui-idle [--timeout-ms <ms>] [--json]
+  orca terminal stop --worktree <selector> [--json]
+  orca terminal create [--worktree <selector>] [--title <name>] [--command <text>] [--focus] [--json]
+  orca terminal split [--terminal <handle>] [--direction horizontal|vertical] [--json]
+  orca terminal switch [--terminal <handle>] [--json]
+  orca terminal close [--terminal <handle>] [--tab] [--json]
+  orca project list [--json]
+  orca project setups [--project <id>] [--host <host-id>] [--json]
+  orca project setup-existing-folder --project <id> --host <host-id> --path <path> [--kind git|folder] [--display-name <name>] [--json]
+  orca project setup-clone --project <id> --host <host-id> --url <clone-url> --destination <path> [--display-name <name>] [--json]
+  orca project setup-create --project <id> --host <host-id> [--setup-id <id>] [--path <path>] [--kind git|folder] [--display-name <name>] [--worktree-base-path <path>] [--git-username <name>] [--state ready|not-set-up|setting-up|error|unsupported] [--method imported-existing-folder|cloned|provisioned] [--json]
+  orca project setup-update --setup <setup-id> [--display-name <name>] [--path <path>] [--worktree-base-path <path>] [--git-username <name>] [--kind git|folder] [--state ready|not-set-up|setting-up|error|unsupported] [--method legacy-repo|imported-existing-folder|cloned|provisioned] [--json]
+  orca project setup-delete --setup <setup-id> [--json]
+  orca repo list [--json]
+  orca repo add --path <path> [--json]
+  orca repo show --repo <selector> [--json]
+  orca repo set-base-ref --repo <selector> --ref <ref> [--json]
+  orca repo search-refs --repo <selector> --query <text> [--limit <n>] [--json]
+
+Selectors:
+  --repo <selector>         Registered repo selector such as id:<id>, name:<name>, or path:<path>
+  --worktree <selector>     Worktree selector such as id:<repo-id>::<path>, name:<displayName>, branch:<branch>, issue:<number>, path:<path>, or active/current
+  --terminal <handle>       Runtime-issued terminal handle returned by `orca terminal list --json`
+  --parent-worktree <selector> Parent worktree selector such as id:<repo-id>::<path>, branch:<branch>, issue:<number>, path:<path>, or active/current
+  --no-parent               Force no parent lineage for unrelated worktree creation/update
+
+Terminal Send Options:
+  --text <text>             Text to send to the terminal
+  --enter                   Append Enter after sending text
+  --interrupt               Send as an interrupt-style input when supported
+
+Terminal List Options:
+  --include-visual-layouts  Include tab and pane topology in JSON output
+
+Wait Options:
+  --for exit                Wait until the target terminal exits
+  --timeout-ms <ms>         Maximum wait time before timing out
+
+Output Options:
+  --json                    Emit machine-readable JSON instead of human text
+  --pairing-code <code>      Connect to a remote Orca runtime using an orca://pair?... code
+  --environment <selector>   Connect using a saved environment id or name
+  --help                    Show this help message
+
+Behavior:
+  Most commands require a running Orca runtime. If Orca is not open yet, run `orca open` first.
+  Remote runtime access can also be supplied with ORCA_PAIRING_CODE or ORCA_ENVIRONMENT.
+  Use selectors for discovery and handles for repeated live terminal operations.
+
+Agent Sessions And Worktrees:
+  `worktree create --agent` creates a new checkout with an agent.
+  To start a fresh agent in the current worktree, use:
+    orca terminal create --worktree active --command "codex"
+
+Browser Workflow:
+  1. Create or navigate:  orca tab create --url https://example.com
+                          orca goto --url https://example.com
+  2. Inspect the page:    orca snapshot
+     (Returns an accessibility tree with element refs like e1, e2, e3)
+     For concurrent workflows, prefer: orca tab list --json
+     then reuse tabs[].browserPageId with --page <id> on later commands.
+  3. Interact:            orca click --element e2
+                          orca fill --element e5 --value "search query"
+                          orca keypress --key Enter
+  4. Re-inspect:          orca snapshot
+     (Element refs change after navigation — always re-snapshot before interacting)
+
+Browser Options:
+  --element <ref>           Element ref from snapshot (e.g. @e3)
+  --url <url>               URL to navigate to
+  --value <text>            Value to fill or select
+  --input <text>            Text to type at current focus (no element needed)
+  --expression <js>         JavaScript expression to evaluate
+  --key <key>               Key to press (Enter, Tab, Escape, Control+a, etc.)
+  --direction <dir>         Scroll direction: up or down
+  --amount <pixels>         Scroll distance in pixels (default: viewport height)
+  --index <n>               Tab index (from `tab list`)
+  --page <id>               Stable browser page id (preferred for concurrent workflows)
+  --profile <id>            Browser profile id
+  --show-profile            Include the tab's browser profile in text output
+  --no-ua-spoof             Keep Electron's native user agent for a new profile
+  --format <png|jpeg>       Screenshot image format
+  --from <ref>              Drag source element ref
+  --to <ref>                Drag target element ref
+  --files <path,...>        Comma-separated file paths for upload
+  --timeout <ms>            Wait timeout in milliseconds
+  --worktree <selector>     Scope commands to a specific worktree's browser tabs
+
+Examples:
+  $ orca open
+  $ orca status --json
+  $ orca diagnostics memory --json
+  $ orca repo list
+  $ orca worktree create --name agent-task --agent codex --prompt "hi"
+  $ orca worktree create --repo name:orca --name cli-test-1 --issue 273
+  $ orca worktree create --repo name:orca --name linear-task --linear-issue https://linear.app/stably/issue/STA-335/test-issue
+  $ orca worktree create --name linear-task --linear-issue STA-335
+  $ orca worktree show --worktree branch:Jinwoo-H/cli
+  $ orca worktree current
+  $ orca worktree set --worktree active --comment "waiting on review"
+  $ orca worktree set --worktree active --linear-issue null
+  $ orca worktree ps --limit 10
+  $ orca file open-changed --mode diff
+  $ orca file open src/App.tsx
+  $ orca terminal create --worktree active --command "codex"
+  $ orca terminal list --worktree path:/Users/me/orca/workspaces/orca/cli-test-1 --json
+  $ orca terminal send --terminal term_123 --text "hi" --enter
+  $ orca terminal wait --terminal term_123 --for exit --timeout-ms 60000 --json
+  $ orca tab current --json
+  $ orca tab show --page page_123 --json
+  $ orca tab create --url https://example.com --profile work
+  $ orca tab profile clone --page page_123 --profile work --json
+  $ orca snapshot
+  $ orca click --element e3
+  $ orca fill --element e5 --value "hello"
+  $ orca goto --url https://example.com/login
+  $ orca keypress --key Enter
+  $ orca eval --expression "document.title"
+  $ orca tab list --json
+$ orca status --json
+{
+  "id": "local-status",
+  "ok": true,
+  "result": {
+    "app": {
+      "running": true,
+      "pid": 70179,
+      "desktopWindowStatus": "available"
+    },
+    "runtime": {
+      "state": "ready",
+      "reachable": true,
+      "runtimeId": "5aa221c2-d1ac-4e04-b0a8-30e23faa79d1",
+      "appVersion": "1.4.181",
+      "remoteUpdateSupport": {
+        "installMode": "interactive",
+        "automatic": true,
+        "reason": "available"
+      },
+      "capabilities": [
+        "runtime.status.compat.v1",
+        "runtime.environments.v1",
+        "remote-runtime.shared-control.v1",
+        "orchestration.federation.v1",
+        "orchestration.federation-control-mail.v1",
+        "orchestration.worker-launch-preferences.v1",
+        "orchestration.contract.v1",
+        "browser.screencast.v1",
+        "terminal.binary-stream.v1",
+        "terminal.multiplex.v1",
+        "workspace-ports.v1",
+        "mobile.tasks.v1",
+        "project-host-setup.v1",
+        "task-source-context.v1",
+        "workspace-run-context.v1",
+        "worktree.linked-work-item-context.v1",
+        "folder-workspace.path-status.v1",
+        "linear.issue-attribute-filter.v1",
+        "aiVault.v1",
+        "aiVault.session-titles.v1",
+        "terminal.query-reply-input.v1",
+        "terminal.paired-parking.v1",
+        "terminal.quick-commands.v1",
+        "worktree.create-idempotency.v1",
+        "terminal.create-idempotency.v2",
+        "session-tabs.close-intent.v1",
+        "agent-session.session-boundary.v1",
+        "updater.remote-control.v1",
+        "agent-session.host-authority.v1",
+        "agent-session.omp-resume-path.v1",
+        "files.mutation-ownership.v1",
+        "accounts.import-host-credentials.v1",
+        "accounts.codex-reset-credit.v1",
+        "browser.certificate-trust.v1"
+      ]
+    },
+    "graph": {
+      "state": "ready"
+    }
+  },
+  "_meta": {
+    "runtimeId": "5aa221c2-d1ac-4e04-b0a8-30e23faa79d1"
+  }
+}
+$ orca tab list --json
+{
+  "id": "e4abeb2d-54d6-4d40-90ed-b306c5466861",
+  "ok": true,
+  "result": {
+    "tabs": [
+      {
+        "browserPageId": "bf4879de-b546-4574-8cd6-c085dcba0087",
+        "index": 0,
+        "url": "http://127.0.0.1:5197/",
+        "title": "MotionSmith - Mechanical Character Designer",
+        "active": false,
+        "loadError": null,
+        "certificateFailure": null,
+        "worktreeId": "2a3d0911-edb9-44e2-b503-f6dcbd2dba95::/Users/alansynn/orca/workspaces/MechAnim/quality-sol-max-integration",
+        "profileId": "default",
+        "profileLabel": "Default"
+      },
+      {
+        "browserPageId": "7b04d814-1488-47af-998c-033ca6b96d68",
+        "index": 1,
+        "url": "data:text/html,",
+        "title": "data:text/html,",
+        "active": false,
+        "loadError": null,
+        "certificateFailure": null,
+        "worktreeId": "2a3d0911-edb9-44e2-b503-f6dcbd2dba95::/Users/alansynn/orca/workspaces/MechAnim/quality-sol-max-integration",
+        "profileId": "default",
+        "profileLabel": "Default"
+      },
+      {
+        "browserPageId": "4aa85da1-bf04-44a6-ae2b-ce8c508428fa",
+        "index": 2,
+        "url": "http://127.0.0.1:43197/health",
+        "title": "127.0.0.1:43197/health",
+        "active": true,
+        "loadError": null,
+        "certificateFailure": null,
+        "worktreeId": "2a3d0911-edb9-44e2-b503-f6dcbd2dba95::/Users/alansynn/orca/workspaces/MechAnim/quality-sol-max-integration",
+        "profileId": "default",
+        "profileLabel": "Default"
+      },
+      {
+        "browserPageId": "804d5cd0-b48b-48e6-bef7-84db878b286e",
+        "index": 3,
+        "url": "http://127.0.0.1:43197/health",
+        "title": "127.0.0.1:43197/health",
+        "active": false,
+        "loadError": null,
+        "certificateFailure": null,
+        "worktreeId": "2a3d0911-edb9-44e2-b503-f6dcbd2dba95::/Users/alansynn/orca/workspaces/MechAnim/quality-sol-max-integration",
+        "profileId": "default",
+        "profileLabel": "Default"
+      }
+    ]
+  },
+  "_meta": {
+    "runtimeId": "5aa221c2-d1ac-4e04-b0a8-30e23faa79d1"
+  }
+}
+$ orca goto --page 4aa85da1-bf04-44a6-ae2b-ce8c508428fa --url http://127.0.0.1:43195/
+Navigated to http://127.0.0.1:43195/ — MotionSmith - Mechanical Character Designer
+$ orca wait --page 4aa85da1-bf04-44a6-ae2b-ce8c508428fa --timeout 10000
+{
+  "ms": 10000,
+  "waited": "timeout"
+}
+$ orca goto --page 804d5cd0-b48b-48e6-bef7-84db878b286e --url http://127.0.0.1:43196/
+Navigated to http://127.0.0.1:43196/ — MotionSmith - Mechanical Character Designer
+$ orca wait --page 804d5cd0-b48b-48e6-bef7-84db878b286e --timeout 10000
+{
+  "ms": 10000,
+  "waited": "timeout"
+}
+$ orca snapshot --page 4aa85da1-bf04-44a6-ae2b-ce8c508428fa
+page: 4aa85da1-bf04-44a6-ae2b-ce8c508428fa
+undefined — undefined
+- generic [ref=e1] clickable [onclick]
+  - main
+    - dialog "Start."
+      - StaticText "GETTING STARTED"
+      - heading "Start." [level=2, ref=e2]
+      - button "Close" [ref=e3]
+      - button "Open Guide" [ref=e4]
+        - strong
+          - StaticText "Guide"
+        - StaticText "Pick a working motion project."
+        - StaticText "Open"
+      - button "Open starter rig" [ref=e5]
+        - strong
+          - StaticText "Starter rig"
+        - StaticText "Start with a simple body."
+        - StaticText "Start"
+      - button "Start Girl starter" [ref=e6]
+        - strong
+          - StaticText "Girl"
+        - StaticText "Ready character art."
+        - StaticText "Start"
+      - button "Start Boy starter" [ref=e7]
+        - strong
+          - StaticText "Boy"
+        - StaticText "Ready character art."
+        - StaticText "Start"
+      - button "Choose image" [ref=e8]
+        - strong
+          - StaticText "Image"
+        - StaticText "Turn one picture into parts."
+        - StaticText "Choose"
+      - checkbox "Don't show again this session" [checked=false, ref=e9]
+      - button "Open full project" [ref=e10]
+$ orca snapshot --page 804d5cd0-b48b-48e6-bef7-84db878b286e
+page: 804d5cd0-b48b-48e6-bef7-84db878b286e
+undefined — undefined
+- generic [ref=e1] clickable [onclick]
+  - main
+    - dialog "Start."
+      - StaticText "GETTING STARTED"
+      - heading "Start." [level=2, ref=e2]
+      - button "Close" [ref=e3]
+      - button "Open Guide" [ref=e4]
+        - strong
+          - StaticText "Guide"
+        - StaticText "Pick a working motion project."
+        - StaticText "Open"
+      - button "Open starter rig" [ref=e5]
+        - strong
+          - StaticText "Starter rig"
+        - StaticText "Start with a simple body."
+        - StaticText "Start"
+      - button "Start Girl starter" [ref=e6]
+        - strong
+          - StaticText "Girl"
+        - StaticText "Ready character art."
+        - StaticText "Start"
+      - button "Start Boy starter" [ref=e7]
+        - strong
+          - StaticText "Boy"
+        - StaticText "Ready character art."
+        - StaticText "Start"
+      - button "Choose image" [ref=e8]
+        - strong
+          - StaticText "Image"
+        - StaticText "Turn one picture into parts."
+        - StaticText "Choose"
+      - checkbox "Don't show again this session" [checked=false, ref=e9]
+      - button "Open full project" [ref=e10]
+$ orca click --page 4aa85da1-bf04-44a6-ae2b-ce8c508428fa --element e4
+Clicked e4
+$ orca click --page 804d5cd0-b48b-48e6-bef7-84db878b286e --element e4
+Clicked e4
+$ orca snapshot --page 4aa85da1-bf04-44a6-ae2b-ce8c508428fa
+page: 4aa85da1-bf04-44a6-ae2b-ce8c508428fa
+undefined — undefined
+- generic [ref=e1] clickable [onclick]
+  - main
+    - dialog "Pick a project."
+      - StaticText "GETTING STARTED"
+      - heading "Pick a project." [level=2, ref=e2]
+      - button "Starters" [ref=e3]
+      - button "Open lesson: Make a hand wave" [ref=e4]
+        - strong
+          - StaticText "Make a hand wave"
+        - StaticText "Open"
+      - button "Open lesson: Make a head bob" [ref=e5]
+        - strong
+          - StaticText "Make a head bob"
+        - StaticText "Open"
+      - button "Open lesson: Make a foot step" [ref=e6]
+        - strong
+          - StaticText "Make a foot step"
+        - StaticText "Open"
+      - button "Open lesson: Make gears spin" [ref=e7]
+        - strong
+          - StaticText "Make gears spin"
+        - StaticText "Open"
+$ orca snapshot --page 804d5cd0-b48b-48e6-bef7-84db878b286e
+page: 804d5cd0-b48b-48e6-bef7-84db878b286e
+undefined — undefined
+- generic [ref=e1] clickable [onclick]
+  - main
+    - dialog "Pick a project."
+      - StaticText "GETTING STARTED"
+      - heading "Pick a project." [level=2, ref=e2]
+      - button "Starters" [ref=e3]
+      - button "Open lesson: Make a hand wave" [ref=e4]
+        - strong
+          - StaticText "Make a hand wave"
+        - StaticText "Open"
+      - button "Open lesson: Make a head bob" [ref=e5]
+        - strong
+          - StaticText "Make a head bob"
+        - StaticText "Open"
+      - button "Open lesson: Make a foot step" [ref=e6]
+        - strong
+          - StaticText "Make a foot step"
+        - StaticText "Open"
+      - button "Open lesson: Make gears spin" [ref=e7]
+        - strong
+          - StaticText "Make gears spin"
+        - StaticText "Open"
+$ orca click --page 4aa85da1-bf04-44a6-ae2b-ce8c508428fa --element e4
+Clicked e4
+$ orca click --page 804d5cd0-b48b-48e6-bef7-84db878b286e --element e4
+Clicked e4
+page: 4aa85da1-bf04-44a6-ae2b-ce8c508428fa
+undefined — undefined
+- generic [ref=e1] clickable [onclick]
+  - main
+    - generic
+      - navigation "Workflow" [ref=e2]
+        - button "Character" [ref=e3]
+          - StaticText "Character"
+          - StaticText "Character"
+        - button "Path Editor" [ref=e4]
+          - StaticText "Path"
+          - StaticText "Path Editor"
+        - button "Mechanism Foundry" [ref=e5]
+          - StaticText "Foundry"
+          - StaticText "Mechanism Foundry"
+        - button "Mechanism Design" [ref=e6]
+          - StaticText "Design"
+          - StaticText "Mechanism Design"
+        - button "Blueprint" [ref=e7]
+          - StaticText "Blueprint"
+          - StaticText "Blueprint"
+        - button "Assembly" [ref=e8]
+          - StaticText "Assembly"
+          - StaticText "Assembly"
+        - button "Options" [ref=e9]
+          - StaticText "Options"
+          - StaticText "Options"
+        - generic "MotionSmith version 0.0.9"
+          - StaticText "v0.0.9"
+      - generic
+        - sectionheader
+          - button "Go home" [ref=e10]
+            - StaticText "MotionSmith"
+          - heading "Character" [level=2, ref=e11]
+          - navigation "Commands" [ref=e12]
+            - group
+              - DisclosureTriangle "File" [expanded=false]
+            - group
+              - DisclosureTriangle "Edit" [expanded=false]
+            - group
+              - DisclosureTriangle "View" [expanded=false]
+            - group
+              - DisclosureTriangle "Go" [expanded=false]
+            - group
+              - DisclosureTriangle "Options" [expanded=false]
+            - group
+              - DisclosureTriangle "Help" [expanded=false]
+          - button "Report bug" [ref=e13]
+        - complementary "Workflow"
+          - StaticText "CHARACTER"
+          - StaticText "14"
+          - StaticText " parts"
+          - StaticText "17"
+          - StaticText " joints"
+          - StaticText "art on plates"
+          - StaticText "0"
+          - StaticText " objects"
+          - region "Make it yours" [ref=e16]
+            - StaticText "MAKE IT YOURS"
+            - StaticText "Make a hand wave"
+            - StaticText "Select a part"
+            - StaticText "Place joints"
+            - button "Edit rig" [ref=e24]
+            - button "Reset" [ref=e25]
+          - button "Open Getting Started" [ref=e17]
+            - StaticText "Getting Started"
+          - group "Character files"
+            - button "Load character file" [ref=e26]
+            - button "Context help" [expanded=false, ref=e27]
+              - StaticText "?"
+            - button "Add object" [ref=e28]
+            - button "Context help" [expanded=false, ref=e29]
+              - StaticText "?"
+          - button "Create from image" [ref=e18]
+          - button "Context help" [expanded=false, ref=e19]
+            - StaticText "?"
+          - button "Open full project" [ref=e20]
+          - group
+            - DisclosureTriangle "TOOLS" [expanded=false]
+          - region "Character body part list" [ref=e21]
+            - StaticText "BODY PARTS"
+            - button "Torso Editable part ART" [ref=e30]
+              - strong
+                - StaticText "Torso"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Left upper leg Editable part ART" [ref=e31]
+              - strong
+                - StaticText "Left upper leg"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Left lower leg Editable part ART" [ref=e32]
+              - strong
+                - StaticText "Left lower leg"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Right upper leg Editable part ART" [ref=e33]
+              - strong
+                - StaticText "Right upper leg"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Right lower leg Editable part ART" [ref=e34]
+              - strong
+                - StaticText "Right lower leg"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Left foot Editable part ART" [ref=e35]
+              - strong
+                - StaticText "Left foot"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Right foot Editable part ART" [ref=e36]
+              - strong
+                - StaticText "Right foot"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Left upper arm Editable part ART" [ref=e37]
+              - strong
+                - StaticText "Left upper arm"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Left lower arm Editable part ART" [ref=e38]
+              - strong
+                - StaticText "Left lower arm"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Right upper arm Editable part ART" [ref=e39]
+              - strong
+                - StaticText "Right upper arm"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Right lower arm Editable part ART" [ref=e40]
+              - strong
+                - StaticText "Right lower arm"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Left hand Editable part ART" [ref=e41]
+              - strong
+                - StaticText "Left hand"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Right hand Editable part ART" [ref=e42]
+              - strong
+                - StaticText "Right hand"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Head Editable part ART" [ref=e43]
+              - strong
+                - StaticText "Head"
+              - StaticText "Editable part"
+              - StaticText "ART"
+          - region "Scene object list" [ref=e22]
+            - StaticText "SCENE OBJECTS"
+            - StaticText "Props start here."
+        - region "Shared canvas" [ref=e15]
+          - generic
+            - generic
+              - button "Zoom out" [ref=e49]
+                - StaticText "−"
+              - StaticText "100"
+              - StaticText "%"
+              - button "Zoom in" [ref=e50]
+                - StaticText "+"
+              - button "Fit view" [ref=e51]
+                - StaticText "Fit"
+            - generic "3D character view"
+              - Canvas
+              - generic "Shared 3D viewer toolbar"
+                - button "2D" [ref=e58]
+                - button "3D" [ref=e59]
+                - button "Toggle grid layer" [ref=e60]
+                  - StaticText "grid"
+                - button "Toggle character layer" [ref=e61]
+                  - StaticText "Body"
+                - button "Toggle skeleton layer" [ref=e62]
+                  - StaticText "Rig"
+        - complementary "Selected item inspector"
+          - region "Character part settings" [ref=e23]
+            - StaticText "PART"
+            - StaticText "Right hand"
+            - button "Add layer" [ref=e44]
+            - button "Remove layer" [ref=e45]
+            - LabelText
+              - StaticText "Visible"
+              - checkbox "Visible" [checked=true, ref=e52]
+            - LabelText
+              - StaticText "Locked"
+              - checkbox "Locked" [checked=false, ref=e53]
+            - StaticText "CUT"
+            - StaticText "IMPORTED CUT"
+            - button "Edit cut" [ref=e46]
+            - LabelText
+              - StaticText "X"
+              - spinbutton "X number" [ref=e54]: -134
+                - StaticText "-134"
+            - LabelText
+              - StaticText "Y"
+              - spinbutton "Y number" [ref=e55]: -54
+                - StaticText "-54"
+            - LabelText
+              - StaticText "Rotation"
+              - spinbutton "Rotation number" [ref=e56]: -18
+                - StaticText "-18"
+            - group
+              - DisclosureTriangle "ARTWORK" [expanded=false]
+            - button "Back" [ref=e47]
+            - button "Front" [ref=e48]
+            - group
+              - DisclosureTriangle "ANCHORS" [expanded=true]
+              - heading "MOTION SETUP" [level=4, ref=e57]
+              - StaticText "3 joints"
+              - StaticText "right elbow bends."
+              - generic
+                - StaticText "HANDLE RIGHT HAND · START RIGHT SHOULDER"
+              - LabelText
+                - StaticText "PART PIVOT"
+                - combobox "Part pivot" [expanded=false, ref=e63]: right hand
+                  - MenuListPopup
+                    - option "root" [ref=e64]
+                    - option "hip" [ref=e65]
+                    - option "torso" [ref=e66]
+                    - option "neck" [ref=e67]
+                    - option "head top" [ref=e68]
+                    - option "left shoulder" [ref=e69]
+                    - option "left elbow" [ref=e70]
+                    - option "left hand" [ref=e71]
+                    - option "right shoulder" [ref=e72]
+                    - option "right elbow" [ref=e73]
+                    - option "right hand" [selected, ref=e74]
+                    - option "left hip" [ref=e75]
+                    - option "left knee" [ref=e76]
+                    - option "left foot" [ref=e77]
+                    - option "right hip" [ref=e78]
+                    - option "right knee" [ref=e79]
+                    - option "right foot" [ref=e80]
+              - StaticText "right hand · 1 joint"
+              - group
+                - DisclosureTriangle "EDIT SKELETON" [expanded=false]
+        - generic
+          - strong
+            - StaticText "Now"
+          - StaticText " "
+          - StaticText "Character"
+          - strong
+            - StaticText "Fix"
+          - StaticText " "
+          - StaticText "OK"
+          - strong
+            - StaticText "Next"
+          - StaticText " "
+          - StaticText "Choose starter"
+        - sectionfooter
+          - StaticText "Make a hand wave ready"
+          - button "AI ready" [disabled, ref=e14]
+$ orca click --page 4aa85da1-bf04-44a6-ae2b-ce8c508428fa --element e5
+Clicked e5
+$ orca click --page 804d5cd0-b48b-48e6-bef7-84db878b286e --element e5
+Could not locate element with role=button name=Open lesson: Make a head bob
+page: 804d5cd0-b48b-48e6-bef7-84db878b286e
+undefined — undefined
+- generic [ref=e1] clickable [onclick]
+  - main
+    - generic
+      - navigation "Workflow" [ref=e2]
+        - button "Character" [ref=e3]
+          - StaticText "Character"
+          - StaticText "Character"
+        - button "Path Editor" [ref=e4]
+          - StaticText "Path"
+          - StaticText "Path Editor"
+        - button "Mechanism Foundry" [ref=e5]
+          - StaticText "Foundry"
+          - StaticText "Mechanism Foundry"
+        - button "Mechanism Design" [ref=e6]
+          - StaticText "Design"
+          - StaticText "Mechanism Design"
+        - button "Blueprint" [ref=e7]
+          - StaticText "Blueprint"
+          - StaticText "Blueprint"
+        - button "Assembly" [ref=e8]
+          - StaticText "Assembly"
+          - StaticText "Assembly"
+        - button "Options" [ref=e9]
+          - StaticText "Options"
+          - StaticText "Options"
+        - generic "MotionSmith version 0.0.9"
+          - StaticText "v0.0.9"
+      - generic
+        - sectionheader
+          - button "Go home" [ref=e10]
+            - StaticText "MotionSmith"
+          - heading "Character" [level=2, ref=e11]
+          - navigation "Commands" [ref=e12]
+            - group
+              - DisclosureTriangle "File" [expanded=false]
+            - group
+              - DisclosureTriangle "Edit" [expanded=false]
+            - group
+              - DisclosureTriangle "View" [expanded=false]
+            - group
+              - DisclosureTriangle "Go" [expanded=false]
+            - group
+              - DisclosureTriangle "Options" [expanded=false]
+            - group
+              - DisclosureTriangle "Help" [expanded=false]
+          - button "Report bug" [ref=e13]
+        - complementary "Workflow"
+          - StaticText "CHARACTER"
+          - StaticText "14"
+          - StaticText " parts"
+          - StaticText "17"
+          - StaticText " joints"
+          - StaticText "art on plates"
+          - StaticText "0"
+          - StaticText " objects"
+          - region "Make it yours" [ref=e16]
+            - StaticText "MAKE IT YOURS"
+            - StaticText "Make a hand wave"
+            - StaticText "Select a part"
+            - StaticText "Place joints"
+            - button "Edit rig" [ref=e24]
+            - button "Reset" [ref=e25]
+          - button "Open Getting Started" [ref=e17]
+            - StaticText "Getting Started"
+          - group "Character files"
+            - button "Load character file" [ref=e26]
+            - button "Context help" [expanded=false, ref=e27]
+              - StaticText "?"
+            - button "Add object" [ref=e28]
+            - button "Context help" [expanded=false, ref=e29]
+              - StaticText "?"
+          - button "Create from image" [ref=e18]
+          - button "Context help" [expanded=false, ref=e19]
+            - StaticText "?"
+          - button "Open full project" [ref=e20]
+          - group
+            - DisclosureTriangle "TOOLS" [expanded=false]
+          - region "Character body part list" [ref=e21]
+            - StaticText "BODY PARTS"
+            - button "Torso Editable part ART" [ref=e30]
+              - strong
+                - StaticText "Torso"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Left upper leg Editable part ART" [ref=e31]
+              - strong
+                - StaticText "Left upper leg"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Left lower leg Editable part ART" [ref=e32]
+              - strong
+                - StaticText "Left lower leg"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Right upper leg Editable part ART" [ref=e33]
+              - strong
+                - StaticText "Right upper leg"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Right lower leg Editable part ART" [ref=e34]
+              - strong
+                - StaticText "Right lower leg"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Left foot Editable part ART" [ref=e35]
+              - strong
+                - StaticText "Left foot"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Right foot Editable part ART" [ref=e36]
+              - strong
+                - StaticText "Right foot"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Left upper arm Editable part ART" [ref=e37]
+              - strong
+                - StaticText "Left upper arm"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Left lower arm Editable part ART" [ref=e38]
+              - strong
+                - StaticText "Left lower arm"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Right upper arm Editable part ART" [ref=e39]
+              - strong
+                - StaticText "Right upper arm"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Right lower arm Editable part ART" [ref=e40]
+              - strong
+                - StaticText "Right lower arm"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Left hand Editable part ART" [ref=e41]
+              - strong
+                - StaticText "Left hand"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Right hand Editable part ART" [ref=e42]
+              - strong
+                - StaticText "Right hand"
+              - StaticText "Editable part"
+              - StaticText "ART"
+            - button "Head Editable part ART" [ref=e43]
+              - strong
+                - StaticText "Head"
+              - StaticText "Editable part"
+              - StaticText "ART"
+          - region "Scene object list" [ref=e22]
+            - StaticText "SCENE OBJECTS"
+            - StaticText "Props start here."
+        - region "Shared canvas" [ref=e15]
+          - generic
+            - generic
+              - button "Zoom out" [ref=e49]
+                - StaticText "−"
+              - StaticText "100"
+              - StaticText "%"
+              - button "Zoom in" [ref=e50]
+                - StaticText "+"
+              - button "Fit view" [ref=e51]
+                - StaticText "Fit"
+            - generic "3D character view"
+              - Canvas
+              - generic "Shared 3D viewer toolbar"
+                - button "2D" [ref=e58]
+                - button "3D" [ref=e59]
+                - button "Toggle grid layer" [ref=e60]
+                  - StaticText "grid"
+                - button "Toggle character layer" [ref=e61]
+                  - StaticText "Body"
+                - button "Toggle skeleton layer" [ref=e62]
+                  - StaticText "Rig"
+        - complementary "Selected item inspector"
+          - region "Character part settings" [ref=e23]
+            - StaticText "PART"
+            - StaticText "Right hand"
+            - button "Add layer" [ref=e44]
+            - button "Remove layer" [ref=e45]
+            - LabelText
+              - StaticText "Visible"
+              - checkbox "Visible" [checked=true, ref=e52]
+            - LabelText
+              - StaticText "Locked"
+              - checkbox "Locked" [checked=false, ref=e53]
+            - StaticText "CUT"
+            - StaticText "IMPORTED CUT"
+            - button "Edit cut" [ref=e46]
+            - LabelText
+              - StaticText "X"
+              - spinbutton "X number" [ref=e54]: -134
+                - StaticText "-134"
+            - LabelText
+              - StaticText "Y"
+              - spinbutton "Y number" [ref=e55]: -54
+                - StaticText "-54"
+            - LabelText
+              - StaticText "Rotation"
+              - spinbutton "Rotation number" [ref=e56]: -18
+                - StaticText "-18"
+            - group
+              - DisclosureTriangle "ARTWORK" [expanded=false]
+            - button "Back" [ref=e47]
+            - button "Front" [ref=e48]
+            - group
+              - DisclosureTriangle "ANCHORS" [expanded=true]
+              - heading "MOTION SETUP" [level=4, ref=e57]
+              - StaticText "3 joints"
+              - StaticText "right elbow bends."
+              - generic
+                - StaticText "HANDLE RIGHT HAND · START RIGHT SHOULDER"
+              - LabelText
+                - StaticText "PART PIVOT"
+                - combobox "Part pivot" [expanded=false, ref=e63]: right hand
+                  - MenuListPopup
+                    - option "root" [ref=e64]
+                    - option "hip" [ref=e65]
+                    - option "torso" [ref=e66]
+                    - option "neck" [ref=e67]
+                    - option "head top" [ref=e68]
+                    - option "left shoulder" [ref=e69]
+                    - option "left elbow" [ref=e70]
+                    - option "left hand" [ref=e71]
+                    - option "right shoulder" [ref=e72]
+                    - option "right elbow" [ref=e73]
+                    - option "right hand" [selected, ref=e74]
+                    - option "left hip" [ref=e75]
+                    - option "left knee" [ref=e76]
+                    - option "left foot" [ref=e77]
+                    - option "right hip" [ref=e78]
+                    - option "right knee" [ref=e79]
+                    - option "right foot" [ref=e80]
+              - StaticText "right hand · 1 joint"
+              - group
+                - DisclosureTriangle "EDIT SKELETON" [expanded=false]
+        - generic
+          - strong
+            - StaticText "Now"
+          - StaticText " "
+          - StaticText "Character"
+          - strong
+            - StaticText "Fix"
+          - StaticText " "
+          - StaticText "OK"
+          - strong
+            - StaticText "Next"
+          - StaticText " "
+          - StaticText "Choose starter"
+        - sectionfooter
+          - StaticText "Make a hand wave ready"
+          - button "AI ready" [disabled, ref=e14]
+Clicked e5
+$ orca eval OFF prepare Foundry
+{"heading":"Mechanism Foundry","phase":"0","renderable":"ready","builds":"1","summaryResources":0}
+$ orca eval ON prepare Foundry
+{"heading":"Mechanism Foundry","phase":"0","renderable":"ready","builds":"1","summaryResources":0}
+$ orca tab switch --page 4aa85da1-bf04-44a6-ae2b-ce8c508428fa
+Switched to tab 4 (4aa85da1-bf04-44a6-ae2b-ce8c508428fa)
+$ orca eval OFF < artifacts/quality/G9/raw/orca-input-probe.js
+started
+{
+  "ms": 10000,
+  "waited": "timeout"
+}
+$ orca eval OFF input result
+{"sampleCount":500,"visualChanges":500,"p50Ms":35.39999997615814,"p95Ms":38.199999928474426,"meanMs":35.80540000081062,"maxMs":73.5,"clearCount":1,"structuralBuildDelta":0,"longTaskSupported":true,"longTasks":[]}
+$ orca tab switch --page 804d5cd0-b48b-48e6-bef7-84db878b286e
+Switched to tab 5 (804d5cd0-b48b-48e6-bef7-84db878b286e)
+$ orca eval ON < artifacts/quality/G9/raw/orca-input-probe.js
+started
+$ orca eval ON input result
+{"sampleCount":500,"visualChanges":500,"p50Ms":35.5,"p95Ms":40,"meanMs":36.27299999976158,"maxMs":62.799999952316284,"clearCount":1,"structuralBuildDelta":0,"longTaskSupported":true,"longTasks":[]}
+$ orca eval ON input round 2 < artifacts/quality/G9/raw/orca-input-probe.js
+started
+$ orca eval ON input round 2 result
+{"sampleCount":500,"visualChanges":500,"p50Ms":35.60000002384186,"p95Ms":39.5,"meanMs":36.212,"maxMs":72.29999995231628,"clearCount":1,"structuralBuildDelta":0,"longTaskSupported":true,"longTasks":[]}
+$ orca tab switch OFF for input round 2
+Switched to tab 4 (4aa85da1-bf04-44a6-ae2b-ce8c508428fa)
+$ orca eval OFF input round 2 < artifacts/quality/G9/raw/orca-input-probe.js
+started
+$ orca eval OFF input round 2 result
+{"sampleCount":500,"visualChanges":500,"p50Ms":34.89999997615814,"p95Ms":38.5,"meanMs":35.59239999961853,"maxMs":78.59999990463257,"clearCount":1,"structuralBuildDelta":0,"longTaskSupported":true,"longTasks":[]}
+CROSSOVER: page 4 loads enabled; page 5 loads default
+Navigated to http://127.0.0.1:43196/ — MotionSmith - Mechanical Character Designer
+guide
+{
+  "ms": 500,
+  "waited": "timeout"
+}
+lesson
+{
+  "ms": 500,
+  "waited": "timeout"
+}
+foundry
+{
+  "ms": 1000,
+  "waited": "timeout"
+}
+Navigated to http://127.0.0.1:43195/ — MotionSmith - Mechanical Character Designer
+guide
+{
+  "ms": 500,
+  "waited": "timeout"
+}
+lesson
+{
+  "ms": 500,
+  "waited": "timeout"
+}
+foundry
+{
+  "ms": 1000,
+  "waited": "timeout"
+}
+CROSSOVER readiness
+{"url":"http://127.0.0.1:43196/","heading":"Mechanism Foundry","rig":"ready"}
+{"url":"http://127.0.0.1:43195/","heading":"Mechanism Foundry","rig":"ready"}
+$ CROSSOVER ON(page4) input round 3
+Switched to tab 4 (4aa85da1-bf04-44a6-ae2b-ce8c508428fa)
+started
+$ orca eval CROSSOVER ON(page4) input round 3 result
+{"sampleCount":500,"visualChanges":500,"p50Ms":40.39999997615814,"p95Ms":45.39999997615814,"meanMs":41.05639999961853,"maxMs":64.19999992847443,"clearCount":1,"structuralBuildDelta":0,"longTaskSupported":true,"longTasks":[]}
+$ orca tab switch CROSSOVER OFF(page5)
+Switched to tab 5 (804d5cd0-b48b-48e6-bef7-84db878b286e)
+$ orca eval --expression-file CROSSOVER OFF(page5)
+Unknown flag --expression-file for command: eval
+$ orca eval CROSSOVER OFF(page5) input round 3
+started
+$ orca eval CROSSOVER OFF(page5) input round 3 result
+{"sampleCount":500,"visualChanges":500,"p50Ms":40.60000002384186,"p95Ms":44,"meanMs":41.261999999761585,"maxMs":83.29999995231628,"clearCount":1,"structuralBuildDelta":0,"longTaskSupported":true,"longTasks":[]}
+$ orca eval CROSSOVER OFF(page5) input round 4
+started
+$ orca eval CROSSOVER OFF(page5) input round 4 result
+{"sampleCount":500,"visualChanges":500,"p50Ms":40.299999952316284,"p95Ms":43.800000071525574,"meanMs":40.90460000061989,"maxMs":97.70000004768372,"clearCount":1,"structuralBuildDelta":0,"longTaskSupported":true,"longTasks":[]}
+$ orca tab switch CROSSOVER ON(page4)
+Switched to tab 4 (4aa85da1-bf04-44a6-ae2b-ce8c508428fa)
+$ orca eval CROSSOVER ON(page4) input round 4
+started
+$ orca eval CROSSOVER ON(page4) input round 4 result
+{"sampleCount":500,"visualChanges":500,"p50Ms":40,"p95Ms":43.699999928474426,"meanMs":40.614600001096726,"maxMs":81.70000004768372,"clearCount":1,"structuralBuildDelta":0,"longTaskSupported":true,"longTasks":[]}
+
+ENVIRONMENT DISPOSITION
+$ orca worktree ps --json | jq integration
+{"isActive":false,"status":"active"}
+$ orca terminal switch --terminal term_73d94266-288a-4786-8028-6a041ee47428 --json
+{"navigated":true,"worktree":"quality-sol-max-integration"}
+$ orca worktree ps --json | jq integration
+{"isActive":true,"status":"active"}
+The hidden-webview playback probes (approximately 1000 ms maxima) are invalid
+environment checks because Chromium throttled the non-active Orca worktree.
+
+LIFECYCLE ISOLATION DISPOSITION
+Temporarily removed the null StudySummaryLifecycle mount, built an enabled
+candidate, measured one unbalanced fresh-page probe, restored the mount, and
+verified `git diff -- components/AppWorkspaceShell.tsx` was empty. The candidate
+did not improve latency and is excluded because its page was cold while the
+default page was already warm.
+
+DECIDING INPUT PROTOCOL
+Harness: artifacts/quality/G9/raw/orca-input-probe-final.js
+Protocol: fresh page; 500 unmeasured sequential input-to-playhead mutations;
+1000 measured mutations; default/enabled/enabled/default order; page identities
+crossed between profiles.
+$ DEFAULT page5 input deciding round 1
+{"p50Ms":40.199999928474426,"p95Ms":43.300000071525574,"p99Ms":45.59999990463257,"meanMs":40.570600001335144,"maxMs":64.60000002384186,"clearCount":1,"structuralBuildDelta":0,"longTasks":[]}
+$ ENABLED page4 input deciding round 2
+{"p50Ms":39.5,"p95Ms":42,"p99Ms":45.39999997615814,"meanMs":39.81590000009537,"maxMs":60.59999990463257,"clearCount":1,"structuralBuildDelta":0,"longTasks":[]}
+$ ENABLED page5 input deciding round 3
+{"p50Ms":40.5,"p95Ms":43.5,"p99Ms":46.300000071525574,"meanMs":40.78429999959469,"maxMs":67.20000004768372,"clearCount":1,"structuralBuildDelta":0,"longTasks":[]}
+$ DEFAULT page4 input deciding round 4
+{"p50Ms":39.5,"p95Ms":42.700000047683716,"p99Ms":46.39999997615814,"meanMs":39.928399999141696,"maxMs":61.800000071525574,"clearCount":1,"structuralBuildDelta":0,"longTasks":[]}
+INPUT DECISION default_p95=43.000000059604645 enabled_p95=42.75 delta_ms=-0.2500000596046448 delta_percent=-0.5813954866467583 PASS
+
+DECIDING PLAYBACK PROTOCOL
+Harness: artifacts/quality/G9/raw/orca-playback-probe-final.js
+Protocol: 120 unmeasured rAF intervals; 360 measured intervals;
+default/enabled/enabled/default order.
+$ DEFAULT playback deciding round 1
+{"p50Ms":83.30000000001746,"p95Ms":85.69999999998254,"p99Ms":90.10000000000582,"meanMs":82.40499999999997,"maxMs":108.69999999998254,"clearCount":360,"structuralBuildDelta":0,"longTasks":[]}
+$ ENABLED playback deciding round 2
+{"p50Ms":83.29999999998836,"p95Ms":87.29999999998836,"p99Ms":89.29999999998836,"meanMs":82.41916666666657,"maxMs":112.70000000001164,"clearCount":360,"structuralBuildDelta":0,"longTasks":[]}
+$ ENABLED playback deciding round 3
+{"p50Ms":83.29999999998836,"p95Ms":87.20000000001164,"p99Ms":88.29999999998836,"meanMs":81.95638888888902,"maxMs":91.79999999998836,"clearCount":360,"structuralBuildDelta":0,"longTasks":[]}
+$ DEFAULT playback deciding round 4
+{"p50Ms":83.29999999998836,"p95Ms":87.29999999998836,"p99Ms":90.5,"meanMs":81.94583333333334,"maxMs":91.5,"clearCount":360,"structuralBuildDelta":0,"longTasks":[]}
+PLAYBACK DECISION default_p95=86.49999999998545 enabled_p95=87.25 delta_ms=0.7500000000145519 delta_percent=0.867052023138356 PASS
+
+TRANSPORT BOUNDARY
+$ curl -X POST http://127.0.0.1:43197/reset
+{"ok":true,"requestCount":0}
+$ DEFAULT Generate package; Download SVG; pagehide navigation; sink stats
+{"afterExportRequestCount":0,"afterPageHideRequestCount":0,"summaryResourceEntries":0}
+$ ENABLED Download SVG; pagehide navigation; sink stats
+{"requestCount":2,"modes":["cors","no-cors"],"bytes":[1114,1114],"normalRequests":1,"exitBeacons":1}
+$ bun artifacts/quality/G9/raw/validate-summary-sink.mjs
+{"requestCount":2,"modes":["cors","no-cors"],"bytes":[1114,1114],"schema":"study-summary-v1","buildSha":"0707c38aaf2ddc121cdfc550a2067812354b0123","exactAllowlist":true,"sensitiveSentinelsAbsent":true}
+
+DEFAULT CRITICAL FLOW
+Character: {"heading":"Character","ownership":"Make it yoursMake a hand waveSelect a partPlace jointsEdit rigReset","sinkResources":0}
+Foundry playing: {"heading":"Mechanism Foundry","control":"Pause","phase":"281","renderable":"ready","renderer":"webgl","physics":"ready","builds":"1","parts":"11","holes":"21","physicalErrors":"0","stackErrors":"0","sinkResources":0}
+Design: {"heading":"Mechanism Design","renderable":"ready","renderer":"webgl","builds":"1","mechanism":"4bar","parts":"14","physicalErrors":"0","stackErrors":"0","path":"moving-joints","sinkResources":0}
+Blueprint: {"heading":"Blueprint","generated":["Download PDF cut sheet default","Download SVG default"],"sinkResources":0}
+Assembly: {"heading":"Assembly","phase":"prepare-parts","sinkResources":0}
+$ orca console --limit 100 --json
+{"messages":[]}
+$ orca network --limit 500 --json | jq HTTP failures
+{"httpFailures":[]}

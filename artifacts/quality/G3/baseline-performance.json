@@ -1,0 +1,64 @@
+{
+  "goal": "G3",
+  "lane": "Luna B",
+  "baselineSha": "c523d16f64263df995f4a8f13c2fd1cf90471a10",
+  "branch": "quality/luna-preview",
+  "runtime": "Orca production preview http://127.0.0.1:4173/",
+  "workflow": "Getting Started > Make a hand wave > Mechanism Foundry",
+  "sample": {
+    "durationMs": 4036.5,
+    "rafCount": 87,
+    "frameCount": 86,
+    "frameMs": {
+      "p50": 49.20000000001164,
+      "p95": 75,
+      "p99": 100,
+      "max": 100
+    },
+    "longTasks": {
+      "count": 15,
+      "totalMs": 771,
+      "maxMs": 55
+    },
+    "renderSignals": {
+      "webglClear": 79,
+      "drawElements": 1581,
+      "drawArrays": 995
+    },
+    "foundryDynamicBuildCount": {
+      "before": 53,
+      "after": 132,
+      "delta": 79
+    },
+    "geometryCacheSize": {
+      "before": 10,
+      "after": 10
+    },
+    "materialCacheSize": {
+      "before": 10,
+      "after": 10
+    },
+    "heapUsedBytes": {
+      "before": 20376339,
+      "after": 48851976
+    }
+  },
+  "inputProbe": {
+    "status": "unavailable",
+    "reason": "Orca accessibility click and native mouse commands completed but emitted no observable page click/pointerdown event to an in-page capture listener; no latency value is asserted."
+  },
+  "stateProbe": {
+    "data-three-animation-commit-ms": "33.3",
+    "data-three-dynamic-build-count-at-settle": "2",
+    "data-three-geometry-cache-size-at-settle": "10",
+    "data-three-material-cache-size-at-settle": "10",
+    "data-three-preview-renderable": "ready",
+    "data-physics-kernel-runtime": "ready",
+    "data-physics-kernel-version": "0.19.3"
+  },
+  "rawEvidence": [
+    "Orca eval result id a875393c-62fd-4481-9bdd-8237b847a74b",
+    "Orca eval input probe timeout ids 17aa4e7d-9963-43b8-b12f-7cb9bf6285e9 and 2cbdc848-e465-4013-a03a-6f2dca4f18f2",
+    "Orca terminal term_1222b1bd-358a-4dc0-b680-c74e3afa3dfb"
+  ]
+}

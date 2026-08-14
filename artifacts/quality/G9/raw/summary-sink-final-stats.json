@@ -1,0 +1,19 @@
+{
+  "requestCount": 2,
+  "requests": [
+    {
+      "body": "{\"schema\":\"study-summary-v1\",\"buildSha\":\"0707c38aaf2ddc121cdfc550a2067812354b0123\",\"profile\":\"study\",\"sessionDurationMs\":673960,\"context\":{\"viewport\":\"medium\",\"hardwareConcurrency\":\"high\",\"pointer\":\"mouse\",\"network\":\"fast\"},\"stageEntries\":[1,0,1,0,1,0,0,0],\"stageDurationMs\":[45937,0,592131,0,35691,0,0,0],\"commandAccepted\":[2,1,0,0,0,1,0,0,0,0,0],\"commandRejected\":[0,0,0,0,0,0,0,0,0,0,0],\"commandNoOp\":[0,0,0,0,0,0,0,0,0,0,0],\"commandUnknown\":[0,0,0,0,0,0,0,0,0,0,0],\"mechanismFamilies\":[0,0,0,0,0,0,0,0],\"fitRequests\":0,\"fitOutcomes\":[0,0,0,0,0],\"fitLatency\":[0,0,0,0,0,0,0,0,0,0,0,0,0],\"exportAttempts\":1,\"exportOutcomes\":[1,0,0,0],\"exportBlockers\":[1,0,0,0,0,0,0,0],\"autosaveSuccess\":14,\"autosaveFailure\":0,\"autosaveRecovery\":0,\"autosaveDuration\":[0,6,5,0,1,0,1,1,0,0,0,0,0],\"imageInferenceSuccess\":0,\"imageInferenceFailure\":0,\"imageInferenceLatency\":[0,0,0,0,0,0,0,0,0,0,0,0,0],\"errorNames\":[0,0,0,0,0,0,0,0,0,0,0],\"performance\":{\"inputLatencyP95Ms\":null,\"inputLatencyDeltaP95Ms\":null,\"inputLatencyDeltaPercentP95\":null,\"frameIntervalP95Ms\":null,\"frameIntervalDeltaPercentP95\":null,\"longTasksOver50Ms\":null}}",
+      "bytes": 1114,
+      "contentType": "text/plain;charset=UTF-8",
+      "origin": "http://127.0.0.1:43196",
+      "secFetchMode": "cors"
+    },
+    {
+      "body": "{\"schema\":\"study-summary-v1\",\"buildSha\":\"0707c38aaf2ddc121cdfc550a2067812354b0123\",\"profile\":\"study\",\"sessionDurationMs\":689480,\"context\":{\"viewport\":\"medium\",\"hardwareConcurrency\":\"high\",\"pointer\":\"mouse\",\"network\":\"fast\"},\"stageEntries\":[1,0,1,0,1,0,0,0],\"stageDurationMs\":[45937,0,592131,0,51211,0,0,0],\"commandAccepted\":[2,1,0,0,0,1,0,0,0,0,0],\"commandRejected\":[0,0,0,0,0,0,0,0,0,0,0],\"commandNoOp\":[0,0,0,0,0,0,0,0,0,0,0],\"commandUnknown\":[0,0,0,0,0,0,0,0,0,0,0],\"mechanismFamilies\":[0,0,0,0,0,0,0,0],\"fitRequests\":0,\"fitOutcomes\":[0,0,0,0,0],\"fitLatency\":[0,0,0,0,0,0,0,0,0,0,0,0,0],\"exportAttempts\":1,\"exportOutcomes\":[1,0,0,0],\"exportBlockers\":[1,0,0,0,0,0,0,0],\"autosaveSuccess\":15,\"autosaveFailure\":0,\"autosaveRecovery\":0,\"autosaveDuration\":[0,6,5,0,1,0,1,2,0,0,0,0,0],\"imageInferenceSuccess\":0,\"imageInferenceFailure\":0,\"imageInferenceLatency\":[0,0,0,0,0,0,0,0,0,0,0,0,0],\"errorNames\":[0,0,0,0,0,0,0,0,0,0,0],\"performance\":{\"inputLatencyP95Ms\":null,\"inputLatencyDeltaP95Ms\":null,\"inputLatencyDeltaPercentP95\":null,\"frameIntervalP95Ms\":null,\"frameIntervalDeltaPercentP95\":null,\"longTasksOver50Ms\":null}}",
+      "bytes": 1114,
+      "contentType": "text/plain;charset=utf-8",
+      "origin": "http://127.0.0.1:43196",
+      "secFetchMode": "no-cors"
+    }
+  ]
+}

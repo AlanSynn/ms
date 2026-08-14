@@ -1,0 +1,6 @@
+$ env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=43201 PLAYWRIGHT_WORKERS=2 bunx playwright test tests/browser/g5-web-onnx.spec.ts
+Error: http://127.0.0.1:43201 is already used, make sure that nothing is running on the port/url or set reuseExistingServer:true in config.webServer.
+
+exit_code=1
+
+Context: the reported integration/full-suite production preview was still using port 43201. The exact command was rerun after that process exited; the successful rerun is preserved in raw-g9-exact-43201.log.

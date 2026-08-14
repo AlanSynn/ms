@@ -1,0 +1,79 @@
+{
+  "goal": "G3",
+  "candidateSha": "9af00126675783b1f5ba6e2a04add618eef85e3b",
+  "baseline": {
+    "sha": "c523d16f64263df995f4a8f13c2fd1cf90471a10",
+    "source": "/Users/alansynn/orca/workspaces/MechAnim/luna-preview/artifacts/quality/G3/baseline-performance.json",
+    "durationMs": 4036.5,
+    "frameMs": { "p50": 49.2, "p95": 75, "p99": 100, "max": 100 },
+    "longTasks": { "count": 15, "totalMs": 771, "maxMs": 55 },
+    "renderSignals": { "webglClear": 79 },
+    "structuralBuildDelta": 79,
+    "geometryCache": { "before": 10, "after": 10 },
+    "materialCache": { "before": 10, "after": 10 },
+    "inputProbe": "unavailable"
+  },
+  "candidate": {
+    "measurementContext": "Orca embedded production preview visible and foreground",
+    "previewUrl": "http://127.0.0.1:5197/",
+    "pageId": "bf4879de-b546-4574-8cd6-c085dcba0087",
+    "terminalId": "term_01e001e8-c735-4093-b33e-97a8f960e70f",
+    "durationMs": 35843.5,
+    "frames": {
+      "count": 2438,
+      "p50Ms": 8.4,
+      "p95Ms": 50,
+      "p99Ms": 50.9,
+      "maxMs": 66.7
+    },
+    "inputToVisualMs": {
+      "samples": [0.7, 0.5, 0.4, 0.5],
+      "p95Ms": 0.7,
+      "maxMs": 0.7
+    },
+    "longTasks": { "count": 10, "totalMs": 549, "maxMs": 60 },
+    "webgl": {
+      "clearCalls": 402,
+      "rafBucketsWithClear": 402,
+      "p95ClearCallsPerRaf": 1,
+      "maxClearCallsPerRaf": 1,
+      "clearCallsOutsideWrappedRaf": 0
+    },
+    "retainedStructure": {
+      "buildsBefore": 1,
+      "buildsAfter": 1,
+      "buildDelta": 0,
+      "geometryCacheBefore": 10,
+      "geometryCacheAfter": 10,
+      "materialCacheBefore": 10,
+      "materialCacheAfter": 10
+    },
+    "simulation": {
+      "durationMs": 6383.9,
+      "observedDeltaDegrees": 194,
+      "expectedDeltaDegrees": 194.4263,
+      "driftDegrees": 0.4263
+    },
+    "hiddenVisibleRecovery": {
+      "phaseBeforeHidden": 234,
+      "phaseAfterVisible": 281,
+      "buildsBefore": 1,
+      "buildsAfter": 1,
+      "source": "earlier visible Orca production-preview recovery probe from the same integrated G3 candidate"
+    }
+  },
+  "discardedMeasurements": [
+    {
+      "reason": "Orca page was backgrounded or occluded, producing roughly one-second RAF throttling; not representative of foreground playback."
+    },
+    {
+      "reason": "Simulation clock began while playback was paused; replaced by the playback-only drift probe above."
+    }
+  ],
+  "interpretation": {
+    "frameIntervals": "The embedded Orca browser presents many frames at approximately 50 ms despite a foreground native RAF stream; the candidate p95 is 33.3 percent lower than the historical 75 ms baseline and the p99 is 49.1 percent lower than the historical 100 ms baseline.",
+    "longTasks": "Raw observer counts are retained without attributing cause. The candidate rate is 0.279 tasks/s versus 3.716 tasks/s in the shorter historical sample; candidate max is 60 ms versus 55 ms.",
+    "renderAndStructure": "Every measured WebGL clear belonged to one wrapped RAF and no RAF bucket had more than one clear. Structural builds fell from 79 per baseline sample to zero during candidate playback; geometry/material caches remained bounded at 10/10.",
+    "leaksAndResources": "Deterministic gates separately prove one RAF plus one watchdog while active, cancellation on stop/unmount, and exact-once geometry/material/texture disposal."
+  }
+}

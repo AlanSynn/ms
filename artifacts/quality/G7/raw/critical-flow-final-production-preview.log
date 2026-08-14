@@ -1,0 +1,12 @@
+2026-08-14T01:14:50Z
+$ PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=43179 PLAYWRIGHT_WORKERS=2 bunx playwright test tests/browser/quality-critical.spec.ts
+[WebServer] $ vite preview --host "127.0.0.1" --port "43179" --strictPort
+
+Running 1 test using 1 worker
+
+(node:85940) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › tests/browser/quality-critical.spec.ts:81:1 › G7 isolated critical flow covers the integrated workbench (27.4s)
+
+  1 passed (28.7s)
+EXIT_CODE=0

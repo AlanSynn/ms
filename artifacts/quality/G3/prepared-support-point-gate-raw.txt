@@ -1,0 +1,32 @@
+G3 prepared Foundry support-point selector gate evidence
+Captured: 2026-08-13 America/New_York
+Workspace: /Users/alansynn/orca/workspaces/MechAnim/quality-sol-max-integration
+
+$ bun tests/g3-prepared-foundry-support-points.test.ts
+exit: 0
+prepared Foundry support-point contracts passed
+
+$ bun tests/mechanism-renderer-envelope-parity.test.ts
+exit: 0
+mechanism-renderer-envelope-parity passed
+
+$ bun tests/mechanism-structural-resolver.test.ts
+exit: 0
+mechanism structural resolver contracts passed
+
+$ bunx tsc --noEmit
+exit: 0
+(no output)
+
+$ bun run build
+exit: 0
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+239 modules transformed.
+dist/assets/index-Cz4WFf9G.js  1,565.00 kB | gzip: 451.10 kB
+dist/assets/rapier-DS2Sl1i-.js  2,237.59 kB | gzip: 842.98 kB
+built in 1.19s
+
+$ git diff --check
+exit: 0
+(no output)

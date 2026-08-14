@@ -3,7 +3,9 @@ import React, { useEffect, useRef, useState } from 'react';
 export type WorkspaceStepPlayback = {
   stepIndex: number;
   stepCount: number;
+  stepProgress: number;
   onStepChange: (index: number) => void;
+  onStepProgressChange: (progress: number) => void;
 };
 
 export const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, speed, drawMode, stepPlayback }: {
@@ -18,14 +20,19 @@ export const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, 
   const stepCount = Math.max(0, stepPlayback?.stepCount ?? 0);
   const maxStepIndex = Math.max(0, stepCount - 1);
   const stepIndex = Math.max(0, Math.min(maxStepIndex, stepPlayback?.stepIndex ?? 0));
+  const stepProgress = Math.max(0, Math.min(1, stepPlayback?.stepProgress ?? 0));
   const progress = stepPlayback
-    ? (maxStepIndex > 0 ? stepIndex / maxStepIndex : 0)
+    ? stepProgress
     : ((angle / (Math.PI * 2)) % 1 + 1) % 1;
   const percent = Math.round(progress * 100);
   const goStep = (next: number) => stepPlayback?.onStepChange(Math.max(0, Math.min(maxStepIndex, next)));
   const scrubWorkspace = (nextPercent: number) => {
     setIsPlaying(false);
     setAngle((nextPercent / 100) * Math.PI * 2);
+  };
+  const scrubAssemblyStep = (nextProgress: number) => {
+    setIsPlaying(false);
+    stepPlayback?.onStepProgressChange(Math.max(0, Math.min(1, nextProgress)));
   };
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
@@ -93,10 +100,11 @@ export const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, 
       aria-label={stepPlayback ? 'Assembly scrubber' : 'Workspace scrubber'}
       type="range"
       min={0}
-      max={stepPlayback ? maxStepIndex : 100}
-      value={stepPlayback ? stepIndex : percent}
-      aria-valuetext={stepPlayback ? `Step ${stepIndex + 1} of ${stepCount}` : `${percent}%`}
-      onChange={event => stepPlayback ? goStep(Number(event.currentTarget.value)) : scrubWorkspace(Number(event.currentTarget.value))}
+      max={stepPlayback ? 1 : 100}
+      step={stepPlayback ? 0.01 : 1}
+      value={stepPlayback ? stepProgress : percent}
+      aria-valuetext={stepPlayback ? `Step ${stepIndex + 1} of ${stepCount}, ${percent}%` : `${percent}%`}
+      onChange={event => stepPlayback ? scrubAssemblyStep(Number(event.currentTarget.value)) : scrubWorkspace(Number(event.currentTarget.value))}
     />
     <output data-testid="workspace-playback-percent" aria-label="Playback percent">{percent}%</output>
   </aside>;

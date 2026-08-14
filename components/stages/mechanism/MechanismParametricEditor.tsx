@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 
 import type {
   ConnectionSelection,
@@ -28,6 +28,7 @@ import { normalizeMechanismConnectionSelections } from "../../../utils/mechanism
 import { FABRICATION_MODULE_SPECS } from "../../../utils/fabricationContract";
 import { connectionRoleLabel } from "./MechanismConnectionOverlay";
 import { resolveMechanismPhysicalFamilySelectionAttempt } from "../../../utils/mechanismPhysicalCandidates";
+import { useFrameCommitSession } from "../../../hooks/useFrameCommitSession";
 
 type FabricationGearOption = (typeof FABRICATION_GEAR_SPECS)[number];
 type FabricationLinkageOption = (typeof FABRICATION_LINKAGE_SPECS)[number];
@@ -207,12 +208,15 @@ export const MechanismParametricEditor = ({
         [key]: linkageSceneLengthForCells(spec.cells),
       } as Partial<MechanismConfig>;
       const current = spec.cells === currentCells;
+      const connectionOwned = key === "crankLength" || key === "rockerLength";
       return {
         item: spec,
         current,
         working: current
           ? mechanismMotionCompletes(mechanism, kit)
-          : safeMechanismUpdate(mechanism, updates, kit),
+          : connectionOwned
+            ? false
+            : mechanismMotionCompletes({ ...mechanism, ...updates }, kit),
       };
     });
   };
@@ -609,7 +613,10 @@ const CamProfileEditor = ({
   onChange: (samples: number[]) => void;
 }) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const activeIndexRef = useRef<number | null>(null);
+  const activeDragRef = useRef<{
+    pointerId: number;
+    index: number;
+  } | null>(null);
   const profile = useMemo(() => normalizeCamProfileSamples(samples), [samples]);
   const width = 240;
   const height = 88;
@@ -622,7 +629,7 @@ const CamProfileEditor = ({
     pad + (index / Math.max(1, profile.length - 1)) * (width - pad * 2);
   const eventIndex = (event: React.PointerEvent<SVGElement>) => {
     const rect = svgRef.current?.getBoundingClientRect();
-    if (!rect) return activeIndexRef.current ?? 0;
+    if (!rect) return activeDragRef.current?.index ?? 0;
     const t = Math.max(
       0,
       Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width)),
@@ -634,7 +641,7 @@ const CamProfileEditor = ({
   };
   const eventValue = (event: React.PointerEvent<SVGElement>) => {
     const rect = svgRef.current?.getBoundingClientRect();
-    if (!rect) return profile[activeIndexRef.current ?? 0] ?? 1;
+    if (!rect) return profile[activeDragRef.current?.index ?? 0] ?? 1;
     const t = Math.max(
       0,
       Math.min(1, (event.clientY - rect.top) / Math.max(1, rect.height)),
@@ -656,6 +663,26 @@ const CamProfileEditor = ({
         sampleIndex === index ? clampCamProfileSample(value) : sample,
       ),
     );
+  const profileFrameSession = useFrameCommitSession<{
+    mechanismId: string;
+    index: number;
+    value: number;
+  }>(({ mechanismId, index, value }) => {
+    if (mechanismId !== mechanism.id) return;
+    updatePoint(index, value);
+  });
+  useEffect(() => {
+    profileFrameSession.reset();
+    activeDragRef.current = null;
+  }, [mechanism.id, profileFrameSession]);
+  const finishProfileDrag = (event: React.PointerEvent<SVGSVGElement>) => {
+    const activeDrag = activeDragRef.current;
+    if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
+    profileFrameSession.finish();
+    activeDragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId))
+      event.currentTarget.releasePointerCapture(event.pointerId);
+  };
   const profilePath = profile
     .map(
       (value, index) =>
@@ -673,9 +700,11 @@ const CamProfileEditor = ({
           type="button"
           className="btn-secondary compact"
           data-testid="cam-profile-reset"
-          onClick={() =>
+          onClick={() => {
+            profileFrameSession.reset();
+            activeDragRef.current = null;
             commitProfile(defaultCamProfileSamples(profile.length))
-          }
+          }}
         >
           Reset
         </button>
@@ -690,22 +719,28 @@ const CamProfileEditor = ({
         onPointerDown={(event) => {
           event.preventDefault();
           const index = eventIndex(event);
-          activeIndexRef.current = index;
+          activeDragRef.current = { pointerId: event.pointerId, index };
+          profileFrameSession.start();
           event.currentTarget.setPointerCapture(event.pointerId);
-          updatePoint(index, eventValue(event));
+          profileFrameSession.move({
+            mechanismId: mechanism.id,
+            index,
+            value: eventValue(event),
+          });
         }}
         onPointerMove={(event) => {
-          const index = activeIndexRef.current;
-          if (index === null) return;
+          const activeDrag = activeDragRef.current;
+          if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
           event.preventDefault();
-          updatePoint(index, eventValue(event));
+          profileFrameSession.move({
+            mechanismId: mechanism.id,
+            index: activeDrag.index,
+            value: eventValue(event),
+          });
         }}
-        onPointerUp={() => {
-          activeIndexRef.current = null;
-        }}
-        onPointerLeave={() => {
-          activeIndexRef.current = null;
-        }}
+        onPointerUp={finishProfileDrag}
+        onPointerCancel={finishProfileDrag}
+        onLostPointerCapture={finishProfileDrag}
       >
         <path
           d={`M ${pad} ${height - pad} H ${width - pad}`}
@@ -730,12 +765,6 @@ const CamProfileEditor = ({
             fill="#ffffff"
             stroke="#4f46e5"
             strokeWidth="2"
-            onPointerDown={(event) => {
-              event.preventDefault();
-              activeIndexRef.current = index;
-              event.currentTarget.setPointerCapture(event.pointerId);
-              updatePoint(index, eventValue(event));
-            }}
           />
         ))}
       </svg>

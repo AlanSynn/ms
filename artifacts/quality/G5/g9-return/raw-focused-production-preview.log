@@ -1,0 +1,11 @@
+$ env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=57819 PLAYWRIGHT_WORKERS=1 bunx playwright test tests/browser/workflow.spec.ts -g 'Load package review, accept, discard, and missing-file recovery stay in browser|Startup uses one boot loader and opens Getting Started over Character'
+[WebServer] $ vite preview --host "127.0.0.1" --port "57819" --strictPort
+
+Running 2 tests using 1 worker
+
+  ✓  1 [chromium] › tests/browser/workflow.spec.ts:2542:1 › Load package review, accept, discard, and missing-file recovery stay in browser (4.5s)
+  ✓  2 [chromium] › tests/browser/workflow.spec.ts:4070:1 › Startup uses one boot loader and opens Getting Started over Character (1.9s)
+
+  2 passed (8.0s)
+
+exit_code=0

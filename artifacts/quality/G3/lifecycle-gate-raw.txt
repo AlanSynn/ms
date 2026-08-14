@@ -1,0 +1,26 @@
+G3 lifecycle-only gate evidence (final result-shape correction)
+Captured: 2026-08-13 America/New_York
+Workspace: /Users/alansynn/orca/workspaces/MechAnim/luna-preview
+Lifecycle API: replacement returns { root, transitions }; disposal emits disposed and returns void.
+
+$ bun tests/g3-foundry-lifecycle.test.ts
+exit: 0
+ok - initial valid candidate attaches as the first root
+ok - valid replacement attaches before disposing the prior root
+ok - authoritative invalid replacement clears and disposes the prior root
+ok - authoritative invalid replacement with no prior root stays empty
+ok - rejected edit retains only the prior valid root
+ok - unmount removes and disposes the active root
+g3 foundry lifecycle contracts passed
+
+$ bun --define __APP_VERSION__='"0.0.0"' tests/foundry-transaction.test.ts
+exit: 0
+foundry transaction contracts passed
+
+$ bun tests/project-contract.test.ts
+exit: 0
+project contracts ok
+
+$ bunx tsc --noEmit
+exit: 0
+(no output)

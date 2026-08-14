@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
+import { useWorkspacePlaybackLoop } from "../../../hooks/useWorkspacePlaybackLoop";
 
 type AssemblyGuidePlaybackOptions = {
   activeStepCount: number;
@@ -21,6 +22,30 @@ export const useAssemblyGuidePlayback = ({
   setStepProgress,
 }: AssemblyGuidePlaybackOptions) => {
   const stepProgressRef = useRef(0);
+
+  useWorkspacePlaybackLoop({
+    stage: "assembly",
+    isPlaying: playing && activeStepCount >= 2,
+    drawMode: false,
+    optimizerBusy: false,
+    showGettingStarted: false,
+    playbackDurationMs: 1400,
+    animationSpeed: 1,
+    timingProfile: "linear",
+    setDrawMode: undefined,
+    onFrame: (elapsedMs) => {
+      const next = stepProgressRef.current + elapsedMs / 1400;
+      if (next >= 1) {
+        stepProgressRef.current = 0;
+        setStepProgress(0);
+        setStepIndex((index) => (index >= activeStepCount - 1 ? 0 : index + 1));
+      } else {
+        stepProgressRef.current = next;
+        setStepProgress(next);
+      }
+    },
+    driverStage: "assembly",
+  });
 
   useEffect(() => {
     setStepCount(activeStepCount);
@@ -47,29 +72,6 @@ export const useAssemblyGuidePlayback = ({
     setStepProgress(0);
     setPlaying(false);
   }, [resetKey, setPlaying, setStepIndex, setStepProgress]);
-
-  useEffect(() => {
-    if (!playing || activeStepCount < 2) return;
-    let frame = 0;
-    let last = performance.now();
-    const stepMs = 1400;
-    const tick = (time: number) => {
-      const delta = Math.min(120, time - last);
-      last = time;
-      const next = stepProgressRef.current + delta / stepMs;
-      if (next >= 1) {
-        stepProgressRef.current = 0;
-        setStepProgress(0);
-        setStepIndex((index) => (index >= activeStepCount - 1 ? 0 : index + 1));
-      } else {
-        stepProgressRef.current = next;
-        setStepProgress(next);
-      }
-      frame = window.requestAnimationFrame(tick);
-    };
-    frame = window.requestAnimationFrame(tick);
-    return () => window.cancelAnimationFrame(frame);
-  }, [playing, activeStepCount, setStepIndex, setStepProgress]);
 
   return { goAssemblyStep };
 };

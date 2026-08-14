@@ -16,10 +16,15 @@ import {
   resolveMechanismPhysicalSelectionAttempt,
 } from "../../../utils/mechanismPhysicalCandidates";
 import {
+  clampFoundryOverlayPoint,
   projectFoundryOverlayPoint,
   type FoundryCamera,
   type FoundryOverlaySize,
 } from "../../../utils/foundryCamera";
+import {
+  createFrameCommitQueue,
+  type FrameCommitScheduler,
+} from "../../../utils/frameCommitQueue";
 import { MECHANISM_BINDING_BLOCKER } from "../../../utils/pathTargets";
 
 export type MechanismConnectionHoleHandle = Omit<MechanismConnectionHoleCandidate, "coordinate"> & { z: number; screen: Point };
@@ -72,10 +77,10 @@ const spreadCoincidentConnectionHoleHandles = (
     return {
       ...handle,
       coincidentOrigin: handle.screen,
-      screen: {
+      screen: clampFoundryOverlayPoint({
         x: handle.screen.x + Math.cos(angle) * 30,
         y: handle.screen.y + Math.sin(angle) * 30,
-      },
+      }, projectionSize) ?? handle.screen,
     };
   });
 };
@@ -141,7 +146,10 @@ export const projectMechanismConnectionHoleHandles = ({
     const z = layerIndex >= 0
       ? (renderedLayerZ[layerIndex] ?? layers[layerIndex]?.z ?? 0)
       : 0;
-    const screen = projectFoundryOverlayPoint(candidate.coordinate, camera, projectionSize, z);
+    const screen = clampFoundryOverlayPoint(
+      projectFoundryOverlayPoint(candidate.coordinate, camera, projectionSize, z),
+      projectionSize,
+    );
     if (!screen) return [];
     const { coordinate: _coordinate, ...handle } = candidate;
     return [{ ...handle, z, screen }];
@@ -173,6 +181,55 @@ type ConnectionDrag = {
   startIdentity: string;
   startHoleIndex: number;
   targetIdentity?: string;
+};
+
+type ConnectionDragFrameSample = {
+  dragging: DraggingMechanismConnectionSelection;
+  targetIdentity?: string;
+};
+
+export const createMechanismConnectionDragSession = ({
+  onTransientFrame,
+  scheduler,
+}: {
+  onTransientFrame: (dragging: DraggingMechanismConnectionSelection) => void;
+  scheduler?: FrameCommitScheduler;
+}) => {
+  let drag: ConnectionDrag | null = null;
+  const frameQueue = createFrameCommitQueue<DraggingMechanismConnectionSelection>({
+    scheduler,
+    commit: onTransientFrame,
+  });
+
+  const reset = () => {
+    drag = null;
+    frameQueue.cancel();
+  };
+
+  return {
+    start: (next: Omit<ConnectionDrag, "targetIdentity">) => {
+      frameQueue.cancel();
+      drag = { ...next, targetIdentity: next.startIdentity };
+    },
+    current: () => (drag ? { ...drag } : undefined),
+    move: (pointerId: number, sample: ConnectionDragFrameSample) => {
+      if (!drag || drag.pointerId !== pointerId) return;
+      drag.targetIdentity = sample.targetIdentity;
+      frameQueue.queue(sample.dragging);
+    },
+    finish: (pointerId: number) => {
+      if (!drag || drag.pointerId !== pointerId) return undefined;
+      frameQueue.flush();
+      const completed = drag;
+      drag = null;
+      return completed;
+    },
+    cancel: (pointerId: number) => {
+      if (!drag || drag.pointerId !== pointerId) return;
+      reset();
+    },
+    reset,
+  };
 };
 
 const pointerPoint = (
@@ -226,11 +283,17 @@ export const useMechanismConnectionDrag = ({
   onCommit: (updates: Partial<MechanismConfig>) => boolean | void;
   onInteractionStart?: () => void;
 }) => {
-  const dragRef = useRef<ConnectionDrag | null>(null);
   const [dragging, setDragging] = useState<DraggingMechanismConnectionSelection>();
   const [selectedRole, setSelectedRole] = useState<ConnectionSelectionRole | null>(null);
   const [recoveryRole, setRecoveryRole] = useState<ConnectionSelectionRole | null>(null);
   const [blocker, setBlocker] = useState<string | null>(null);
+  const dragSessionRef = useRef<ReturnType<typeof createMechanismConnectionDragSession> | null>(null);
+  if (!dragSessionRef.current) {
+    dragSessionRef.current = createMechanismConnectionDragSession({
+      onTransientFrame: setDragging,
+    });
+  }
+  const dragSession = dragSessionRef.current;
   const interactionHandles = spreadCoincidentConnectionHoleHandles(
     handles,
     dragging?.role ?? recoveryRole,
@@ -239,16 +302,17 @@ export const useMechanismConnectionDrag = ({
   const beginInteraction = () => onInteractionStart?.();
 
   useEffect(() => {
-    dragRef.current = null;
+    dragSession.reset();
     setDragging(undefined);
     setSelectedRole(null);
     setRecoveryRole(null);
     setBlocker(null);
+    return () => dragSession.reset();
   }, [mechanism?.id, mechanism?.targetAnchorJointId, mechanism?.targetPartId, mechanism?.targetPathId, mechanism?.type]);
 
   useEffect(() => {
     if (!disabled) return;
-    dragRef.current = null;
+    dragSession.reset();
     setDragging(undefined);
     setRecoveryRole(null);
     setBlocker(null);
@@ -286,15 +350,14 @@ export const useMechanismConnectionDrag = ({
       setSelectedRole(handle.role);
       setBlocker(null);
       setRecoveryRole(null);
-      dragRef.current = {
+      dragSession.start({
         pointerId: event.pointerId,
         role: handle.role,
         startX: event.clientX,
         startY: event.clientY,
         startIdentity: handle.identity,
         startHoleIndex: handle.holeIndex,
-        targetIdentity: handle.identity,
-      };
+      });
       setDragging({
         role: handle.role,
         identity: handle.identity,
@@ -303,7 +366,7 @@ export const useMechanismConnectionDrag = ({
     };
 
   const onPointerMove: ConnectionPointerHandler = (event) => {
-    const drag = dragRef.current;
+    const drag = dragSession.current();
     if (!drag || drag.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopPropagation();
@@ -314,33 +377,39 @@ export const useMechanismConnectionDrag = ({
     const target = moved
       ? nearestRoleHandle(interactionHandles, drag.role, pointerPoint(event, projectionSize))
       : undefined;
-    drag.targetIdentity = moved ? target?.identity : drag.startIdentity;
-    setDragging({
-      role: drag.role,
-      identity: target?.identity ?? drag.startIdentity,
-      holeIndex: target?.holeIndex ?? drag.startHoleIndex,
+    dragSession.move(event.pointerId, {
+      targetIdentity: moved ? target?.identity : drag.startIdentity,
+      dragging: {
+        role: drag.role,
+        identity: target?.identity ?? drag.startIdentity,
+        holeIndex: target?.holeIndex ?? drag.startHoleIndex,
+      },
     });
   };
 
   const onPointerUp: ConnectionPointerHandler = (event) => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
+    const activeDrag = dragSession.current();
+    if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    dragRef.current = null;
-    setDragging(undefined);
     if (event.type === "pointercancel") {
+      dragSession.cancel(event.pointerId);
+      setDragging(undefined);
       setBlocker(null);
       setRecoveryRole(null);
       return;
     }
+    const completedDrag = dragSession.finish(event.pointerId);
+    if (!completedDrag) return;
+    setDragging(undefined);
     const target = interactionHandles.find(
       (handle) =>
-        handle.role === drag.role && handle.identity === drag.targetIdentity,
+        handle.role === completedDrag.role &&
+        handle.identity === completedDrag.targetIdentity,
     );
     if (!target) {
-      reject(drag.role);
+      reject(completedDrag.role);
       return;
     }
     selectHandle(target);

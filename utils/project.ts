@@ -2133,6 +2133,11 @@ export const applyProjectAction = (
       if (result.status !== "accepted") return project;
       const accepted = result.mechanism;
       if (mechanismDriverConflict(project, accepted)) return project;
+      if (result.outcome === "no-op") {
+        return project.selectedMechanismId === accepted.id
+          ? project
+          : touch({ ...project, selectedMechanismId: accepted.id });
+      }
       const mechanisms = previous
         ? project.mechanisms.map((m) => (m.id === accepted.id ? accepted : m))
         : [...project.mechanisms, accepted];
@@ -2155,6 +2160,7 @@ export const applyProjectAction = (
         result.mechanism,
       );
       if (attempt.status !== "accepted") return project;
+      if (attempt.outcome === "no-op" && !result.foundryExport) return project;
       const accepted = result.foundryExport
         ? { ...attempt.mechanism, foundryExport: result.foundryExport }
         : (() => {

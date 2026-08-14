@@ -1,5 +1,9 @@
 import { BodyPartLayer, MechanismConfig, Point, ProjectMotionPath, ProjectState, SceneObject, StandardJoint, StandardSkeleton } from '../types';
-import { calculateLinkage } from './kinematics';
+import {
+    calculatePreparedLinkage,
+    prepareMechanismKinematics,
+    type PreparedMechanismKinematics,
+} from './kinematics';
 import { placeBodyPartPivotAt } from './coordinates';
 import { assessMechanismTargetBinding } from './pathTargets';
 import {
@@ -508,37 +512,83 @@ export const mechanismBindingWarnings = (
     mechanisms: MechanismConfig[] = project.mechanisms,
 ) => mechanismRuntimeWarnings(project, mechanisms);
 
-export const motionPreviewForProject = (
+export type PreparedProjectMotionPreview = {
+    project: ProjectState;
+    mechanisms: ReadonlyArray<{
+        mechanism: MechanismConfig;
+        kinematics: PreparedMechanismKinematics;
+    }>;
+    warnings: Record<string, string[]>;
+};
+
+export const prepareMotionPreviewForProject = (
     project: ProjectState,
     mechanisms: MechanismConfig[],
-    angle: number
-): MotionPreview => {
+    preparedByMechanismId: ReadonlyMap<string, PreparedMechanismKinematics> = new Map(),
+): PreparedProjectMotionPreview => {
     const activeMechanisms = runtimeMechanisms(project, mechanisms);
-    const warnings = mechanismBindingWarnings(project, mechanisms);
-    let preview: MotionPreview = { parts: {}, sceneObjects: {}, skeleton: project.skeleton, warnings };
-    activeMechanisms.forEach(m => {
+    return {
+        project,
+        mechanisms: activeMechanisms.map(mechanism => {
+            const supplied = preparedByMechanismId.get(mechanism.id);
+            if (
+                supplied
+                && (
+                    supplied.mechanism !== mechanism
+                    || supplied.kit !== project.settings.physicalKit
+                )
+            ) {
+                throw new Error(`Prepared motion kinematics are stale for ${mechanism.id}`);
+            }
+            return {
+                mechanism,
+                kinematics: supplied
+                    ?? prepareMechanismKinematics(mechanism, project.settings.physicalKit),
+            };
+        }),
+        warnings: mechanismBindingWarnings(project, mechanisms),
+    };
+};
+
+export const samplePreparedMotionPreview = (
+    prepared: PreparedProjectMotionPreview,
+    angle: number,
+): MotionPreview => {
+    const { project } = prepared;
+    let warnings = prepared.warnings;
+    const appendWarning = (mechanismId: string, message: string) => {
+        if (warnings === prepared.warnings) warnings = { ...prepared.warnings };
+        warnings[mechanismId] = [...(warnings[mechanismId] ?? []), message];
+    };
+    let preview: MotionPreview = {
+        parts: {},
+        sceneObjects: {},
+        skeleton: project.skeleton,
+        warnings,
+    };
+    prepared.mechanisms.forEach(({ mechanism: m, kinematics }) => {
         if (warnings[m.id]?.length) return;
         if (m.targetSceneObjectId) {
             const object = project.sceneObjects[m.targetSceneObjectId];
             if (!object) return;
-            const state = calculateLinkage(m, angle, project.settings.physicalKit);
+            const state = calculatePreparedLinkage(kinematics, angle);
             const generatedTarget = pointOnGeneratedMechanismPath(m.generatedPath ?? [], angle);
             if (!state.isValid && !generatedTarget) {
-                warnings[m.id] = [...(warnings[m.id] ?? []), 'Motion may jam. Try a smaller move.'];
+                appendWarning(m.id, 'Motion may jam. Try a smaller move.');
                 return;
             }
-            if (!state.isValid) warnings[m.id] = [...(warnings[m.id] ?? []), 'Motion may jam. Try a smaller move.'];
+            if (!state.isValid) appendWarning(m.id, 'Motion may jam. Try a smaller move.');
             preview = motionPreviewForSceneObject(project, m.targetSceneObjectId, generatedTarget ?? state.effector, preview);
             return;
         }
         if (!m.targetPartId || !project.parts[m.targetPartId]) return;
-        const state = calculateLinkage(m, angle, project.settings.physicalKit);
+        const state = calculatePreparedLinkage(kinematics, angle);
         const generatedTarget = pointOnGeneratedMechanismPath(m.generatedPath ?? [], angle);
         if (!state.isValid && !generatedTarget) {
-            warnings[m.id] = [...(warnings[m.id] ?? []), 'Motion may jam. Try a smaller move.'];
+            appendWarning(m.id, 'Motion may jam. Try a smaller move.');
             return;
         }
-        if (!state.isValid) warnings[m.id] = [...(warnings[m.id] ?? []), 'Motion may jam. Try a smaller move.'];
+        if (!state.isValid) appendWarning(m.id, 'Motion may jam. Try a smaller move.');
         const path = m.targetPathId ? project.paths[m.targetPathId] : undefined;
         const targetJointId = preferredMotionJointId(project, m.targetPartId, m.targetAnchorJointId ?? path?.targetAnchorJointId);
         const rootOptions = motionChainRootJointIds(project, m.targetPartId, targetJointId);
@@ -547,6 +597,15 @@ export const motionPreviewForProject = (
     });
     return { ...preview, warnings };
 };
+
+export const motionPreviewForProject = (
+    project: ProjectState,
+    mechanisms: MechanismConfig[],
+    angle: number
+): MotionPreview => samplePreparedMotionPreview(
+    prepareMotionPreviewForProject(project, mechanisms),
+    angle,
+);
 
 export const animatedPartsForProject = (project: ProjectState, mechanisms: MechanismConfig[], angle: number): Record<string, BodyPartLayer> => {
     return motionPreviewForProject(project, mechanisms, angle).parts;

@@ -1,0 +1,477 @@
+2026-08-14T00:49:01Z
+$ PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=43179 PLAYWRIGHT_WORKERS=2 bun run test:browser
+$ bun run build && env -u NO_COLOR PLAYWRIGHT_SERVER=preview playwright test
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+[2Ktransforming...✓ 245 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/girl-thumb-CAdQi3RL.png                    8.20 kB
+dist/assets/boy-thumb-YC7FWjeU.png                    14.01 kB
+dist/index.html                                       86.25 kB │ gzip:    16.03 kB
+dist/assets/girl-DcnbHWJO.png                         94.86 kB
+dist/assets/webOnnxWorker-A3hq6BbQ.js                238.13 kB
+dist/assets/AppIcon-Dx9trOlC.png                     474.08 kB
+dist/assets/boy-CGof9C4m.PNG                       2,817.50 kB
+dist/assets/ort-wasm-simd-threaded-Cpm-ox6i.wasm  13,479.97 kB │ gzip: 3,498.23 kB
+dist/assets/index-CKjsjXHu.js                      1,581.83 kB │ gzip:   456.60 kB
+dist/assets/rapier-DS2Sl1i-.js                     2,237.59 kB │ gzip:   842.98 kB
+
+✓ built in 826ms
+[WebServer] $ vite preview --host "127.0.0.1" --port "43179" --strictPort
+
+Running 76 tests using 2 workers
+
+  ✓   2 [chromium] › tests/browser/g008-physical-authoring.spec.ts:125:1 › G008 shared physical overlay supports keyboard commit and preserves state on rejected pointer drop (9.3s)
+  ✓   1 [chromium] › tests/browser/g008-physical-authoring.spec.ts:267:1 › G018 family prospects commit atomically in Foundry and Design (14.0s)
+  ✓   3 [chromium] › tests/browser/g008-physical-authoring.spec.ts:310:1 › physical drag commits A after returning A to B to A inside the start deadzone (4.8s)
+  ✓   5 [chromium] › tests/browser/g008-physical-authoring.spec.ts:415:1 › G018 cam and planetary secondary traces stay display-only (6.6s)
+  ✓   4 [chromium] › tests/browser/g008-physical-authoring.spec.ts:358:1 › planetary coincident pivot identity commits exactly in Foundry and Design (8.6s)
+  ✓   6 [chromium] › tests/browser/g3-camera-cadence.spec.ts:17:1 › Assembly camera flushes its final pointer sample (4.5s)
+{"g5FirstEvidence":{"requestId":2,"dispatchMark":{"startTime":7334.300000071526,"duration":0,"detail":{"requestId":2}},"processResultMark":{"startTime":8456.600000023842,"duration":0,"detail":{"requestId":2,"metrics":{"inputWidth":160,"inputHeight":220,"workingWidth":160,"workingHeight":220,"provider":"wasm","model":"fp32","modelBytes":135929562,"modelPath":"http://127.0.0.1:43179/onnx/pose_model.onnx","modelInitMs":549.7000000476837,"modelReused":false,"ownedModelBufferReferencesRetained":0,"retainedModelSessionCount":1,"requestTensorRetainedBytes":0,"imageBitmapClosed":true,"partTextureDataUrlChars":9018,"partMaskDataUrlChars":5108,"inferenceMs":305.39999997615814,"totalMs":1119.8999999761581}}},"processProgressMessageCount":7,"processProgressMarks":[{"startTime":7338.200000047684,"duration":0,"detail":{"requestId":2,"stage":"loading-model","progress":6}},{"startTime":7347.600000023842,"duration":0,"detail":{"requestId":2,"stage":"downloading-model","progress":12}},{"startTime":7488.700000047684,"duration":0,"detail":{"requestId":2,"stage":"downloading-model","progress":34}},{"startTime":8040.300000071526,"duration":0,"detail":{"requestId":2,"stage":"loading-model","progress":35}},{"startTime":8041.900000095367,"duration":0,"detail":{"requestId":2,"stage":"running-onnx","progress":45}},{"startTime":8348.300000071526,"duration":0,"detail":{"requestId":2,"stage":"extracting-parts","progress":75}},{"startTime":8453.600000023842,"duration":0,"detail":{"requestId":2,"stage":"normalizing","progress":90}}],"phaseMarks":[{"name":"motionsmith-image-result-application-start","startTime":8456.700000047684,"duration":0,"detail":{"requestId":2}},{"name":"motionsmith-image-result-application-end","startTime":8457.600000023842,"duration":0,"detail":{"requestId":2}}],"reviewMark":{"startTime":8937.100000023842,"duration":0,"detail":null},"overlappingLongTasks":[{"startTime":8480.400000095367,"duration":61}],"media":{"artParts":10,"maskParts":10,"totalParts":10,"modelPath":"http://127.0.0.1:43179/onnx/pose_model.onnx","modelInitMs":549.7000000476837,"modelReused":false,"inferenceMs":305.39999997615814,"ownedModelBufferReferencesRetained":0,"retainedModelSessionCount":1,"requestTensorRetainedBytes":0,"imageBitmapClosed":true,"partTextureDataUrlChars":9018,"partMaskDataUrlChars":5108}}}
+  ✘   7 [chromium] › tests/browser/g5-web-onnx.spec.ts:123:1 › Create from image upload keeps transforms off the UI thread (9.9s)
+  ✓   9 [chromium] › tests/browser/responsive-workbench.spec.ts:74:3 › 1920x1080 Getting Started keeps guided choices reachable and Character can reopen it (5.8s)
+  ✘  10 [chromium] › tests/browser/responsive-workbench.spec.ts:112:3 › 1920x1080 workbench surfaces remain reachable across enabled stages (4.2s)
+  ✘   8 [chromium] › tests/browser/quality-critical.spec.ts:81:1 › G7 isolated critical flow covers the integrated workbench (27.7s)
+  ✘  12 [chromium] › tests/browser/responsive-workbench.spec.ts:112:3 › 1200x520 workbench surfaces remain reachable across enabled stages (2.5s)
+  ✓  11 [chromium] › tests/browser/responsive-workbench.spec.ts:74:3 › 1200x520 Getting Started keeps guided choices reachable and Character can reopen it (4.2s)
+  ✓  13 [chromium] › tests/browser/workflow.spec.ts:250:1 › Context help opens compact registry popovers (1.5s)
+  ✓  14 [chromium] › tests/browser/workflow.spec.ts:304:1 › Character part cut outline editor bakes and edits contour points (7.2s)
+  ✓  16 [chromium] › tests/browser/workflow.spec.ts:513:1 › Getting Started guided project opens a real editable lesson (4.2s)
+  ✓  15 [chromium] › tests/browser/workflow.spec.ts:395:1 › Character tab owns separate scene objects and later tabs only render them (19.9s)
+  ✓  17 [chromium] › tests/browser/workflow.spec.ts:591:1 › guided lessons open Design with coupled mechanism ownership (12.8s)
+  ✓  18 [chromium] › tests/browser/workflow.spec.ts:636:1 › classroom assessment slug and mechanism example video work end-to-end (5.7s)
+  ✓  19 [chromium] › tests/browser/workflow.spec.ts:900:1 › Ultragoal anatomy contracts › Ultragoal G003 built-in front character keeps anatomical right on viewer left (2.8s)
+  ✓  20 [chromium] › tests/browser/workflow.spec.ts:1187:1 › physical hole selection authors connection role and updates preview/export only through visible affordance (9.1s)
+  ✓  22 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 4bar uses the shared physical pointer flow in Foundry and Design (6.0s)
+  ✓  21 [chromium] › tests/browser/workflow.spec.ts:1289:1 › gear linkage physical hole selection authors drive/output pins and exports dedicated metadata (17.0s)
+  ✓  24 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 gear uses the shared physical pointer flow in Foundry and Design (8.5s)
+  ✓  23 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 gear_linkage uses the shared physical pointer flow in Foundry and Design (10.6s)
+  ✓  26 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 cam uses the shared physical pointer flow in Foundry and Design (7.8s)
+  ✓  25 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 planetary_gear uses the shared physical pointer flow in Foundry and Design (8.1s)
+  ✓  28 [chromium] › tests/browser/workflow.spec.ts:1464:1 › G006 short/fullscreen zoom playback and accessibility matrix stays recoverable (7.2s)
+  ✓  27 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 piston uses the shared physical pointer flow in Foundry and Design (8.3s)
+  ✓  29 [chromium] › tests/browser/workflow.spec.ts:1596:1 › MotionSmith header logo returns to Character home (5.4s)
+  ✓  30 [chromium] › tests/browser/workflow.spec.ts:1607:1 › Medium-width desktop keeps editor panes from cutting off the canvas (8.0s)
+  ✘  32 [chromium] › tests/browser/workflow.spec.ts:1693:1 › Ultragoal warning and responsive contracts › G005 responsive shell keeps primary surfaces reachable without page overflow (6.8s)
+  ✓  33 [chromium] › tests/browser/workflow.spec.ts:1723:1 › G005 mobile Getting Started keeps actions reachable in a short viewport (886ms)
+  ✓  31 [chromium] › tests/browser/workflow.spec.ts:1634:1 › Ultragoal warning and responsive contracts › G006 student warning UX hides raw ids and fit scores in Design recommendations (16.1s)
+  ✘  35 [chromium] › tests/browser/workflow.spec.ts:2282:1 › Assembly shows character pins as a separate board build stage (4.1s)
+  ✓  36 [chromium] › tests/browser/workflow.spec.ts:2359:1 › Character tab processing controls route to real browser workflows (4.4s)
+  ✓  37 [chromium] › tests/browser/workflow.spec.ts:2415:1 › animation performance: Foundry playback stays responsive without runaway Three rebuilds (7.5s)
+  ✓  38 [chromium] › tests/browser/workflow.spec.ts:2495:1 › Create from image upload creates a reviewed character package in browser (9.1s)
+  ✓  34 [chromium] › tests/browser/workflow.spec.ts:1740:1 › character → path → foundry → design → blueprint runs end-to-end in browser (37.8s)
+  ✓  40 [chromium] › tests/browser/workflow.spec.ts:2605:1 › Character replacement package starts clean without keep-mechanisms toggle (7.5s)
+  ✓  41 [chromium] › tests/browser/workflow.spec.ts:2650:1 › Options and validation gates update browser blueprint output (11.5s)
+  ✘  39 [chromium] › tests/browser/workflow.spec.ts:2542:1 › Load package review, accept, discard, and missing-file recovery stay in browser (13.0s)
+  ✓  42 [chromium] › tests/browser/workflow.spec.ts:2719:1 › Options parity updates workspace UI, canvas context, and blueprint defaults (23.9s)
+  ✓  43 [chromium] › tests/browser/workflow.spec.ts:2864:1 › Legacy storage namespace migrates to MotionSmith keys without losing autosave or workspace layout (8.1s)
+  ✓  44 [chromium] › tests/browser/workflow.spec.ts:2906:1 › Path Editor sensemaking follows selected part, lock state, and anchor handoff (15.7s)
+  ✘  46 [chromium] › tests/browser/workflow.spec.ts:3478:1 › Foundry parameter safety contracts › Foundry clamps feasible numeric parameter edits without adding jam warnings (15.0s)
+  ✘  45 [chromium] › tests/browser/workflow.spec.ts:3045:1 › Foundry sensemaking shows library, partial range, and exported metadata (29.1s)
+  ✓  47 [chromium] › tests/browser/workflow.spec.ts:3592:1 › Recommendation driver ownership contracts › Recommendation keeps a limb path on its exact owner and one physical driver (19.9s)
+  ✓  48 [chromium] › tests/browser/workflow.spec.ts:3519:1 › Character tab owns body layer and skeleton edits used by design controls (26.2s)
+  ✓  50 [chromium] › tests/browser/workflow.spec.ts:3732:1 › Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking (6.9s)
+  ✓  51 [chromium] › tests/browser/workflow.spec.ts:3816:1 › Foundry supports CAD-style 3D camera presets and drag orbit (7.5s)
+  ✓  49 [chromium] › tests/browser/workflow.spec.ts:3643:1 › Recommendation sheet applies a distinct mechanism and blueprint recipe (24.9s)
+  ✓  52 [chromium] › tests/browser/workflow.spec.ts:3979:1 › Cam foundry profile points edit the shared cam simulation profile (4.3s)
+  ✓  54 [chromium] › tests/browser/workflow.spec.ts:4037:1 › Character import surface omits browser camera capture (2.7s)
+  ✓  55 [chromium] › tests/browser/workflow.spec.ts:4050:1 › Mobile path editor keeps Draw free path action above the canvas (5.7s)
+  ✓  53 [chromium] › tests/browser/workflow.spec.ts:4004:1 › Mechanism Design cam profile edits update the integrated automata preview (14.5s)
+  ✓  57 [chromium] › tests/browser/workflow.spec.ts:4094:1 › Bug report opens a GitHub issue draft from any stage (6.3s)
+  ✓  58 [chromium] › tests/browser/workflow.spec.ts:4121:1 › Mobile startup shows compact Getting Started with a session opt-out (777ms)
+  ✓  59 [chromium] › tests/browser/workflow.spec.ts:4142:1 › Shared player dock overlays the canvas, does not take layout space, and can be dragged (23.8s)
+  ✓  60 [chromium] › tests/browser/workflow.spec.ts:4174:1 › Right inspector scroll does not move the center canvas (3.3s)
+  ✘  56 [chromium] › tests/browser/workflow.spec.ts:4068:1 › Startup uses one boot loader and opens Getting Started over Character (10.8s)
+  ✓  61 [chromium] › tests/browser/workflow.spec.ts:4191:1 › Narrow character right inspector remains independently scrollable (2.9s)
+  ✓  63 [chromium] › tests/browser/workflow.spec.ts:4254:1 › Workflow tabs keep left workflow, center canvas, and right inspector roles (18.1s)
+  ✓  62 [chromium] › tests/browser/workflow.spec.ts:4222:1 › Every workflow right inspector uses the shared scroll container (21.4s)
+  ✓  65 [chromium] › tests/browser/workflow.spec.ts:4362:1 › Animation resumes after leaving path drawing mode (5.7s)
+  ✓  64 [chromium] › tests/browser/workflow.spec.ts:4332:1 › Workflow rail remains reachable on short desktop and mobile fallback exposes every stage (12.2s)
+  ✓  67 [chromium] › tests/browser/workflow.spec.ts:4530:1 › Every top menu command is wired to a visible result (32.0s)
+  ✓  68 [chromium] › tests/browser/workflow.spec.ts:4644:1 › guided classroom lesson opens real baseline and can reset safely (5.8s)
+  ✓  69 [chromium] › tests/browser/workflow.spec.ts:4673:1 › Invalid Design target edits retain the prior valid mechanism and exact recovery blocker (11.9s)
+  ✓  66 [chromium] › tests/browser/workflow.spec.ts:4376:1 › Command menu and shared canvas zoom persist across workflow stages (1.0m)
+  ✓  71 [chromium] › tests/browser/workflow.spec.ts:4757:1 › Mechanism Design integrated automata preview keeps placed anchors on the fabrication grid (6.7s)
+  ✓  70 [chromium] › tests/browser/workflow.spec.ts:4690:1 › Mechanism Design library chips replace transactionally, delete, and export (25.2s)
+  ✓  72 [chromium] › tests/browser/workflow.spec.ts:4786:1 › Mechanism Design center workspace renders the integrated Foundry automata scene (30.2s)
+  ✓  73 [chromium] › tests/browser/workflow.spec.ts:4953:1 › shared Design renderer preserves exact compiled support paths for all six fabrication families (39.1s)
+  ✓  74 [chromium] › tests/browser/workflow.spec.ts:5003:1 › Simplified shared canvas stays non-destructive and exports blueprint (23.4s)
+  ✓  76 [chromium] › tests/browser/workflow.spec.ts:5128:1 › Draw mode forces 2D Path view and accepts free path strokes on SceneSketch (6.0s)
+  ✓  75 [chromium] › tests/browser/workflow.spec.ts:5087:1 › Shared path view supports 2D zoom and 3D direct orbit (10.4s)
+
+
+  1) [chromium] › tests/browser/g5-web-onnx.spec.ts:123:1 › Create from image upload keeps transforms off the UI thread
+
+    Error: app dispatch through review has no UI long task over 50 ms
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 6
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "duration": 61,
+    +     "startTime": 8480.400000095367,
+    +   },
+    + ]
+
+      186 |   expect(firstMedia.modelInitMs, "first import measures session initialization").toBeGreaterThan(0);
+      187 |   expect(firstEvidence.processProgressMessageCount, "download progress is coalesced per process request").toBeLessThanOrEqual(40);
+    > 188 |   expect(firstEvidence.overlappingLongTasks.filter((entry) => entry.duration > 50), "app dispatch through review has no UI long task over 50 ms").toEqual([]);
+          |                                                                                                                                                   ^
+      189 |
+      190 |   await page.getByRole("button", { name: "Skip", exact: true }).click();
+      191 |   await expect(page.getByTestId("character-import-review")).toHaveCount(0);
+        at /Users/alansynn/orca/workspaces/MechAnim/luna-qa-recovery/tests/browser/g5-web-onnx.spec.ts:188:147
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/g5-web-onnx-Create-from-im-55e36-ransforms-off-the-UI-thread-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/g5-web-onnx-Create-from-im-55e36-ransforms-off-the-UI-thread-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/g5-web-onnx-Create-from-im-55e36-ransforms-off-the-UI-thread-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/g5-web-onnx-Create-from-im-55e36-ransforms-off-the-UI-thread-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium] › tests/browser/quality-critical.spec.ts:81:1 › G7 isolated critical flow covers the integrated workbench
+
+    Error: the Foundry preview exposes its structural build count
+
+    expect(received).toBeTruthy()
+
+    Received: null
+
+      345 |   const structuralBuildCountBeforeLifecycle = await restoredRig.getAttribute("data-three-structural-build-count");
+      346 |   expect(signatureBeforeLifecycle, "the Foundry preview exposes a stable fabrication signature").toBeTruthy();
+    > 347 |   expect(structuralBuildCountBeforeLifecycle, "the Foundry preview exposes its structural build count").toBeTruthy();
+          |                                                                                                         ^
+      348 |
+      349 |   await page.evaluate(() => {
+      350 |     type LifecycleCounters = { freeze: number; resume: number };
+        at /Users/alansynn/orca/workspaces/MechAnim/luna-qa-recovery/tests/browser/quality-critical.spec.ts:347:105
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/quality-critical-G7-isolat-e1302-rs-the-integrated-workbench-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/quality-critical-G7-isolat-e1302-rs-the-integrated-workbench-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/quality-critical-G7-isolat-e1302-rs-the-integrated-workbench-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/quality-critical-G7-isolat-e1302-rs-the-integrated-workbench-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium] › tests/browser/responsive-workbench.spec.ts:112:3 › 1920x1080 workbench surfaces remain reachable across enabled stages
+
+    Error: 1920x1080 Character status is inside the viewport or its own scroll container (no scroll container)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      56 |     return { reachable: false, via: 'no scroll container' };
+      57 |   });
+    > 58 |   expect(result.reachable, `${label} is inside the viewport or its own scroll container (${result.via})`).toBe(true);
+         |                                                                                                           ^
+      59 | };
+      60 |
+      61 | const openFinalGuidedLesson = async (page: Page) => {
+        at expectReachable (/Users/alansynn/orca/workspaces/MechAnim/luna-qa-recovery/tests/browser/responsive-workbench.spec.ts:58:107)
+        at /Users/alansynn/orca/workspaces/MechAnim/luna-qa-recovery/tests/browser/responsive-workbench.spec.ts:134:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/responsive-workbench-1920x-70154-hable-across-enabled-stages-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/responsive-workbench-1920x-70154-hable-across-enabled-stages-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/responsive-workbench-1920x-70154-hable-across-enabled-stages-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/responsive-workbench-1920x-70154-hable-across-enabled-stages-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium] › tests/browser/responsive-workbench.spec.ts:112:3 › 1200x520 workbench surfaces remain reachable across enabled stages
+
+    Error: 1200x520 Character status is inside the viewport or its own scroll container (no scroll container)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      56 |     return { reachable: false, via: 'no scroll container' };
+      57 |   });
+    > 58 |   expect(result.reachable, `${label} is inside the viewport or its own scroll container (${result.via})`).toBe(true);
+         |                                                                                                           ^
+      59 | };
+      60 |
+      61 | const openFinalGuidedLesson = async (page: Page) => {
+        at expectReachable (/Users/alansynn/orca/workspaces/MechAnim/luna-qa-recovery/tests/browser/responsive-workbench.spec.ts:58:107)
+        at /Users/alansynn/orca/workspaces/MechAnim/luna-qa-recovery/tests/browser/responsive-workbench.spec.ts:134:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/responsive-workbench-1200x-536f6-hable-across-enabled-stages-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/responsive-workbench-1200x-536f6-hable-across-enabled-stages-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/responsive-workbench-1200x-536f6-hable-across-enabled-stages-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/responsive-workbench-1200x-536f6-hable-across-enabled-stages-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [chromium] › tests/browser/workflow.spec.ts:1693:1 › Ultragoal warning and responsive contracts › G005 responsive shell keeps primary surfaces reachable without page overflow
+
+    Error: 1920x1080 status footer is inside viewport or reachable through its own scroll container (none)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      873 |     };
+      874 |   });
+    > 875 |   expect(result.ok, `${label} is inside viewport or reachable through its own scroll container (${result.via})`).toBe(true);
+          |                                                                                                                  ^
+      876 | };
+      877 |
+      878 | const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        at expectReachableInViewportOrOwnScroller (/Users/alansynn/orca/workspaces/MechAnim/luna-qa-recovery/tests/browser/workflow.spec.ts:875:114)
+        at /Users/alansynn/orca/workspaces/MechAnim/luna-qa-recovery/tests/browser/workflow.spec.ts:1717:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/workflow-Ultragoal-warning-24f8a-hable-without-page-overflow-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/workflow-Ultragoal-warning-24f8a-hable-without-page-overflow-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/workflow-Ultragoal-warning-24f8a-hable-without-page-overflow-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/workflow-Ultragoal-warning-24f8a-hable-without-page-overflow-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [chromium] › tests/browser/workflow.spec.ts:2282:1 › Assembly shows character pins as a separate board build stage
+
+    Error: locator.fill: Error: Malformed value
+    Call log:
+      - waiting for getByLabel('Assembly scrubber')
+        - locator resolved to <input min="0" max="4" value="1" type="range" aria-valuetext="Step 2 of 5" aria-label="Assembly scrubber"/>
+        - fill("0.45")
+      - attempting fill action
+        - waiting for element to be visible, enabled and editable
+
+
+      2329 |   const fixedPinsBuildCount = Number(await characterAssemblyThree.getAttribute('data-three-dynamic-build-count') ?? '0');
+      2330 |   const assemblyScrubber = page.getByLabel('Assembly scrubber');
+    > 2331 |   await assemblyScrubber.fill('0.45');
+           |                          ^
+      2332 |   await expect.poll(async () => Number(await assemblyScrubber.inputValue()), {
+      2333 |     message: 'Assembly scrubbing advances the shared progress frame',
+      2334 |   }).toBeGreaterThan(0.4);
+        at /Users/alansynn/orca/workspaces/MechAnim/luna-qa-recovery/tests/browser/workflow.spec.ts:2331:26
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/workflow-Assembly-shows-ch-c3a64--separate-board-build-stage-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/workflow-Assembly-shows-ch-c3a64--separate-board-build-stage-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/workflow-Assembly-shows-ch-c3a64--separate-board-build-stage-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/workflow-Assembly-shows-ch-c3a64--separate-board-build-stage-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [chromium] › tests/browser/workflow.spec.ts:2542:1 › Load package review, accept, discard, and missing-file recovery stay in browser
+
+    Error: expect(locator).toHaveAttribute(expected) failed
+
+    Locator:  getByTestId('character-three-puppet-state')
+    Expected: "1"
+    Received: "14"
+    Timeout:  10000ms
+
+    Call log:
+      - Expect "toHaveAttribute" with timeout 10000ms
+      - waiting for getByTestId('character-three-puppet-state')
+        24 × locator resolved to <div data-view-mode="3d" data-cam-profile="" data-part-count="14" data-joint-count="17" data-assembly-mode="" data-three-stack-z="" data-thickness-mm="8" data-mechanism-type="" data-assembly-phase="" data-layer-grid="shown" data-camera-preset="iso" data-input-mode="always" data-camera-zoom="1.000" data-camera-yaw="35.789" data-three-base-layer="" data-three-gear-radii="" data-three-cam-count="0" data-layer-paths="hidden" data-three-stack-order="" data-three-stack-roles="" data-three-rack-x="0.000" …></div>
+           - unexpected value "14"
+
+
+      2568 |   await expect(review.getByText('Ready', { exact: true })).toBeVisible();
+      2569 |   await expect(review).toContainText('1 parts · 2 joints');
+    > 2570 |   await expect(page.getByTestId('character-three-puppet-state')).toHaveAttribute('data-part-count', '1');
+           |                                                                  ^
+      2571 |   await expect(page.getByText('outlines')).toBeHidden();
+      2572 |   await expect(page.getByText('Checks')).toHaveCount(0);
+      2573 |   await expect(page.getByTestId('character-setup-panel').getByText('Choose new character.')).toBeVisible();
+        at /Users/alansynn/orca/workspaces/MechAnim/luna-qa-recovery/tests/browser/workflow.spec.ts:2570:66
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/workflow-Load-package-revi-6ea89-le-recovery-stay-in-browser-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/workflow-Load-package-revi-6ea89-le-recovery-stay-in-browser-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/workflow-Load-package-revi-6ea89-le-recovery-stay-in-browser-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/workflow-Load-package-revi-6ea89-le-recovery-stay-in-browser-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [chromium] › tests/browser/workflow.spec.ts:3045:1 › Foundry sensemaking shows library, partial range, and exported metadata
+
+    Error: expect(locator).toHaveValue(expected) failed
+
+    Locator:  getByLabel('ground number')
+    Expected: "120"
+    Received: "160"
+    Timeout:  10000ms
+
+    Call log:
+      - Expect "toHaveValue" with timeout 10000ms
+      - waiting for getByLabel('ground number')
+        24 × locator resolved to <input min="0" step="1" max="160" value="160" type="number" class="field mt-1" aria-label="ground number"/>
+           - unexpected value "160"
+
+
+      3433 |   await page.getByLabel('Foundry mechanism type').selectOption('4bar');
+      3434 |   await page.getByLabel('Foundry preset').selectOption('compact');
+    > 3435 |   await expect(page.getByLabel('ground number')).toHaveValue('120');
+           |                                                  ^
+      3436 |   await page.getByLabel('Foundry preset').selectOption('balanced');
+      3437 |   await expect(page.getByLabel('ground number')).toHaveValue('160');
+      3438 |   await page.getByLabel('Foundry preset').selectOption('broad');
+        at /Users/alansynn/orca/workspaces/MechAnim/luna-qa-recovery/tests/browser/workflow.spec.ts:3435:50
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/workflow-Foundry-sensemaki-37ac0-range-and-exported-metadata-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/workflow-Foundry-sensemaki-37ac0-range-and-exported-metadata-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/workflow-Foundry-sensemaki-37ac0-range-and-exported-metadata-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/workflow-Foundry-sensemaki-37ac0-range-and-exported-metadata-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [chromium] › tests/browser/workflow.spec.ts:3478:1 › Foundry parameter safety contracts › Foundry clamps feasible numeric parameter edits without adding jam warnings
+
+    Error: unsafe 4bar output sizes stay visible but locked instead of breaking the preview
+
+    expect(locator).toHaveAttribute(expected) failed
+
+    Locator:  getByLabel('Output link length').locator('option[value="2"]')
+    Expected: ""
+    Received: serializes to the same string
+    Timeout:  10000ms
+
+    Call log:
+      - unsafe 4bar output sizes stay visible but locked instead of breaking the preview with timeout 10000ms
+      - waiting for getByLabel('Output link length').locator('option[value="2"]')
+        24 × locator resolved to <option value="2" data-motion-safe="true">3-hole</option>
+           - unexpected value "null"
+
+
+      3509 |   await expect(page.getByLabel('Input link length'), 'physical input holes own the role endpoint').toBeDisabled();
+      3510 |   await page.getByLabel('Coupler link length').selectOption('4');
+    > 3511 |   await expect(page.getByLabel('Output link length').locator('option[value="2"]'), 'unsafe 4bar output sizes stay visible but locked instead of breaking the preview').toHaveAttribute('disabled', '');
+           |                                                                                                                                                                        ^
+      3512 |   await expect(page.getByLabel('Output link length').locator('option[value="2"]')).toContainText(/not fitting/i);
+      3513 |   await expect(page.getByTestId('mechanism-motion-option-locks')).toHaveText('Fit inside board.');
+      3514 |   await expect(page.getByTestId('foundry-motion-warning')).toHaveCount(0);
+        at /Users/alansynn/orca/workspaces/MechAnim/luna-qa-recovery/tests/browser/workflow.spec.ts:3511:168
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/workflow-Foundry-parameter-6ffa7-without-adding-jam-warnings-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/workflow-Foundry-parameter-6ffa7-without-adding-jam-warnings-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/workflow-Foundry-parameter-6ffa7-without-adding-jam-warnings-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/workflow-Foundry-parameter-6ffa7-without-adding-jam-warnings-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  10) [chromium] › tests/browser/workflow.spec.ts:4068:1 › Startup uses one boot loader and opens Getting Started over Character
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: locator('#boot-loader')
+    Expected pattern: /MotionSmith/
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toContainText" with timeout 10000ms
+      - waiting for locator('#boot-loader')
+
+
+      4079 |   });
+      4080 |   await page.goto('/');
+    > 4081 |   await expect(page.locator('#boot-loader')).toContainText(/MotionSmith/);
+           |                                              ^
+      4082 |   await expect(page.locator('#boot-loader')).toContainText(/AI model/i);
+      4083 |   releaseModelDownload();
+      4084 |   await expect(page.locator('#boot-loader')).toHaveCount(0, { timeout: 180_000 });
+        at /Users/alansynn/orca/workspaces/MechAnim/luna-qa-recovery/tests/browser/workflow.spec.ts:4081:46
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/workflow-Startup-uses-one--5a162-ting-Started-over-Character-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/workflow-Startup-uses-one--5a162-ting-Started-over-Character-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/workflow-Startup-uses-one--5a162-ting-Started-over-Character-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/workflow-Startup-uses-one--5a162-ting-Started-over-Character-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  10 failed
+    [chromium] › tests/browser/g5-web-onnx.spec.ts:123:1 › Create from image upload keeps transforms off the UI thread
+    [chromium] › tests/browser/quality-critical.spec.ts:81:1 › G7 isolated critical flow covers the integrated workbench
+    [chromium] › tests/browser/responsive-workbench.spec.ts:112:3 › 1920x1080 workbench surfaces remain reachable across enabled stages
+    [chromium] › tests/browser/responsive-workbench.spec.ts:112:3 › 1200x520 workbench surfaces remain reachable across enabled stages
+    [chromium] › tests/browser/workflow.spec.ts:1693:1 › Ultragoal warning and responsive contracts › G005 responsive shell keeps primary surfaces reachable without page overflow
+    [chromium] › tests/browser/workflow.spec.ts:2282:1 › Assembly shows character pins as a separate board build stage
+    [chromium] › tests/browser/workflow.spec.ts:2542:1 › Load package review, accept, discard, and missing-file recovery stay in browser
+    [chromium] › tests/browser/workflow.spec.ts:3045:1 › Foundry sensemaking shows library, partial range, and exported metadata
+    [chromium] › tests/browser/workflow.spec.ts:3478:1 › Foundry parameter safety contracts › Foundry clamps feasible numeric parameter edits without adding jam warnings
+    [chromium] › tests/browser/workflow.spec.ts:4068:1 › Startup uses one boot loader and opens Getting Started over Character
+  66 passed (9.1m)
+error: script "test:browser" exited with code 1
+EXIT_CODE=1

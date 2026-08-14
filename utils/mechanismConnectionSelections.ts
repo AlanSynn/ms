@@ -557,6 +557,7 @@ const resolvedLinkageAssetGeometry = (
   const endOffsetMm = { x: end.x - anchor.x, y: end.y - anchor.y };
   return {
     anchorHoleIndex,
+    holeCount: spec.holeCentersMm.length,
     startOffsetMm,
     endOffsetMm,
     centerOffsetMm: {
@@ -592,6 +593,7 @@ export type ResolvedPhysicalConnection = {
  */
 export type ResolvedLinkageAssetGeometry = {
   anchorHoleIndex: number;
+  holeCount: number;
   startOffsetMm: Point;
   endOffsetMm: Point;
   centerOffsetMm: Point;
@@ -802,11 +804,21 @@ export type MechanismConnectionHoleCandidate = {
   holeIndex: number;
   selection: ConnectionSelection;
   coordinate: Point;
+  frameProjection: MechanismConnectionFrameProjection;
   legal: true;
   recoveryEligible: boolean;
   selected: boolean;
   provisional: boolean;
 };
+
+export type MechanismConnectionFrameProjection =
+  | { kind: 'fixed'; coordinate: Point }
+  | {
+      kind: 'local';
+      local: ResolvedConnectionLocal;
+      activeLocal: ResolvedConnectionLocal;
+      guideSourceRotation?: number;
+    };
 
 const sameSelection = (a: ConnectionSelection | undefined, b: ConnectionSelection) => {
   if (!a || a.kind !== b.kind) return false;
@@ -836,22 +848,19 @@ const angleBetween = (origin: Point, tip: Point) => Math.atan2(tip.y - origin.y,
 
 const resolvedLinkageBlankPose = (
   role: ResolvedLinkageBlankPose['role'],
-  selection: ConnectionSelection | undefined,
+  connection: ResolvedPhysicalConnection | undefined,
   origin: Point,
   selectedJoint: Point,
 ): ResolvedLinkageBlankPose | undefined => {
-  if (selection?.kind !== 'linkage-hole') return undefined;
-  const spec = linkageSpec(selection.linkageKey);
-  const firstHole = spec?.holeCentersMm[0];
-  const selectedHole = spec?.holeCentersMm[selection.holeIndex];
-  const lastHole = spec?.holeCentersMm.at(-1);
-  if (!spec || !firstHole || !selectedHole || !lastHole) return undefined;
-  const selectedOffset = scaleMm({ x: selectedHole.x - firstHole.x, y: selectedHole.y - firstHole.y });
-  const fullOffset = scaleMm({ x: lastHole.x - firstHole.x, y: lastHole.y - firstHole.y });
-  const selectedLength = Math.hypot(selectedOffset.x, selectedOffset.y);
+  const selection = connection?.selection;
+  const local = connection?.local;
+  const asset = connection?.linkageAsset;
+  if (selection?.kind !== 'linkage-hole' || !local || !asset) return undefined;
+  const fullOffset = scaleMm(asset.endOffsetMm);
+  const selectedLength = local.length;
   const actualLength = Math.hypot(selectedJoint.x - origin.x, selectedJoint.y - origin.y);
   if (selectedLength < 0.001 || actualLength < 0.001) return undefined;
-  const phase = angleBetween(origin, selectedJoint) - Math.atan2(selectedOffset.y, selectedOffset.x);
+  const phase = angleBetween(origin, selectedJoint) - local.localAngle;
   const scaledFullOffset = rotate(
     { x: fullOffset.x * actualLength / selectedLength, y: fullOffset.y * actualLength / selectedLength },
     phase,
@@ -859,12 +868,34 @@ const resolvedLinkageBlankPose = (
   return {
     role,
     selection,
-    partKey: spec.key,
-    holeCount: spec.holeCentersMm.length,
+    partKey: connection.partKey,
+    holeCount: asset.holeCount,
     selectedHoleIndex: selection.holeIndex,
     origin,
     selectedJoint,
     end: add(origin, scaledFullOffset),
+  };
+};
+
+export const resolveFourBarLinkageBlankPosesFromPhysicalConnections = (
+  connections: readonly ResolvedPhysicalConnection[],
+  state: ConnectionSelectionSceneState,
+): Partial<Record<ResolvedLinkageBlankPose['role'], ResolvedLinkageBlankPose>> => {
+  const input = resolvedLinkageBlankPose(
+    '4bar.input-joint',
+    connections.find((connection) => connection.role === '4bar.input-joint'),
+    state.p1,
+    state.j1,
+  );
+  const output = resolvedLinkageBlankPose(
+    '4bar.output-joint',
+    connections.find((connection) => connection.role === '4bar.output-joint'),
+    state.p2,
+    state.j2,
+  );
+  return {
+    ...(input ? { '4bar.input-joint': input } : {}),
+    ...(output ? { '4bar.output-joint': output } : {}),
   };
 };
 
@@ -874,23 +905,10 @@ export const resolveFourBarLinkageBlankPoses = (
   kit: PhysicalKitSettings = defaultPhysicalKit(),
 ): Partial<Record<ResolvedLinkageBlankPose['role'], ResolvedLinkageBlankPose>> => {
   if (mechanism.type !== '4bar') return {};
-  const selections = resolvedSelectionState(mechanism, kit).connectionSelections;
-  const input = resolvedLinkageBlankPose(
-    '4bar.input-joint',
-    selections?.['4bar.input-joint'],
-    state.p1,
-    state.j1,
+  return resolveFourBarLinkageBlankPosesFromPhysicalConnections(
+    resolveMechanismPhysicalConnections(mechanism, kit).connections,
+    state,
   );
-  const output = resolvedLinkageBlankPose(
-    '4bar.output-joint',
-    selections?.['4bar.output-joint'],
-    state.p2,
-    state.j2,
-  );
-  return {
-    ...(input ? { '4bar.input-joint': input } : {}),
-    ...(output ? { '4bar.output-joint': output } : {}),
-  };
 };
 
 const localForSelection = (
@@ -937,12 +955,21 @@ const selectedCoordinatesForSelections = (
     connectionSelections: selections,
     connectionSelectionValidation: undefined,
   }, kit);
-  return resolved.connections.reduce<Partial<Record<ConnectionSelectionRole, Point>>>((coordinates, connection) => {
+  return connectionSelectionSceneCoordinatesForPhysicalConnections(
+    resolved.connections,
+    state,
+  );
+};
+
+export const connectionSelectionSceneCoordinatesForPhysicalConnections = (
+  connections: readonly ResolvedPhysicalConnection[],
+  state: ConnectionSelectionSceneState,
+): Partial<Record<ConnectionSelectionRole, Point>> =>
+  connections.reduce<Partial<Record<ConnectionSelectionRole, Point>>>((coordinates, connection) => {
     const coordinate = selectedCoordinateForRole(connection.role, connection, state);
     if (coordinate) coordinates[connection.role] = coordinate;
     return coordinates;
   }, {});
-};
 
 export const connectionSelectionSceneCoordinates = (
   mechanism: MechanismConfig,
@@ -962,20 +989,38 @@ export const connectionSelectionSceneCoordinates = (
     kit,
   );
 
-const candidateCoordinate = (
+const candidateFrameProjection = (
   mechanism: MechanismConfig,
-  state: ConnectionSelectionSceneState,
   role: ConnectionSelectionRole,
   selection: ConnectionSelection,
   active: ConnectionSelection | undefined,
   selections: MechanismConfig['connectionSelections'],
   kit: PhysicalKitSettings,
-): Point | undefined => {
+): MechanismConnectionFrameProjection | undefined => {
   const mounted = resolveBoardMountPose(selection, kit);
-  if (mounted) return mounted.center;
+  if (mounted) return { kind: 'fixed', coordinate: mounted.center };
   const local = localForSelection(role, selection, selections);
   const activeLocal = active ? localForSelection(role, active, selections) : undefined;
   if (!local || !activeLocal) return undefined;
+  const guide = selections?.['cam.guide-mount'];
+  const guideSourceRotation = role === 'cam.follower-output-hole'
+    ? resolveBoardMountPose(guide, kit)?.sourceRotation
+    : undefined;
+  return {
+    kind: 'local',
+    local,
+    activeLocal,
+    ...(guideSourceRotation !== undefined ? { guideSourceRotation } : {}),
+  };
+};
+
+const candidateCoordinate = (
+  role: ConnectionSelectionRole,
+  state: ConnectionSelectionSceneState,
+  projection: MechanismConnectionFrameProjection,
+): Point | undefined => {
+  if (projection.kind === 'fixed') return projection.coordinate;
+  const { local, activeLocal } = projection;
   const phaseFrom = (origin: Point, selectedPoint: Point) =>
     angleBetween(origin, selectedPoint) - activeLocal.localAngle;
   switch (role) {
@@ -998,9 +1043,11 @@ const candidateCoordinate = (
     case 'piston.rod-slider-pin':
       return connectionPointAt(local, state.j1, phaseFrom(state.j1, state.j2)).position;
     case 'cam.follower-output-hole': {
-      const guide = selections?.['cam.guide-mount'];
-      const guidePose = resolveBoardMountPose(guide, kit);
-      return connectionPointAt(local, state.j2, (guidePose?.sourceRotation ?? 0)).position;
+      return connectionPointAt(
+        local,
+        state.j2,
+        projection.guideSourceRotation ?? 0,
+      ).position;
     }
   }
 };
@@ -1047,8 +1094,16 @@ export const mechanismConnectionHoleCandidates = (
         (entry) => entry.role === role && (entry.status === 'accepted' || entry.status === 'defaulted'),
       );
   };
-  const add = (role: ConnectionSelectionRole, selection: ConnectionSelection, coordinate: Point | undefined, holeIndex: number) => {
-    if (!coordinate || !isLegal(role, selection)) return;
+  const add = (
+    role: ConnectionSelectionRole,
+    selection: ConnectionSelection,
+    frameProjection: MechanismConnectionFrameProjection | undefined,
+    holeIndex: number,
+  ) => {
+    const coordinate = frameProjection
+      ? candidateCoordinate(role, state, frameProjection)
+      : undefined;
+    if (!coordinate || !frameProjection || !isLegal(role, selection)) return;
     const active = selected[role] ?? defaultSelectionForRole(mechanism, role, kit);
     const selectedForRole = selected[role];
     candidates.push({
@@ -1061,6 +1116,7 @@ export const mechanismConnectionHoleCandidates = (
       holeIndex,
       selection,
       coordinate,
+      frameProjection,
       legal: true,
       recoveryEligible: !sameSelection(selectedForRole, selection),
       selected: sameSelection(selectedForRole, selection),
@@ -1077,7 +1133,19 @@ export const mechanismConnectionHoleCandidates = (
       spec.holeCentersMm.forEach((_, holeIndex) => {
         if (!allowed(holeIndex)) return;
         const selection: ConnectionSelection = { kind: 'linkage-hole', linkageKey: spec.key, holeIndex };
-        add(role, selection, candidateCoordinate(mechanism, state, role, selection, active, { ...selected, [role]: selection }, kit), holeIndex);
+        add(
+          role,
+          selection,
+          candidateFrameProjection(
+            mechanism,
+            role,
+            selection,
+            active,
+            { ...selected, [role]: selection },
+            kit,
+          ),
+          holeIndex,
+        );
       });
     });
   };
@@ -1087,7 +1155,19 @@ export const mechanismConnectionHoleCandidates = (
     FABRICATION_GEAR_SPECS.forEach((spec) => {
       spec.attachmentHoleCentersMm.forEach((_, holeIndex) => {
         const selection: ConnectionSelection = { kind: 'gear-attachment-hole', gearKey: spec.key, gearIndex: expectedGearIndex(role, mechanism), holeIndex };
-        add(role, selection, candidateCoordinate(mechanism, state, role, selection, active, { ...selected, [role]: selection }, kit), holeIndex);
+        add(
+          role,
+          selection,
+          candidateFrameProjection(
+            mechanism,
+            role,
+            selection,
+            active,
+            { ...selected, [role]: selection },
+            kit,
+          ),
+          holeIndex,
+        );
       });
     });
   };
@@ -1121,7 +1201,19 @@ export const mechanismConnectionHoleCandidates = (
           mountKey: spec.key,
           boardHoleIds,
         };
-        add(role, selection, resolveBoardMountPose(selection, kit)?.center, candidateIndex);
+        add(
+          role,
+          selection,
+          candidateFrameProjection(
+            mechanism,
+            role,
+            selection,
+            selected[role],
+            { ...selected, [role]: selection },
+            kit,
+          ),
+          candidateIndex,
+        );
         candidateIndex += 1;
       }
     }
@@ -1134,7 +1226,19 @@ export const mechanismConnectionHoleCandidates = (
     if (!spec) return;
     Object.keys(spec.holes).forEach((holeId, holeIndex) => {
       const selection: ConnectionSelection = { kind: 'module-hole', moduleKey: spec.key, holeId: holeId as keyof typeof spec.holes };
-      add(role, selection, candidateCoordinate(mechanism, state, role, selection, active, { ...selected, [role]: selection }, kit), holeIndex);
+      add(
+        role,
+        selection,
+        candidateFrameProjection(
+          mechanism,
+          role,
+          selection,
+          active,
+          { ...selected, [role]: selection },
+          kit,
+        ),
+        holeIndex,
+      );
     });
   };
 
@@ -1160,6 +1264,19 @@ export const mechanismConnectionHoleCandidates = (
   }
   return candidates;
 };
+
+/** Reproject an already validated catalog candidate set using frame math only. */
+export const projectMechanismConnectionHoleCandidates = (
+  state: ConnectionSelectionSceneState,
+  candidates: readonly MechanismConnectionHoleCandidate[],
+): MechanismConnectionHoleCandidate[] => candidates.flatMap((candidate) => {
+  const coordinate = candidateCoordinate(
+    candidate.role,
+    state,
+    candidate.frameProjection,
+  );
+  return coordinate ? [{ ...candidate, coordinate }] : [];
+});
 
 export const connectionSelectionAccepted = (
   validation: ConnectionSelectionValidation | undefined,

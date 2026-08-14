@@ -1,6 +1,12 @@
 import type { JointState, MechanismConfig, PhysicalKitSettings, Point } from '../types';
 import { defaultPhysicalKit, SCENE_VIEW } from './coordinates';
-import { calculateLinkage, generateCurvePoints, planetaryRingPitchRadius } from './kinematics';
+import {
+  calculatePreparedLinkage,
+  generatePreparedCurvePoints,
+  planetaryRingPitchRadius,
+  prepareMechanismKinematics,
+  type PreparedMechanismKinematics,
+} from './kinematics';
 
 export const pointsToSvgPath = (points: Point[]) => points.length ? `M ${points.map(p => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' L ')}` : '';
 
@@ -36,15 +42,15 @@ export type MechanismFitContext = {
   map: (point: Point) => Point;
 };
 
-export const createMechanismFitContext = (
-  mechanism: MechanismConfig,
+export const createPreparedMechanismFitContext = (
+  prepared: PreparedMechanismKinematics,
   width: number,
   height: number,
   resolution = 72,
   extraPoints: Point[] = [],
-  kit: PhysicalKitSettings = defaultPhysicalKit(),
 ): MechanismFitContext => {
-  const pathPoints = generateCurvePoints(mechanism, resolution, kit).points;
+  const { mechanism } = prepared;
+  const pathPoints = generatePreparedCurvePoints(prepared, resolution).points;
   const sweepBounds: Point[] = [];
   const addRadiusBounds = (center: Point | undefined, radius: number, target = sweepBounds) => {
     if (!center || !Number.isFinite(radius) || radius <= 0) return;
@@ -54,7 +60,10 @@ export const createMechanismFitContext = (
     );
   };
   for (let i = 0; i < Math.max(12, resolution); i += 1) {
-    const sampleState = calculateLinkage(mechanism, (i / Math.max(12, resolution)) * Math.PI * 2, kit);
+    const sampleState = calculatePreparedLinkage(
+      prepared,
+      (i / Math.max(12, resolution)) * Math.PI * 2,
+    );
     sweepBounds.push(...[sampleState.p1, sampleState.p2, sampleState.j1, sampleState.j2, sampleState.aux, sampleState.effector].filter((point): point is Point => Boolean(point)));
     if (mechanism.type === 'cam') addRadiusBounds(sampleState.p1, mechanism.crankLength * 1.35);
     if (mechanism.type === 'gear' || mechanism.type === 'gear_linkage' || mechanism.type === '5bar' || mechanism.type === 'rack-pinion') {
@@ -81,6 +90,36 @@ export const createMechanismFitContext = (
   return { pathPoints: fittedPath, pathD: pointsToSvgPath(fittedPath), scale, map };
 };
 
+export const createMechanismFitContext = (
+  mechanism: MechanismConfig,
+  width: number,
+  height: number,
+  resolution = 72,
+  extraPoints: Point[] = [],
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+): MechanismFitContext => createPreparedMechanismFitContext(
+  prepareMechanismKinematics(mechanism, kit),
+  width,
+  height,
+  resolution,
+  extraPoints,
+);
+
+
+export const createPreparedSceneMechanismFitContext = (
+  prepared: PreparedMechanismKinematics,
+  width: number,
+  height: number,
+  resolution = 72,
+): MechanismFitContext => {
+  const scale = Math.min(width / SCENE_VIEW.width, height / SCENE_VIEW.height);
+  const map = (point: Point): Point => ({
+    x: width / 2 + point.x * scale,
+    y: height / 2 - point.y * scale
+  });
+  const pathPoints = generatePreparedCurvePoints(prepared, resolution).points.map(map);
+  return { pathPoints, pathD: pointsToSvgPath(pathPoints), scale, map };
+};
 
 export const createSceneMechanismFitContext = (
   mechanism: MechanismConfig,
@@ -88,23 +127,20 @@ export const createSceneMechanismFitContext = (
   height: number,
   resolution = 72,
   kit: PhysicalKitSettings = defaultPhysicalKit(),
-): MechanismFitContext => {
-  const scale = Math.min(width / SCENE_VIEW.width, height / SCENE_VIEW.height);
-  const map = (point: Point): Point => ({
-    x: width / 2 + point.x * scale,
-    y: height / 2 - point.y * scale
-  });
-  const pathPoints = generateCurvePoints(mechanism, resolution, kit).points.map(map);
-  return { pathPoints, pathD: pointsToSvgPath(pathPoints), scale, map };
-};
+): MechanismFitContext => createPreparedSceneMechanismFitContext(
+  prepareMechanismKinematics(mechanism, kit),
+  width,
+  height,
+  resolution,
+);
 
-export const fitMechanismSimulationWithContext = (
-  mechanism: MechanismConfig,
+export const fitPreparedMechanismSimulationWithContext = (
+  prepared: PreparedMechanismKinematics,
   angle: number,
   context: MechanismFitContext,
-  kit: PhysicalKitSettings = defaultPhysicalKit(),
 ): MechanismPreviewSimulation => {
-  const state = calculateLinkage(mechanism, angle, kit);
+  const { mechanism } = prepared;
+  const state = calculatePreparedLinkage(prepared, angle);
   const map = context.map;
   const driveAngleRad = angle * (mechanism.speed1 ?? 1) + (mechanism.driverPhaseOffset ?? 0);
   return {
@@ -128,9 +164,29 @@ export const fitMechanismSimulationWithContext = (
   };
 };
 
-export const fitMechanismSimulation = (mechanism: MechanismConfig, angle: number, width: number, height: number, resolution = 72, kit: PhysicalKitSettings = defaultPhysicalKit()) => fitMechanismSimulationWithContext(
-  mechanism,
+export const fitMechanismSimulationWithContext = (
+  mechanism: MechanismConfig,
+  angle: number,
+  context: MechanismFitContext,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+): MechanismPreviewSimulation => fitPreparedMechanismSimulationWithContext(
+  prepareMechanismKinematics(mechanism, kit),
   angle,
-  createMechanismFitContext(mechanism, width, height, resolution, [], kit),
-  kit,
+  context,
 );
+
+export const fitMechanismSimulation = (
+  mechanism: MechanismConfig,
+  angle: number,
+  width: number,
+  height: number,
+  resolution = 72,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+) => {
+  const prepared = prepareMechanismKinematics(mechanism, kit);
+  return fitPreparedMechanismSimulationWithContext(
+    prepared,
+    angle,
+    createPreparedMechanismFitContext(prepared, width, height, resolution),
+  );
+};

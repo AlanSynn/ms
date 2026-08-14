@@ -42,6 +42,7 @@ type FoundryOverlayLayerProps = {
   ) => React.PointerEventHandler<SVGCircleElement>;
   onParamPointerMove: React.PointerEventHandler<SVGCircleElement>;
   onParamPointerUp: React.PointerEventHandler<SVGCircleElement>;
+  onParamPointerCancel: React.PointerEventHandler<SVGCircleElement>;
 };
 
 export const FoundryOverlayLayer = ({
@@ -71,6 +72,7 @@ export const FoundryOverlayLayer = ({
   onParamPointerDown,
   onParamPointerMove,
   onParamPointerUp,
+  onParamPointerCancel,
 }: FoundryOverlayLayerProps) => (
   <svg
     data-testid="foundry-preview-overlay"
@@ -258,7 +260,7 @@ export const FoundryOverlayLayer = ({
               }
               onPointerMove={handle.draggable ? onParamPointerMove : undefined}
               onPointerUp={handle.draggable ? onParamPointerUp : undefined}
-              onPointerCancel={handle.draggable ? onParamPointerUp : undefined}
+              onPointerCancel={handle.draggable ? onParamPointerCancel : undefined}
             />
             <text className="foundry-param-label" x="10" y="-8">
               {handle.id}

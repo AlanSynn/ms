@@ -2324,6 +2324,20 @@ test('Assembly shows character pins as a separate board build stage', async ({ p
   await expect(characterAssemblyThree).toHaveAttribute('data-three-assembly-board-hole-count', '225');
   await expect(characterAssemblyThree).toHaveAttribute('data-three-assembly-board-z', '0.00');
   expect(Number(await characterAssemblyThree.getAttribute('data-three-assembly-rendered-board-marker-count')), 'Fixed pins render board markers in the shared Foundry rig').toBeGreaterThan(0);
+  const fixedPinsFrameVersion = await characterAssemblyThree.getAttribute('data-three-assembly-frame-version');
+  const fixedPinsMotion = await characterAssemblyThree.getAttribute('data-three-assembly-motion-kind');
+  const fixedPinsBuildCount = Number(await characterAssemblyThree.getAttribute('data-three-dynamic-build-count') ?? '0');
+  const assemblyScrubber = page.getByLabel('Assembly scrubber');
+  await assemblyScrubber.fill('0.45');
+  await expect.poll(async () => Number(await assemblyScrubber.inputValue()), {
+    message: 'Assembly scrubbing advances the shared progress frame',
+  }).toBeGreaterThan(0.4);
+  await expect(characterAssemblyThree).toHaveAttribute('data-three-assembly-frame-version', fixedPinsFrameVersion!);
+  await expect(characterAssemblyThree).toHaveAttribute('data-three-assembly-motion-kind', fixedPinsMotion!);
+  expect(
+    Number(await characterAssemblyThree.getAttribute('data-three-dynamic-build-count') ?? '0'),
+    'Assembly progress retains the prepared structural root within one step',
+  ).toBe(fixedPinsBuildCount);
   await page.getByTestId('assembly-step-list').getByRole('button', { name: /Free pivots/i }).click();
   await expect(workbench).toHaveAttribute('data-step-phase', 'free-pivots');
   await expect(workbench).toHaveAttribute('data-assembly-motion-kind', 'explode_z');
@@ -2426,29 +2440,53 @@ test('animation performance: Foundry playback stays responsive without runaway T
   await expect(foundryRig).toHaveAttribute('data-three-animation-commit-ms', '33.3');
   await expect(foundryRig).toHaveAttribute('data-three-pixel-ratio-cap', '1.5');
 
+  const phaseControl = page.getByLabel('Foundry phase');
+  const foundryToolbar = page.getByTestId('foundry-toolbar');
+  await foundryToolbar.getByRole('button', { name: 'Reset', exact: true }).click();
+  await expect.poll(async () => Number(await phaseControl.inputValue()), {
+    message: 'Foundry reset settles the playback phase at zero',
+  }).toBe(0);
+  let previousResetBuildCount: number | undefined;
+  let stableResetReads = 0;
+  await expect.poll(async () => {
+    const current = Number(await foundryRig.getAttribute('data-three-dynamic-build-count') ?? '0');
+    if (current === previousResetBuildCount) stableResetReads += 1;
+    else stableResetReads = 0;
+    previousResetBuildCount = current;
+    return stableResetReads;
+  }, { message: 'Foundry reset build count settles before playback measurement' }).toBeGreaterThanOrEqual(1);
   const dynamicBuildsBefore = Number(await foundryRig.getAttribute('data-three-dynamic-build-count') ?? '0');
   const geometryCacheBefore = Number(await foundryRig.getAttribute('data-three-geometry-cache-size') ?? '0');
-  const phaseControl = page.getByLabel('Foundry phase');
-  const phaseBefore = Number(await phaseControl.inputValue());
-  await page.getByTestId('foundry-toolbar').getByRole('button', { name: 'Play', exact: true }).click();
+  const playhead = page.getByTestId('foundry-playhead');
+  const readPlayhead = async () => ({
+    x: Number(await playhead.getAttribute('cx')),
+    y: Number(await playhead.getAttribute('cy')),
+  });
+  await expect.poll(async () => {
+    const point = await readPlayhead();
+    return Number.isFinite(point.x) && Number.isFinite(point.y);
+  }, { message: 'Foundry playhead is measurable after reset' }).toBe(true);
+  const playheadBefore = await readPlayhead();
+  await foundryToolbar.getByRole('button', { name: 'Play', exact: true }).click();
   await expect(page.getByTestId('foundry-toolbar-state')).toContainText('playing');
   await expect(page.getByTestId('foundry-toolbar-state')).not.toBeVisible();
-  const playbackStartedAt = Date.now();
-
-  await expect.poll(async () => {
-    return Number(await foundryRig.getAttribute('data-three-dynamic-build-count') ?? '0') - dynamicBuildsBefore;
-  }, { message: 'Foundry still animates enough frames to feel alive under parallel browser load' }).toBeGreaterThan(12);
+  await expect.poll(async () => Number(await phaseControl.inputValue()), {
+    message: 'Foundry still advances phase while the structural root is retained',
+  }).toBeGreaterThan(40);
 
   const phaseAfter = Number(await phaseControl.inputValue());
+  const playheadAfter = await readPlayhead();
   const dynamicBuildsAfter = Number(await foundryRig.getAttribute('data-three-dynamic-build-count') ?? '0');
   const geometryCacheAfter = Number(await foundryRig.getAttribute('data-three-geometry-cache-size') ?? '0');
   const dynamicBuildsDuringPlayback = dynamicBuildsAfter - dynamicBuildsBefore;
-  const playbackSeconds = Math.max(0.1, (Date.now() - playbackStartedAt) / 1000);
-  const dynamicBuildsPerSecond = dynamicBuildsDuringPlayback / playbackSeconds;
-  expect(dynamicBuildsDuringPlayback, 'Foundry still animates enough committed frames to feel alive').toBeGreaterThan(12);
-  expect(dynamicBuildsPerSecond, 'Foundry does not rebuild expensive Three geometry at unbounded 60fps').toBeLessThanOrEqual(35);
+  const playheadDisplacement = Math.hypot(
+    playheadAfter.x - playheadBefore.x,
+    playheadAfter.y - playheadBefore.y,
+  );
+  expect(phaseAfter, 'Foundry phase advances during optimized playback').toBeGreaterThan(40);
+  expect(playheadDisplacement, 'Foundry visible playhead moves during optimized playback').toBeGreaterThan(2);
+  expect(dynamicBuildsDuringPlayback, 'Foundry playback retains the structural Three root').toBe(0);
   expect(geometryCacheAfter - geometryCacheBefore, 'Foundry path/trail geometry is disposed instead of leaking into the persistent cache').toBeLessThanOrEqual(12);
-  expect(Math.abs(phaseAfter - phaseBefore), 'Foundry phase advances during optimized playback').toBeGreaterThan(40);
 
   await page.getByTestId('foundry-toolbar').getByRole('button', { name: 'Pause', exact: true }).click();
   expectCleanPage(pageErrors, consoleErrors);
@@ -2529,7 +2567,8 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
   await expect(review).toBeVisible();
   await expect(review.getByText('Ready', { exact: true })).toBeVisible();
   await expect(review).toContainText('1 parts · 2 joints');
-  await expect(page.getByTestId('character-three-puppet-state')).toHaveAttribute('data-part-count', '1');
+  await expect(review.getByTestId('character-import-media-summary')).toHaveAttribute('data-total-parts', '1');
+  await expect(page.getByTestId('character-three-puppet-state')).toHaveAttribute('data-part-count', '14');
   await expect(page.getByText('outlines')).toBeHidden();
   await expect(page.getByText('Checks')).toHaveCount(0);
   await expect(page.getByTestId('character-setup-panel').getByText('Choose new character.')).toBeVisible();
@@ -2553,6 +2592,7 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
   await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toHaveCount(0);
   await expectProjectCounts(page, 1, 0, 0);
+  await expect(page.getByTestId('character-three-puppet-state')).toHaveAttribute('data-part-count', '1');
   await expect(page.getByTestId('character-part-list')).toContainText('Fixture body');
 
   await page.getByRole('button', { name: /^Character$/i }).click();
@@ -4028,10 +4068,24 @@ test('Mobile path editor keeps Draw free path action above the canvas', async ({
 
 
 test('Startup uses one boot loader and opens Getting Started over Character', async ({ page }) => {
+  const packageJson = JSON.parse(await readFile(join(process.cwd(), 'package.json'), 'utf8')) as { version: string };
+  let releaseEntryModule!: () => void;
+  const heldEntryModule = new Promise<void>(resolve => { releaseEntryModule = resolve; });
+  let entryModuleRequested = false;
+  await page.route(/\/assets\/index-[^/]+\.js$/, async route => {
+    entryModuleRequested = true;
+    await heldEntryModule;
+    await route.continue();
+  });
+
   let releaseModelDownload!: () => void;
   const heldDownload = new Promise<void>(resolve => { releaseModelDownload = resolve; });
+  let modelRequestStarted = false;
+  let modelDownloadReleased = false;
   await page.route(ONNX_MODEL_ROUTE, async route => {
+    modelRequestStarted = true;
     await heldDownload;
+    modelDownloadReleased = true;
     await route.fulfill({
       status: 200,
       contentType: 'application/octet-stream',
@@ -4039,15 +4093,29 @@ test('Startup uses one boot loader and opens Getting Started over Character', as
       body: TEST_ONNX_MODEL_BYTES,
     });
   });
-  await page.goto('/');
-  await expect(page.locator('#boot-loader')).toContainText(/MotionSmith/);
-  await expect(page.locator('#boot-loader')).toContainText(/AI model/i);
-  releaseModelDownload();
-  await expect(page.locator('#boot-loader')).toHaveCount(0, { timeout: 180_000 });
+
+  await page.goto('/', { waitUntil: 'commit' });
+  const loader = page.locator('#boot-loader');
+  await expect.poll(() => entryModuleRequested, { message: 'production entry module is held before React mounts' }).toBe(true);
+  await expect(loader).toBeVisible();
+  await expect(loader.locator('.boot-word')).toHaveText('MotionSmith');
+  await expect(loader.locator('.boot-version')).toHaveText(`v${packageJson.version}`);
+  await expect(loader).not.toContainText(/AI|model|progress|warming|download|ready/i);
+
+  releaseEntryModule();
+  await expect.poll(() => modelRequestStarted, { message: 'ONNX response is held after app startup begins' }).toBe(true);
+  await expect(loader).toHaveCount(0, { timeout: 180_000 });
   await expect(page.getByTestId('character-screen')).toBeVisible();
-  await expect(page.getByTestId('getting-started-dialog')).toBeVisible();
-  await page.getByTestId('getting-started-hide-session').locator('input').check();
-  await page.getByRole('button', { name: 'Close' }).click();
+  const gettingStarted = page.getByTestId('getting-started-dialog');
+  await expect(gettingStarted).toBeVisible();
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).toBeVisible();
+  await expect(gettingStarted.getByRole('button', { name: 'Open starter rig', exact: true })).toBeVisible();
+  expect(modelDownloadReleased, 'Character and Getting Started are usable while ONNX remains pending').toBe(false);
+
+  releaseModelDownload();
+  await expect.poll(() => modelDownloadReleased, { message: 'held ONNX response is released' }).toBe(true);
+  await gettingStarted.getByTestId('getting-started-hide-session').locator('input').check();
+  await gettingStarted.getByRole('button', { name: 'Close', exact: true }).click();
   await page.reload();
   await expect(page.locator('#boot-loader')).toHaveCount(0, { timeout: 180_000 });
   await expect(page.getByTestId('getting-started-dialog')).toHaveCount(0);
@@ -4829,12 +4897,18 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
   expect(headTarget.y, 'Design front view preserves Character/Path scene orientation: head stays above torso').toBeLessThan(torsoTarget.y);
   expect(torsoTarget.y, 'Design front view preserves Character/Path scene orientation: torso stays above foot').toBeLessThan(footTarget.y);
   const drivenHandBefore = await waitForThreePartTarget(designRig, 'right_hand_part');
+  const designDynamicBuildsBeforeScrub = Number(await designRig.getAttribute('data-three-dynamic-build-count') ?? '0');
   await page.getByLabel('Workspace scrubber').fill('28');
   await expect.poll(async () => {
     const moved = (await readThreeScreenTargets(designRig, 'data-three-part-screen-targets'))
       .find(item => item.id === 'right_hand_part' && item.visible);
     return moved ? Math.hypot(moved.x - drivenHandBefore.x, moved.y - drivenHandBefore.y) : 0;
   }, { message: 'visible Design hand part follows the rendered mechanism path through scrubber changes' }).toBeGreaterThan(2);
+  const designDynamicBuildsAfterScrub = Number(await designRig.getAttribute('data-three-dynamic-build-count') ?? '0');
+  expect(
+    designDynamicBuildsAfterScrub - designDynamicBuildsBeforeScrub,
+    'Design scrub refreshes direct screen targets without rebuilding the structural root',
+  ).toBe(0);
   expect(Number(await designPreview.getAttribute('data-design-target-error'))).toBeLessThan(0.01);
 
   const expectedMarkers: Record<string, Array<[string, number]>> = {

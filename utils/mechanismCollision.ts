@@ -15,6 +15,14 @@ import {
 type Envelope = MechanismPhysicalEnvelopeDescriptor['envelope'];
 type Segment = [Point, Point];
 
+const GEOMETRIC_BOUNDARY_EPSILON = 1e-9;
+
+const withinClosedRange = (value: number, min: number, max: number) =>
+    value >= min - GEOMETRIC_BOUNDARY_EPSILON && value <= max + GEOMETRIC_BOUNDARY_EPSILON;
+
+const pointWithinBounds = (point: Point, minX: number, maxX: number, minY: number, maxY: number) =>
+    withinClosedRange(point.x, minX, maxX) && withinClosedRange(point.y, minY, maxY);
+
 const squaredDistance = (a: Point, b: Point) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
 const dot = (a: Point, b: Point) => a.x * b.x + a.y * b.y;
 const subtract = (a: Point, b: Point): Point => ({ x: a.x - b.x, y: a.y - b.y });
@@ -149,16 +157,20 @@ export const mechanismEnvelopeWithinSheet = (envelope: Envelope, kit: PhysicalKi
     const minY = sheet.y;
     const maxY = sheet.y + sheet.height;
     if (envelope.kind === 'circle') {
-        return envelope.x - envelope.radius >= minX && envelope.x + envelope.radius <= maxX
-            && envelope.y - envelope.radius >= minY && envelope.y + envelope.radius <= maxY;
+        return withinClosedRange(envelope.x - envelope.radius, minX, maxX)
+            && withinClosedRange(envelope.x + envelope.radius, minX, maxX)
+            && withinClosedRange(envelope.y - envelope.radius, minY, maxY)
+            && withinClosedRange(envelope.y + envelope.radius, minY, maxY);
     }
     if (envelope.kind === 'capsule') {
         return capsuleSegment(envelope).every(point =>
-            point.x - envelope.radius >= minX && point.x + envelope.radius <= maxX
-            && point.y - envelope.radius >= minY && point.y + envelope.radius <= maxY
+            withinClosedRange(point.x - envelope.radius, minX, maxX)
+            && withinClosedRange(point.x + envelope.radius, minX, maxX)
+            && withinClosedRange(point.y - envelope.radius, minY, maxY)
+            && withinClosedRange(point.y + envelope.radius, minY, maxY)
         );
     }
-    return boxCorners(envelope).every(point => point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY);
+    return boxCorners(envelope).every(point => pointWithinBounds(point, minX, maxX, minY, maxY));
 };
 
 export const mechanismEnvelopeWithinBoard = (envelope: Envelope, kit: PhysicalKitSettings): boolean => {
@@ -168,18 +180,20 @@ export const mechanismEnvelopeWithinBoard = (envelope: Envelope, kit: PhysicalKi
     const minY = board.y;
     const maxY = board.y + board.height;
     if (envelope.kind === 'circle') {
-        return envelope.x - envelope.radius >= minX && envelope.x + envelope.radius <= maxX
-            && envelope.y - envelope.radius >= minY && envelope.y + envelope.radius <= maxY;
+        return withinClosedRange(envelope.x - envelope.radius, minX, maxX)
+            && withinClosedRange(envelope.x + envelope.radius, minX, maxX)
+            && withinClosedRange(envelope.y - envelope.radius, minY, maxY)
+            && withinClosedRange(envelope.y + envelope.radius, minY, maxY);
     }
     if (envelope.kind === 'capsule') {
         return capsuleSegment(envelope).every(point =>
-            point.x - envelope.radius >= minX && point.x + envelope.radius <= maxX
-            && point.y - envelope.radius >= minY && point.y + envelope.radius <= maxY
+            withinClosedRange(point.x - envelope.radius, minX, maxX)
+            && withinClosedRange(point.x + envelope.radius, minX, maxX)
+            && withinClosedRange(point.y - envelope.radius, minY, maxY)
+            && withinClosedRange(point.y + envelope.radius, minY, maxY)
         );
     }
-    return boxCorners(envelope).every(point =>
-        point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY
-    );
+    return boxCorners(envelope).every(point => pointWithinBounds(point, minX, maxX, minY, maxY));
 };
 
 export const mechanismDescriptorWithinSheet = (
@@ -192,14 +206,19 @@ export const mechanismDescriptorWithinBoard = (
     kit: PhysicalKitSettings
 ) => mechanismEnvelopeWithinBoard(descriptor.envelope, kit);
 
-const dimensionsFitCutSheet = (
+/**
+ * Check one blank's two dimensions against the sheet axes. This is an
+ * individual-part fit check, not a multi-part nesting proof.
+ */
+export const cutPartDimensionsFitSheet = (
     width: number,
     height: number,
     kit: PhysicalKitSettings,
 ) => {
     const sheet = sceneBoundsForSheet(kit);
-    return (width <= sheet.width && height <= sheet.height) ||
-        (width <= sheet.height && height <= sheet.width);
+    const tolerance = GEOMETRIC_BOUNDARY_EPSILON;
+    return (width <= sheet.width + tolerance && height <= sheet.height + tolerance) ||
+        (width <= sheet.height + tolerance && height <= sheet.width + tolerance);
 };
 
 /**
@@ -212,14 +231,14 @@ export const mechanismDescriptorFitsCutSheet = (
 ) => {
     const envelope = descriptor.envelope;
     if (envelope.kind === 'circle')
-        return dimensionsFitCutSheet(envelope.radius * 2, envelope.radius * 2, kit);
+        return cutPartDimensionsFitSheet(envelope.radius * 2, envelope.radius * 2, kit);
     if (envelope.kind === 'capsule')
-        return dimensionsFitCutSheet(
+        return cutPartDimensionsFitSheet(
             envelope.length + envelope.radius * 2,
             envelope.radius * 2,
             kit,
         );
-    return dimensionsFitCutSheet(envelope.width, envelope.height, kit);
+    return cutPartDimensionsFitSheet(envelope.width, envelope.height, kit);
 };
 
 export const mechanismFitsFabricationBoard = (

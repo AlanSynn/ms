@@ -1,0 +1,38 @@
+G3 Sol-owned prepared preview and automata seam evidence
+Captured: 2026-08-13 America/New_York
+Workspace: /Users/alansynn/orca/workspaces/MechAnim/quality-sol-max-integration
+Commits: e02c336, e7f45be
+
+$ bun tests/g3-prepared-preview-sampling.test.ts
+exit: 0
+prepared foundry preview sampling contracts passed
+
+$ bun tests/g3-prepared-automata-scene.test.ts
+exit: 0
+prepared automata scene contracts passed
+
+$ bun tests/mechanism-prepared-kinematics.test.ts
+exit: 0
+prepared mechanism kinematics contracts passed
+
+$ bun tests/project-contract.test.ts
+exit: 0
+(no output)
+
+$ bunx tsc --noEmit
+exit: 0
+(no output)
+
+$ bun run build
+exit: 0
+(no output)
+
+$ bun run test
+exit: 0
+The repository test runner enumerated all top-level *.test.ts files and exited 0.
+The deciding prepared-sampling outputs are preserved above; the full runner also
+printed the existing suite's individual contract summaries.
+
+$ git diff --check
+exit: 0
+(no output)

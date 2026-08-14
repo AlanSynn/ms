@@ -1,0 +1,66 @@
+G3 prepared physical-envelope seam gate evidence
+Captured: 2026-08-13 America/New_York
+Workspace: /Users/alansynn/orca/workspaces/MechAnim/quality-sol-max-integration
+
+Pre-edit baseline
+
+$ bun tests/mechanism-physical-envelope.test.ts && bun tests/mechanism-renderer-envelope-parity.test.ts && bun tests/mechanism-structural-resolver.test.ts
+exit: 0
+mechanism physical envelope contract passed
+mechanism-renderer-envelope-parity passed
+mechanism structural resolver contracts passed
+
+Post-edit focused gate
+
+$ bun tests/g3-prepared-physical-envelope.test.ts
+exit: 0
+prepared physical envelope contracts passed
+
+$ bun tests/mechanism-prepared-kinematics.test.ts
+exit: 0
+prepared mechanism kinematics contracts passed
+
+$ bun tests/mechanism-physical-envelope.test.ts
+exit: 0
+mechanism physical envelope contract passed
+
+$ bun tests/mechanism-renderer-envelope-parity.test.ts
+exit: 0
+mechanism-renderer-envelope-parity passed
+
+$ bun tests/mechanism-structural-resolver.test.ts
+exit: 0
+mechanism structural resolver contracts passed
+
+$ bun --define __APP_VERSION__='"0.0.0"' tests/foundry-transaction.test.ts
+exit: 0
+foundry transaction contracts passed
+
+$ bunx tsc --noEmit
+exit: 0
+(no output)
+
+$ bun run build
+exit: 0
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+239 modules transformed.
+dist/assets/index-BPGSolzt.js  1,564.77 kB | gzip: 451.03 kB
+dist/assets/rapier-DS2Sl1i-.js  2,237.59 kB | gzip: 842.98 kB
+built in 1.01s
+
+$ git diff --check
+exit: 0
+(no output)
+
+Aggregate-runner audit
+
+$ bun run test
+exit: 1
+ReferenceError: __APP_VERSION__ is not defined
+at components/shell/WorkflowRail.tsx:6:21
+
+This is an integration-level runner defect present outside this seam: package.json invokes each
+test with bare `bun`, while tests that import WorkflowRail require the Vite-defined build constant.
+The focused G3 tests and production build pass. The aggregate runner remains a required G9 repair;
+this failure is not reported as a passing gate.

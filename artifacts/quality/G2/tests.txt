@@ -1,0 +1,265 @@
+# MotionSmith G2 verification log
+
+All commands below were run in `/Users/alansynn/orca/workspaces/MechAnim/luna-board`.
+`<empty>` means the command produced no output on that stream.
+
+## Baseline identity
+
+Command:
+
+    git rev-parse --abbrev-ref HEAD
+    git rev-parse HEAD
+
+stdout:
+
+    quality/luna-board
+    622617e1956562a83cde2cf07a38521b46cbad5f
+
+stderr: `<empty>`
+Exit: `0`
+
+## Reviewed board source, generated artifact, and oracle
+
+Command:
+
+    board_tmp=$(mktemp -d /tmp/motionsmith-g2-board.XXXXXX)
+    bun scripts/generate-fabrication-board.ts --output "$board_tmp"
+    sha256sum fabrication/board-final.svg scripts/fabrication/source/board-final.svg "$board_tmp/board-final.svg"
+    source_artifact_cmp=1
+    generated_artifact_cmp=1
+    cmp -s scripts/fabrication/source/board-final.svg fabrication/board-final.svg && source_artifact_cmp=0
+    cmp -s "$board_tmp/board-final.svg" fabrication/board-final.svg && generated_artifact_cmp=0
+    printf 'source-artifact-cmp=%s\ngenerated-artifact-cmp=%s\n' "$source_artifact_cmp" "$generated_artifact_cmp"
+    rg -n '9d0202b80395c555be87e0abb91ff10910d3c4ffdd580484e49c6368baa33568' fabrication/fabrication-v2-reviewed-oracle.json
+
+stdout:
+
+    {"generated":"/tmp/motionsmith-g2-board.YscDgW/board-final.svg","board_rel_path":"board-final.svg","rows":15,"columns":15,"pitch_mm":20,"hole_diameter_mm":4,"source":"scripts/generate-fabrication-board.ts"}
+    9d0202b80395c555be87e0abb91ff10910d3c4ffdd580484e49c6368baa33568  fabrication/board-final.svg
+    9d0202b80395c555be87e0abb91ff10910d3c4ffdd580484e49c6368baa33568  scripts/fabrication/source/board-final.svg
+    9d0202b80395c555be87e0abb91ff10910d3c4ffdd580484e49c6368baa33568  /tmp/motionsmith-g2-board.YscDgW/board-final.svg
+    source-artifact-cmp=0
+    generated-artifact-cmp=0
+    14:      "source_svg_sha256": "9d0202b80395c555be87e0abb91ff10910d3c4ffdd580484e49c6368baa33568",
+
+stderr: `<empty>`
+Exit: `0`
+
+## Focused G2 contracts
+
+Each command below exited `0`; stderr was `<empty>` for each.
+
+Command: `bun tests/g2-coordinate-readiness.test.ts`
+
+stdout:
+
+    G2 coordinate, readiness, and export contracts passed
+
+Command: `bun tests/mechanism-build-gates.test.ts`
+
+stdout:
+
+    mechanism build gates passed
+
+Command: `bun tests/mechanism-v2-schema-inventory.test.ts`
+
+stdout:
+
+    mechanism v2 schema and physical inventory contracts passed
+
+Command: `bun tests/mechanism-collision.test.ts`
+
+stdout:
+
+    mechanism collision contracts passed
+
+Command: `bun tests/mechanism-physical-envelope.test.ts`
+
+stdout:
+
+    mechanism physical envelope contract passed
+
+Command: `bun tests/mechanism-readiness.test.ts`
+
+stdout:
+
+    mechanism readiness contracts passed
+
+Command: `bun tests/g008-project-review.test.ts`
+
+stdout:
+
+    g008 ProjectState ingress/runtime/scene contracts passed
+
+Command: `bun tests/mechanism-fit-boundary.test.ts`
+
+stdout:
+
+    mechanism Fit boundary contracts passed
+
+Command: `bun tests/mechanism-fit-readiness.test.ts`
+
+stdout:
+
+    mechanism fit readiness contracts passed
+
+Command: `bun tests/mechanism-renderer-envelope-parity.test.ts`
+
+stdout:
+
+    mechanism-renderer-envelope-parity passed
+
+Command: `bun tests/mechanism-project-consumer-parity.test.ts`
+
+stdout:
+
+    mechanism project consumer parity contracts passed
+
+Command: `bun tests/mechanism-fabrication-combinations.test.ts`
+
+stdout:
+
+    mechanism fabrication-combination contracts passed
+
+Command: `bun tests/mechanism-physical-instance.test.ts`
+
+stdout:
+
+    mechanism physical instance contracts passed
+
+Command: `bun tests/mechanism-authored-authority-boundaries.test.ts`
+
+stdout:
+
+    mechanism authored authority boundary contracts passed
+
+Command: `bun tests/mechanism-edit-authority.test.ts`
+
+stdout:
+
+    mechanism edit authority contracts passed
+
+Command: `bun tests/foundry-transaction.test.ts`
+
+stdout:
+
+    foundry transaction contracts passed
+
+## Production build
+
+Command: `bun run build`
+
+stdout:
+
+    $ tsc && vite build
+    vite v8.1.0 building client environment for production...
+    transforming...✓ 235 modules transformed.
+    rendering chunks...
+    computing gzip size...
+    dist/assets/girl-thumb-CAdQi3RL.png                         8.20 kB
+    dist/assets/boy-thumb-YC7FWjeU.png                         14.01 kB
+    dist/index.html                                            86.97 kB │ gzip:    16.20 kB
+    dist/assets/girl-DcnbHWJO.png                              94.86 kB
+    dist/assets/AppIcon-Dx9trOlC.png                          474.08 kB
+    dist/assets/boy-CGof9C4m.PNG                            2,817.50 kB
+    dist/assets/ort-wasm-simd-threaded.jsep-DC5y_g6C.wasm  26,827.54 kB │ gzip: 6,400.68 kB
+    dist/assets/ort.bundle.min-k_wL893Z.js                    400.74 kB │ gzip:   110.41 kB
+    dist/assets/index-DYKj5_Yn.js                           1,561.12 kB │ gzip:   450.38 kB
+    dist/assets/rapier-DS2Sl1i-.js                          2,237.59 kB │ gzip:   842.98 kB
+
+    ✓ built in 1.28s
+
+stderr: `<empty>`
+Exit: `0`
+
+## Routed dense direct-compiler fixture (intentional Sol deferral)
+
+Command: `bun tests/project-contract.test.ts`
+
+stdout/stderr (Bun runner output):
+
+    1674 |   assert(tinyInventory.compilerBlockers > 0 && tinyInventory.parts > 0, 'graph inventory exposes compiler blockers instead of silently returning an empty build inventory');
+    1675 |   const denseKit = { ...sample.settings.physicalKit, gridPitchMm: 10, boardCells: 30 };
+    1676 |   const defaultFabrication = compileMechanismGraphFabrication(mechanism, sample.settings.physicalKit);
+    1677 |   const denseFabrication = compileMechanismGraphFabrication(mechanism, denseKit);
+    1678 |   const partKeys = (recipe = defaultFabrication.recipe) => recipe?.requiredParts.map(part => part.part ?? part.name).sort() ?? [];
+    1679 |   assert.equal(denseFabrication.buildable, true, 'graph fabrication compiler keeps the same mechanism buildable on a larger dense-pitch kit');
+                    ^
+    AssertionError: graph fabrication compiler keeps the same mechanism buildable on a larger dense-pitch kit
+
+    false !== true
+
+     generatedMessage: false,
+       actual: false,
+     expected: true,
+       operator: "strictEqual",
+
+          at /Users/alansynn/orca/workspaces/MechAnim/luna-board/tests/project-contract.test.ts:1679:10
+
+    Bun v1.3.14 (macOS arm64)
+
+stderr: `<empty>`
+Exit: `1`
+
+Disposition: unchanged and intentionally deferred to Sol. The fixture directly compiles an explicit default anchor on an even board; G2 proves the frozen creation resolver may snap only a fresh default candidate and that an existing/imported off-grid anchor remains visible and blocked. No snap tolerance or compiler assertion was weakened.
+
+## Browser attempt (non-deciding)
+
+Command (run before the integration-owner clarification; not rerun or modified for G2):
+
+    PLAYWRIGHT_SERVER=preview PLAYWRIGHT_WORKERS=1 bunx playwright test tests/browser/workflow.spec.ts -g 'character → path → foundry → design → blueprint runs end-to-end in browser'
+
+stdout/stderr (runner failure excerpt):
+
+    Error: expect(locator).toBeVisible() failed
+    Locator: getByTestId('shared-workbench')
+    Expected: visible
+    Error: element(s) not found
+    Call log:
+      - Expect "toBeVisible" with timeout 10000ms
+      - waiting for getByTestId('shared-workbench')
+
+Exit: `1`
+
+Read-only environment check after the attempt:
+
+Command:
+
+    lsof -nP -iTCP:5173 -sTCP:LISTEN
+    curl -sS http://127.0.0.1:5173/ | rg -o '<title>[^<]*</title>' | head -1
+
+stdout:
+
+    COMMAND   PID     USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+    node    25515 alansynn   18u  IPv4 0x228d53422347f65a      0t0  TCP 127.0.0.1:5173 (LISTEN)
+    <title>Voice Studio</title>
+
+stderr: `<empty>`
+Exit: `0`
+
+Disposition: non-deciding. The old pre-G6 browser configuration reused the unrelated Voice Studio listener on port 5173. No Playwright configuration was edited and PID 25515 was not stopped. Production-preview browser validation is deferred to Sol/G7 after G6 integration.
+
+## Pre-commit hygiene
+
+Command: `git diff --check`
+
+stdout: `<empty>`
+stderr: `<empty>`
+Exit: `0`
+
+Command: `git status --short`
+
+stdout:
+
+    M components/stages/assembly/AssemblyGuide.tsx
+    M components/stages/blueprint/BlueprintExport.tsx
+    M components/stages/foundry/foundryAssemblySceneOverlay.ts
+    M scripts/fabrication/source/board-final.svg
+    M tests/mechanism-build-gates.test.ts
+    M utils/coordinates.ts
+    M utils/fabricationReadiness.ts
+    M utils/mechanismCollision.ts
+    ?? tests/g2-coordinate-readiness.test.ts
+
+stderr: `<empty>`
+Exit: `0`

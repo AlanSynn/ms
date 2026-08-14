@@ -1,0 +1,6 @@
+Source SHA: 2adec93
+$ bun run test
+project contracts ok
+study-summary-analyze: ok
+study-summary-telemetry: ok
+exit 0

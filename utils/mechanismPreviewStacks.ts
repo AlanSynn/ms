@@ -14,6 +14,14 @@ export type FoundrySupportPointContext = {
   planetCenters?: Point[];
 };
 
+export type FoundrySupportPointSelector =
+  | {
+      kind: "state";
+      key: "p1" | "p2" | "j1" | "j2" | "aux" | "effector";
+    }
+  | { kind: "gear"; index: number }
+  | { kind: "planet" };
+
 export type FoundryPinStackPoint = {
   id: string;
   pathId: string;
@@ -37,15 +45,11 @@ export type FoundryPinStack = FoundryPinStackPoint & {
   retainerZ: number[];
 };
 
-const pointForTypedNode = (
+export const prepareFoundrySupportPointSelector = (
   nodeId: string,
-  { state, gearCenters = [], planetCenters = [] }: FoundrySupportPointContext,
-): Point | undefined => {
+): FoundrySupportPointSelector | undefined => {
   const gearMatch = /^gear-(\d+)$/.exec(nodeId);
-  if (gearMatch) {
-    const index = Number(gearMatch[1]);
-    return gearCenters[index] ?? (index === 0 ? state.p1 : state.p2);
-  }
+  if (gearMatch) return { kind: "gear", index: Number(gearMatch[1]) };
   switch (nodeId) {
     case "p1":
     case "cam-axle":
@@ -53,30 +57,49 @@ const pointForTypedNode = (
     case "pinion-gear":
     case "sun-gear":
     case "ring-gear":
-      return state.p1;
+      return { kind: "state", key: "p1" };
     case "p2":
-      return state.p2;
+      return { kind: "state", key: "p2" };
     case "j1":
     case "drive-pin":
-      return state.j1;
+      return { kind: "state", key: "j1" };
     case "j2":
     case "output-pin":
     case "slider":
     case "yoke-slider":
     case "rack":
     case "follower-head":
-      return state.j2;
+      return { kind: "state", key: "j2" };
     case "aux":
-      return state.aux;
+      return { kind: "state", key: "aux" };
     case "effector":
     case "output-point":
-      return state.effector;
+      return { kind: "state", key: "effector" };
     case "planet-gear":
-      return planetCenters[0] ?? state.p2;
+      return { kind: "planet" };
     default:
       return undefined;
   }
 };
+
+export const samplePreparedFoundrySupportPoint = (
+  selector: FoundrySupportPointSelector | undefined,
+  { state, gearCenters = [], planetCenters = [] }: FoundrySupportPointContext,
+): Point | undefined => {
+  if (!selector) return undefined;
+  if (selector.kind === "state") return state[selector.key];
+  if (selector.kind === "planet") return planetCenters[0] ?? state.p2;
+  return gearCenters[selector.index]
+    ?? (selector.index === 0 ? state.p1 : state.p2);
+};
+
+const pointForTypedNode = (
+  nodeId: string,
+  context: FoundrySupportPointContext,
+): Point | undefined => samplePreparedFoundrySupportPoint(
+  prepareFoundrySupportPointSelector(nodeId),
+  context,
+);
 
 export const foundryLayerGeometryContract = (
   layer: Pick<FabricationRenderLayer, "layerId" | "sourceNodeId" | "renderKind">,

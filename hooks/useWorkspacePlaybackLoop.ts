@@ -1,6 +1,7 @@
-import { useEffect, type Dispatch, type SetStateAction } from "react";
-import { SHARED_PLAYBACK_STAGES } from "../components/AppShell";
+import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
+import { SHARED_PLAYBACK_STAGES } from "../components/shell/workflowStages";
 import type { AppStage, ProjectState } from "../types";
+import { createAnimationDriver } from "../utils/animationClock";
 import { animationDeltaRadians } from "../utils/kinematics";
 
 type UseWorkspacePlaybackLoopOptions = {
@@ -12,8 +13,10 @@ type UseWorkspacePlaybackLoopOptions = {
   playbackDurationMs: number;
   animationSpeed: number;
   timingProfile: ProjectState["settings"]["timingProfile"];
-  setAngle: Dispatch<SetStateAction<number>>;
-  setDrawMode: Dispatch<SetStateAction<boolean>>;
+  setAngle?: Dispatch<SetStateAction<number>>;
+  setDrawMode?: Dispatch<SetStateAction<boolean>>;
+  onFrame?: (elapsedMs: number, frameTime: number) => void;
+  driverStage?: AppStage;
 };
 
 export const useWorkspacePlaybackLoop = ({
@@ -27,50 +30,70 @@ export const useWorkspacePlaybackLoop = ({
   timingProfile,
   setAngle,
   setDrawMode,
+  onFrame,
+  driverStage,
 }: UseWorkspacePlaybackLoopOptions) => {
+  const onFrameRef = useRef(onFrame);
+  const setAngleRef = useRef(setAngle);
+  const playbackConfigRef = useRef({
+    playbackDurationMs,
+    animationSpeed,
+    timingProfile,
+  });
+  onFrameRef.current = onFrame;
+  setAngleRef.current = setAngle;
+  playbackConfigRef.current = {
+    playbackDurationMs,
+    animationSpeed,
+    timingProfile,
+  };
+
   useEffect(() => {
+    const sharedStageRejected = !SHARED_PLAYBACK_STAGES.includes(stage);
     if (
       !isPlaying ||
       drawMode ||
       optimizerBusy ||
       showGettingStarted ||
-      !SHARED_PLAYBACK_STAGES.includes(stage)
+      (driverStage ? stage !== driverStage : sharedStageRejected)
     )
       return;
-    let frame = 0;
-    let last = performance.now();
-    const tick = (time: number) => {
-      const dt = Math.min(64, time - last);
-      last = time;
-      setAngle(
-        (prev) =>
-          (prev +
-            animationDeltaRadians(
-              dt,
-              playbackDurationMs,
-              animationSpeed,
-              timingProfile,
-              prev,
-            )) %
-          (Math.PI * 2),
-      );
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+    const driver = createAnimationDriver({
+      onAdvance: (elapsedMs, frameTime) => {
+        const latestOnFrame = onFrameRef.current;
+        if (latestOnFrame) {
+          latestOnFrame(elapsedMs, frameTime);
+          return;
+        }
+        const latestSetAngle = setAngleRef.current;
+        if (!latestSetAngle) return;
+        const config = playbackConfigRef.current;
+        latestSetAngle(
+          (prev) =>
+            (prev +
+              animationDeltaRadians(
+                elapsedMs,
+                config.playbackDurationMs,
+                config.animationSpeed,
+                config.timingProfile,
+                prev,
+              )) %
+            (Math.PI * 2),
+        );
+      },
+    });
+    driver.start();
+    return () => driver.stop();
   }, [
     isPlaying,
     drawMode,
     optimizerBusy,
     showGettingStarted,
     stage,
-    playbackDurationMs,
-    animationSpeed,
-    timingProfile,
-    setAngle,
+    driverStage,
   ]);
 
   useEffect(() => {
-    if (stage !== "path" && drawMode) setDrawMode(false);
+    if (stage !== "path" && drawMode && setDrawMode) setDrawMode(false);
   }, [stage, drawMode, setDrawMode]);
 };

@@ -8,11 +8,13 @@ import {
 } from './fabricationContract';
 import { fabricationRingGearProfileForPitchRadius } from './fabricationProfiles';
 import {
-    calculateLinkage,
+    calculatePreparedLinkage,
     gearTrainCenters,
     gearTrainPitchRadii,
     mechanismSafetyPhaseSchedule,
-    normalizeCamProfileSamples
+    normalizeCamProfileSamples,
+    prepareMechanismKinematics,
+    type PreparedMechanismKinematics,
 } from './kinematics';
 import { planetaryRingPitchRadius } from './fabricationSizing';
 import { compileMechanismRenderPlan } from './mechanismCompiler';
@@ -21,8 +23,8 @@ import { foundryPinStackPoints } from './mechanismPreviewStacks';
 import {
     physicalConnectionAnchorAndSelected,
     physicalConnectionForSourceNode,
-    resolveMechanismPhysicalConnections,
     resolvePhysicalLinkageAssetPose,
+    type ResolvedPhysicalConnection,
 } from './mechanismConnectionSelections';
 
 export type MechanismPhysicalEnvelopeDescriptor = {
@@ -45,6 +47,24 @@ export type MechanismPhysicalEnvelopeDescriptor = {
 type Envelope = MechanismPhysicalEnvelopeDescriptor['envelope'];
 type DescriptorSeed = Omit<MechanismPhysicalEnvelopeDescriptor, 'layerKey' | 'mechanismId' | 'phaseIndex' | 'phaseRad'>;
 
+export type PreparedMechanismPhysicalLayerEnvelope = {
+    mechanism: MechanismConfig;
+    layer: FabricationRenderLayer;
+    sourceConnection?: ResolvedPhysicalConnection;
+    gearRadii: readonly number[];
+    gearCenters: Point[];
+    camOuterScale: number;
+};
+
+export type PreparedMechanismPhysicalEnvelopeModel = {
+    mechanism: MechanismConfig;
+    renderPlan: FabricationRenderPlan;
+    kinematics: PreparedMechanismKinematics;
+    layers: readonly PreparedMechanismPhysicalLayerEnvelope[];
+    layerById: ReadonlyMap<string, PreparedMechanismPhysicalLayerEnvelope>;
+    gearCenters: Point[];
+};
+
 const positive = (value: number, fallback = 1) => Number.isFinite(value) && value > 0 ? value : fallback;
 const point = (value: Point | undefined, fallback: Point): Point =>
     value && Number.isFinite(value.x) && Number.isFinite(value.y) ? value : fallback;
@@ -64,18 +84,12 @@ const capsule = (a: Point, b: Point): Envelope => ({
 });
 
 const linkageEndpoints = (
-    mechanism: MechanismConfig,
-    sourceNodeId: string | undefined,
+    prepared: PreparedMechanismPhysicalLayerEnvelope,
     state: JointState,
-    kit: PhysicalKitSettings,
 ): [Point, Point] => {
-    const sourceConnection = physicalConnectionForSourceNode(
-        resolveMechanismPhysicalConnections(mechanism, kit),
-        sourceNodeId,
-    );
     const physicalPose = resolvePhysicalLinkageAssetPose(
-        sourceConnection,
-        physicalConnectionAnchorAndSelected(sourceConnection, state),
+        prepared.sourceConnection,
+        physicalConnectionAnchorAndSelected(prepared.sourceConnection, state),
     );
     if (physicalPose) return [physicalPose.start, physicalPose.end];
     const endpoints: Record<string, [Point | undefined, Point | undefined]> = {
@@ -89,42 +103,42 @@ const linkageEndpoints = (
         carrier: [state.p1, state.p2]
     };
     const fallback = point(state.p1, { x: 0, y: 0 });
-    const [a, b] = endpoints[sourceNodeId ?? ''] ?? [state.j1, state.j2];
+    const [a, b] = endpoints[prepared.layer.sourceNodeId ?? ''] ?? [state.j1, state.j2];
     return [point(a, fallback), point(b, fallback)];
 };
 
-const gearEnvelope = (mechanism: MechanismConfig, sourceNodeId: string | undefined, state: JointState): Envelope => {
+const gearEnvelope = (
+    prepared: PreparedMechanismPhysicalLayerEnvelope,
+    state: JointState,
+): Envelope => {
+    const { mechanism, gearCenters: centers, gearRadii: radii } = prepared;
+    const sourceNodeId = prepared.layer.sourceNodeId;
     if (sourceNodeId === 'ring-gear') {
         const ringProfile = fabricationRingGearProfileForPitchRadius(planetaryRingPitchRadius(mechanism) / SCENE_PX_PER_MM);
         return circle(state.p1, ringProfile.outerRadius * SCENE_PX_PER_MM);
     }
     if (sourceNodeId === 'sun-gear') return circle(state.p1, fabricationGearSpecForPitchRadius(mechanism.crankLength / SCENE_PX_PER_MM).outerRadiusMm * SCENE_PX_PER_MM);
     if (sourceNodeId === 'planet-gear') return circle(state.p2, fabricationGearSpecForPitchRadius(mechanism.rockerLength / SCENE_PX_PER_MM).outerRadiusMm * SCENE_PX_PER_MM);
-    const radii = gearTrainPitchRadii(mechanism);
-    const centers = gearTrainCenters(mechanism);
     const index = Math.max(0, Math.min(Number(/^gear-(\d+)$/.exec(sourceNodeId ?? '')?.[1] ?? 0), radii.length - 1));
     const pitchRadius = sourceNodeId === 'pinion-gear' ? mechanism.crankLength : radii[index] ?? mechanism.crankLength;
     const center = sourceNodeId === 'pinion-gear' ? state.p1 : centers[index] ?? state.p1;
     return circle(center, fabricationGearSpecForPitchRadius(pitchRadius / SCENE_PX_PER_MM).outerRadiusMm * SCENE_PX_PER_MM);
 };
 
-const layerEnvelope = (
-    mechanism: MechanismConfig,
-    layer: FabricationRenderLayer,
+export const samplePreparedMechanismPhysicalLayerEnvelope = (
+    prepared: PreparedMechanismPhysicalLayerEnvelope,
     state: JointState,
-    kit: PhysicalKitSettings,
 ): Envelope => {
+    const { layer, mechanism, sourceConnection } = prepared;
     const source = layer.sourceNodeId;
     if (layer.renderKind === 'linkage') {
-        const [a, b] = linkageEndpoints(mechanism, source, state, kit);
+        const [a, b] = linkageEndpoints(prepared, state);
         return capsule(a, b);
     }
-    if (layer.renderKind === 'gear') return gearEnvelope(mechanism, source, state);
-    if (layer.renderKind === 'cam') {
-        const outerScale = Math.max(...normalizeCamProfileSamples(mechanism.camProfileSamples));
-        return circle(state.p1, positive(mechanism.crankLength * outerScale));
-    }
-    const mounted = physicalConnectionForSourceNode(resolveMechanismPhysicalConnections(mechanism, kit), source)?.boardMount;
+    if (layer.renderKind === 'gear') return gearEnvelope(prepared, state);
+    if (layer.renderKind === 'cam')
+        return circle(state.p1, positive(mechanism.crankLength * prepared.camOuterScale));
+    const mounted = sourceConnection?.boardMount;
     if (mounted) {
         const sourceAxis = source === 'follower-guide' ? Math.PI / 2 : 0;
         return box(
@@ -153,6 +167,44 @@ const layerEnvelope = (
     return box(center, rotation, (source === 'guide' && mechanism.type === 'rack-pinion' ? 4.8 : 3.2) * 18, FABRICATION_LINKAGE_WIDTH_MM * SCENE_PX_PER_MM * 1.35);
 };
 
+export const prepareMechanismPhysicalEnvelopeModel = (
+    kinematics: PreparedMechanismKinematics,
+    renderPlan: FabricationRenderPlan,
+): PreparedMechanismPhysicalEnvelopeModel => {
+    const { mechanism, physicalConnections } = kinematics;
+    const gearRadii = gearTrainPitchRadii(mechanism);
+    const gearCenters = gearTrainCenters(mechanism);
+    const camOuterScale = mechanism.type === 'cam'
+        ? Math.max(...normalizeCamProfileSamples(mechanism.camProfileSamples))
+        : 1;
+    const layers = renderPlan.layers.flatMap((layer) => {
+        if (
+            layer.renderKind === 'base'
+            || layer.renderKind === 'clip'
+            || layer.renderKind === 'spacer'
+        ) return [];
+        return [{
+            mechanism,
+            layer,
+            sourceConnection: physicalConnectionForSourceNode(
+                physicalConnections,
+                layer.sourceNodeId,
+            ),
+            gearRadii,
+            gearCenters,
+            camOuterScale,
+        } satisfies PreparedMechanismPhysicalLayerEnvelope];
+    });
+    return {
+        mechanism,
+        renderPlan,
+        kinematics,
+        layers,
+        layerById: new Map(layers.map((layer) => [layer.layer.layerId, layer])),
+        gearCenters,
+    };
+};
+
 const descriptor = (
     mechanism: MechanismConfig,
     phaseIndex: number,
@@ -167,23 +219,27 @@ const descriptor = (
 });
 
 const phaseDescriptors = (
-    mechanism: MechanismConfig,
-    renderPlan: FabricationRenderPlan,
+    prepared: PreparedMechanismPhysicalEnvelopeModel,
+    state: JointState,
     phaseRad: number,
     phaseIndex: number,
-    kit: PhysicalKitSettings,
 ): MechanismPhysicalEnvelopeDescriptor[] => {
-    const state = calculateLinkage(mechanism, phaseRad, kit);
-    const gearCenters = gearTrainCenters(mechanism);
-    const pinPoints = foundryPinStackPoints(renderPlan, { state, gearCenters, planetCenters: [state.p2] });
+    const { mechanism, renderPlan } = prepared;
+    const pinPoints = foundryPinStackPoints(renderPlan, {
+        state,
+        gearCenters: prepared.gearCenters,
+        planetCenters: [state.p2],
+    });
     const seeds: DescriptorSeed[] = [];
     renderPlan.layers.forEach(layer => {
         if (layer.renderKind === 'base') return;
         if (layer.renderKind !== 'clip' && layer.renderKind !== 'spacer') {
+            const preparedLayer = prepared.layerById.get(layer.layerId);
+            if (!preparedLayer) return;
             seeds.push({
                 layerId: layer.layerId,
                 ...(layer.sourceNodeId ? { sourceNodeId: layer.sourceNodeId } : {}),
-                envelope: layerEnvelope(mechanism, layer, state, kit),
+                envelope: samplePreparedMechanismPhysicalLayerEnvelope(preparedLayer, state),
                 backFaceMm: layer.backFaceMm,
                 frontFaceMm: layer.frontFaceMm,
                 role: layer.role,
@@ -218,14 +274,31 @@ const phaseDescriptors = (
     return seeds.map(seed => descriptor(mechanism, phaseIndex, phaseRad, seed));
 };
 
+export const samplePreparedMechanismPhysicalEnvelopeDescriptors = (
+    prepared: PreparedMechanismPhysicalEnvelopeModel,
+    state: JointState,
+    phaseRad: number,
+    phaseIndex = 0,
+): MechanismPhysicalEnvelopeDescriptor[] =>
+    phaseDescriptors(prepared, state, phaseRad, phaseIndex);
+
 export const buildMechanismPhysicalEnvelopeDescriptors = (
     mechanism: MechanismConfig,
     phases: readonly number[] | undefined,
     renderPlan: FabricationRenderPlan,
     kit: PhysicalKitSettings,
-): MechanismPhysicalEnvelopeDescriptor[] => (phases ?? mechanismSafetyPhaseSchedule(mechanism.type)).flatMap((phaseRad, phaseIndex) =>
-    phaseDescriptors(mechanism, renderPlan, phaseRad, phaseIndex, kit)
-);
+): MechanismPhysicalEnvelopeDescriptor[] => {
+    const kinematics = prepareMechanismKinematics(mechanism, kit);
+    const prepared = prepareMechanismPhysicalEnvelopeModel(kinematics, renderPlan);
+    return (phases ?? mechanismSafetyPhaseSchedule(mechanism.type)).flatMap(
+        (phaseRad, phaseIndex) => samplePreparedMechanismPhysicalEnvelopeDescriptors(
+            prepared,
+            calculatePreparedLinkage(kinematics, phaseRad),
+            phaseRad,
+            phaseIndex,
+        ),
+    );
+};
 
 /** Bounded mechanism-only diagnostic for tests and isolated family tooling. */
 export const buildLowLevelMechanismPhysicalEnvelopeDescriptors = (

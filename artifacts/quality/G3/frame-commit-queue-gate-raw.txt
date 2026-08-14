@@ -1,0 +1,25 @@
+Commands:
+  bun tests/g3-frame-commit-queue.test.ts
+  bunx tsc --noEmit
+  bun tests/project-contract.test.ts
+  bun run build
+  git diff --check
+Exit: 0
+
+G3 frame commit queue contracts passed
+project contracts ok
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+240 modules transformed.
+dist/assets/index-DRDuOoad.js 1,566.39 kB | gzip: 451.37 kB
+built in 889ms
+
+Verified:
+- burst samples produce one queued display-frame commit with latest-value wins;
+- terminal flush commits synchronously and cancels the queued callback;
+- cancellation discards abandoned work;
+- inspector sliders flush on pointer up/cancel, lost capture, and blur;
+- rejected numeric edits restore the authoritative value;
+- stage typing preserves the boolean acceptance result;
+- anchor slider steps use the active fabrication-kit board pitch;
+- TypeScript, project contracts, production build, and whitespace checks pass.

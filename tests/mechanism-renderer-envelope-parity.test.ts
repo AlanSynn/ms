@@ -18,6 +18,11 @@ import { fittedGearTrainCenters } from "../components/stages/foundry/foundryPrev
 import { gearPairOutputRatio, gearTrainOutputRatio, gearTrainPitchRadii } from "../utils/kinematics";
 import { fabricationRingGearSpecForPitchRadius } from "../utils/fabricationContract";
 import { planetaryRingPitchRadius } from "../utils/fabricationSizing";
+import {
+  mechanismPhysicalConnectionCandidates,
+  resolveMechanismPhysicalSelectionAttempt,
+} from "../utils/mechanismPhysicalCandidates";
+import { resolveMechanismCandidateCommit } from "../utils/mechanismEditAuthority";
 
 const testTypes: MechanismType[] = ["4bar", "gear_linkage", "gear", "cam", "piston", "planetary_gear"];
 const testKit: PhysicalKitSettings = {
@@ -96,6 +101,31 @@ const alterMechanism = (mechanism: MechanismConfig): MechanismConfig => {
         }
       : {}),
   };
+};
+
+const buildableAlternateMechanism = (mechanism: MechanismConfig): MechanismConfig => {
+  if (!["4bar", "gear_linkage", "gear", "planetary_gear"].includes(mechanism.type)) {
+    return alterMechanism(mechanism);
+  }
+  const state = fit(mechanism).state;
+  const candidate = mechanismPhysicalConnectionCandidates(mechanism, state, testKit)
+    .find((item) => item.recoveryEligible);
+  assert(candidate, `${mechanism.type} exposes a buildable alternate connection`);
+  const attempt = resolveMechanismPhysicalSelectionAttempt(
+    mechanism,
+    candidate.role,
+    candidate.selection,
+    testKit,
+  );
+  assert.equal(attempt.status, "accepted", `${mechanism.type} alternate connection passes selection authority`);
+  if (attempt.status !== "accepted") return mechanism;
+  const committed = resolveMechanismCandidateCommit(
+    mechanism,
+    { ...mechanism, ...attempt.updates },
+    testKit,
+  );
+  assert.equal(committed.status, "accepted", `${mechanism.type} alternate connection passes commit authority`);
+  return committed.mechanism;
 };
 
 const worldFromMapped = (value: number) => (value - 180) / 18;
@@ -200,7 +230,7 @@ const assertEnvelopeShapeMatch = (
 
 for (const type of testTypes) {
   const defaultMechanism = createDefaultMechanism(type, `${type}-parity`);
-  const alternateMechanism = alterMechanism(defaultMechanism);
+  const alternateMechanism = buildableAlternateMechanism(defaultMechanism);
   const descriptorSamples: [MechanismConfig, boolean][] = [
     [defaultMechanism, false],
     [alternateMechanism, true],
@@ -290,9 +320,10 @@ for (const type of testTypes) {
         defaultPlanetRingRadiusPx = ringDescriptor.envelope.radius;
       } else {
         assert(defaultPlanetRingRadiusPx !== undefined, `${mechanism.type} baseline ring radius cached`);
-        assert(
-          Math.abs(defaultPlanetRingRadiusPx - ringDescriptor.envelope.radius) > 1,
-          `${mechanism.type} altered ring descriptor differs from baseline`,
+        assert.equal(
+          ringDescriptor.envelope.radius,
+          defaultPlanetRingRadiusPx,
+          `${mechanism.type} alternate connection retains the single approved ring profile`,
         );
       }
       const ringPoints = collectLayerPoints(root, ringDescriptor.layerId);

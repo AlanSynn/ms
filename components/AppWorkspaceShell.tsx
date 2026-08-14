@@ -20,8 +20,9 @@ import { TrackingModal } from "./TrackingModal";
 import motionSmithIconUrl from "../resources/icons/AppIcon.png?url";
 import type { AppStage, MechanismConfig, Point, ProjectState } from "../types";
 import type { AppCommandHandlerMap } from "../utils/appCommands";
-import type { WebOnnxCacheStatus } from "../utils/webOnnx";
 import type { WorkflowStatus } from "../utils/workflowStatus";
+import { StudySummaryLifecycle } from "./shell/StudySummaryLifecycle";
+import { STUDY_SUMMARY_ENABLED } from "../infrastructure/study-summary/browserSession";
 
 export type AppWorkspaceShellProps = {
   themeClass: string;
@@ -35,7 +36,6 @@ export type AppWorkspaceShellProps = {
   stageRouterProps: AppStageRouterProps;
   workflowStatus: WorkflowStatus;
   commandStatus: string;
-  onnxCacheStatus: WebOnnxCacheStatus;
   cacheOnnxModel: () => void | Promise<void>;
   showGettingStarted: boolean;
   hideGettingStartedThisSession: boolean;
@@ -84,7 +84,6 @@ export const AppWorkspaceShell = ({
   stageRouterProps,
   workflowStatus,
   commandStatus,
-  onnxCacheStatus,
   cacheOnnxModel,
   showGettingStarted,
   hideGettingStartedThisSession,
@@ -212,10 +211,7 @@ export const AppWorkspaceShell = ({
           <WorkflowStatusStrip {...workflowStatus} />
           <footer className="status-bar" data-testid="status-bar">
             <span>{commandStatus}</span>
-            <OnnxCacheStatusPill
-              status={onnxCacheStatus}
-              onDownload={cacheOnnxModel}
-            />
+            <OnnxCacheStatusPill onDownload={cacheOnnxModel} />
           </footer>
         </section>
       </div>
@@ -254,6 +250,7 @@ export const AppWorkspaceShell = ({
         onClose={onCloseTracking}
         onTransfer={onTransferTracking}
       />
+      {STUDY_SUMMARY_ENABLED ? <StudySummaryLifecycle stage={stage} /> : null}
     </main>
   );
 };

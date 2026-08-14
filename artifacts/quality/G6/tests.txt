@@ -1,0 +1,127 @@
+# G6 command evidence
+
+## Final G6 gates
+
+COMMAND: bun tests/g6-release-contract.test.ts
+EXIT: 0
+OUTPUT:
+g6 release contracts ok
+
+COMMAND: bun run build
+EXIT: 0
+OUTPUT:
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+transforming...✓ 235 modules transformed.
+rendering chunks...
+✓ built in 1.02s
+
+COMMAND: VITE_BASE_PATH=/ms/ bun run build
+EXIT: 0
+OUTPUT:
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+transforming...✓ 235 modules transformed.
+rendering chunks...
+✓ built in 1.13s
+
+COMMAND: bun run build:tauri-frontend
+EXIT: 0
+OUTPUT:
+$ tsc && vite build --base ./
+vite v8.1.0 building client environment for production...
+transforming...✓ 235 modules transformed.
+rendering chunks...
+✓ built in 915ms
+
+COMMAND: bun -e 'const config = (await import("./playwright.config.ts")).default; console.log(`preview reuseExistingServer=${config.webServer.reuseExistingServer}`)'
+EXIT: 0
+OUTPUT:
+preview reuseExistingServer=false
+
+COMMAND: PLAYWRIGHT_SERVER=dev bun -e 'const config = (await import("./playwright.config.ts")).default; console.log(`dev reuseExistingServer=${config.webServer.reuseExistingServer}`)'
+EXIT: 0
+OUTPUT:
+dev reuseExistingServer=true
+
+COMMAND: wc -c public/onnx/pose_model.onnx dist/onnx/pose_model.onnx && shasum -a 256 public/onnx/pose_model.onnx dist/onnx/pose_model.onnx
+EXIT: 0
+OUTPUT:
+ 135929562 public/onnx/pose_model.onnx
+ 135929562 dist/onnx/pose_model.onnx
+ 271859124 total
+9fd0dc927f41d1981c64d1ac7f5b22545f369c16b95944d60d93495c5a68eb74  public/onnx/pose_model.onnx
+9fd0dc927f41d1981c64d1ac7f5b22545f369c16b95944d60d93495c5a68eb74  dist/onnx/pose_model.onnx
+
+COMMAND: git diff --check
+EXIT: 0
+OUTPUT:
+
+## Native packaging limitation
+
+COMMAND: CARGO_NET_OFFLINE=true bun run build:exe
+EXIT: 1
+OUTPUT:
+$ bun scripts/with-rustup-cargo.mjs tauri build --bundles app
+Running beforeBuildCommand `bun run build:tauri-frontend`
+✓ built in 1.14s
+error: failed to download `adler2 v2.0.1`
+Caused by:
+attempting to make an HTTP request, but --offline was specified
+failed to build app: failed to build app
+
+COMMAND: CARGO_NET_OFFLINE=true bun run build:dmg
+EXIT: 1
+OUTPUT:
+$ bun scripts/with-rustup-cargo.mjs tauri build --bundles dmg
+Running beforeBuildCommand `bun run build:tauri-frontend`
+✓ built in 978ms
+error: failed to download `adler2 v2.0.1`
+Caused by:
+attempting to make an HTTP request, but --offline was specified
+failed to build app: failed to build app
+
+TOOL SIDE EFFECT: Both native packaging commands reordered entries in src-tauri/Cargo.lock.
+COMMAND: git restore --source=HEAD -- src-tauri/Cargo.lock
+EXIT: 0
+OUTPUT:
+
+FINAL STATUS: src-tauri/Cargo.lock is absent from the worktree diff; only the authorized G6 paths remain.
+
+## Recorded broader-suite and browser limitations
+
+These commands were recorded in the existing G6 draft and were not rerun for
+this narrow release-contract revision. They remain outside G6 ownership.
+
+COMMAND: bun run test:contracts
+EXIT: 1
+OUTPUT:
+$ bun tests/project-contract.test.ts
+AssertionError: graph fabrication compiler keeps the same mechanism buildable on a larger dense-pitch kit
+at tests/project-contract.test.ts:1679
+error: script "test:contracts" exited with code 1
+
+COMMAND: bun run test
+EXIT: 1
+OUTPUT:
+$ find tests -maxdepth 1 -type f -name '*.test.ts' -print | LC_ALL=C sort | while IFS= read -r file; do bun "$file" || exit; done
+foundry transaction contracts passed
+G008 physical review contracts passed
+g008 ProjectState ingress/runtime/scene contracts passed
+g6 release contracts ok
+AssertionError: existing-mechanism sheet fit keeps authored selected-hole lengths authoritative
+at tests/mechanism-authored-authority-boundaries.test.ts:117
+error: script "test" exited with code 1
+
+COMMAND: PLAYWRIGHT_PORT=4173 PLAYWRIGHT_WORKERS=2 bun run test:browser
+EXIT: 1
+OUTPUT:
+$ bun run build && env -u NO_COLOR PLAYWRIGHT_SERVER=preview playwright test
+[WebServer] $ vite preview --host "127.0.0.1" --port "4173" --strictPort
+[WebServer] error when starting preview server:
+[WebServer] Error: listen EPERM: operation not permitted 127.0.0.1:4173
+[WebServer] code: EPERM
+Error: Process from config.webServer was not able to start. Exit code: 1
+error: script "test:browser" exited with code 1
+
+Policy: not retried in this lane; integration owner runs the Orca production-preview gate.

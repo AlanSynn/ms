@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
-import { MechanismRecommendationSheet } from '../components/stages/path/MechanismRecommendationSheet';
+import {
+  buildOpenMechanismRecommendations,
+  MechanismRecommendationSheet,
+} from '../components/stages/path/MechanismRecommendationSheet';
 import type { MechanismConfig, ProjectState } from '../types';
 import { boardToScene, physicalKitPreset, sceneToBoard } from '../utils/coordinates';
 import { resolveFoundryTransaction } from '../utils/foundryTransaction';
@@ -45,6 +48,22 @@ const fitSeed = (type: MechanismConfig['type']): MechanismConfig => ({
   targetPathId: 'path-right-arm',
   targetAnchorJointId: 'right_hand',
 });
+
+{
+  const project = fitProject();
+  let buildCalls = 0;
+  const countBuilds = () => {
+    buildCalls += 1;
+    return [];
+  };
+  assert.deepEqual(
+    buildOpenMechanismRecommendations(false, project, undefined, undefined, countBuilds),
+    [],
+  );
+  assert.equal(buildCalls, 0, 'a closed recommendation sheet performs no recommendation fitting work');
+  buildOpenMechanismRecommendations(true, project, undefined, undefined, countBuilds);
+  assert.equal(buildCalls, 1, 'an open recommendation sheet computes its options once');
+}
 
 const withoutPackage = (mechanism: MechanismConfig) => {
   const { foundryExport: _foundryExport, ...geometry } = mechanism;

@@ -1,0 +1,25 @@
+$ bun artifacts/quality/G9/raw/validate-final-ledgers.mjs
+{
+  "commitRows": 82,
+  "uniqueHistoricalCommits": 82,
+  "commitDispositions": {
+    "REPLACED_BY_LEAN_TELEMETRY": 23,
+    "REWORK_REQUIRED": 4,
+    "VERIFIED_CLEAN_IMPLEMENTATION": 55
+  },
+  "hunkRows": 346,
+  "uniqueHistoricalHunks": 346,
+  "hunkDispositions": {
+    "DROP_INTENTIONAL": 169,
+    "REPLACED_BY_LEAN_TELEMETRY": 41,
+    "REWORK_REQUIRED": 2,
+    "VERIFIED_CLEAN_IMPLEMENTATION": 134
+  },
+  "evidencePaths": 10,
+  "acceptedCommits": 8,
+  "pending": 0,
+  "exactOriginalIdSets": true,
+  "evidencePathsExist": true,
+  "acceptedCommitsIntegrated": true
+}
+exit_code=0

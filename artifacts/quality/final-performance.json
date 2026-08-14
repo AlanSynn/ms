@@ -1,0 +1,106 @@
+{
+  "schema": "motionsmith-quality-pass-performance-v1",
+  "measuredAt": "2026-08-14",
+  "sourceSha": "0707c38aaf2ddc121cdfc550a2067812354b0123",
+  "tool": "Orca 1.4.181 built-in Chromium browser",
+  "builds": {
+    "default": {
+      "url": "http://127.0.0.1:43195/",
+      "studyRuntimeMarkers": 0,
+      "mainBundleBytes": 1584865
+    },
+    "study": {
+      "url": "http://127.0.0.1:43196/",
+      "summaryTarget": "http://127.0.0.1:43197/summary",
+      "mainBundleBytes": 1594105,
+      "mainBundleDeltaBytes": 9240
+    }
+  },
+  "method": {
+    "scenario": "Open the Make a hand wave guided project and measure its Foundry four-bar preview.",
+    "order": "default, study, study, default",
+    "input": {
+      "warmupInteractionsPerRun": 500,
+      "measuredInteractionsPerRun": 1000,
+      "visualBoundary": "Foundry SVG playhead cx/cy mutation",
+      "tabCrossover": true,
+      "estimator": "arithmetic mean of the two per-build run p95 values"
+    },
+    "playback": {
+      "warmupFrameIntervalsPerRun": 120,
+      "measuredFrameIntervalsPerRun": 360,
+      "estimator": "arithmetic mean of the two per-build run p95 values"
+    }
+  },
+  "gates": {
+    "inputP95DeltaMsMax": 1,
+    "inputP95DeltaPercentMax": 2,
+    "frameIntervalP95DeltaPercentMax": 2,
+    "attributableLongTasksOver50MsMax": 0,
+    "structuralBuildDeltaMax": 0
+  },
+  "input": {
+    "defaultRunP95Ms": [43.300000071525574, 42.700000047683716],
+    "studyRunP95Ms": [42, 43.5],
+    "defaultP95Ms": 43.000000059604645,
+    "studyP95Ms": 42.75,
+    "deltaMs": -0.2500000596046448,
+    "deltaPercent": -0.5813954866467583,
+    "defaultMeanMs": 40.24950000023842,
+    "studyMeanMs": 40.30009999984503,
+    "defaultMeasuredInteractions": 2000,
+    "studyMeasuredInteractions": 2000,
+    "defaultWebglClears": 2,
+    "studyWebglClears": 2,
+    "defaultStructuralBuildDelta": 0,
+    "studyStructuralBuildDelta": 0,
+    "attributableLongTasksOver50Ms": 0,
+    "decision": "pass"
+  },
+  "playback": {
+    "defaultRunP95Ms": [85.69999999998254, 87.29999999998836],
+    "studyRunP95Ms": [87.29999999998836, 87.20000000001164],
+    "defaultP95Ms": 86.49999999998545,
+    "studyP95Ms": 87.25,
+    "deltaMs": 0.7500000000145519,
+    "deltaPercent": 0.867052023138356,
+    "defaultMeanMs": 82.17541666666666,
+    "studyMeanMs": 82.1877777777778,
+    "defaultMeasuredFrameIntervals": 720,
+    "studyMeasuredFrameIntervals": 720,
+    "defaultWebglClears": 720,
+    "studyWebglClears": 720,
+    "defaultStructuralBuildDelta": 0,
+    "studyStructuralBuildDelta": 0,
+    "attributableLongTasksOver50Ms": 0,
+    "decision": "pass"
+  },
+  "transport": {
+    "defaultRequestsAfterExportAndPageHide": 0,
+    "studyNormalRequests": 1,
+    "studyExitBeacons": 1,
+    "studyPayloadBytes": [1114, 1114],
+    "payloadBytesMax": 8192,
+    "exactSchemaAllowlist": true,
+    "sourceShaMatched": true,
+    "decision": "pass"
+  },
+  "pilotDisposition": {
+    "retained": true,
+    "deciding": false,
+    "reasons": [
+      "Cold pages had unequal JIT warm-up.",
+      "The Orca integration worktree was initially hidden, causing embedded-webview throttling.",
+      "A lifecycle-isolation candidate compared a cold page with a warm page, did not improve latency, and was fully reverted."
+    ],
+    "rawEvidence": "artifacts/quality/G9/raw/orca-final-session.log"
+  },
+  "rawEvidence": {
+    "structured": "artifacts/quality/G9/raw/orca-ab-evidence.json",
+    "inputHarness": "artifacts/quality/G9/raw/orca-input-probe-final.js",
+    "playbackHarness": "artifacts/quality/G9/raw/orca-playback-probe-final.js",
+    "transport": "artifacts/quality/G9/raw/summary-sink-final-stats.json",
+    "session": "artifacts/quality/G9/raw/orca-final-session.log"
+  },
+  "overallDecision": "pass"
+}

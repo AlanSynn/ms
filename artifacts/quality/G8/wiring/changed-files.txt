@@ -1,0 +1,23 @@
+Source and contract commit `892e619`:
+components/AppWorkspaceShell.tsx
+components/shell/StudySummaryLifecycle.tsx
+components/stages/assembly/AssemblyGuide.tsx
+components/stages/blueprint/BlueprintControlPanel.tsx
+hooks/useAppCharacterImportActions.ts
+hooks/useAppMechanismActions.ts
+hooks/useAppProjectCommands.ts
+hooks/useMotionSmithAppController.ts
+hooks/useProjectAutosave.ts
+infrastructure/study-summary/browserSession.ts
+tests/g5-web-onnx.test.ts
+tests/g8-study-summary-wiring.test.ts
+tests/project-contract.test.ts
+vite-env.d.ts
+vite.config.ts
+
+Evidence-only files:
+artifacts/quality/G8/wiring/changed-files.txt
+artifacts/quality/G8/wiring/raw-default-build.log
+artifacts/quality/G8/wiring/raw-enabled-build.log
+artifacts/quality/G8/wiring/raw-focused-tests.log
+artifacts/quality/G8/wiring/result.md

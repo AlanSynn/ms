@@ -1,0 +1,19 @@
+Final source SHA: `2adec93`.
+
+Exact verification commands and exit codes:
+
+`bun tests/study-summary-telemetry.test.ts` — exit 0
+`bun tests/study-summary-analyze.test.ts` — exit 0
+`bunx tsc --noEmit` — exit 0 (run before removing the temporary dependency symlink)
+`bun run build` — exit 0
+`bun run test` — exit 0 (rerun after removing the temporary dependency symlink)
+`git diff --check` — exit 0
+`rg -n -i 'study-summary|collector\\.invalid|ms-study|study telemetry' dist` — no matches; exit 1 from rg is expected and the guard command exited 0
+
+The first full-suite attempt while the root `node_modules` symlink existed hit
+the existing G6 `git check-ignore` symlink-path probe. After unlinking that
+temporary symlink, the full suite completed with exit 0. A post-removal fresh
+`bunx tsc --noEmit` cannot resolve the repository's `node` type package; this
+is an environment dependency note, not a source failure. The passing fresh
+TypeScript gate and production build were run before unlinking, and the final
+focused tests/full suite run after unlinking.

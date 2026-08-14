@@ -1,0 +1,19 @@
+Baseline build: c523d16f64263df995f4a8f13c2fd1cf90471a10
+Branch: quality/luna-preview
+Command: bun run build
+
+Initial attempt before dependency reuse:
+$ tsc && vite build
+/bin/bash: tsc: command not found
+exit 127
+
+Dependency reuse:
+- local untracked symlink: node_modules -> /Users/alansynn/orca/workspaces/MechAnim/quality-sol-max-integration/node_modules
+- tracked lockfiles unchanged
+
+Successful rerun:
+$ tsc && vite build
+vite v8.1.0 building client environment for production...
+238 modules transformed
+vite production build completed successfully in 823ms
+exit 0

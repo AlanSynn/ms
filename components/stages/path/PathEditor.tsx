@@ -28,6 +28,15 @@ import { addDrawSamplePoint, normalizeDrawTimedPoints, type DrawSamplePoint } fr
 import { PathCanvasPane } from "./PathCanvasPane";
 import { PathInspectorPanel } from "./PathInspectorPanel";
 import { PathWorkflowPanel } from "./PathWorkflowPanel";
+import { createPathPointerFrameSession } from "./pathPointerFrameSession";
+
+type PathFrameSample = {
+  points: Point[];
+  source?: ProjectMotionPath["source"];
+  timedPoints?: ProjectMotionPath["timedPoints"];
+  targetKey: string;
+  pathId?: string;
+};
 
 export const PathEditor = ({
   project,
@@ -72,6 +81,35 @@ export const PathEditor = ({
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const freeDraftRef = useRef<DrawSamplePoint[] | null>(null);
+  const dragPointsRef = useRef<Point[] | undefined>(undefined);
+  const pathTargetKey = selectedSceneObject
+    ? `scene:${selectedSceneObject.id}`
+    : selectedPart
+      ? `part:${selectedPart.id}`
+      : "none";
+  const pathTargetKeyRef = useRef(pathTargetKey);
+  pathTargetKeyRef.current = pathTargetKey;
+  const selectedPathIdRef = useRef(selectedPath?.id);
+  selectedPathIdRef.current = selectedPath?.id;
+  const setPathPointsRef = useRef(setPathPoints);
+  setPathPointsRef.current = setPathPoints;
+  const pathFrameSessionRef = useRef<
+    ReturnType<typeof createPathPointerFrameSession<PathFrameSample>> | null
+  >(null);
+  if (!pathFrameSessionRef.current) {
+    pathFrameSessionRef.current = createPathPointerFrameSession<PathFrameSample>({
+      commit: (sample) => {
+        if (sample.targetKey !== pathTargetKeyRef.current) return;
+        if (sample.pathId && sample.pathId !== selectedPathIdRef.current) return;
+        setPathPointsRef.current(
+          sample.points,
+          sample.source,
+          sample.timedPoints,
+        );
+      },
+    });
+  }
+  const pathFrameSession = pathFrameSessionRef.current;
   const [dragPoint, setDragPoint] = useState<number | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
   const [isFreeDrawing, setIsFreeDrawing] = useState(false);
@@ -107,11 +145,41 @@ export const PathEditor = ({
     : undefined;
   const jointLabel = (id?: string) => (id ? id.replaceAll("_", " ") : "none");
   useEffect(() => {
+    pathFrameSession.reset();
     freeDraftRef.current = null;
+    dragPointsRef.current = undefined;
     setIsFreeDrawing(false);
     setDragPoint(null);
     setSelectedPoint(null);
-  }, [selectedPart?.id, selectedSceneObject?.id]);
+  }, [pathFrameSession, pathTargetKey]);
+  const previousSelectedPathIdRef = useRef(selectedPath?.id);
+  useEffect(() => {
+    const previousPathId = previousSelectedPathIdRef.current;
+    previousSelectedPathIdRef.current = selectedPath?.id;
+    if (!previousPathId || previousPathId === selectedPath?.id) return;
+    pathFrameSession.reset();
+    freeDraftRef.current = null;
+    dragPointsRef.current = undefined;
+    setIsFreeDrawing(false);
+    setDragPoint(null);
+    setSelectedPoint(null);
+  }, [pathFrameSession, selectedPath?.id]);
+  useEffect(
+    () => () => pathFrameSession.reset(),
+    [pathFrameSession],
+  );
+  const queuePathPoints = (
+    points: Point[],
+    source?: ProjectMotionPath["source"],
+    timedPoints?: ProjectMotionPath["timedPoints"],
+  ) =>
+    pathFrameSession.move({
+      points,
+      source,
+      timedPoints,
+      targetKey: pathTargetKey,
+      pathId: selectedPath?.id,
+    });
   const appendFreePoint = (point: Point, seed = false) => {
     const next = addDrawSamplePoint(
       freeDraftRef.current,
@@ -126,7 +194,7 @@ export const PathEditor = ({
       { closed: selectedPath?.closed ?? true },
     );
     freeDraftRef.current = next;
-    setPathPoints(
+    queuePathPoints(
       timed.map(({ x, y }) => ({ x, y })),
       "drawn",
       timed,
@@ -135,6 +203,7 @@ export const PathEditor = ({
   const onCanvasDown = (e: React.MouseEvent<SVGSVGElement>) => {
     if (!drawMode || !svgRef.current || pathLocked || e.button !== 0) return;
     const p = svgPointerToScene(svgRef.current, e.clientX, e.clientY);
+    pathFrameSession.start();
     setSelectedPoint(null);
     setIsFreeDrawing(true);
     appendFreePoint(p, true);
@@ -185,29 +254,41 @@ export const PathEditor = ({
     }
     if (dragPoint === null || !svgRef.current || !selectedPath || pathLocked)
       return;
-    const points = [...selectedPath.points];
+    const points = [...(dragPointsRef.current ?? selectedPath.points)];
     points[dragPoint] = svgPointerToScene(svgRef.current, e.clientX, e.clientY);
-    setPathPoints(points, selectedPath.source);
+    dragPointsRef.current = points;
+    queuePathPoints(points, selectedPath.source);
   };
   const stopDrawing = () => {
     const finishedFreeStroke = Boolean(freeDraftRef.current?.length);
+    pathFrameSession.finish();
     setDragPoint(null);
     setIsFreeDrawing(false);
     freeDraftRef.current = null;
+    dragPointsRef.current = undefined;
     if (finishedFreeStroke) setDrawMode(false);
+  };
+  const startPointDrag = (index: number) => {
+    if (!selectedPath || pathLocked) return;
+    pathFrameSession.start();
+    dragPointsRef.current = [...selectedPath.points];
+    setSelectedPoint(index);
+    setDragPoint(index);
   };
   const deletePoint = () => {
     if (selectedPoint === null || !selectedPath || pathLocked) return;
+    pathFrameSession.finish();
     setPathPoints(
       selectedPath.points.filter((_, i) => i !== selectedPoint),
       selectedPath.source,
     );
     setSelectedPoint(null);
   };
-  const clearPath = () =>
-    selectedPath &&
-    !pathLocked &&
+  const clearPath = () => {
+    if (!selectedPath || pathLocked) return;
+    pathFrameSession.finish();
     dispatch({ type: "delete_path", pathId: selectedPath.id });
+  };
   const switchPathView = (mode: "2d" | "3d") => {
     setPathViewMode(mode);
     if (mode === "3d" && drawMode) {
@@ -285,8 +366,7 @@ export const PathEditor = ({
             selectedPath={selectedPath}
             dragPoint={dragPoint}
             selectedPoint={selectedPoint}
-            setDragPoint={setDragPoint}
-            setSelectedPoint={setSelectedPoint}
+            onPointDragStart={startPointDrag}
             onPointMove={movePoint}
             onPointUp={stopDrawing}
             onCanvasDown={onCanvasDown}

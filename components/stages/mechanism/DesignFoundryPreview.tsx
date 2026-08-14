@@ -16,7 +16,11 @@ import {
   type FoundryOverlaySize,
   type FoundryViewPreset,
 } from "../../../utils/foundryCamera";
-import { buildAutomataSceneModel } from "../../../utils/automataSceneModel";
+import { useFrameCommitSession } from "../../../hooks/useFrameCommitSession";
+import {
+  prepareAutomataSceneModel,
+  samplePreparedAutomataSceneModel,
+} from "../../../utils/automataSceneModel";
 import { pointsToSvgPath } from "../../../utils/mechanismPreview";
 import {
   connectionSelectionSceneCoordinates,
@@ -85,10 +89,15 @@ export const DesignFoundryPreview = ({
     pan: Point;
     mode: "orbit" | "zoom" | "pan";
   } | null>(null);
+  const cameraFrameSession = useFrameCommitSession<FoundryCamera>(setCamera);
 
+  const preparedSceneModel = useMemo(
+    () => prepareAutomataSceneModel(project, mechanism, "design-live"),
+    [mechanism, project],
+  );
   const sceneModel = useMemo(
-    () => buildAutomataSceneModel(project, mechanism, angle, "design-live"),
-    [angle, mechanism, project],
+    () => samplePreparedAutomataSceneModel(preparedSceneModel, angle),
+    [angle, preparedSceneModel],
   );
   const previewMechanism = sceneModel.mechanism ?? sceneModel.recoveryMechanism;
   const automataContext = useMemo(
@@ -173,8 +182,10 @@ export const DesignFoundryPreview = ({
         : size,
     );
 
-  const setCameraPreset = (preset: Exclude<FoundryViewPreset, "custom">) =>
+  const setCameraPreset = (preset: Exclude<FoundryViewPreset, "custom">) => {
+    cameraFrameSession.reset();
     setCamera({ ...FOUNDRY_VIEW_PRESETS[preset], preset, pan: { x: 0, y: 0 } });
+  };
 
   const resetCamera = () => setCameraPreset("iso");
 
@@ -200,6 +211,7 @@ export const DesignFoundryPreview = ({
       pan: camera.pan ?? noPoint,
       mode,
     };
+    cameraFrameSession.start();
     setIsOrbiting(mode === "orbit");
     setIsZooming(mode === "zoom");
     setIsPanning(mode === "pan");
@@ -213,30 +225,36 @@ export const DesignFoundryPreview = ({
     event.preventDefault();
     const dx = event.clientX - start.x;
     const dy = event.clientY - start.y;
-    setCamera((prev) => {
+    cameraFrameSession.move((() => {
       if (start.mode === "zoom")
         return {
-          ...prev,
+          yaw: start.yaw,
+          pitch: start.pitch,
           zoom: clampFoundryZoom(start.zoom * (1 - dy * 0.006)),
           preset: "custom",
+          pan: start.pan,
         };
       if (start.mode === "pan")
         return {
-          ...prev,
+          yaw: start.yaw,
+          pitch: start.pitch,
+          zoom: start.zoom,
           pan: { x: start.pan.x - dx * 0.018, y: start.pan.y + dy * 0.018 },
           preset: "custom",
         };
       return {
-        ...prev,
         yaw: start.yaw + dx * 0.38,
         pitch: clampFoundryPitch(start.pitch + dy * 0.28),
+        zoom: start.zoom,
         preset: "custom",
+        pan: start.pan,
       };
-    });
+    })());
   };
 
   const finishPointerMove: React.PointerEventHandler<HTMLDivElement> = (event) => {
     if (orbitStartRef.current?.pointerId !== event.pointerId) return;
+    cameraFrameSession.finish();
     orbitStartRef.current = null;
     setIsOrbiting(false);
     setIsZooming(false);
@@ -274,7 +292,7 @@ export const DesignFoundryPreview = ({
       data-renderer-source="ThreeFoundryPreview"
       data-shared-with="foundry-renderer"
       data-design-scene-mode="single-foundry-automata-scene"
-      data-automata-model-source="buildAutomataSceneModel"
+      data-automata-model-source="prepareAutomataSceneModel/samplePreparedAutomataSceneModel"
       data-mechanism-id={previewMechanism.id}
       data-mechanism-type={previewMechanism.type}
       data-recovery-mode={sceneModel.recoveryMechanism ? "static" : "bound"}
@@ -306,7 +324,7 @@ export const DesignFoundryPreview = ({
       data-design-animated-object-count={Object.keys(sceneModel.animatedSceneObjects).length}
       data-design-show-trace={showTrace ? "true" : "false"}
       data-design-trace-layer={showTrace ? "shown" : "hidden"}
-      data-design-foundry-contract-source="buildAutomataSceneModel"
+      data-design-foundry-contract-source="preparedAutomataSceneModel"
       data-design-mechanism-contract-id={sceneModel.mechanismContract?.mechanismId ?? ""}
       data-design-viewer-tool={viewerTool}
     >

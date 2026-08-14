@@ -1,0 +1,31 @@
+G3 deciding gate summary
+
+PASS bun tests/g3-animation-clock.test.ts
+PASS bun tests/g3-foundry-lifecycle.test.ts
+PASS bun tests/g3-three-resource-kit.test.ts
+PASS bun tests/g3-foundry-retained-frame.test.ts
+PASS bun tests/g3-frame-commit-queue.test.ts
+PASS bun tests/g3-foundry-render-submission.test.ts
+PASS bun tests/g3-path-cadence.test.ts
+PASS bun tests/g3-path-pointer-finalization.test.ts
+PASS bun tests/g3-foundry-param-cadence.test.ts
+PASS bun tests/g3-connection-cadence.test.ts
+PASS bun tests/g3-camera-cadence.test.ts
+PASS bun tests/g3-cam-profile-cadence.test.ts
+PASS bun tests/g3-puppet-prepared-frame.test.ts
+PASS bun tests/g3-assembly-scene-preparation.test.ts
+PASS bun tests/g3-prepared-automata-scene.test.ts
+PASS bun tests/g3-prepared-preview-sampling.test.ts
+PASS bun tests/project-contract.test.ts
+PASS bunx tsc --noEmit
+PASS bun run build
+PASS git diff --check
+PASS production-preview shared-scene, Foundry playback, and CAD-camera flows
+
+Exact stdout and exit evidence is split by verified seam across the `*-raw.txt`
+files in this directory. Quantitative preview evidence is in performance.json.
+
+Consolidated final run (candidate `9af00126675783b1f5ba6e2a04add618eef85e3b`):
+all 18 `tests/g3-*.test.ts` files passed, mechanism command feedback passed,
+project contracts passed, TypeScript passed, the production build passed, and
+`git diff --check` passed.

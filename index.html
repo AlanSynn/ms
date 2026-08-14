@@ -53,9 +53,6 @@
       #boot-loader .boot-logo { width: clamp(4.5rem, 12vw, 8rem); height: clamp(4.5rem, 12vw, 8rem); border-radius: clamp(1rem, 2vw, 1.6rem); object-fit: cover; filter: drop-shadow(0 22px 44px rgba(47,86,214,.20)); }
       #boot-loader .boot-word { max-width: calc(100vw - 2rem); color: var(--ms-text); font-family: Manrope, var(--ms-font-display); font-size: clamp(2.4rem, 8vw, 6.5rem); line-height: .92; letter-spacing: clamp(.08em, .9vw, .24em); font-weight: 800; text-transform: uppercase; white-space: nowrap; }
       #boot-loader .boot-version { color: rgba(100,116,139,.42); font-size: .72rem; font-weight: 760; letter-spacing: .16em; }
-      #boot-loader .boot-status { min-height: 1.1rem; color: rgba(100,116,139,.70); font-size: clamp(.72rem, 1.7vw, .95rem); font-weight: 760; letter-spacing: .08em; text-transform: uppercase; }
-      #boot-loader .boot-progress { width: min(22rem, calc(100vw - 4rem)); height: .38rem; overflow: hidden; border-radius: 999px; background: rgba(203,213,225,.62); }
-      #boot-loader .boot-progress > span { display: block; width: 8%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2f56d6, #8b5cf6); transition: width .18s ease; }
       body.app-ready #boot-loader { opacity: 0; pointer-events: none; transition: opacity .25s ease; }
       @keyframes boot-breathe { 0%, 100% { opacity: .82; transform: scale(.985); } 50% { opacity: 1; transform: scale(1); } }
       html, body, #root { height: 100%; }
@@ -98,6 +95,7 @@
       .ok { background: #dcfce7; color: #166534; }
       .row { display: flex; justify-content: space-between; gap: 1rem; border-radius: 1.25rem; background: var(--ms-bg-soft); padding: 1rem; border: 1px solid var(--ms-line); }
       .app-shell { display: block; height: var(--ms-viewport-height); max-height: var(--ms-viewport-height); overflow: hidden; }
+      .app-shell > section { height: var(--ms-viewport-height); min-height: 0; overflow: hidden; }
       .app-rail { position: fixed; left: 0; top: var(--ms-header-height); bottom: 0; width: 300px; z-index: 40; overflow: auto; background: rgba(255,255,255,.94); box-shadow: 0 4px 20px rgba(139,92,246,.05); }
       .workflow-rail { position: fixed; left: 0; top: 0; bottom: 0; z-index: 60; width: var(--ms-rail-width); display: flex; flex-direction: column; align-items: stretch; gap: .42rem; border-right: 1px solid var(--ms-line); border-radius: 0; border-left: 0; border-top: 0; border-bottom: 0; background: rgba(255,255,255,.94); box-shadow: 0 14px 36px rgba(15,23,42,.07); padding: .72rem .55rem; backdrop-filter: blur(18px); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
       .workflow-rail::-webkit-scrollbar { display: none; }
@@ -125,7 +123,7 @@
       .quick-toolbar .btn-secondary, .quick-toolbar .btn-primary { min-height: 2rem; border-radius: 999px; padding: .42rem .65rem; font-size: .76rem; }
       .stage-body { margin-left: 0; padding-top: calc(var(--ms-header-height) + var(--ms-stage-top-gap)) !important; min-height: calc(var(--ms-viewport-height) - var(--ms-bottom-bars-height)); }
       .editor-workbench { background-color: var(--ms-bg-soft); background-size: 40px 40px; background-image: linear-gradient(to right, rgba(139,92,246,.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(139,92,246,.06) 1px, transparent 1px); }
-      .app-shell .stage-body { display: flex; flex-direction: column; gap: .65rem; flex: none; height: var(--ms-stage-body-height); margin-left: var(--ms-rail-width); margin-top: var(--ms-header-height); min-height: 0; overflow: hidden; padding: var(--ms-stage-top-gap) var(--ms-stage-gap) .7rem !important; }
+      .app-shell .stage-body { display: flex; flex-direction: column; gap: .65rem; flex: 1 1 0; height: auto; margin-left: var(--ms-rail-width); margin-top: var(--ms-header-height); min-height: 0; overflow: hidden; padding: var(--ms-stage-top-gap) var(--ms-stage-gap) .7rem !important; }
       .editor-stage-frame { flex: 1 1 auto; min-height: 0; height: 100%; overflow: hidden; display: grid; grid-template-columns: minmax(245px, var(--ms-left-pane-width)) minmax(0, 1fr) minmax(280px, var(--ms-right-pane-width)); grid-template-areas: "left canvas right"; gap: var(--ms-stage-gap); }
       .stage-left-pane { grid-area: left; }
       .stage-canvas-pane { grid-area: canvas; }
@@ -674,8 +672,6 @@
         <img class="boot-logo" src="resources/icons/AppIcon.png" alt="" />
         <div class="boot-word">MotionSmith</div>
         <div class="boot-version">v%APP_VERSION%</div>
-        <div class="boot-status" data-boot-status>Preparing AI model</div>
-        <div class="boot-progress" aria-hidden="true"><span data-boot-progress></span></div>
       </div>
     </div>
     <div id="root"></div>

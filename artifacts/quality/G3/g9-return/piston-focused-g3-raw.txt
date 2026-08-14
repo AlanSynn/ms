@@ -1,0 +1,18 @@
+G3 g9-return RAW transcript: focused piston Design regression
+
+Command
+$ PLAYWRIGHT_PORT=4191 PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_SERVER=preview bunx playwright test tests/browser/g3-piston-pointer-diagnostic.spec.ts 2>&1
+
+Combined stdout/stderr (unfiltered)
+[WebServer] $ vite preview --host "127.0.0.1" --port "4191" --strictPort
+
+Running 1 test using 1 worker
+
+(node:56295) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › tests/browser/g3-piston-pointer-diagnostic.spec.ts:3:1 › G3 piston Design connection handle stays a hit target after Foundry export (6.9s)
+
+  1 passed (7.9s)
+
+Exit code
+0

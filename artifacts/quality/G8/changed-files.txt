@@ -1,0 +1,23 @@
+Commits `4637948`, `f630636`, and `2adec93` (source/tests):
+hooks/useStudySummaryTelemetry.ts
+infrastructure/study-summary/schema.ts
+scripts/study-summary-analyze.ts
+tests/study-summary-analyze.test.ts
+tests/study-summary-telemetry.test.ts
+utils/studySummaryTelemetry.ts
+
+Evidence commits `b0000c3`, `f3e1711`, and `696e844` (metadata, raw logs, and
+privacy refresh):
+artifacts/quality/G8/changed-files.txt
+artifacts/quality/G8/historical-dispositions.tsv
+artifacts/quality/G8/result.md
+artifacts/quality/G8/schema.md
+artifacts/quality/G8/tests.txt
+artifacts/quality/G8/raw/focused-analyzer.log
+artifacts/quality/G8/raw/focused-telemetry.log
+artifacts/quality/G8/raw/full-test-tail.log
+artifacts/quality/G8/raw/tsc.log
+artifacts/quality/G8/raw/build.log
+artifacts/quality/G8/raw/default-dist.log
+
+No existing/shared/product/config/package/ledger file was edited.

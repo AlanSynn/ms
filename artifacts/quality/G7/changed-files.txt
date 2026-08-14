@@ -1,0 +1,7 @@
+# G7 allowed files
+
+tests/browser/quality-critical.spec.ts
+tests/browser/quality-helpers.ts
+artifacts/quality/G7/**
+
+No production source, package, workflow, or configuration file was changed.

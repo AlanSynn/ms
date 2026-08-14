@@ -1,0 +1,64 @@
+Goal-ID: G5
+
+$ bun run build
+exit_code=0
+evidence: raw-build.log
+
+$ bunx tsc --noEmit
+exit_code=0
+evidence: raw-tsc.log
+
+$ bun tests/project-contract.test.ts
+exit_code=0
+evidence: raw-contract.log
+
+$ env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=57819 PLAYWRIGHT_WORKERS=1 bunx playwright test tests/browser/workflow.spec.ts -g 'Load package review, accept, discard, and missing-file recovery stay in browser|Startup uses one boot loader and opens Getting Started over Character'
+exit_code=0
+result: 2 passed (8.0s)
+evidence: raw-focused-production-preview.log
+
+$ git diff --check
+exit_code=0
+evidence: raw-diff-check.log
+
+G9 QA return reproduction
+-------------------------
+$ bun run build
+exit_code=0
+evidence: raw-g9-build.log
+
+$ env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=43211 PLAYWRIGHT_WORKERS=2 bunx playwright test tests/browser/g5-web-onnx.spec.ts
+exit_code=1
+result: one 121 ms overlap while the integration two-worker process was active
+evidence: raw-g9-contention-43211.log
+
+$ env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=43201 PLAYWRIGHT_WORKERS=2 bunx playwright test tests/browser/g5-web-onnx.spec.ts
+exit_code=0
+result: 1 passed; empty overlap arrays
+evidence: raw-g9-exact-43201.log
+
+$ env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=43213 PLAYWRIGHT_WORKERS=2 bunx playwright test tests/browser/g5-web-onnx.spec.ts --repeat-each=2
+exit_code=1
+result: 2 failed; 191 ms and 217 ms overlaps under concurrent copies
+evidence: raw-g9-concurrent-repeat-43213.log
+
+$ env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=43214 PLAYWRIGHT_WORKERS=1 bunx playwright test tests/browser/g5-web-onnx.spec.ts --repeat-each=2
+exit_code=0
+result: 2 passed; empty overlap arrays
+evidence: raw-g9-serial-repeat-43214.log
+
+Disposition: host contention; no test-contract or production fix. See g9-disposition.md.
+
+Fresh unfiltered deciding evidence
+-----------------------------------
+$ env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=43215 PLAYWRIGHT_WORKERS=1 bunx playwright test tests/browser/g5-web-onnx.spec.ts
+exit_code=0
+result: 1 passed; full stdout/stderr in raw-g9-fresh-isolated.stdout-stderr.log
+
+$ env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=43216 PLAYWRIGHT_WORKERS=2 bunx playwright test tests/browser/g5-web-onnx.spec.ts --repeat-each=2
+exit_code=1
+result: 2 failed under concurrent copies; full stdout/stderr in raw-g9-fresh-concurrent.stdout-stderr.log
+
+Evidence provenance: the two `raw-g9-fresh-*.stdout-stderr.log` files are
+unfiltered combined command streams with exact exit codes. Earlier `raw-g9-*.log`
+files are condensed/manual summaries only.

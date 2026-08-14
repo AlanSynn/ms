@@ -1,0 +1,9 @@
+[WebServer] $ vite preview --host "127.0.0.1" --port "43202" --strictPort
+
+Running 1 test using 1 worker
+
+(node:25347) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › tests/browser/workflow.spec.ts:1408:3 › G006 piston uses the shared physical pointer flow in Foundry and Design (8.1s)
+
+  1 passed (9.4s)

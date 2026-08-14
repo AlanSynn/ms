@@ -1,5 +1,10 @@
+import { useEffect, useRef, useState } from "react";
 import { ContextHelp } from "./ContextHelp";
 import type { ContextHelpId } from "../../utils/contextHelp";
+import {
+  createFrameCommitQueue,
+  type FrameCommitQueue,
+} from "../../utils/frameCommitQueue";
 
 export const MiniNumber = ({
   label,
@@ -20,12 +25,28 @@ export const MiniNumber = ({
   disabled?: boolean;
   constraint?: string;
   helpId?: ContextHelpId;
-  onChange: (v: number) => void;
+  onChange: (v: number) => boolean | void;
 }) => {
+  const onChangeRef = useRef(onChange);
+  const boundsRef = useRef({ min, max });
+  const rangeQueueRef = useRef<FrameCommitQueue<number> | null>(null);
+  const [numberResetVersion, setNumberResetVersion] = useState(0);
+  onChangeRef.current = onChange;
+  boundsRef.current = { min, max };
   const boundedChange = (next: number) => {
     if (!Number.isFinite(next)) return;
-    onChange(Math.max(min, Math.min(max, next)));
+    const bounds = boundsRef.current;
+    return onChangeRef.current(
+      Math.max(bounds.min, Math.min(bounds.max, next)),
+    );
   };
+  if (!rangeQueueRef.current) {
+    rangeQueueRef.current = createFrameCommitQueue({
+      commit: (next: number) => boundedChange(next),
+    });
+  }
+  const flushRangeChange = () => rangeQueueRef.current?.flush();
+  useEffect(() => () => rangeQueueRef.current?.cancel(), []);
   const displayedValue = Number.isFinite(value) ? value : min;
   return <label
     className={`block mini-number-control ${disabled ? "is-disabled" : ""}`}
@@ -48,9 +69,16 @@ export const MiniNumber = ({
       disabled={disabled}
       value={displayedValue}
       aria-valuetext={`${displayedValue}; ${min} to ${max}`}
-      onChange={(event) => boundedChange(event.currentTarget.valueAsNumber)}
+      onChange={(event) =>
+        rangeQueueRef.current?.queue(event.currentTarget.valueAsNumber)
+      }
+      onPointerUp={flushRangeChange}
+      onPointerCancel={flushRangeChange}
+      onLostPointerCapture={flushRangeChange}
+      onBlur={flushRangeChange}
     />
     <input
+      key={numberResetVersion}
       aria-label={`${label} number`}
       className="field mt-1"
       type="number"
@@ -59,7 +87,13 @@ export const MiniNumber = ({
       step={step}
       disabled={disabled}
       value={displayedValue}
-      onChange={(event) => boundedChange(event.currentTarget.valueAsNumber)}
+      onChange={(event) => {
+        const next = event.currentTarget.valueAsNumber;
+        if (!Number.isFinite(next)) return;
+        if (boundedChange(next) === false) {
+          setNumberResetVersion((version) => version + 1);
+        }
+      }}
     />
     <small className="mini-number-limit">{min}–{max}</small>
     {constraint && <small className="motion-option-lock-note">{constraint}</small>}

@@ -1,0 +1,44 @@
+G3 cam-profile pointer cadence gate
+Date: 2026-08-13
+Integration branch: quality/sol-max-integration
+
+Owner decision
+- MechanismParametricEditor is outside the delegated G3 writable roots and owns an authoritative G1-safe mechanism edit. Sol applied this cross-cutting interface change directly.
+- Pointer samples are latest-only per display frame.
+- Pointer up, pointer cancel, and lost pointer capture flush the final accepted sample.
+- Mechanism identity replacement, Reset, and unmount cancel queued work.
+- Every committed sample still passes safeMechanismUpdate; no domain acceptance rule changed.
+- A mechanism-id guard prevents a queued sample from crossing an authoritative replacement before effect cleanup runs.
+
+Focused gate
+$ bun tests/g3-cam-profile-cadence.test.ts
+G3 cam profile cadence contracts passed
+exit 0
+
+$ bun tests/g3-camera-cadence.test.ts
+G3 camera cadence contracts passed
+exit 0
+
+$ bun tests/g3-frame-commit-queue.test.ts
+G3 frame commit queue contracts passed
+exit 0
+
+$ bun tests/project-contract.test.ts
+project contracts ok
+exit 0 (direct rerun before browser gate)
+
+$ bun tests/g008-physical-review.test.ts
+G008 physical review contracts passed
+exit 0
+
+$ bun run build
+tsc && vite build; 245 modules transformed; production build completed in 877ms
+exit 0
+
+$ git diff --check
+exit 0
+
+Production-preview deciding gate
+$ PLAYWRIGHT_PORT=5195 PLAYWRIGHT_WORKERS=2 bunx playwright test tests/browser/workflow.spec.ts --grep "Cam foundry profile points edit the shared cam simulation profile|Mechanism Design cam profile edits update the integrated automata preview"
+2 passed (16.9s)
+exit 0

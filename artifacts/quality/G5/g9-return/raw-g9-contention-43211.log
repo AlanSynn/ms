@@ -1,0 +1,17 @@
+$ env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=43211 PLAYWRIGHT_WORKERS=2 bunx playwright test tests/browser/g5-web-onnx.spec.ts
+[WebServer] $ vite preview --host "127.0.0.1" --port "43211" --strictPort
+
+Running 1 test using 1 worker
+
+{"g5FirstEvidence":{"requestId":2,"dispatchMark":{"startTime":7486.900000095367,"duration":0,"detail":{"requestId":2}},"processResultMark":{"startTime":8423.100000023842,"duration":0,"detail":{"requestId":2,"metrics":{"modelInitMs":419.3000000715256,"modelReused":false,"inferenceMs":314,"totalMs":934.8999999761581,"imageBitmapClosed":true,"partTextureDataUrlChars":9018,"partMaskDataUrlChars":5108}},"processProgressMessageCount":7,"phaseMarks":[{"name":"motionsmith-image-result-application-start","startTime":8423.300000071526,"duration":0,"detail":{"requestId":2}},{"name":"motionsmith-image-result-application-end","startTime":8424.300000071526,"duration":0,"detail":{"requestId":2}}],"reviewMark":{"startTime":8674.700000047684,"duration":0,"detail":null},"overlappingLongTasks":[{"startTime":8462.400000095367,"duration":121}]}}
+  ✘  1 [chromium] › tests/browser/g5-web-onnx.spec.ts:123:1 › Create from image upload keeps transforms off the UI thread (9.6s)
+
+Error: app dispatch through review has no UI long task over 50 ms
+Expected: []
+Received: [{"duration":121,"startTime":8462.400000095367}]
+at tests/browser/g5-web-onnx.spec.ts:188:147
+
+1 failed
+exit_code=1
+
+Context: an independent two-worker full-suite process was active on port 43201 during this run. The app-owned result application was 1ms; the 121ms task began 39.1ms after application-end and overlapped the dispatch-to-review interval.

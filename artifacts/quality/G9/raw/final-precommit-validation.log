@@ -1,0 +1,509 @@
+$ bun artifacts/quality/G9/raw/validate-final-ledgers.mjs
+expected_exit=0 actual_exit=0 decision=PASS
+{
+  "commitRows": 82,
+  "uniqueHistoricalCommits": 82,
+  "commitDispositions": {
+    "REPLACED_BY_LEAN_TELEMETRY": 23,
+    "REWORK_REQUIRED": 4,
+    "VERIFIED_CLEAN_IMPLEMENTATION": 55
+  },
+  "hunkRows": 346,
+  "uniqueHistoricalHunks": 346,
+  "hunkDispositions": {
+    "DROP_INTENTIONAL": 169,
+    "REPLACED_BY_LEAN_TELEMETRY": 41,
+    "REWORK_REQUIRED": 2,
+    "VERIFIED_CLEAN_IMPLEMENTATION": 134
+  },
+  "evidencePaths": 10,
+  "acceptedCommits": 8,
+  "pending": 0,
+  "exactOriginalIdSets": true,
+  "evidencePathsExist": true,
+  "acceptedCommitsIntegrated": true
+}
+
+$ bun artifacts/quality/G9/raw/validate-summary-sink.mjs
+expected_exit=0 actual_exit=0 decision=PASS
+{"requestCount":2,"modes":["cors","no-cors"],"bytes":[1114,1114],"schema":"study-summary-v1","buildSha":"0707c38aaf2ddc121cdfc550a2067812354b0123","exactAllowlist":true,"sensitiveSentinelsAbsent":true}
+
+$ jq -e . artifacts/quality/final-performance.json artifacts/quality/G9/raw/orca-ab-evidence.json artifacts/quality/G9/raw/summary-sink-final-stats.json artifacts/quality/G3/baseline-performance.json
+expected_exit=0 actual_exit=0 decision=PASS
+{
+  "schema": "motionsmith-quality-pass-performance-v1",
+  "measuredAt": "2026-08-14",
+  "sourceSha": "0707c38aaf2ddc121cdfc550a2067812354b0123",
+  "tool": "Orca 1.4.181 built-in Chromium browser",
+  "builds": {
+    "default": {
+      "url": "http://127.0.0.1:43195/",
+      "studyRuntimeMarkers": 0,
+      "mainBundleBytes": 1584865
+    },
+    "study": {
+      "url": "http://127.0.0.1:43196/",
+      "summaryTarget": "http://127.0.0.1:43197/summary",
+      "mainBundleBytes": 1594105,
+      "mainBundleDeltaBytes": 9240
+    }
+  },
+  "method": {
+    "scenario": "Open the Make a hand wave guided project and measure its Foundry four-bar preview.",
+    "order": "default, study, study, default",
+    "input": {
+      "warmupInteractionsPerRun": 500,
+      "measuredInteractionsPerRun": 1000,
+      "visualBoundary": "Foundry SVG playhead cx/cy mutation",
+      "tabCrossover": true,
+      "estimator": "arithmetic mean of the two per-build run p95 values"
+    },
+    "playback": {
+      "warmupFrameIntervalsPerRun": 120,
+      "measuredFrameIntervalsPerRun": 360,
+      "estimator": "arithmetic mean of the two per-build run p95 values"
+    }
+  },
+  "gates": {
+    "inputP95DeltaMsMax": 1,
+    "inputP95DeltaPercentMax": 2,
+    "frameIntervalP95DeltaPercentMax": 2,
+    "attributableLongTasksOver50MsMax": 0,
+    "structuralBuildDeltaMax": 0
+  },
+  "input": {
+    "defaultRunP95Ms": [
+      43.300000071525574,
+      42.700000047683716
+    ],
+    "studyRunP95Ms": [
+      42,
+      43.5
+    ],
+    "defaultP95Ms": 43.000000059604645,
+    "studyP95Ms": 42.75,
+    "deltaMs": -0.2500000596046448,
+    "deltaPercent": -0.5813954866467583,
+    "defaultMeanMs": 40.24950000023842,
+    "studyMeanMs": 40.30009999984503,
+    "defaultMeasuredInteractions": 2000,
+    "studyMeasuredInteractions": 2000,
+    "defaultWebglClears": 2,
+    "studyWebglClears": 2,
+    "defaultStructuralBuildDelta": 0,
+    "studyStructuralBuildDelta": 0,
+    "attributableLongTasksOver50Ms": 0,
+    "decision": "pass"
+  },
+  "playback": {
+    "defaultRunP95Ms": [
+      85.69999999998254,
+      87.29999999998836
+    ],
+    "studyRunP95Ms": [
+      87.29999999998836,
+      87.20000000001164
+    ],
+    "defaultP95Ms": 86.49999999998545,
+    "studyP95Ms": 87.25,
+    "deltaMs": 0.7500000000145519,
+    "deltaPercent": 0.867052023138356,
+    "defaultMeanMs": 82.17541666666666,
+    "studyMeanMs": 82.1877777777778,
+    "defaultMeasuredFrameIntervals": 720,
+    "studyMeasuredFrameIntervals": 720,
+    "defaultWebglClears": 720,
+    "studyWebglClears": 720,
+    "defaultStructuralBuildDelta": 0,
+    "studyStructuralBuildDelta": 0,
+    "attributableLongTasksOver50Ms": 0,
+    "decision": "pass"
+  },
+  "transport": {
+    "defaultRequestsAfterExportAndPageHide": 0,
+    "studyNormalRequests": 1,
+    "studyExitBeacons": 1,
+    "studyPayloadBytes": [
+      1114,
+      1114
+    ],
+    "payloadBytesMax": 8192,
+    "exactSchemaAllowlist": true,
+    "sourceShaMatched": true,
+    "decision": "pass"
+  },
+  "pilotDisposition": {
+    "retained": true,
+    "deciding": false,
+    "reasons": [
+      "Cold pages had unequal JIT warm-up.",
+      "The Orca integration worktree was initially hidden, causing embedded-webview throttling.",
+      "A lifecycle-isolation candidate compared a cold page with a warm page, did not improve latency, and was fully reverted."
+    ],
+    "rawEvidence": "artifacts/quality/G9/raw/orca-final-session.log"
+  },
+  "rawEvidence": {
+    "structured": "artifacts/quality/G9/raw/orca-ab-evidence.json",
+    "inputHarness": "artifacts/quality/G9/raw/orca-input-probe-final.js",
+    "playbackHarness": "artifacts/quality/G9/raw/orca-playback-probe-final.js",
+    "transport": "artifacts/quality/G9/raw/summary-sink-final-stats.json",
+    "session": "artifacts/quality/G9/raw/orca-final-session.log"
+  },
+  "overallDecision": "pass"
+}
+{
+  "sourceSha": "0707c38aaf2ddc121cdfc550a2067812354b0123",
+  "runtime": {
+    "tool": "orca 1.4.181 built-in browser",
+    "runtimeId": "5aa221c2-d1ac-4e04-b0a8-30e23faa79d1",
+    "worktree": "/Users/alansynn/orca/workspaces/MechAnim/quality-sol-max-integration",
+    "worktreeWasActivatedBeforeDecidingRuns": true,
+    "defaultUrl": "http://127.0.0.1:43195/",
+    "enabledUrl": "http://127.0.0.1:43196/",
+    "sinkUrl": "http://127.0.0.1:43197/summary"
+  },
+  "buildBoundary": {
+    "defaultMainBundleBytes": 1584865,
+    "enabledMainBundleBytes": 1594105,
+    "enabledDeltaBytes": 9240,
+    "defaultMarkerScanMatches": 0,
+    "enabledContainsSchemaAndTarget": true
+  },
+  "input": {
+    "protocol": "Each fresh page receives 500 sequential unmeasured input-to-playhead mutations, followed by 1000 measured mutations. Builds run in default/enabled/enabled/default order and cross browser-page identities. The arithmetic mean of the two per-build p95 values is the deciding estimate.",
+    "rounds": [
+      {
+        "order": 1,
+        "profile": "default",
+        "browserPageId": "804d5cd0-b48b-48e6-bef7-84db878b286e",
+        "p50Ms": 40.199999928474426,
+        "p95Ms": 43.300000071525574,
+        "p99Ms": 45.59999990463257,
+        "meanMs": 40.570600001335144,
+        "maxMs": 64.60000002384186,
+        "latencyBands": [
+          0,
+          0,
+          454,
+          994,
+          6
+        ],
+        "webglClears": 1,
+        "structuralBuildDelta": 0,
+        "longTasksOver50Ms": []
+      },
+      {
+        "order": 2,
+        "profile": "study",
+        "browserPageId": "4aa85da1-bf04-44a6-ae2b-ce8c508428fa",
+        "p50Ms": 39.5,
+        "p95Ms": 42,
+        "p99Ms": 45.39999997615814,
+        "meanMs": 39.81590000009537,
+        "maxMs": 60.59999990463257,
+        "latencyBands": [
+          0,
+          0,
+          679,
+          993,
+          7
+        ],
+        "webglClears": 1,
+        "structuralBuildDelta": 0,
+        "longTasksOver50Ms": []
+      },
+      {
+        "order": 3,
+        "profile": "study",
+        "browserPageId": "804d5cd0-b48b-48e6-bef7-84db878b286e",
+        "p50Ms": 40.5,
+        "p95Ms": 43.5,
+        "p99Ms": 46.300000071525574,
+        "meanMs": 40.78429999959469,
+        "maxMs": 67.20000004768372,
+        "latencyBands": [
+          0,
+          0,
+          379,
+          993,
+          7
+        ],
+        "webglClears": 1,
+        "structuralBuildDelta": 0,
+        "longTasksOver50Ms": []
+      },
+      {
+        "order": 4,
+        "profile": "default",
+        "browserPageId": "4aa85da1-bf04-44a6-ae2b-ce8c508428fa",
+        "p50Ms": 39.5,
+        "p95Ms": 42.700000047683716,
+        "p99Ms": 46.39999997615814,
+        "meanMs": 39.928399999141696,
+        "maxMs": 61.800000071525574,
+        "latencyBands": [
+          0,
+          0,
+          682,
+          993,
+          7
+        ],
+        "webglClears": 1,
+        "structuralBuildDelta": 0,
+        "longTasksOver50Ms": []
+      }
+    ],
+    "aggregate": {
+      "defaultP95Ms": 43.000000059604645,
+      "enabledP95Ms": 42.75,
+      "deltaMs": -0.2500000596046448,
+      "deltaPercent": -0.5813954866467583,
+      "maxDeltaMs": 1,
+      "maxDeltaPercent": 2,
+      "decision": "pass"
+    }
+  },
+  "playback": {
+    "protocol": "Each run plays 120 unmeasured requestAnimationFrame intervals, then measures 360 intervals. Runs use default/enabled/enabled/default order. The arithmetic mean of the two per-build p95 values is the deciding estimate.",
+    "rounds": [
+      {
+        "order": 1,
+        "profile": "default",
+        "p50Ms": 83.30000000001746,
+        "p95Ms": 85.69999999998254,
+        "p99Ms": 90.10000000000582,
+        "meanMs": 82.40499999999997,
+        "maxMs": 108.69999999998254,
+        "webglClears": 360,
+        "structuralBuildDelta": 0,
+        "longTasksOver50Ms": []
+      },
+      {
+        "order": 2,
+        "profile": "study",
+        "p50Ms": 83.29999999998836,
+        "p95Ms": 87.29999999998836,
+        "p99Ms": 89.29999999998836,
+        "meanMs": 82.41916666666657,
+        "maxMs": 112.70000000001164,
+        "webglClears": 360,
+        "structuralBuildDelta": 0,
+        "longTasksOver50Ms": []
+      },
+      {
+        "order": 3,
+        "profile": "study",
+        "p50Ms": 83.29999999998836,
+        "p95Ms": 87.20000000001164,
+        "p99Ms": 88.29999999998836,
+        "meanMs": 81.95638888888902,
+        "maxMs": 91.79999999998836,
+        "webglClears": 360,
+        "structuralBuildDelta": 0,
+        "longTasksOver50Ms": []
+      },
+      {
+        "order": 4,
+        "profile": "default",
+        "p50Ms": 83.29999999998836,
+        "p95Ms": 87.29999999998836,
+        "p99Ms": 90.5,
+        "meanMs": 81.94583333333334,
+        "maxMs": 91.5,
+        "webglClears": 360,
+        "structuralBuildDelta": 0,
+        "longTasksOver50Ms": []
+      }
+    ],
+    "aggregate": {
+      "defaultP95Ms": 86.49999999998545,
+      "enabledP95Ms": 87.25,
+      "deltaMs": 0.7500000000145519,
+      "deltaPercent": 0.8670520231383565,
+      "maxDeltaPercent": 2,
+      "defaultMeasuredWebglClears": 720,
+      "enabledMeasuredWebglClears": 720,
+      "attributableLongTasksOver50Ms": 0,
+      "decision": "pass"
+    }
+  },
+  "transport": {
+    "default": {
+      "afterExportRequestCount": 0,
+      "afterPageHideRequestCount": 0,
+      "resourceEntriesToSink": 0,
+      "decision": "pass"
+    },
+    "enabled": {
+      "requestCount": 2,
+      "modes": [
+        "cors",
+        "no-cors"
+      ],
+      "bytes": [
+        1114,
+        1114
+      ],
+      "normalRequests": 1,
+      "exitBeacons": 1,
+      "schema": "study-summary-v1",
+      "buildSha": "0707c38aaf2ddc121cdfc550a2067812354b0123",
+      "profile": "study",
+      "exactAllowlist": true,
+      "sensitiveSentinelsAbsent": true,
+      "decision": "pass"
+    }
+  },
+  "criticalFlow": {
+    "profile": "default",
+    "character": {
+      "heading": "Character",
+      "ownership": "Make it yoursMake a hand waveSelect a partPlace jointsEdit rigReset"
+    },
+    "foundry": {
+      "control": "Pause",
+      "phaseDegrees": 281,
+      "renderable": "ready",
+      "renderer": "webgl",
+      "physics": "ready",
+      "dynamicBuildCount": 1,
+      "partCount": 11,
+      "holeCount": 21,
+      "physicalErrors": 0,
+      "stackErrors": 0
+    },
+    "design": {
+      "heading": "Mechanism Design",
+      "renderable": "ready",
+      "renderer": "webgl",
+      "dynamicBuildCount": 1,
+      "mechanism": "4bar",
+      "partCount": 14,
+      "physicalErrors": 0,
+      "stackErrors": 0,
+      "pathSource": "moving-joints"
+    },
+    "blueprint": {
+      "heading": "Blueprint",
+      "generated": [
+        "Download PDF cut sheet default",
+        "Download SVG default"
+      ]
+    },
+    "assembly": {
+      "heading": "Assembly",
+      "phase": "prepare-parts"
+    },
+    "consoleMessages": [],
+    "httpFailures": [],
+    "summaryResourceEntries": 0,
+    "decision": "pass"
+  },
+  "excludedPilots": [
+    {
+      "reason": "cold pages and unbalanced JIT warm-up",
+      "result": "Several 500-sample input pairs exceeded the p95 gate despite zero per-input telemetry work; later rounds on the same pages became faster. All exact values remain in orca-final-session.log."
+    },
+    {
+      "reason": "integration worktree hidden in Orca",
+      "result": "The embedded webview was throttled, producing playback maxima near 1000 ms. Orca worktree ps reported isActive=false. These runs were rejected before the worktree was activated."
+    },
+    {
+      "reason": "unbalanced lifecycle-isolation experiment",
+      "result": "A temporary uncommitted removal of the lifecycle mount compared a fresh candidate page with a heavily warmed default page. It did not improve latency and was fully reverted; git diff for the production file returned empty."
+    }
+  ]
+}
+{
+  "requestCount": 2,
+  "requests": [
+    {
+      "body": "{\"schema\":\"study-summary-v1\",\"buildSha\":\"0707c38aaf2ddc121cdfc550a2067812354b0123\",\"profile\":\"study\",\"sessionDurationMs\":673960,\"context\":{\"viewport\":\"medium\",\"hardwareConcurrency\":\"high\",\"pointer\":\"mouse\",\"network\":\"fast\"},\"stageEntries\":[1,0,1,0,1,0,0,0],\"stageDurationMs\":[45937,0,592131,0,35691,0,0,0],\"commandAccepted\":[2,1,0,0,0,1,0,0,0,0,0],\"commandRejected\":[0,0,0,0,0,0,0,0,0,0,0],\"commandNoOp\":[0,0,0,0,0,0,0,0,0,0,0],\"commandUnknown\":[0,0,0,0,0,0,0,0,0,0,0],\"mechanismFamilies\":[0,0,0,0,0,0,0,0],\"fitRequests\":0,\"fitOutcomes\":[0,0,0,0,0],\"fitLatency\":[0,0,0,0,0,0,0,0,0,0,0,0,0],\"exportAttempts\":1,\"exportOutcomes\":[1,0,0,0],\"exportBlockers\":[1,0,0,0,0,0,0,0],\"autosaveSuccess\":14,\"autosaveFailure\":0,\"autosaveRecovery\":0,\"autosaveDuration\":[0,6,5,0,1,0,1,1,0,0,0,0,0],\"imageInferenceSuccess\":0,\"imageInferenceFailure\":0,\"imageInferenceLatency\":[0,0,0,0,0,0,0,0,0,0,0,0,0],\"errorNames\":[0,0,0,0,0,0,0,0,0,0,0],\"performance\":{\"inputLatencyP95Ms\":null,\"inputLatencyDeltaP95Ms\":null,\"inputLatencyDeltaPercentP95\":null,\"frameIntervalP95Ms\":null,\"frameIntervalDeltaPercentP95\":null,\"longTasksOver50Ms\":null}}",
+      "bytes": 1114,
+      "contentType": "text/plain;charset=UTF-8",
+      "origin": "http://127.0.0.1:43196",
+      "secFetchMode": "cors"
+    },
+    {
+      "body": "{\"schema\":\"study-summary-v1\",\"buildSha\":\"0707c38aaf2ddc121cdfc550a2067812354b0123\",\"profile\":\"study\",\"sessionDurationMs\":689480,\"context\":{\"viewport\":\"medium\",\"hardwareConcurrency\":\"high\",\"pointer\":\"mouse\",\"network\":\"fast\"},\"stageEntries\":[1,0,1,0,1,0,0,0],\"stageDurationMs\":[45937,0,592131,0,51211,0,0,0],\"commandAccepted\":[2,1,0,0,0,1,0,0,0,0,0],\"commandRejected\":[0,0,0,0,0,0,0,0,0,0,0],\"commandNoOp\":[0,0,0,0,0,0,0,0,0,0,0],\"commandUnknown\":[0,0,0,0,0,0,0,0,0,0,0],\"mechanismFamilies\":[0,0,0,0,0,0,0,0],\"fitRequests\":0,\"fitOutcomes\":[0,0,0,0,0],\"fitLatency\":[0,0,0,0,0,0,0,0,0,0,0,0,0],\"exportAttempts\":1,\"exportOutcomes\":[1,0,0,0],\"exportBlockers\":[1,0,0,0,0,0,0,0],\"autosaveSuccess\":15,\"autosaveFailure\":0,\"autosaveRecovery\":0,\"autosaveDuration\":[0,6,5,0,1,0,1,2,0,0,0,0,0],\"imageInferenceSuccess\":0,\"imageInferenceFailure\":0,\"imageInferenceLatency\":[0,0,0,0,0,0,0,0,0,0,0,0,0],\"errorNames\":[0,0,0,0,0,0,0,0,0,0,0],\"performance\":{\"inputLatencyP95Ms\":null,\"inputLatencyDeltaP95Ms\":null,\"inputLatencyDeltaPercentP95\":null,\"frameIntervalP95Ms\":null,\"frameIntervalDeltaPercentP95\":null,\"longTasksOver50Ms\":null}}",
+      "bytes": 1114,
+      "contentType": "text/plain;charset=utf-8",
+      "origin": "http://127.0.0.1:43196",
+      "secFetchMode": "no-cors"
+    }
+  ]
+}
+{
+  "goal": "G3",
+  "lane": "Luna B",
+  "baselineSha": "c523d16f64263df995f4a8f13c2fd1cf90471a10",
+  "branch": "quality/luna-preview",
+  "runtime": "Orca production preview http://127.0.0.1:4173/",
+  "workflow": "Getting Started > Make a hand wave > Mechanism Foundry",
+  "sample": {
+    "durationMs": 4036.5,
+    "rafCount": 87,
+    "frameCount": 86,
+    "frameMs": {
+      "p50": 49.20000000001164,
+      "p95": 75,
+      "p99": 100,
+      "max": 100
+    },
+    "longTasks": {
+      "count": 15,
+      "totalMs": 771,
+      "maxMs": 55
+    },
+    "renderSignals": {
+      "webglClear": 79,
+      "drawElements": 1581,
+      "drawArrays": 995
+    },
+    "foundryDynamicBuildCount": {
+      "before": 53,
+      "after": 132,
+      "delta": 79
+    },
+    "geometryCacheSize": {
+      "before": 10,
+      "after": 10
+    },
+    "materialCacheSize": {
+      "before": 10,
+      "after": 10
+    },
+    "heapUsedBytes": {
+      "before": 20376339,
+      "after": 48851976
+    }
+  },
+  "inputProbe": {
+    "status": "unavailable",
+    "reason": "Orca accessibility click and native mouse commands completed but emitted no observable page click/pointerdown event to an in-page capture listener; no latency value is asserted."
+  },
+  "stateProbe": {
+    "data-three-animation-commit-ms": "33.3",
+    "data-three-dynamic-build-count-at-settle": "2",
+    "data-three-geometry-cache-size-at-settle": "10",
+    "data-three-material-cache-size-at-settle": "10",
+    "data-three-preview-renderable": "ready",
+    "data-physics-kernel-runtime": "ready",
+    "data-physics-kernel-version": "0.19.3"
+  },
+  "rawEvidence": [
+    "Orca eval result id a875393c-62fd-4481-9bdd-8237b847a74b",
+    "Orca eval input probe timeout ids 17aa4e7d-9963-43b8-b12f-7cb9bf6285e9 and 2cbdc848-e465-4013-a03a-6f2dca4f18f2",
+    "Orca terminal term_1222b1bd-358a-4dc0-b680-c74e3afa3dfb"
+  ]
+}
+
+$ test -s artifacts/quality/final-commit-ledger.tsv -a -s artifacts/quality/final-hunk-ledger.tsv -a -s artifacts/quality/final-test-evidence.md -a -s artifacts/quality/final-performance.json -a -s artifacts/quality/final-telemetry-schema.md -a -s artifacts/quality/final-risk-register.md
+expected_exit=0 actual_exit=0 decision=PASS
+<empty>
+$ rg -n '[가-힣]' artifacts/quality/final-commit-ledger.tsv artifacts/quality/final-hunk-ledger.tsv artifacts/quality/final-test-evidence.md artifacts/quality/final-telemetry-schema.md artifacts/quality/final-risk-register.md artifacts/quality/G9 artifacts/quality/G3/atomic-clock-gate-raw.txt artifacts/quality/G3/baseline-build.txt artifacts/quality/G3/baseline-performance.json artifacts/quality/G3/lifecycle-gate-raw.txt artifacts/quality/G3/resource-gate-raw.txt
+expected_exit=1 actual_exit=1 decision=PASS
+<empty>
+$ git diff --check
+expected_exit=0 actual_exit=0 decision=PASS
+<empty>

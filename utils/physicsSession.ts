@@ -1,5 +1,11 @@
 import type { ConnectionSelectionRole, MechanismConfig, MechanismType, Point, ProjectState } from '../types';
-import { calculateLinkage, camFollowerConstraintError, gearTrainResolvedCenterDistance } from './kinematics';
+import {
+  calculateLinkage,
+  gearTrainResolvedCenterDistance,
+  preparedCamFollowerConstraintError,
+  prepareMechanismKinematics,
+  type PreparedMechanismKinematics,
+} from './kinematics';
 import { physicalConnectionForRole, resolveMechanismPhysicalConnections } from './mechanismConnectionSelections';
 import { mechanismTemplateLabel } from './mechanismTemplates';
 import type { ProjectionSourceType, ToonSceneProjection } from './sceneProjection';
@@ -175,7 +181,11 @@ const foundryPhysicalPlayhead = (
   return s.effector ? { point: s.effector, source: 'effector-point' } : { point: fallback, source: 'path-sample' };
 };
 
-const foundryConstraintError = (mechanism: MechanismConfig, simulation: FoundryPhysicsSimulation): number => {
+const foundryConstraintError = (
+  prepared: PreparedMechanismKinematics,
+  simulation: FoundryPhysicsSimulation,
+): number => {
+  const { mechanism } = prepared;
   const s = simulation.state;
   const scaledLength = (length: number | undefined) => Math.max(0, finite(length ?? 0)) * simulation.scale;
   const errors = mechanism.type === 'gear'
@@ -193,7 +203,7 @@ const foundryConstraintError = (mechanism: MechanismConfig, simulation: FoundryP
       : mechanism.type === 'rack-pinion'
         ? [Math.abs(fittedDistance(s.p1, s.j1) - scaledLength(mechanism.crankLength)), fittedDistance(s.j2, s.p2)]
         : mechanism.type === 'cam'
-          ? [camFollowerConstraintError(mechanism, simulation.rawState ?? s)
+          ? [preparedCamFollowerConstraintError(prepared, simulation.rawState ?? s)
             * (simulation.rawState ? simulation.scale : 1)]
           : mechanism.type === 'piston'
             ? [fittedDistance(s.j2, s.effector)]
@@ -209,13 +219,14 @@ const foundryConstraintError = (mechanism: MechanismConfig, simulation: FoundryP
   return Math.max(0, ...errors.filter(Number.isFinite));
 };
 
-export const buildFoundryPhysicsOverlay = (
-  mechanism: MechanismConfig,
+export const buildPreparedFoundryPhysicsOverlay = (
+  prepared: PreparedMechanismKinematics,
   simulation: FoundryPhysicsSimulation,
   phaseRad: number,
   settings: Pick<ProjectState['settings'], 'simulationFriction' | 'simulationMassKg'>,
   fallbackPathPoints: Point[] = []
 ): FoundryPhysicsOverlay => {
+  const { mechanism } = prepared;
   const previewPoints = simulation.pathPoints.length ? simulation.pathPoints : fallbackPathPoints;
   const playIndex = previewPoints.length ? Math.floor(normalizedPhase(phaseRad) * previewPoints.length) : 0;
   const fallbackPlayhead = previewPoints[playIndex];
@@ -265,10 +276,24 @@ export const buildFoundryPhysicsOverlay = (
     forceTip,
     frictionTip,
     driveTip,
-    constraintError: finite(foundryConstraintError(mechanism, simulation)),
+    constraintError: finite(foundryConstraintError(prepared, simulation)),
     rule: mechanismPhysicsRule(mechanism.type)
   };
 };
+
+export const buildFoundryPhysicsOverlay = (
+  mechanism: MechanismConfig,
+  simulation: FoundryPhysicsSimulation,
+  phaseRad: number,
+  settings: Pick<ProjectState['settings'], 'simulationFriction' | 'simulationMassKg'>,
+  fallbackPathPoints: Point[] = []
+): FoundryPhysicsOverlay => buildPreparedFoundryPhysicsOverlay(
+  prepareMechanismKinematics(mechanism),
+  simulation,
+  phaseRad,
+  settings,
+  fallbackPathPoints,
+);
 
 const addConstraint = (constraints: PhysicsConstraintSample[], id: string, kind: PhysicsConstraintKind, a: Point, b: Point, expectedLength: number, label: string, mechanismId?: string) => {
   const currentLength = distance(a, b);

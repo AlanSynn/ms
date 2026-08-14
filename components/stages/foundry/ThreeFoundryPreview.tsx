@@ -12,11 +12,14 @@ import type {
 } from "../../../types";
 import {
   camFollowerConstraintError,
+  calculatePreparedLinkage,
   gearPairOutputRatio,
   gearTrainMeshPhaseDegAt,
   gearTrainOutputRatio,
   gearTrainPitchRadii,
+  gearTrainRotationRatioAt,
   planetaryCarrierOutputRatio,
+  prepareMechanismKinematics,
 } from "../../../utils/kinematics";
 import {
   FABRICATION_HOLE_RADIUS_MM,
@@ -50,8 +53,16 @@ import {
   type FoundryCamera,
   type FoundryOverlaySize,
 } from "../../../utils/foundryCamera";
+import { foundryPlanetaryPlanetRotationDeg } from "../../../utils/foundryPlayback";
 import type { MechanismPreviewSimulation } from "../../../utils/mechanismPreview";
-import { setRendererPixelRatioCap } from "../../../utils/threeResourceKit";
+import {
+  disposeThreeResourceCaches,
+  setRendererPixelRatioCap,
+} from "../../../utils/threeResourceKit";
+import {
+  createFrameCommitQueue,
+  type FrameCommitQueue,
+} from "../../../utils/frameCommitQueue";
 import { fittedGearTrainCenters } from "./foundryPreviewGeometry";
 import { FoundryPreviewStateProbe } from "./FoundryPreviewStateProbe";
 import {
@@ -64,7 +75,11 @@ import {
   createFoundryThreePrimitiveFactory,
   disposeFoundryThreeObject,
 } from "./foundryThreePrimitives";
-import { renderFoundryDynamicLayers } from "./foundryThreeRenderLayers";
+import {
+  disposeFoundryDynamicRoot,
+  renderFoundryDynamicLayers,
+  replaceFoundryDynamicRoot,
+} from "./foundryThreeRenderLayers";
 import {
   foundryAssemblyPinContract,
   foundryLocalSpacerZForPin,
@@ -74,6 +89,15 @@ import {
   foundrySpacerTouchesPin,
   type FoundryPinStackPoint,
 } from "../../../utils/mechanismPreviewStacks";
+import {
+  createFoundryFrameBindingTable,
+  foundryFrameAffineForSimulation,
+  foundryFramePointPresentationKey,
+  updateFoundryFrameBindings,
+  type FoundryAutomataFrameTransform,
+  type FoundryFrameBindingTable,
+  type FoundryFramePresentation,
+} from "./foundryFrameBindings";
 
 type ThreeFoundryPreviewProps = {
   mechanism: MechanismConfig;
@@ -117,6 +141,7 @@ type ThreeFoundryPreviewProps = {
   onAutomataPartSelect?: (partId: string) => void;
   onAutomataSceneObjectSelect?: (objectId: string) => void;
   assemblySceneFrame?: FoundryAssemblySceneFrame;
+  assemblyFramePresentation?: FoundryFramePresentation["assembly"];
   connectionSelectionCoordinates?: Record<string, Point>;
   connectionExportSignature?: string;
   selectedConnection?: { role: string; kind: string; holeIndex: number };
@@ -125,7 +150,7 @@ type ThreeFoundryPreviewProps = {
   children: React.ReactNode;
 };
 
-type FoundryAutomataContext = {
+export type FoundryAutomataContext = {
   project: ProjectState;
   animatedParts?: Record<string, BodyPartLayer>;
   animatedSceneObjects?: Record<string, SceneObject>;
@@ -163,6 +188,35 @@ const sceneLocalFromFoundryGeometry = (x: number, y: number): Point => ({
   x: (x * 18) / SCENE_TO_FOUNDRY_SCALE,
   y: (y * 18) / SCENE_TO_FOUNDRY_SCALE,
 });
+
+const structuralSimulationFor = (
+  simulation: MechanismPreviewSimulation,
+  preparedKinematics: ReturnType<typeof prepareMechanismKinematics>,
+): MechanismPreviewSimulation => {
+  const rawState = calculatePreparedLinkage(preparedKinematics, 0);
+  const affine = foundryFrameAffineForSimulation(simulation);
+  const map = (point: Point): Point => ({
+    x: point.x * affine.scale + affine.translateX,
+    y: affine.translateY - point.y * affine.scale,
+  });
+  return {
+    ...simulation,
+    inputAngleRad: 0,
+    inputAngleDeg: 0,
+    driveAngleRad: 0,
+    driveAngleDeg: 0,
+    rawState,
+    state: {
+      ...rawState,
+      p1: map(rawState.p1),
+      p2: map(rawState.p2),
+      j1: map(rawState.j1),
+      j2: map(rawState.j2),
+      aux: rawState.aux ? map(rawState.aux) : undefined,
+      effector: map(rawState.effector),
+    },
+  };
+};
 
 const AUTOMATA_PART_ART_SURFACE_Z = 0.09;
 const AUTOMATA_STACKED_BASE_LIFT_Z = 0.16;
@@ -223,6 +277,14 @@ type FoundryScreenTargets = {
   mechanismTargets?: FoundryScreenTarget[];
 };
 
+type FoundryRenderCommit = {
+  scene: THREE.Scene;
+  renderer: THREE.WebGLRenderer;
+  camera: THREE.PerspectiveCamera;
+  bindingTable?: FoundryFrameBindingTable;
+  screenTargetOverride?: FoundryScreenTargets;
+};
+
 const roundedFoundryScreenTargets = (targets: FoundryScreenTarget[]) =>
   targets.map((target) => ({
     kind: target.kind,
@@ -236,6 +298,197 @@ const roundedFoundryScreenTargets = (targets: FoundryScreenTarget[]) =>
     radius: Number(target.radius.toFixed(1)),
     visible: target.visible,
   }));
+
+const writeFoundryAutomataScreenTargets = ({
+  table,
+  renderer,
+  cam,
+  state,
+}: {
+  table: FoundryFrameBindingTable;
+  renderer: THREE.WebGLRenderer;
+  cam: THREE.PerspectiveCamera;
+  state: HTMLDivElement | null;
+}) => {
+  if (!state) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  const objectTargets: FoundryScreenTarget[] = [];
+  const partTargets: FoundryScreenTarget[] = [];
+  const worldPosition = new THREE.Vector3();
+  const projected = new THREE.Vector3();
+  cam.updateMatrixWorld();
+  for (let index = 0; index < table.automata.length; index += 1) {
+    const binding = table.automata[index];
+    const prefix = "foundry:automata:";
+    if (!binding.bindingId.startsWith(prefix)) continue;
+    const separator = binding.bindingId.indexOf(":", prefix.length);
+    if (separator < 0) continue;
+    const kind = binding.bindingId.slice(prefix.length, separator);
+    if (kind !== "part" && kind !== "object") continue;
+    const id = binding.bindingId.slice(separator + 1);
+    binding.owner.getWorldPosition(worldPosition);
+    projected.copy(worldPosition).project(cam);
+    const x = rect.left + ((projected.x + 1) / 2) * rect.width;
+    const y = rect.top + ((1 - projected.y) / 2) * rect.height;
+    const radius = 24;
+    const left = x - radius;
+    const right = x + radius;
+    const top = y - radius;
+    const bottom = y + radius;
+    const visible = binding.owner.visible
+      && right >= rect.left
+      && left <= rect.right
+      && bottom >= rect.top
+      && top <= rect.bottom;
+    const target = {
+      kind,
+      id,
+      x,
+      y,
+      left,
+      top,
+      right,
+      bottom,
+      radius,
+      visible,
+    } satisfies FoundryScreenTarget;
+    (kind === "part" ? partTargets : objectTargets).push(target);
+  }
+  state.dataset.threeSceneObjectScreenTargets = JSON.stringify(
+    roundedFoundryScreenTargets(objectTargets),
+  );
+  state.dataset.threePartScreenTargets = JSON.stringify(
+    roundedFoundryScreenTargets(partTargets),
+  );
+};
+
+const writeFoundryCameraDiagnostics = ({
+  scene,
+  renderer,
+  cam,
+  state,
+  screenTargetOverride,
+}: {
+  scene: THREE.Scene;
+  renderer: THREE.WebGLRenderer;
+  cam: THREE.PerspectiveCamera;
+  state: HTMLDivElement | null;
+  screenTargetOverride?: FoundryScreenTargets;
+}) => {
+  if (!state) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  const projectWorld = (point: THREE.Vector3) => {
+    const projected = point.clone().project(cam);
+    return {
+      x: rect.left + ((projected.x + 1) / 2) * rect.width,
+      y: rect.top + ((1 - projected.y) / 2) * rect.height,
+      z: projected.z,
+    };
+  };
+  const targetForObject = (
+    kind: FoundryScreenTarget["kind"],
+    id: string,
+    object: THREE.Object3D,
+  ): FoundryScreenTarget | null => {
+    if (!object.visible) return null;
+    object.updateWorldMatrix(true, true);
+    const box = new THREE.Box3().setFromObject(object);
+    const center = new THREE.Vector3();
+    const worldPoints: THREE.Vector3[] = [];
+    if (box.isEmpty() || !Number.isFinite(box.min.x) || !Number.isFinite(box.max.x)) {
+      object.getWorldPosition(center);
+      worldPoints.push(center.clone());
+    } else {
+      box.getCenter(center);
+      for (const x of [box.min.x, box.max.x]) {
+        for (const y of [box.min.y, box.max.y]) {
+          for (const z of [box.min.z, box.max.z]) {
+            worldPoints.push(new THREE.Vector3(x, y, z));
+          }
+        }
+      }
+    }
+    const centerScreen = projectWorld(center);
+    let left = centerScreen.x;
+    let right = centerScreen.x;
+    let top = centerScreen.y;
+    let bottom = centerScreen.y;
+    let radius = 0;
+    worldPoints.forEach((point) => {
+      const screen = projectWorld(point);
+      left = Math.min(left, screen.x);
+      right = Math.max(right, screen.x);
+      top = Math.min(top, screen.y);
+      bottom = Math.max(bottom, screen.y);
+      radius = Math.max(radius, Math.hypot(screen.x - centerScreen.x, screen.y - centerScreen.y));
+    });
+    const intersectsViewport =
+      right >= rect.left && left <= rect.right && bottom >= rect.top && top <= rect.bottom;
+    const visible = intersectsViewport;
+    const visibleLeft = Math.max(left, rect.left);
+    const visibleRight = Math.min(right, rect.right);
+    const visibleTop = Math.max(top, rect.top);
+    const visibleBottom = Math.min(bottom, rect.bottom);
+    const clickX = visible ? (visibleLeft + visibleRight) / 2 : centerScreen.x;
+    const clickY = visible ? (visibleTop + visibleBottom) / 2 : centerScreen.y;
+    return { kind, id, x: clickX, y: clickY, left, top, right, bottom, radius, visible };
+  };
+  const dynamicObjectTargets = new Map<string, FoundryScreenTarget>();
+  const dynamicPartTargets = new Map<string, FoundryScreenTarget>();
+  const dynamic = scene.getObjectByName("foundry-dynamic");
+  dynamic?.traverse((object) => {
+    const sceneObjectId = object.userData.sceneObjectId;
+    if (
+      typeof sceneObjectId === "string"
+      && !dynamicObjectTargets.has(sceneObjectId)
+    ) {
+      const target = targetForObject("object", sceneObjectId, object);
+      if (target) dynamicObjectTargets.set(sceneObjectId, target);
+    }
+    const partId = object.userData.partId;
+    if (typeof partId === "string" && !dynamicPartTargets.has(partId)) {
+      const target = targetForObject("part", partId, object);
+      if (target) dynamicPartTargets.set(partId, target);
+    }
+  });
+  const targetsToWrite = screenTargetOverride
+    ? {
+        objectTargets:
+          screenTargetOverride.objectTargets.length > 0
+            ? screenTargetOverride.objectTargets
+            : roundedFoundryScreenTargets([...dynamicObjectTargets.values()]),
+        partTargets:
+          screenTargetOverride.partTargets.length > 0
+            ? screenTargetOverride.partTargets
+            : roundedFoundryScreenTargets([...dynamicPartTargets.values()]),
+        mechanismTargets:
+          screenTargetOverride.mechanismTargets ?? roundedFoundryScreenTargets([]),
+      }
+    : {
+        objectTargets: roundedFoundryScreenTargets([...dynamicObjectTargets.values()]),
+        partTargets: roundedFoundryScreenTargets([...dynamicPartTargets.values()]),
+        mechanismTargets: [],
+      };
+  state.dataset.threeSceneObjectScreenTargets = JSON.stringify(
+    targetsToWrite.objectTargets,
+  );
+  state.dataset.threePartScreenTargets = JSON.stringify(
+    targetsToWrite.partTargets,
+  );
+  state.dataset.threeMechanismScreenTargets = JSON.stringify(
+    targetsToWrite.mechanismTargets,
+  );
+  const assemblyBoard = scene.getObjectByName("assembly-15x15-board-surface");
+  state.dataset.threeAssemblyBoardSurface = assemblyBoard
+    ? String(assemblyBoard.userData.assemblyBoardSurface ?? "15x15-hole-board")
+    : "hidden";
+  state.dataset.threeAssemblyBoardHoleCount = String(
+    assemblyBoard?.userData.assemblyBoardHoleCount ?? 0,
+  );
+  state.dataset.threeAssemblyBoardZ = assemblyBoard
+    ? Number(assemblyBoard.userData.assemblyBoardZ ?? 0).toFixed(2)
+    : "";
+};
 
 const createFoundryFallbackScreenTarget = (
   kind: FoundryScreenTarget["kind"],
@@ -347,11 +600,15 @@ const foundryAutomataMaterial = (
   return material;
 };
 
-const foundryAutomataTextureMaterial = (
+export const createFoundryAutomataTextureMaterial = (
   textureUrl: string | undefined,
   opacity: number,
+  materialCache: Map<string, THREE.Material>,
   onLoaded: () => void,
 ) => {
+  const key = `automata-texture:${textureUrl ?? "none"}:${opacity.toFixed(2)}`;
+  const existing = materialCache.get(key);
+  if (existing) return existing;
   const material = new THREE.MeshBasicMaterial({
     color: textureUrl ? "#ffffff" : "#f8fafc",
     transparent: true,
@@ -367,7 +624,66 @@ const foundryAutomataTextureMaterial = (
     material.map = texture;
     material.needsUpdate = true;
   }
+  material.userData[FOUNDRY_CACHE_MARKER] = true;
+  materialCache.set(key, material);
   return material;
+};
+
+export const automataFramePresentationFor = ({
+  context,
+  assemblySceneFrame,
+  assemblyFramePresentation,
+  baseZ,
+}: {
+  context?: FoundryAutomataContext;
+  assemblySceneFrame?: FoundryAssemblySceneFrame;
+  assemblyFramePresentation?: FoundryFramePresentation["assembly"];
+  baseZ: number;
+}): Readonly<Record<string, FoundryAutomataFrameTransform>> => {
+  const transforms: Record<string, FoundryAutomataFrameTransform> = {};
+  if (!context?.showCharacter) return transforms;
+  const activePartIds =
+    assemblySceneFrame?.kind === "character"
+      ? assemblySceneFrame.activePartIds
+      : [];
+  const assemblyLift = assemblyFramePresentation?.automataLift ?? 0;
+  context.project.partOrder.forEach((id) => {
+    const part = context.animatedParts?.[id] ?? context.project.parts[id];
+    if (!part) return;
+    const base = context.project.parts[id] ?? part;
+    const position = sceneTo3(
+      part.transform,
+      baseZ +
+        part.zIndex * 0.045 +
+        (activePartIds.includes(id) ? assemblyLift : 0),
+    );
+    transforms[`foundry:automata:part:${id}`] = {
+      x: position.x,
+      y: position.y,
+      z: position.z,
+      rotationZ: (part.transform.rotation * Math.PI) / 180,
+      scale: part.transform.scale,
+      visible: part.visible,
+    };
+  });
+  context.project.sceneObjectOrder.forEach((id) => {
+    const object =
+      context.animatedSceneObjects?.[id] ?? context.project.sceneObjects[id];
+    if (!object) return;
+    const position = sceneTo3(
+      object.transform,
+      baseZ + 0.12 + object.zIndex * 0.045,
+    );
+    transforms[`foundry:automata:object:${id}`] = {
+      x: position.x,
+      y: position.y,
+      z: position.z,
+      rotationZ: (object.transform.rotation * Math.PI) / 180,
+      scale: object.transform.scale,
+      visible: object.visible,
+    };
+  });
+  return transforms;
 };
 
 const placeFoundryLocalGroup = (
@@ -485,7 +801,12 @@ const renderFoundryAutomataContext = ({
       artGeometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
       const art = new THREE.Mesh(
         artGeometry,
-        foundryAutomataTextureMaterial(base.textureUrl, Math.min(0.82, base.opacity), onLoaded),
+        createFoundryAutomataTextureMaterial(
+          base.textureUrl,
+          Math.min(0.82, base.opacity),
+          materialCache,
+          onLoaded,
+        ),
       );
       art.name = `foundry-automata-art-${part.id}`;
       art.position.z = 0.09;
@@ -535,7 +856,12 @@ const renderFoundryAutomataContext = ({
       artGeometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
       const art = new THREE.Mesh(
         artGeometry,
-        foundryAutomataTextureMaterial(object.textureUrl, Math.min(0.86, object.opacity), onLoaded),
+        createFoundryAutomataTextureMaterial(
+          object.textureUrl,
+          Math.min(0.86, object.opacity),
+          materialCache,
+          onLoaded,
+        ),
       );
       art.position.z = 0.08;
       art.userData.sceneObjectId = object.id;
@@ -601,6 +927,7 @@ export const ThreeFoundryPreview = ({
   onAutomataPartSelect,
   onAutomataSceneObjectSelect,
   assemblySceneFrame,
+  assemblyFramePresentation,
   connectionSelectionCoordinates = {},
   connectionExportSignature = "",
   selectedConnection,
@@ -619,6 +946,9 @@ export const ThreeFoundryPreview = ({
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const cameraStateRef = useRef(camera);
+  const dynamicRootRef = useRef<THREE.Group | null>(null);
+  const frameBindingTableRef = useRef<FoundryFrameBindingTable | null>(null);
+  const frameRenderQueueRef = useRef<FrameCommitQueue<FoundryRenderCommit> | null>(null);
   const dynamicBuildCountRef = useRef(0);
   const geometryCacheRef = useRef<Map<string, THREE.BufferGeometry>>(new Map());
   const materialCacheRef = useRef<Map<string, THREE.Material>>(new Map());
@@ -630,18 +960,14 @@ export const ThreeFoundryPreview = ({
   const isGearTrain =
     mechanism.type === "gear" || mechanism.type === "gear_linkage";
   const isPlanetaryGear = mechanism.type === "planetary_gear";
-  const gearRadii = isGearTrain
-    ? gearTrainPitchRadii(mechanism)
-    : mechanism.type === "planetary_gear"
-      ? planetaryGearRadii(mechanism)
-      : [mechanism.crankLength, mechanism.rockerLength];
-  const gearCenters = isGearTrain
-    ? fittedGearTrainCenters(
-        gearRadii,
-        simulation.state.p1,
-        simulation.state.p2,
-      )
-    : [];
+  const gearRadii = useMemo(
+    () => isGearTrain
+      ? gearTrainPitchRadii(mechanism)
+      : mechanism.type === "planetary_gear"
+        ? planetaryGearRadii(mechanism)
+        : [mechanism.crankLength, mechanism.rockerLength],
+    [isGearTrain, mechanism],
+  );
   const planetaryConvention =
     mechanism.type === "planetary_gear"
       ? planetaryGearConventionForMechanism(mechanism)
@@ -649,6 +975,31 @@ export const ThreeFoundryPreview = ({
   const inv = mechanismInventoryForMechanism(mechanism, kit);
   const pinionRotation = simulation.driveAngleDeg;
   const renderPlan = mechanismContract.renderPlan;
+  const preparedKinematics = useMemo(
+    () => prepareMechanismKinematics(mechanism, kit),
+    [kit, mechanism],
+  );
+  const structuralSimulation = useMemo(
+    () => structuralSimulationFor(simulation, preparedKinematics),
+    [
+      preparedKinematics,
+      simulation.rawState.p1.x,
+      simulation.rawState.p1.y,
+      simulation.scale,
+      simulation.state.p1.x,
+      simulation.state.p1.y,
+    ],
+  );
+  const gearCenters = useMemo(
+    () => isGearTrain
+      ? fittedGearTrainCenters(
+          gearRadii,
+          structuralSimulation.state.p1,
+          structuralSimulation.state.p2,
+        )
+      : [],
+    [gearRadii, isGearTrain, structuralSimulation],
+  );
   const physicalValidationErrors = useMemo(
     () => validateMechanismPreviewReadiness(mechanism, kit),
     [kit, mechanism],
@@ -681,6 +1032,25 @@ export const ThreeFoundryPreview = ({
         stackLayerZ,
       ),
     [renderPlan.layers, stackLayerZ],
+  );
+  const structuralRenderedLayerZ = useMemo(
+    () => foundryRenderedLayerZForMechanism(
+      renderPlan.layers,
+      renderPlan.layers.map((layer) => layer.z),
+    ),
+    [renderPlan.layers],
+  );
+  const layerRotationPolicies = useMemo(
+    () => renderPlan.layers.map((layer) => {
+      const gearMatch = /^gear-(\d+)$/.exec(layer.sourceNodeId ?? "");
+      return {
+        bindingId: `foundry:layer:${layer.layerId}`,
+        renderKind: layer.renderKind,
+        sourceNodeId: layer.sourceNodeId,
+        gearIndex: gearMatch ? Number(gearMatch[1]) : undefined,
+      };
+    }),
+    [renderPlan.layers],
   );
   const activeGearPlaneZ =
     typeof gearMeshPlaneZ === "number"
@@ -732,21 +1102,21 @@ export const ThreeFoundryPreview = ({
       ),
     [renderPlan.layers],
   );
-  const pinStackPoints = useMemo(
+  const structuralPinStackPoints = useMemo(
     () =>
       foundryPinStackPoints(
         renderPlan,
         {
-          state: simulation.state,
+          state: structuralSimulation.state,
           gearCenters,
-          planetCenters: [simulation.state.p2],
+          planetCenters: [structuralSimulation.state.p2],
         },
       ),
-    [gearCenters, renderPlan, simulation.state],
+    [gearCenters, renderPlan, structuralSimulation],
   );
   const assemblyPinPoints = useMemo(
-    () => pinStackPoints.map((pin) => pin.point),
-    [pinStackPoints],
+    () => structuralPinStackPoints.map((pin) => pin.point),
+    [structuralPinStackPoints],
   );
   const assemblyPinContract = foundryAssemblyPinContract();
   const localSpacerZForPin = useMemo(
@@ -760,14 +1130,14 @@ export const ThreeFoundryPreview = ({
   );
   const { partIds: visibleAutomataPartIds, objectIds: visibleAutomataObjectIds, partArtIds: visibleAutomataPartArtIds } =
     useMemo(() => visibleAutomataSceneIds(automataContext), [automataContext]);
-  const pinStacks = useMemo(
-    () => foundryPinStacks(pinStackPoints, renderPlan),
-    [pinStackPoints, renderPlan],
+  const structuralPinStacks = useMemo(
+    () => foundryPinStacks(structuralPinStackPoints, renderPlan),
+    [structuralPinStackPoints, renderPlan],
   );
   const spacerRenderCount = spacerLayerIndexes.reduce(
     (count, spacerIndex) =>
       count +
-      pinStackPoints.filter((pin) => foundrySpacerTouchesPin(pin, spacerIndex))
+      structuralPinStackPoints.filter((pin) => foundrySpacerTouchesPin(pin, spacerIndex))
         .length,
     0,
   );
@@ -776,7 +1146,7 @@ export const ThreeFoundryPreview = ({
       .filter((node) => node.kind === "board")
       .map((node) => node.id),
   );
-  const boardPivotPinStacks = pinStacks.filter((pin) =>
+  const boardPivotPinStacks = structuralPinStacks.filter((pin) =>
     pin.supportNodeIds.some((nodeId) => boardSupportNodeIds.has(nodeId)),
   );
   const boardPivotSpacerZ = (pin: FoundryPinStackPoint) =>
@@ -784,7 +1154,7 @@ export const ThreeFoundryPreview = ({
   const boardPivotSpacerSummary = boardPivotPinStacks
     .map((pin) => `${pin.id}:${boardPivotSpacerZ(pin)?.toFixed(2) ?? "n/a"}`)
     .join(",");
-  const gearPinStackPoints = pinStackPoints.filter((pin) =>
+  const gearPinStackPoints = structuralPinStackPoints.filter((pin) =>
     pin.movingLayerIndexes.some(
       (index) => renderPlan.layers[index]?.renderKind === "gear",
     ),
@@ -806,7 +1176,7 @@ export const ThreeFoundryPreview = ({
     : "";
   const gearLinkagePinZOrderSummary =
     mechanism.type === "gear_linkage"
-      ? pinStackPoints
+      ? structuralPinStackPoints
           .map((pin) => `${pin.id}:${pin.layerIndexes
             .map((index) => renderPlan.layers[index]?.renderKind)
             .filter(Boolean)
@@ -817,25 +1187,25 @@ export const ThreeFoundryPreview = ({
     renderPlan.layers.length > 1
       ? renderPlan.layers[1].z - renderPlan.layers[0].z
       : 0;
-  const pinBottomZ = pinStacks.length
-    ? Math.min(...pinStacks.map((pin) => pin.bottomZ))
+  const pinBottomZ = structuralPinStacks.length
+    ? Math.min(...structuralPinStacks.map((pin) => pin.bottomZ))
     : (renderedLayerZ[0] ?? 0.22) - 0.08;
-  const pinTopZ = pinStacks.length
-    ? Math.max(...pinStacks.map((pin) => pin.topZ))
+  const pinTopZ = structuralPinStacks.length
+    ? Math.max(...structuralPinStacks.map((pin) => pin.topZ))
     : (renderedLayerZ.at(-1) ?? 0.22) + 0.18;
-  const pinLengthZ = pinStacks.length
-    ? Math.max(...pinStacks.map((pin) => pin.lengthZ))
+  const pinLengthZ = structuralPinStacks.length
+    ? Math.max(...structuralPinStacks.map((pin) => pin.lengthZ))
     : Math.max(0.55, pinTopZ - pinBottomZ);
-  const pinSpanSummary = pinStacks
+  const pinSpanSummary = structuralPinStacks
     .map((pin) => `${pin.id}:${pin.lengthZ.toFixed(2)}`)
     .join(",");
-  const pinStackLayerSummary = pinStackPoints
+  const pinStackLayerSummary = structuralPinStackPoints
     .map((pin) => `${pin.id}:${pin.layerIndexes.join("+") || "none"}`)
     .join(",");
   const spacerPinIdSummary = spacerLayerIndexes
     .map(
       (spacerIndex) =>
-        `${spacerIndex}:${pinStackPoints
+        `${spacerIndex}:${structuralPinStackPoints
           .filter((pin) => foundrySpacerTouchesPin(pin, spacerIndex))
           .map((pin) => pin.id)
           .join("+")}`,
@@ -901,6 +1271,11 @@ export const ThreeFoundryPreview = ({
           }),
         )
       : 0;
+  const automataBaseZ =
+    viewerTab === "design" && !assemblySceneFrame
+      ? pinTopZ + AUTOMATA_DESIGN_SURFACE_CLEARANCE_Z - AUTOMATA_PART_ART_SURFACE_Z
+      : pinTopZ + AUTOMATA_STACKED_BASE_LIFT_Z;
+  const automataSurfaceZ = automataBaseZ + AUTOMATA_PART_ART_SURFACE_Z;
   const gearOutputRatioForDisplay = isGearTrain
     ? mechanism.type === "gear_linkage" && gearRadii.length <= 2
       ? Number.isFinite(mechanism.speed2)
@@ -913,8 +1288,87 @@ export const ThreeFoundryPreview = ({
       ? planetaryCarrierOutputRatio(
           mechanism.crankLength,
           mechanism.rockerLength,
-        )
+      )
       : gearPairOutputRatio(mechanism.crankLength, mechanism.rockerLength);
+  const framePresentation = useMemo<FoundryFramePresentation>(() => {
+    const layerRotationRadByBindingId: Record<string, number> = {};
+    const layerZByBindingId: Record<string, number> = {};
+    const pointZByPointKey: Record<string, number> = {};
+    layerRotationPolicies.forEach((policy, index) => {
+      layerZByBindingId[policy.bindingId] = renderedLayerZ[index] ?? 0;
+      if (policy.renderKind === "cam") {
+        layerRotationRadByBindingId[policy.bindingId] = (pinionRotation * Math.PI) / 180;
+        return;
+      }
+      if (policy.renderKind !== "gear") return;
+      if (policy.sourceNodeId === "ring-gear") {
+        layerRotationRadByBindingId[policy.bindingId] = 0;
+        return;
+      }
+      if (policy.sourceNodeId === "planet-gear") {
+        layerRotationRadByBindingId[policy.bindingId] =
+          (foundryPlanetaryPlanetRotationDeg(mechanism, pinionRotation) * Math.PI) / 180;
+        return;
+      }
+      if (policy.sourceNodeId === "sun-gear" || !isGearTrain) {
+        layerRotationRadByBindingId[policy.bindingId] = (pinionRotation * Math.PI) / 180;
+        return;
+      }
+      const gearIndex = Math.max(0, Math.min(
+        policy.gearIndex ?? 0,
+        Math.max(0, gearRadii.length - 1),
+      ));
+      const isLastGear = gearIndex === gearRadii.length - 1;
+      const phaseDeg = (gearUsesMeshPhases ? gearTrainMeshPhaseDegAt(gearRadii, gearIndex) : 0)
+        + (isLastGear ? ((mechanism.phase ?? 0) * 180) / Math.PI : 0);
+      const ratio = gearUsesMeshPhases
+        ? gearTrainRotationRatioAt(gearRadii, gearIndex)
+        : mechanism.type === "gear_linkage"
+          ? gearIndex === 0 ? 1 : isLastGear ? gearOutputRatioForDisplay : 0
+          : 0;
+      layerRotationRadByBindingId[policy.bindingId] =
+        ((pinionRotation * ratio + phaseDeg) * Math.PI) / 180;
+    });
+    structuralPinStackPoints.forEach((pin) => {
+      renderPlan.layers.forEach((layer, index) => {
+        if (layer.role !== "spacer" || !foundrySpacerTouchesPin(pin, index)) return;
+        pointZByPointKey[
+          foundryFramePointPresentationKey(
+            `foundry:pin:${pin.pinSpanId}`,
+            "spacer",
+            index,
+          )
+        ] = renderedLayerZ[index] ?? layer.z;
+      });
+    });
+    const automataByBindingId = automataFramePresentationFor({
+      context: automataContext,
+      assemblySceneFrame,
+      assemblyFramePresentation,
+      baseZ: automataBaseZ,
+    });
+    return {
+      layerRotationRadByBindingId,
+      layerZByBindingId,
+      pointZByPointKey,
+      automataByBindingId,
+      ...(assemblyFramePresentation ? { assembly: assemblyFramePresentation } : {}),
+    };
+  }, [
+    assemblyFramePresentation,
+    automataBaseZ,
+    automataContext,
+    gearOutputRatioForDisplay,
+    gearRadii,
+    gearUsesMeshPhases,
+    isGearTrain,
+    layerRotationPolicies,
+    mechanism,
+    pinionRotation,
+    renderedLayerZ,
+    renderPlan,
+    structuralPinStackPoints,
+  ]);
   const supportNodeById = new Map(
     renderPlan.supportNodes.map((node) => [node.id, node]),
   );
@@ -946,7 +1400,7 @@ export const ThreeFoundryPreview = ({
   const supportBlockerCount = renderPlan.validationErrors.length
     + supportContactErrorCount
     + spacerSupportErrorCount;
-  const zCollisionCount = pinStacks.filter(
+  const zCollisionCount = structuralPinStacks.filter(
     (pin) => pin.topZ <= pin.bottomZ || pin.lengthZ <= 0,
   ).length + supportContactErrorCount + spacerSupportErrorCount;
   const visiblePathTraces = useMemo(
@@ -968,11 +1422,6 @@ export const ThreeFoundryPreview = ({
     visiblePathTraces[0]?.id ??
     "";
   const pathLayerZ = pinTopZ + 0.08;
-  const automataBaseZ =
-    viewerTab === "design" && !assemblySceneFrame
-      ? pinTopZ + AUTOMATA_DESIGN_SURFACE_CLEARANCE_Z - AUTOMATA_PART_ART_SURFACE_Z
-      : pinTopZ + AUTOMATA_STACKED_BASE_LIFT_Z;
-  const automataSurfaceZ = automataBaseZ + AUTOMATA_PART_ART_SURFACE_Z;
   const camContactErrorForData =
     mechanism.type === "cam"
       ? camFollowerConstraintError(mechanism, simulation.rawState) *
@@ -1008,130 +1457,58 @@ export const ThreeFoundryPreview = ({
     };
   }, [mechanismContract.boundPhysicsEnabled, mechanismContract.runtimeBlocker]);
 
+  const queueFrameRender = (screenTargetOverride?: FoundryScreenTargets) => {
+    const scene = sceneRef.current;
+    const renderer = rendererRef.current;
+    const camera = cameraRef.current;
+    if (!scene || !renderer || !camera) return;
+    const queue =
+      frameRenderQueueRef.current ??
+      (frameRenderQueueRef.current = createFrameCommitQueue<FoundryRenderCommit>({
+        commit: ({
+          scene: queuedScene,
+          renderer: queuedRenderer,
+          camera: queuedCamera,
+          bindingTable: queuedBindingTable,
+          screenTargetOverride: queuedScreenTargetOverride,
+        }) => {
+          queuedRenderer.render(queuedScene, queuedCamera);
+          if (queuedBindingTable) {
+            writeFoundryAutomataScreenTargets({
+              table: queuedBindingTable,
+              renderer: queuedRenderer,
+              cam: queuedCamera,
+              state: stateRef.current,
+            });
+            return;
+          }
+          writeFoundryCameraDiagnostics({
+            scene: queuedScene,
+            renderer: queuedRenderer,
+            cam: queuedCamera,
+            state: stateRef.current,
+            screenTargetOverride: queuedScreenTargetOverride,
+          });
+        },
+      }));
+    const table = frameBindingTableRef.current;
+    queue.queue({
+      scene,
+      renderer,
+      camera,
+      bindingTable: table ?? undefined,
+      screenTargetOverride,
+    });
+  };
   const renderCamera = (
     view: FoundryCamera,
     screenTargetOverride?: FoundryScreenTargets,
   ) => {
-    const scene = sceneRef.current;
-    const renderer = rendererRef.current;
     const cam = cameraRef.current;
-    if (!scene || !renderer || !cam) return;
+    if (!cam) return;
     cam.position.copy(foundryCameraPosition(view));
     cam.lookAt(foundryCameraTarget(view));
-    renderer.render(scene, cam);
-    if (!stateRef.current) return;
-    const rect = renderer.domElement.getBoundingClientRect();
-    const projectWorld = (point: THREE.Vector3) => {
-      const projected = point.clone().project(cam);
-      return {
-        x: rect.left + ((projected.x + 1) / 2) * rect.width,
-        y: rect.top + ((1 - projected.y) / 2) * rect.height,
-        z: projected.z,
-      };
-    };
-    const targetForObject = (
-      kind: FoundryScreenTarget["kind"],
-      id: string,
-      object: THREE.Object3D,
-    ): FoundryScreenTarget | null => {
-      if (!object.visible) return null;
-      object.updateWorldMatrix(true, true);
-      const box = new THREE.Box3().setFromObject(object);
-      const center = new THREE.Vector3();
-      const worldPoints: THREE.Vector3[] = [];
-      if (box.isEmpty() || !Number.isFinite(box.min.x) || !Number.isFinite(box.max.x)) {
-        object.getWorldPosition(center);
-        worldPoints.push(center.clone());
-      } else {
-        box.getCenter(center);
-        for (const x of [box.min.x, box.max.x]) {
-          for (const y of [box.min.y, box.max.y]) {
-            for (const z of [box.min.z, box.max.z]) {
-              worldPoints.push(new THREE.Vector3(x, y, z));
-            }
-          }
-        }
-      }
-      const centerScreen = projectWorld(center);
-      let left = centerScreen.x;
-      let right = centerScreen.x;
-      let top = centerScreen.y;
-      let bottom = centerScreen.y;
-      let radius = 0;
-      worldPoints.forEach((point) => {
-        const screen = projectWorld(point);
-        left = Math.min(left, screen.x);
-        right = Math.max(right, screen.x);
-        top = Math.min(top, screen.y);
-        bottom = Math.max(bottom, screen.y);
-        radius = Math.max(radius, Math.hypot(screen.x - centerScreen.x, screen.y - centerScreen.y));
-      });
-      const intersectsViewport =
-        right >= rect.left && left <= rect.right && bottom >= rect.top && top <= rect.bottom;
-      const visible = intersectsViewport;
-      const visibleLeft = Math.max(left, rect.left);
-      const visibleRight = Math.min(right, rect.right);
-      const visibleTop = Math.max(top, rect.top);
-      const visibleBottom = Math.min(bottom, rect.bottom);
-      const clickX = visible ? (visibleLeft + visibleRight) / 2 : centerScreen.x;
-      const clickY = visible ? (visibleTop + visibleBottom) / 2 : centerScreen.y;
-      return { kind, id, x: clickX, y: clickY, left, top, right, bottom, radius, visible };
-    };
-    const dynamicObjectTargets = new Map<string, FoundryScreenTarget>();
-    const dynamicPartTargets = new Map<string, FoundryScreenTarget>();
-    const dynamic = scene.getObjectByName("foundry-dynamic");
-    dynamic?.traverse((object) => {
-      const sceneObjectId = object.userData.sceneObjectId;
-      if (
-        typeof sceneObjectId === "string" &&
-        !dynamicObjectTargets.has(sceneObjectId)
-      ) {
-        const target = targetForObject("object", sceneObjectId, object);
-        if (target) dynamicObjectTargets.set(sceneObjectId, target);
-      }
-      const partId = object.userData.partId;
-      if (typeof partId === "string" && !dynamicPartTargets.has(partId)) {
-        const target = targetForObject("part", partId, object);
-        if (target) dynamicPartTargets.set(partId, target);
-      }
-    });
-    const targetsToWrite = screenTargetOverride
-      ? {
-          objectTargets:
-            screenTargetOverride.objectTargets.length > 0
-              ? screenTargetOverride.objectTargets
-              : roundedFoundryScreenTargets([...dynamicObjectTargets.values()]),
-          partTargets:
-            screenTargetOverride.partTargets.length > 0
-              ? screenTargetOverride.partTargets
-              : roundedFoundryScreenTargets([...dynamicPartTargets.values()]),
-          mechanismTargets:
-            screenTargetOverride.mechanismTargets ?? roundedFoundryScreenTargets([]),
-        }
-      : {
-          objectTargets: roundedFoundryScreenTargets([...dynamicObjectTargets.values()]),
-          partTargets: roundedFoundryScreenTargets([...dynamicPartTargets.values()]),
-          mechanismTargets: [],
-        };
-    stateRef.current.dataset.threeSceneObjectScreenTargets = JSON.stringify(
-      targetsToWrite.objectTargets,
-    );
-    stateRef.current.dataset.threePartScreenTargets = JSON.stringify(
-      targetsToWrite.partTargets,
-    );
-    stateRef.current.dataset.threeMechanismScreenTargets = JSON.stringify(
-      targetsToWrite.mechanismTargets,
-    );
-    const assemblyBoard = scene.getObjectByName("assembly-15x15-board-surface");
-    stateRef.current.dataset.threeAssemblyBoardSurface = assemblyBoard
-      ? String(assemblyBoard.userData.assemblyBoardSurface ?? "15x15-hole-board")
-      : "hidden";
-    stateRef.current.dataset.threeAssemblyBoardHoleCount = String(
-      assemblyBoard?.userData.assemblyBoardHoleCount ?? 0,
-    );
-    stateRef.current.dataset.threeAssemblyBoardZ = assemblyBoard
-      ? Number(assemblyBoard.userData.assemblyBoardZ ?? 0).toFixed(2)
-      : "";
+    queueFrameRender(screenTargetOverride);
   };
   const pickAutomataTarget = (event: React.MouseEvent<HTMLDivElement>) => {
     if (
@@ -1315,14 +1692,21 @@ export const ThreeFoundryPreview = ({
     renderCamera(cameraStateRef.current);
     return () => {
       ro.disconnect();
+      frameRenderQueueRef.current?.cancel();
+      frameRenderQueueRef.current = null;
       renderer.dispose();
       if (renderer.domElement.parentElement === host)
         host.removeChild(renderer.domElement);
+      disposeFoundryDynamicRoot({
+        scene,
+        root: dynamicRootRef.current,
+      });
+      dynamicRootRef.current = null;
       disposeFoundryThreeObject(scene);
-      geometryCacheRef.current.forEach((geometry) => geometry.dispose());
-      materialCacheRef.current.forEach((material) => material.dispose());
-      geometryCacheRef.current.clear();
-      materialCacheRef.current.clear();
+      disposeThreeResourceCaches(
+        geometryCacheRef.current,
+        materialCacheRef.current,
+      );
     };
   }, []);
 
@@ -1344,16 +1728,30 @@ export const ThreeFoundryPreview = ({
     const renderer = rendererRef.current;
     const cam = cameraRef.current;
     if (!scene || !renderer || !cam) return;
-    const old = scene.getObjectByName("foundry-dynamic");
-    if (old) {
-      scene.remove(old);
-      disposeFoundryThreeObject(old);
-    }
+    frameRenderQueueRef.current?.cancel();
+    const previousRoot =
+      dynamicRootRef.current ??
+      (scene.getObjectByName("foundry-dynamic") as THREE.Group | undefined) ??
+      null;
     const root = new THREE.Group();
     root.name = "foundry-dynamic";
-    scene.add(root);
     if (supportBlockerCount || physicalValidationErrors.length) {
-      dynamicBuildCountRef.current += 1;
+      frameBindingTableRef.current = null;
+      const replacement = replaceFoundryDynamicRoot({
+        scene,
+        previousRoot,
+        candidateRoot: root,
+        status: "invalid",
+      });
+      dynamicRootRef.current = replacement.root;
+      const fallbackTargets = createFoundryFallbackSceneObjectTargets(
+        visibleAutomataObjectIds,
+        visibleAutomataPartIds,
+        automataContext,
+        automataBaseZ,
+        renderer,
+        cam,
+      );
       if (stateRef.current) {
         stateRef.current.dataset.threeDynamicBuildCount = String(
           dynamicBuildCountRef.current,
@@ -1363,14 +1761,6 @@ export const ThreeFoundryPreview = ({
         );
         stateRef.current.dataset.threeMaterialCacheSize = String(
           materialCacheRef.current.size,
-        );
-    const fallbackTargets = createFoundryFallbackSceneObjectTargets(
-      visibleAutomataObjectIds,
-      visibleAutomataPartIds,
-          automataContext,
-          automataBaseZ,
-          renderer,
-          cam,
         );
         stateRef.current.dataset.threeSceneObjectScreenTargets = JSON.stringify(
           fallbackTargets.objectTargets,
@@ -1384,8 +1774,8 @@ export const ThreeFoundryPreview = ({
           partTargets: fallbackTargets.partTargets,
           mechanismTargets: [],
         });
-        return;
       }
+      return;
     }
     const primitives = createFoundryThreePrimitiveFactory({
       root,
@@ -1396,21 +1786,21 @@ export const ThreeFoundryPreview = ({
       color,
       rigOpacity,
       baseColor: renderPlan.base.color,
-      simulationScale: simulation.scale,
+      simulationScale: structuralSimulation.scale,
     });
     renderFoundryDynamicLayers({
       mechanism,
       kit,
-      simulation,
+      simulation: structuralSimulation,
       primitives,
       renderPlan,
-      renderedLayerZ,
-      pinStacks,
+      renderedLayerZ: structuralRenderedLayerZ,
+      pinStacks: structuralPinStacks,
       visiblePathTraces,
       pathLayerZ,
       showPathPreview,
       showTrail,
-      pinionRotation,
+      pinionRotation: 0,
       isGearTrain,
       gearRadii,
       gearCenters,
@@ -1422,7 +1812,7 @@ export const ThreeFoundryPreview = ({
       root,
       frame: assemblySceneFrame,
       mechanism,
-      simulation,
+      simulation: structuralSimulation,
       kit,
       pinBottomZ,
       pinTopZ,
@@ -1436,6 +1826,24 @@ export const ThreeFoundryPreview = ({
       materialCache: materialCacheRef.current,
       onLoaded: () => renderCamera(cameraStateRef.current),
       baseZ: automataBaseZ,
+    });
+    const replacement = replaceFoundryDynamicRoot({
+      scene,
+      previousRoot,
+      candidateRoot: root,
+      status: "valid",
+    });
+    dynamicRootRef.current = replacement.root;
+    const bindingTable = createFoundryFrameBindingTable({
+      root,
+      kinematics: preparedKinematics,
+      renderPlan,
+      simulation: structuralSimulation,
+    });
+    frameBindingTableRef.current = bindingTable;
+    updateFoundryFrameBindings(bindingTable, {
+      simulation,
+      presentation: framePresentation,
     });
 
     dynamicBuildCountRef.current += 1;
@@ -1505,17 +1913,15 @@ export const ThreeFoundryPreview = ({
     renderCamera(cameraStateRef.current);
   }, [
     mechanism,
-    simulation,
     kit,
     color,
     visiblePathTraces,
     pathLayerZ,
     showPathPreview,
     showTrail,
-    pinionRotation,
     renderPlan,
-    renderedLayerZ,
-    pinStacks,
+    structuralRenderedLayerZ,
+    structuralPinStacks,
     rigOpacity,
     physicalValidationErrors,
     supportBlockerCount,
@@ -1524,9 +1930,27 @@ export const ThreeFoundryPreview = ({
     pinTopZ,
     automataBaseZ,
     viewerTab,
-    pathPoints,
-    automataContext,
+    structuralSimulation,
+    automataContext?.project,
+    automataContext?.showCharacter,
+    automataContext?.showSkeleton,
+    preparedKinematics,
   ]);
+
+  useEffect(() => {
+    const table = frameBindingTableRef.current;
+    if (
+      !table
+      || !sceneRef.current
+      || !rendererRef.current
+      || !cameraRef.current
+    ) return;
+    updateFoundryFrameBindings(table, {
+      simulation,
+      presentation: framePresentation,
+    });
+    queueFrameRender();
+  }, [framePresentation, simulation]);
 
   return (
     <div
@@ -1536,6 +1960,7 @@ export const ThreeFoundryPreview = ({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
+      onLostPointerCapture={onPointerCancel}
       onWheel={onWheel}
       onContextMenu={(event) => event.preventDefault()}
       className={`foundry-preview h-[520px] w-full ${isPickingAnchor ? "is-picking-anchor" : ""} ${isOrbiting ? "is-orbiting" : ""} ${isZooming ? "is-zooming" : ""} ${isPanning ? "is-panning" : ""}`}

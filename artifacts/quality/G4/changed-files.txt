@@ -1,0 +1,19 @@
+G4 continuation commits
+========================
+
+dc57109fda08ba6d0cc4ca16c5c1e690ef0b737a  tests/g4-persistence-golden.test.ts
+EXTRACTION_COMMIT_SELF (this commit)  utils/projectPersistence.ts
+EXTRACTION_COMMIT_SELF (this commit)  utils/projectAutosaveFormat.ts
+EXTRACTION_COMMIT_SELF (this commit)  utils/projectAutosaveTransactions.ts
+EXTRACTION_COMMIT_SELF (this commit)  utils/projectAutosaveRecovery.ts
+EXTRACTION_COMMIT_SELF (this commit)  tests/project-contract.test.ts (minimal ownership assertion adaptation)
+
+Evidence files updated after the extraction:
+
+artifacts/quality/G4/result.md
+artifacts/quality/G4/tests.txt
+artifacts/quality/G4/changed-files.txt
+
+The existing G4 hook remains owned but was unchanged by this continuation.
+The extraction commit is amended in place; the final SHA is reported by the
+handoff.

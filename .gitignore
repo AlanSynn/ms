@@ -1,27 +1,26 @@
 # Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+/logs/
+/*.log
+/npm-debug.log*
+/yarn-debug.log*
+/yarn-error.log*
+/pnpm-debug.log*
+/lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+/node_modules/
+/dist/
+/dist-ssr/
 
 # Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+/.vscode/*
+!/.vscode/extensions.json
+/.idea/
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+/*.suo
+/*.ntvs*
+/*.njsproj
+/*.sln
+/*.sw?
 
 # Tauri build artifacts (can be regenerated)
 src-tauri/target/
@@ -36,16 +35,34 @@ src-tauri/icons/*
 src-tauri/gen/
 
 # Portable exe output
-exe build/
+/exe build/
 
 # Temporary build files
-app-icon.png
+/app-icon.png
 
-test-results/
-playwright-report/
+/test-results/
+/playwright-report/
 
 # Local agent/runtime state
-.omx/
-.omc/
-.agents/
-skills-lock.json
+/.omx/
+/.omc/
+/.agents/
+/skills-lock.json
+/.worktrees/
+
+# Local secrets and future optional study tooling state (root only)
+/.env
+/.env.*
+!/.env.example
+/.wrangler/
+
+# Transient debug / repro scratch at the repo root. Keep these patterns
+# anchored so source and fixture files elsewhere remain visible to Git.
+/repro*.ts
+/repro*.js
+/repro*.mjs
+/repro*.png
+/check-*.ts
+/check_*.ts
+/snap_*.json
+/test-results-*/

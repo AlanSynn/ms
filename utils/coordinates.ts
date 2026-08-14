@@ -71,10 +71,32 @@ export const sheetMmToScene = (p: Point, kit: PhysicalKitSettings): Point => ({
     y: (kit.sheetHeightMm / 2 - p.y) * SCENE_PX_PER_MM
 });
 
+/** The centered grid index is an integer for odd boards and a half-index for even boards. */
+export const boardGridCenter = (kit: PhysicalKitSettings) => (kit.boardCells - 1) / 2;
+
+export const boardScenePitch = (kit: PhysicalKitSettings) => kit.gridPitchMm * SCENE_PX_PER_MM;
+
+/** Maximum nearest-hole round-trip error for a point inside a square board cell. */
+export const boardRoundTripTolerance = (kit: PhysicalKitSettings) => boardScenePitch(kit) / Math.sqrt(2) + 1e-9;
+
+const BOARD_BOUNDARY_EPSILON = 1e-9;
+
+export const scenePointWithinBoard = (
+    p: Point,
+    kit: PhysicalKitSettings,
+    tolerance = BOARD_BOUNDARY_EPSILON,
+) => {
+    const bounds = sceneBoundsForBoard(kit);
+    return p.x >= bounds.x - tolerance
+        && p.x <= bounds.x + bounds.width + tolerance
+        && p.y >= bounds.y - tolerance
+        && p.y <= bounds.y + bounds.height + tolerance;
+};
+
 export const sceneToBoardRaw = (p: Point, kit: PhysicalKitSettings) => {
     const xMm = p.x / SCENE_PX_PER_MM;
     const yMm = p.y / SCENE_PX_PER_MM;
-    const center = (kit.boardCells - 1) / 2;
+    const center = boardGridCenter(kit);
     const col = Math.round(xMm / kit.gridPitchMm + center);
     const row = Math.round(center - yMm / kit.gridPitchMm);
     const valid = col >= 0 && row >= 0 && col < kit.boardCells && row < kit.boardCells;
@@ -91,17 +113,23 @@ export const sceneToBoard = (p: Point, kit: PhysicalKitSettings) => {
 };
 
 export const boardToScene = (col: number, row: number, kit: PhysicalKitSettings): Point => {
-    const center = (kit.boardCells - 1) / 2;
+    const center = boardGridCenter(kit);
     return {
-        x: (col - center) * kit.gridPitchMm * SCENE_PX_PER_MM,
-        y: (center - row) * kit.gridPitchMm * SCENE_PX_PER_MM
+        x: (col - center) * boardScenePitch(kit),
+        y: (center - row) * boardScenePitch(kit)
     };
+};
+
+export const boardRoundTripError = (p: Point, kit: PhysicalKitSettings) => {
+    const board = sceneToBoard(p, kit);
+    const nearest = boardToScene(board.col, board.row, kit);
+    return Math.hypot(p.x - nearest.x, p.y - nearest.y);
 };
 
 export const sceneBoundsForBoard = (kit: PhysicalKitSettings): Bounds => {
     const first = boardToScene(0, 0, kit);
     const last = boardToScene(kit.boardCells - 1, kit.boardCells - 1, kit);
-    const edge = (kit.gridPitchMm * SCENE_PX_PER_MM) / 2;
+    const edge = boardScenePitch(kit) / 2;
     const minX = Math.min(first.x, last.x) - edge;
     const maxX = Math.max(first.x, last.x) + edge;
     const minY = Math.min(first.y, last.y) - edge;

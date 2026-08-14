@@ -1,0 +1,2927 @@
+{
+  "version": 2,
+  "metadata": {
+    "id": "project-jq4zmj-mss98w80",
+    "name": "Waving arm",
+    "createdAt": "2026-08-14T01:15:00.000Z",
+    "updatedAt": "2026-08-14T01:15:00.000Z",
+    "normalizationScale": 1,
+    "status": "sample",
+    "classroomLessonId": "waving-arm",
+    "classroomLessonLabel": "Waving arm"
+  },
+  "parts": {
+    "torso": {
+      "id": "torso",
+      "name": "Torso",
+      "anchorJointId": "torso",
+      "transform": {
+        "x": 0,
+        "y": 12,
+        "rotation": 0,
+        "scale": 1
+      },
+      "bounds": {
+        "x": -66,
+        "y": -110,
+        "width": 132,
+        "height": 220
+      },
+      "zIndex": 0,
+      "opacity": 0.9,
+      "visible": true,
+      "locked": false,
+      "selectable": true,
+      "fillColor": "#cbd5e1",
+      "contourPoints": [
+        {
+          "x": -50.160000000000004,
+          "y": -105.6
+        },
+        {
+          "x": 50.160000000000004,
+          "y": -105.6
+        },
+        {
+          "x": 63.36,
+          "y": -74.80000000000001
+        },
+        {
+          "x": 64.67999999999999,
+          "y": 83.6
+        },
+        {
+          "x": 47.519999999999996,
+          "y": 110
+        },
+        {
+          "x": -47.519999999999996,
+          "y": 110
+        },
+        {
+          "x": -64.67999999999999,
+          "y": 83.6
+        },
+        {
+          "x": -63.36,
+          "y": -74.80000000000001
+        }
+      ],
+      "contourSource": "imported",
+      "textureUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20132%20220%22%3E%3Cpath%20d%3D%22M%2015.84%204.40%20L%20116.16%204.40%20L%20129.36%2035.20%20L%20130.68%20193.60%20L%20113.52%20220.00%20L%2018.48%20220.00%20L%201.32%20193.60%20L%202.64%2035.20%20Z%22%20fill%3D%22%23cbd5e1%22%2F%3E%3C%2Fsvg%3E",
+      "originalSvgPath": "sample-assets/torso.svg",
+      "enhancedSvgPath": "sample-assets/torso-enhanced.svg",
+      "localPivotOffset": {
+        "x": 0,
+        "y": 28
+      },
+      "localPivotJointId": "torso"
+    },
+    "head": {
+      "id": "head",
+      "name": "Head",
+      "anchorJointId": "neck",
+      "transform": {
+        "x": 0,
+        "y": 152,
+        "rotation": 0,
+        "scale": 1
+      },
+      "bounds": {
+        "x": -39,
+        "y": -39,
+        "width": 78,
+        "height": 78
+      },
+      "zIndex": 5,
+      "opacity": 0.9,
+      "visible": true,
+      "locked": false,
+      "selectable": true,
+      "fillColor": "#e2e8f0",
+      "contourPoints": [
+        {
+          "x": -24.18,
+          "y": -30.42
+        },
+        {
+          "x": 0,
+          "y": -36.66
+        },
+        {
+          "x": 24.18,
+          "y": -30.42
+        },
+        {
+          "x": 31.979999999999997,
+          "y": 0
+        },
+        {
+          "x": 21.450000000000003,
+          "y": 30.42
+        },
+        {
+          "x": 0,
+          "y": 35.88
+        },
+        {
+          "x": -21.450000000000003,
+          "y": 30.42
+        },
+        {
+          "x": -31.979999999999997,
+          "y": 0
+        }
+      ],
+      "contourSource": "imported",
+      "textureUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2078%2078%22%3E%3Cpath%20d%3D%22M%2014.82%208.58%20L%2039.00%202.34%20L%2063.18%208.58%20L%2070.98%2039.00%20L%2060.45%2069.42%20L%2039.00%2074.88%20L%2017.55%2069.42%20L%207.02%2039.00%20Z%22%20fill%3D%22%23e2e8f0%22%2F%3E%3C%2Fsvg%3E",
+      "originalSvgPath": "sample-assets/head.svg",
+      "enhancedSvgPath": "sample-assets/head-enhanced.svg",
+      "localPivotOffset": {
+        "x": 0,
+        "y": -32
+      },
+      "localPivotJointId": "neck"
+    },
+    "left_arm_upper": {
+      "id": "left_arm_upper",
+      "name": "Left upper arm",
+      "anchorJointId": "left_shoulder",
+      "transform": {
+        "x": 80,
+        "y": 56,
+        "rotation": 20,
+        "scale": 1
+      },
+      "bounds": {
+        "x": -22,
+        "y": -52,
+        "width": 44,
+        "height": 104
+      },
+      "zIndex": 3,
+      "opacity": 0.9,
+      "visible": true,
+      "locked": false,
+      "selectable": true,
+      "fillColor": "#b6c2d2",
+      "contourPoints": [
+        {
+          "x": -22,
+          "y": 30.000000000000004
+        },
+        {
+          "x": -19.052558883257653,
+          "y": 41
+        },
+        {
+          "x": -11.000000000000005,
+          "y": 49.052558883257646
+        },
+        {
+          "x": 1.3471114790620886e-15,
+          "y": 52
+        },
+        {
+          "x": 10.999999999999998,
+          "y": 49.05255888325765
+        },
+        {
+          "x": 19.052558883257653,
+          "y": 41
+        },
+        {
+          "x": 22,
+          "y": 30
+        },
+        {
+          "x": 22,
+          "y": -30
+        },
+        {
+          "x": 19.052558883257653,
+          "y": -41
+        },
+        {
+          "x": 11.000000000000002,
+          "y": -49.052558883257646
+        },
+        {
+          "x": 1.3471114790620886e-15,
+          "y": -52
+        },
+        {
+          "x": -10.999999999999995,
+          "y": -49.05255888325765
+        },
+        {
+          "x": -19.052558883257653,
+          "y": -41
+        },
+        {
+          "x": -22,
+          "y": -30.000000000000004
+        }
+      ],
+      "contourSource": "imported",
+      "textureUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2044%20104%22%3E%3Cpath%20d%3D%22M%200.00%2082.00%20L%202.95%2093.00%20L%2011.00%20101.05%20L%2022.00%20104.00%20L%2033.00%20101.05%20L%2041.05%2093.00%20L%2044.00%2082.00%20L%2044.00%2022.00%20L%2041.05%2011.00%20L%2033.00%202.95%20L%2022.00%200.00%20L%2011.00%202.95%20L%202.95%2011.00%20L%200.00%2022.00%20Z%22%20fill%3D%22%23b6c2d2%22%2F%3E%3C%2Fsvg%3E",
+      "originalSvgPath": "sample-assets/left_arm_upper.svg",
+      "enhancedSvgPath": "sample-assets/left_arm_upper-enhanced.svg",
+      "localPivotOffset": {
+        "x": -8.36051249756591,
+        "y": 41.353377501457416
+      },
+      "localPivotJointId": "left_shoulder"
+    },
+    "left_arm_lower": {
+      "id": "left_arm_lower",
+      "name": "Left lower arm",
+      "anchorJointId": "left_elbow",
+      "transform": {
+        "x": 116,
+        "y": -10,
+        "rotation": 18,
+        "scale": 1
+      },
+      "bounds": {
+        "x": -21,
+        "y": -52,
+        "width": 42,
+        "height": 104
+      },
+      "zIndex": 3,
+      "opacity": 0.9,
+      "visible": true,
+      "locked": false,
+      "selectable": true,
+      "fillColor": "#b6c2d2",
+      "contourPoints": [
+        {
+          "x": -21,
+          "y": 31.000000000000004
+        },
+        {
+          "x": -18.186533479473212,
+          "y": 41.5
+        },
+        {
+          "x": -10.500000000000005,
+          "y": 49.18653347947321
+        },
+        {
+          "x": 1.2858791391047208e-15,
+          "y": 52
+        },
+        {
+          "x": 10.499999999999998,
+          "y": 49.18653347947321
+        },
+        {
+          "x": 18.186533479473212,
+          "y": 41.5
+        },
+        {
+          "x": 21,
+          "y": 31
+        },
+        {
+          "x": 21,
+          "y": -31
+        },
+        {
+          "x": 18.186533479473212,
+          "y": -41.5
+        },
+        {
+          "x": 10.500000000000002,
+          "y": -49.18653347947321
+        },
+        {
+          "x": 1.2858791391047208e-15,
+          "y": -52
+        },
+        {
+          "x": -10.499999999999995,
+          "y": -49.18653347947321
+        },
+        {
+          "x": -18.186533479473212,
+          "y": -41.5
+        },
+        {
+          "x": -21,
+          "y": -31.000000000000004
+        }
+      ],
+      "contourSource": "imported",
+      "textureUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2042%20104%22%3E%3Cpath%20d%3D%22M%200.00%2083.00%20L%202.81%2093.50%20L%2010.50%20101.19%20L%2021.00%20104.00%20L%2031.50%20101.19%20L%2039.19%2093.50%20L%2042.00%2083.00%20L%2042.00%2021.00%20L%2039.19%2010.50%20L%2031.50%202.81%20L%2021.00%200.00%20L%2010.50%202.81%20L%202.81%2010.50%20L%200.00%2021.00%20Z%22%20fill%3D%22%23b6c2d2%22%2F%3E%3C%2Fsvg%3E",
+      "originalSvgPath": "sample-assets/left_arm_lower.svg",
+      "enhancedSvgPath": "sample-assets/left_arm_lower-enhanced.svg",
+      "localPivotOffset": {
+        "x": 4.134193655886773,
+        "y": 38.61228357421541
+      },
+      "localPivotJointId": "left_elbow"
+    },
+    "left_hand_part": {
+      "id": "left_hand_part",
+      "name": "Left hand",
+      "anchorJointId": "left_hand",
+      "transform": {
+        "x": 134,
+        "y": -54,
+        "rotation": 18,
+        "scale": 1
+      },
+      "bounds": {
+        "x": -20,
+        "y": -21,
+        "width": 40,
+        "height": 42
+      },
+      "zIndex": 4,
+      "opacity": 0.9,
+      "visible": true,
+      "locked": false,
+      "selectable": true,
+      "fillColor": "#d1d5db",
+      "contourPoints": [
+        {
+          "x": -12,
+          "y": -15.12
+        },
+        {
+          "x": 11,
+          "y": -17.22
+        },
+        {
+          "x": 18,
+          "y": -2.52
+        },
+        {
+          "x": 11.6,
+          "y": 20.58
+        },
+        {
+          "x": -11.6,
+          "y": 20.58
+        },
+        {
+          "x": -18,
+          "y": 1.68
+        }
+      ],
+      "contourSource": "imported",
+      "textureUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2042%22%3E%3Cpath%20d%3D%22M%208.00%205.88%20L%2031.00%203.78%20L%2038.00%2018.48%20L%2031.60%2041.58%20L%208.40%2041.58%20L%202.00%2022.68%20Z%22%20fill%3D%22%23d1d5db%22%2F%3E%3C%2Fsvg%3E",
+      "originalSvgPath": "sample-assets/left_hand_part.svg",
+      "enhancedSvgPath": "sample-assets/left_hand_part-enhanced.svg",
+      "localPivotOffset": {
+        "x": 0.47400078972802717,
+        "y": 20.875232292152752
+      },
+      "localPivotJointId": "left_hand"
+    },
+    "right_arm_upper": {
+      "id": "right_arm_upper",
+      "name": "Right upper arm",
+      "anchorJointId": "right_shoulder",
+      "transform": {
+        "x": -80,
+        "y": 56,
+        "rotation": -20,
+        "scale": 1
+      },
+      "bounds": {
+        "x": -22,
+        "y": -52,
+        "width": 44,
+        "height": 104
+      },
+      "zIndex": 3,
+      "opacity": 0.9,
+      "visible": true,
+      "locked": false,
+      "selectable": true,
+      "fillColor": "#b6c2d2",
+      "contourPoints": [
+        {
+          "x": -22,
+          "y": 30.000000000000004
+        },
+        {
+          "x": -19.052558883257653,
+          "y": 41
+        },
+        {
+          "x": -11.000000000000005,
+          "y": 49.052558883257646
+        },
+        {
+          "x": 1.3471114790620886e-15,
+          "y": 52
+        },
+        {
+          "x": 10.999999999999998,
+          "y": 49.05255888325765
+        },
+        {
+          "x": 19.052558883257653,
+          "y": 41
+        },
+        {
+          "x": 22,
+          "y": 30
+        },
+        {
+          "x": 22,
+          "y": -30
+        },
+        {
+          "x": 19.052558883257653,
+          "y": -41
+        },
+        {
+          "x": 11.000000000000002,
+          "y": -49.052558883257646
+        },
+        {
+          "x": 1.3471114790620886e-15,
+          "y": -52
+        },
+        {
+          "x": -10.999999999999995,
+          "y": -49.05255888325765
+        },
+        {
+          "x": -19.052558883257653,
+          "y": -41
+        },
+        {
+          "x": -22,
+          "y": -30.000000000000004
+        }
+      ],
+      "contourSource": "imported",
+      "textureUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2044%20104%22%3E%3Cpath%20d%3D%22M%200.00%2082.00%20L%202.95%2093.00%20L%2011.00%20101.05%20L%2022.00%20104.00%20L%2033.00%20101.05%20L%2041.05%2093.00%20L%2044.00%2082.00%20L%2044.00%2022.00%20L%2041.05%2011.00%20L%2033.00%202.95%20L%2022.00%200.00%20L%2011.00%202.95%20L%202.95%2011.00%20L%200.00%2022.00%20Z%22%20fill%3D%22%23b6c2d2%22%2F%3E%3C%2Fsvg%3E",
+      "originalSvgPath": "sample-assets/right_arm_upper.svg",
+      "enhancedSvgPath": "sample-assets/right_arm_upper-enhanced.svg",
+      "localPivotOffset": {
+        "x": 8.36051249756591,
+        "y": 41.353377501457416
+      },
+      "localPivotJointId": "right_shoulder"
+    },
+    "right_arm_lower": {
+      "id": "right_arm_lower",
+      "name": "Right lower arm",
+      "anchorJointId": "right_elbow",
+      "transform": {
+        "x": -116,
+        "y": -10,
+        "rotation": -18,
+        "scale": 1
+      },
+      "bounds": {
+        "x": -21,
+        "y": -52,
+        "width": 42,
+        "height": 104
+      },
+      "zIndex": 3,
+      "opacity": 0.9,
+      "visible": true,
+      "locked": false,
+      "selectable": true,
+      "fillColor": "#b6c2d2",
+      "contourPoints": [
+        {
+          "x": -21,
+          "y": 31.000000000000004
+        },
+        {
+          "x": -18.186533479473212,
+          "y": 41.5
+        },
+        {
+          "x": -10.500000000000005,
+          "y": 49.18653347947321
+        },
+        {
+          "x": 1.2858791391047208e-15,
+          "y": 52
+        },
+        {
+          "x": 10.499999999999998,
+          "y": 49.18653347947321
+        },
+        {
+          "x": 18.186533479473212,
+          "y": 41.5
+        },
+        {
+          "x": 21,
+          "y": 31
+        },
+        {
+          "x": 21,
+          "y": -31
+        },
+        {
+          "x": 18.186533479473212,
+          "y": -41.5
+        },
+        {
+          "x": 10.500000000000002,
+          "y": -49.18653347947321
+        },
+        {
+          "x": 1.2858791391047208e-15,
+          "y": -52
+        },
+        {
+          "x": -10.499999999999995,
+          "y": -49.18653347947321
+        },
+        {
+          "x": -18.186533479473212,
+          "y": -41.5
+        },
+        {
+          "x": -21,
+          "y": -31.000000000000004
+        }
+      ],
+      "contourSource": "imported",
+      "textureUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2042%20104%22%3E%3Cpath%20d%3D%22M%200.00%2083.00%20L%202.81%2093.50%20L%2010.50%20101.19%20L%2021.00%20104.00%20L%2031.50%20101.19%20L%2039.19%2093.50%20L%2042.00%2083.00%20L%2042.00%2021.00%20L%2039.19%2010.50%20L%2031.50%202.81%20L%2021.00%200.00%20L%2010.50%202.81%20L%202.81%2010.50%20L%200.00%2021.00%20Z%22%20fill%3D%22%23b6c2d2%22%2F%3E%3C%2Fsvg%3E",
+      "originalSvgPath": "sample-assets/right_arm_lower.svg",
+      "enhancedSvgPath": "sample-assets/right_arm_lower-enhanced.svg",
+      "localPivotOffset": {
+        "x": -4.134193655886773,
+        "y": 38.61228357421541
+      },
+      "localPivotJointId": "right_elbow"
+    },
+    "right_hand_part": {
+      "id": "right_hand_part",
+      "name": "Right hand",
+      "anchorJointId": "right_hand",
+      "transform": {
+        "x": -134,
+        "y": -54,
+        "rotation": -18,
+        "scale": 1
+      },
+      "bounds": {
+        "x": -20,
+        "y": -21,
+        "width": 40,
+        "height": 42
+      },
+      "zIndex": 4,
+      "opacity": 0.9,
+      "visible": true,
+      "locked": false,
+      "selectable": true,
+      "fillColor": "#d1d5db",
+      "contourPoints": [
+        {
+          "x": -12,
+          "y": -15.12
+        },
+        {
+          "x": 11,
+          "y": -17.22
+        },
+        {
+          "x": 18,
+          "y": -2.52
+        },
+        {
+          "x": 11.6,
+          "y": 20.58
+        },
+        {
+          "x": -11.6,
+          "y": 20.58
+        },
+        {
+          "x": -18,
+          "y": 1.68
+        }
+      ],
+      "contourSource": "imported",
+      "textureUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2042%22%3E%3Cpath%20d%3D%22M%208.00%205.88%20L%2031.00%203.78%20L%2038.00%2018.48%20L%2031.60%2041.58%20L%208.40%2041.58%20L%202.00%2022.68%20Z%22%20fill%3D%22%23d1d5db%22%2F%3E%3C%2Fsvg%3E",
+      "originalSvgPath": "sample-assets/right_hand_part.svg",
+      "enhancedSvgPath": "sample-assets/right_hand_part-enhanced.svg",
+      "localPivotOffset": {
+        "x": -0.47400078972802717,
+        "y": 20.875232292152752
+      },
+      "localPivotJointId": "right_hand"
+    },
+    "left_leg_upper": {
+      "id": "left_leg_upper",
+      "name": "Left upper leg",
+      "anchorJointId": "left_hip",
+      "transform": {
+        "x": 42,
+        "y": -114,
+        "rotation": 8,
+        "scale": 1
+      },
+      "bounds": {
+        "x": -24,
+        "y": -54,
+        "width": 48,
+        "height": 108
+      },
+      "zIndex": 1,
+      "opacity": 0.9,
+      "visible": true,
+      "locked": false,
+      "selectable": true,
+      "fillColor": "#94a3b8",
+      "contourPoints": [
+        {
+          "x": -24,
+          "y": 30.000000000000004
+        },
+        {
+          "x": -20.784609690826528,
+          "y": 42
+        },
+        {
+          "x": -12.000000000000005,
+          "y": 50.78460969082653
+        },
+        {
+          "x": 1.4695761589768238e-15,
+          "y": 54
+        },
+        {
+          "x": 11.999999999999996,
+          "y": 50.78460969082653
+        },
+        {
+          "x": 20.784609690826528,
+          "y": 42
+        },
+        {
+          "x": 24,
+          "y": 30
+        },
+        {
+          "x": 24,
+          "y": -30
+        },
+        {
+          "x": 20.784609690826528,
+          "y": -42
+        },
+        {
+          "x": 12.000000000000004,
+          "y": -50.78460969082653
+        },
+        {
+          "x": 1.4695761589768238e-15,
+          "y": -54
+        },
+        {
+          "x": -11.999999999999995,
+          "y": -50.78460969082653
+        },
+        {
+          "x": -20.784609690826528,
+          "y": -42
+        },
+        {
+          "x": -24,
+          "y": -30.000000000000004
+        }
+      ],
+      "contourSource": "imported",
+      "textureUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%20108%22%3E%3Cpath%20d%3D%22M%200.00%2084.00%20L%203.22%2096.00%20L%2012.00%20104.78%20L%2024.00%20108.00%20L%2036.00%20104.78%20L%2044.78%2096.00%20L%2048.00%2084.00%20L%2048.00%2024.00%20L%2044.78%2012.00%20L%2036.00%203.22%20L%2024.00%200.00%20L%2012.00%203.22%20L%203.22%2012.00%20L%200.00%2024.00%20Z%22%20fill%3D%22%2394a3b8%22%2F%3E%3C%2Fsvg%3E",
+      "originalSvgPath": "sample-assets/left_leg_upper.svg",
+      "enhancedSvgPath": "sample-assets/left_leg_upper-enhanced.svg",
+      "localPivotOffset": {
+        "x": -2.0768743096098143,
+        "y": 42.70464369482648
+      },
+      "localPivotJointId": "left_hip"
+    },
+    "left_leg_lower": {
+      "id": "left_leg_lower",
+      "name": "Left lower leg",
+      "anchorJointId": "left_knee",
+      "transform": {
+        "x": 60,
+        "y": -194,
+        "rotation": 8,
+        "scale": 1
+      },
+      "bounds": {
+        "x": -24,
+        "y": -56,
+        "width": 48,
+        "height": 112
+      },
+      "zIndex": 1,
+      "opacity": 0.9,
+      "visible": true,
+      "locked": false,
+      "selectable": true,
+      "fillColor": "#94a3b8",
+      "contourPoints": [
+        {
+          "x": -24,
+          "y": 32
+        },
+        {
+          "x": -20.784609690826528,
+          "y": 44
+        },
+        {
+          "x": -12.000000000000005,
+          "y": 52.78460969082653
+        },
+        {
+          "x": 1.4695761589768238e-15,
+          "y": 56
+        },
+        {
+          "x": 11.999999999999996,
+          "y": 52.78460969082653
+        },
+        {
+          "x": 20.784609690826528,
+          "y": 44
+        },
+        {
+          "x": 24,
+          "y": 32
+        },
+        {
+          "x": 24,
+          "y": -32
+        },
+        {
+          "x": 20.784609690826528,
+          "y": -44
+        },
+        {
+          "x": 12.000000000000004,
+          "y": -52.78460969082653
+        },
+        {
+          "x": 1.4695761589768238e-15,
+          "y": -56
+        },
+        {
+          "x": -11.999999999999995,
+          "y": -52.78460969082653
+        },
+        {
+          "x": -20.784609690826528,
+          "y": -44
+        },
+        {
+          "x": -24,
+          "y": -32
+        }
+      ],
+      "contourSource": "imported",
+      "textureUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%20112%22%3E%3Cpath%20d%3D%22M%200.00%2088.00%20L%203.22%20100.00%20L%2012.00%20108.78%20L%2024.00%20112.00%20L%2036.00%20108.78%20L%2044.78%20100.00%20L%2048.00%2088.00%20L%2048.00%2024.00%20L%2044.78%2012.00%20L%2036.00%203.22%20L%2024.00%200.00%20L%2012.00%203.22%20L%203.22%2012.00%20L%200.00%2024.00%20Z%22%20fill%3D%22%2394a3b8%22%2F%3E%3C%2Fsvg%3E",
+      "originalSvgPath": "sample-assets/left_leg_lower.svg",
+      "enhancedSvgPath": "sample-assets/left_leg_lower-enhanced.svg",
+      "localPivotOffset": {
+        "x": -3.7790642451728242,
+        "y": 44.96352603422975
+      },
+      "localPivotJointId": "left_knee"
+    },
+    "left_foot_part": {
+      "id": "left_foot_part",
+      "name": "Left foot",
+      "anchorJointId": "left_foot",
+      "transform": {
+        "x": 82,
+        "y": -238,
+        "rotation": 8,
+        "scale": 1
+      },
+      "bounds": {
+        "x": -33,
+        "y": -29,
+        "width": 66,
+        "height": 58
+      },
+      "zIndex": 2,
+      "opacity": 0.9,
+      "visible": true,
+      "locked": false,
+      "selectable": true,
+      "fillColor": "#94a3b8",
+      "contourPoints": [
+        {
+          "x": -30.360000000000003,
+          "y": -15.08
+        },
+        {
+          "x": 11.549999999999999,
+          "y": -23.779999999999998
+        },
+        {
+          "x": 31.02,
+          "y": -5.800000000000001
+        },
+        {
+          "x": 25.080000000000002,
+          "y": 20.88
+        },
+        {
+          "x": -19.139999999999997,
+          "y": 27.84
+        },
+        {
+          "x": -31.68,
+          "y": 8.7
+        }
+      ],
+      "contourSource": "imported",
+      "textureUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2066%2058%22%3E%3Cpath%20d%3D%22M%202.64%2013.92%20L%2044.55%205.22%20L%2064.02%2023.20%20L%2058.08%2049.88%20L%2013.86%2056.84%20L%201.32%2037.70%20Z%22%20fill%3D%22%2394a3b8%22%2F%3E%3C%2Fsvg%3E",
+      "originalSvgPath": "sample-assets/left_foot_part.svg",
+      "enhancedSvgPath": "sample-assets/left_foot_part-enhanced.svg",
+      "localPivotOffset": {
+        "x": -7.119218668214394,
+        "y": 21.19709238443206
+      },
+      "localPivotJointId": "left_foot"
+    },
+    "right_leg_upper": {
+      "id": "right_leg_upper",
+      "name": "Right upper leg",
+      "anchorJointId": "right_hip",
+      "transform": {
+        "x": -42,
+        "y": -114,
+        "rotation": -8,
+        "scale": 1
+      },
+      "bounds": {
+        "x": -24,
+        "y": -54,
+        "width": 48,
+        "height": 108
+      },
+      "zIndex": 1,
+      "opacity": 0.9,
+      "visible": true,
+      "locked": false,
+      "selectable": true,
+      "fillColor": "#94a3b8",
+      "contourPoints": [
+        {
+          "x": -24,
+          "y": 30.000000000000004
+        },
+        {
+          "x": -20.784609690826528,
+          "y": 42
+        },
+        {
+          "x": -12.000000000000005,
+          "y": 50.78460969082653
+        },
+        {
+          "x": 1.4695761589768238e-15,
+          "y": 54
+        },
+        {
+          "x": 11.999999999999996,
+          "y": 50.78460969082653
+        },
+        {
+          "x": 20.784609690826528,
+          "y": 42
+        },
+        {
+          "x": 24,
+          "y": 30
+        },
+        {
+          "x": 24,
+          "y": -30
+        },
+        {
+          "x": 20.784609690826528,
+          "y": -42
+        },
+        {
+          "x": 12.000000000000004,
+          "y": -50.78460969082653
+        },
+        {
+          "x": 1.4695761589768238e-15,
+          "y": -54
+        },
+        {
+          "x": -11.999999999999995,
+          "y": -50.78460969082653
+        },
+        {
+          "x": -20.784609690826528,
+          "y": -42
+        },
+        {
+          "x": -24,
+          "y": -30.000000000000004
+        }
+      ],
+      "contourSource": "imported",
+      "textureUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%20108%22%3E%3Cpath%20d%3D%22M%200.00%2084.00%20L%203.22%2096.00%20L%2012.00%20104.78%20L%2024.00%20108.00%20L%2036.00%20104.78%20L%2044.78%2096.00%20L%2048.00%2084.00%20L%2048.00%2024.00%20L%2044.78%2012.00%20L%2036.00%203.22%20L%2024.00%200.00%20L%2012.00%203.22%20L%203.22%2012.00%20L%200.00%2024.00%20Z%22%20fill%3D%22%2394a3b8%22%2F%3E%3C%2Fsvg%3E",
+      "originalSvgPath": "sample-assets/right_leg_upper.svg",
+      "enhancedSvgPath": "sample-assets/right_leg_upper-enhanced.svg",
+      "localPivotOffset": {
+        "x": 2.0768743096098143,
+        "y": 42.70464369482648
+      },
+      "localPivotJointId": "right_hip"
+    },
+    "right_leg_lower": {
+      "id": "right_leg_lower",
+      "name": "Right lower leg",
+      "anchorJointId": "right_knee",
+      "transform": {
+        "x": -60,
+        "y": -194,
+        "rotation": -8,
+        "scale": 1
+      },
+      "bounds": {
+        "x": -24,
+        "y": -56,
+        "width": 48,
+        "height": 112
+      },
+      "zIndex": 1,
+      "opacity": 0.9,
+      "visible": true,
+      "locked": false,
+      "selectable": true,
+      "fillColor": "#94a3b8",
+      "contourPoints": [
+        {
+          "x": -24,
+          "y": 32
+        },
+        {
+          "x": -20.784609690826528,
+          "y": 44
+        },
+        {
+          "x": -12.000000000000005,
+          "y": 52.78460969082653
+        },
+        {
+          "x": 1.4695761589768238e-15,
+          "y": 56
+        },
+        {
+          "x": 11.999999999999996,
+          "y": 52.78460969082653
+        },
+        {
+          "x": 20.784609690826528,
+          "y": 44
+        },
+        {
+          "x": 24,
+          "y": 32
+        },
+        {
+          "x": 24,
+          "y": -32
+        },
+        {
+          "x": 20.784609690826528,
+          "y": -44
+        },
+        {
+          "x": 12.000000000000004,
+          "y": -52.78460969082653
+        },
+        {
+          "x": 1.4695761589768238e-15,
+          "y": -56
+        },
+        {
+          "x": -11.999999999999995,
+          "y": -52.78460969082653
+        },
+        {
+          "x": -20.784609690826528,
+          "y": -44
+        },
+        {
+          "x": -24,
+          "y": -32
+        }
+      ],
+      "contourSource": "imported",
+      "textureUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%20112%22%3E%3Cpath%20d%3D%22M%200.00%2088.00%20L%203.22%20100.00%20L%2012.00%20108.78%20L%2024.00%20112.00%20L%2036.00%20108.78%20L%2044.78%20100.00%20L%2048.00%2088.00%20L%2048.00%2024.00%20L%2044.78%2012.00%20L%2036.00%203.22%20L%2024.00%200.00%20L%2012.00%203.22%20L%203.22%2012.00%20L%200.00%2024.00%20Z%22%20fill%3D%22%2394a3b8%22%2F%3E%3C%2Fsvg%3E",
+      "originalSvgPath": "sample-assets/right_leg_lower.svg",
+      "enhancedSvgPath": "sample-assets/right_leg_lower-enhanced.svg",
+      "localPivotOffset": {
+        "x": 3.7790642451728242,
+        "y": 44.96352603422975
+      },
+      "localPivotJointId": "right_knee"
+    },
+    "right_foot_part": {
+      "id": "right_foot_part",
+      "name": "Right foot",
+      "anchorJointId": "right_foot",
+      "transform": {
+        "x": -82,
+        "y": -238,
+        "rotation": -8,
+        "scale": 1
+      },
+      "bounds": {
+        "x": -33,
+        "y": -29,
+        "width": 66,
+        "height": 58
+      },
+      "zIndex": 2,
+      "opacity": 0.9,
+      "visible": true,
+      "locked": false,
+      "selectable": true,
+      "fillColor": "#94a3b8",
+      "contourPoints": [
+        {
+          "x": -30.360000000000003,
+          "y": -15.08
+        },
+        {
+          "x": 11.549999999999999,
+          "y": -23.779999999999998
+        },
+        {
+          "x": 31.02,
+          "y": -5.800000000000001
+        },
+        {
+          "x": 25.080000000000002,
+          "y": 20.88
+        },
+        {
+          "x": -19.139999999999997,
+          "y": 27.84
+        },
+        {
+          "x": -31.68,
+          "y": 8.7
+        }
+      ],
+      "contourSource": "imported",
+      "textureUrl": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2066%2058%22%3E%3Cpath%20d%3D%22M%202.64%2013.92%20L%2044.55%205.22%20L%2064.02%2023.20%20L%2058.08%2049.88%20L%2013.86%2056.84%20L%201.32%2037.70%20Z%22%20fill%3D%22%2394a3b8%22%2F%3E%3C%2Fsvg%3E",
+      "originalSvgPath": "sample-assets/right_foot_part.svg",
+      "enhancedSvgPath": "sample-assets/right_foot_part-enhanced.svg",
+      "localPivotOffset": {
+        "x": 7.119218668214394,
+        "y": 21.19709238443206
+      },
+      "localPivotJointId": "right_foot"
+    }
+  },
+  "partOrder": [
+    "torso",
+    "left_leg_upper",
+    "left_leg_lower",
+    "right_leg_upper",
+    "right_leg_lower",
+    "left_foot_part",
+    "right_foot_part",
+    "left_arm_upper",
+    "left_arm_lower",
+    "right_arm_upper",
+    "right_arm_lower",
+    "left_hand_part",
+    "right_hand_part",
+    "head"
+  ],
+  "sceneObjects": {},
+  "sceneObjectOrder": [],
+  "skeleton": {
+    "joints": {
+      "root": {
+        "id": "root",
+        "name": "root",
+        "position": {
+          "x": 0,
+          "y": -70
+        },
+        "parentId": null,
+        "locked": false,
+        "bendDirection": 1
+      },
+      "hip": {
+        "id": "hip",
+        "name": "hip",
+        "position": {
+          "x": 0,
+          "y": -70
+        },
+        "parentId": "root",
+        "locked": false,
+        "bendDirection": 1
+      },
+      "torso": {
+        "id": "torso",
+        "name": "torso",
+        "position": {
+          "x": 0,
+          "y": 40
+        },
+        "parentId": "hip",
+        "locked": false,
+        "bendDirection": 1
+      },
+      "neck": {
+        "id": "neck",
+        "name": "neck",
+        "position": {
+          "x": 0,
+          "y": 120
+        },
+        "parentId": "torso",
+        "locked": false,
+        "bendDirection": 1
+      },
+      "head_top": {
+        "id": "head_top",
+        "name": "head top",
+        "position": {
+          "x": 0,
+          "y": 170
+        },
+        "parentId": "neck",
+        "locked": false,
+        "bendDirection": 1
+      },
+      "left_shoulder": {
+        "id": "left_shoulder",
+        "name": "left shoulder",
+        "position": {
+          "x": 58,
+          "y": 92
+        },
+        "parentId": "torso",
+        "locked": false,
+        "bendDirection": 1
+      },
+      "left_elbow": {
+        "id": "left_elbow",
+        "name": "left elbow",
+        "position": {
+          "x": 108,
+          "y": 28
+        },
+        "parentId": "left_shoulder",
+        "locked": false,
+        "bendDirection": 1
+      },
+      "left_hand": {
+        "id": "left_hand",
+        "name": "left hand",
+        "position": {
+          "x": 128,
+          "y": -34
+        },
+        "parentId": "left_elbow",
+        "locked": false,
+        "bendDirection": 1
+      },
+      "right_shoulder": {
+        "id": "right_shoulder",
+        "name": "right shoulder",
+        "position": {
+          "x": -58,
+          "y": 92
+        },
+        "parentId": "torso",
+        "locked": false,
+        "bendDirection": 1
+      },
+      "right_elbow": {
+        "id": "right_elbow",
+        "name": "right elbow",
+        "position": {
+          "x": -108,
+          "y": 28
+        },
+        "parentId": "right_shoulder",
+        "locked": false,
+        "bendDirection": 1
+      },
+      "right_hand": {
+        "id": "right_hand",
+        "name": "right hand",
+        "position": {
+          "x": -128,
+          "y": -34
+        },
+        "parentId": "right_elbow",
+        "locked": false,
+        "bendDirection": 1
+      },
+      "left_hip": {
+        "id": "left_hip",
+        "name": "left hip",
+        "position": {
+          "x": 34,
+          "y": -72
+        },
+        "parentId": "root",
+        "locked": false,
+        "bendDirection": 1
+      },
+      "left_knee": {
+        "id": "left_knee",
+        "name": "left knee",
+        "position": {
+          "x": 50,
+          "y": -150
+        },
+        "parentId": "left_hip",
+        "locked": false,
+        "bendDirection": 1
+      },
+      "left_foot": {
+        "id": "left_foot",
+        "name": "left foot",
+        "position": {
+          "x": 72,
+          "y": -218
+        },
+        "parentId": "left_knee",
+        "locked": false,
+        "bendDirection": 1
+      },
+      "right_hip": {
+        "id": "right_hip",
+        "name": "right hip",
+        "position": {
+          "x": -34,
+          "y": -72
+        },
+        "parentId": "root",
+        "locked": false,
+        "bendDirection": 1
+      },
+      "right_knee": {
+        "id": "right_knee",
+        "name": "right knee",
+        "position": {
+          "x": -50,
+          "y": -150
+        },
+        "parentId": "right_hip",
+        "locked": false,
+        "bendDirection": 1
+      },
+      "right_foot": {
+        "id": "right_foot",
+        "name": "right foot",
+        "position": {
+          "x": -72,
+          "y": -218
+        },
+        "parentId": "right_knee",
+        "locked": false,
+        "bendDirection": 1
+      }
+    },
+    "bones": [
+      [
+        "root",
+        "hip"
+      ],
+      [
+        "hip",
+        "torso"
+      ],
+      [
+        "torso",
+        "neck"
+      ],
+      [
+        "neck",
+        "head_top"
+      ],
+      [
+        "torso",
+        "left_shoulder"
+      ],
+      [
+        "left_shoulder",
+        "left_elbow"
+      ],
+      [
+        "left_elbow",
+        "left_hand"
+      ],
+      [
+        "torso",
+        "right_shoulder"
+      ],
+      [
+        "right_shoulder",
+        "right_elbow"
+      ],
+      [
+        "right_elbow",
+        "right_hand"
+      ],
+      [
+        "root",
+        "left_hip"
+      ],
+      [
+        "left_hip",
+        "left_knee"
+      ],
+      [
+        "left_knee",
+        "left_foot"
+      ],
+      [
+        "root",
+        "right_hip"
+      ],
+      [
+        "right_hip",
+        "right_knee"
+      ],
+      [
+        "right_knee",
+        "right_foot"
+      ]
+    ],
+    "rootJointIds": [
+      "root"
+    ],
+    "jointMap": {
+      "root": "root",
+      "hip": "hip",
+      "torso": "torso",
+      "neck": "neck",
+      "head_top": "head_top",
+      "left_shoulder": "left_shoulder",
+      "left_elbow": "left_elbow",
+      "left_hand": "left_hand",
+      "right_shoulder": "right_shoulder",
+      "right_elbow": "right_elbow",
+      "right_hand": "right_hand",
+      "left_hip": "left_hip",
+      "left_knee": "left_knee",
+      "left_foot": "left_foot",
+      "right_hip": "right_hip",
+      "right_knee": "right_knee",
+      "right_foot": "right_foot"
+    },
+    "hierarchy": {
+      "root": [
+        "hip",
+        "left_hip",
+        "right_hip"
+      ],
+      "hip": [
+        "torso"
+      ],
+      "torso": [
+        "neck",
+        "left_shoulder",
+        "right_shoulder"
+      ],
+      "neck": [
+        "head_top"
+      ],
+      "left_shoulder": [
+        "left_elbow"
+      ],
+      "left_elbow": [
+        "left_hand"
+      ],
+      "right_shoulder": [
+        "right_elbow"
+      ],
+      "right_elbow": [
+        "right_hand"
+      ],
+      "left_hip": [
+        "left_knee"
+      ],
+      "left_knee": [
+        "left_foot"
+      ],
+      "right_hip": [
+        "right_knee"
+      ],
+      "right_knee": [
+        "right_foot"
+      ]
+    },
+    "metadata": {
+      "sourceFormat": "web-port",
+      "scale": 1,
+      "normalization": "letter-sheet-scene"
+    }
+  },
+  "paths": {
+    "path-right-arm": {
+      "id": "path-right-arm",
+      "partId": "right_hand_part",
+      "targetAnchorJointId": "right_hand",
+      "chainRootJointId": "right_shoulder",
+      "points": [
+        {
+          "x": -39.99999999999999,
+          "y": 65.83005244258364
+        },
+        {
+          "x": -64.23051238953941,
+          "y": 88.17256041302227
+        },
+        {
+          "x": -99.2792202424786,
+          "y": 108.03035805414572
+        },
+        {
+          "x": -139.3295878967653,
+          "y": 118.65917579353064
+        },
+        {
+          "x": -172.11102550927978,
+          "y": 119.54097611934552
+        },
+        {
+          "x": -176.01643740130686,
+          "y": 119.19633705889723
+        },
+        {
+          "x": -119.99999999999997,
+          "y": 114.91933384829669
+        },
+        {
+          "x": -53.26559490144817,
+          "y": 79.19633705889724
+        },
+        {
+          "x": -27.8889744907202,
+          "y": 50.2589438165904
+        },
+        {
+          "x": -20.670412103234668,
+          "y": 38.65917579353062
+        },
+        {
+          "x": -20.720779757521356,
+          "y": 38.74832575139064
+        },
+        {
+          "x": -26.487455307705442,
+          "y": 48.17256041302226
+        }
+      ],
+      "timedPoints": [
+        {
+          "x": -39.99999999999999,
+          "y": 65.83005244258364,
+          "time": 0
+        },
+        {
+          "x": -44.966778394039174,
+          "y": 71.20862343790574,
+          "time": 37.5
+        },
+        {
+          "x": -50.65231136969152,
+          "y": 76.80360863949842,
+          "time": 75
+        },
+        {
+          "x": -57.074461929840936,
+          "y": 82.500341276946,
+          "time": 112.5
+        },
+        {
+          "x": -64.23051238953941,
+          "y": 88.17256041302227,
+          "time": 150
+        },
+        {
+          "x": -72.09408555703337,
+          "y": 93.6882575469732,
+          "time": 187.5
+        },
+        {
+          "x": -80.6132482911632,
+          "y": 98.91631888701738,
+          "time": 225
+        },
+        {
+          "x": -89.70975500737218,
+          "y": 103.7333693297293,
+          "time": 262.5
+        },
+        {
+          "x": -99.2792202424786,
+          "y": 108.03035805414572,
+          "time": 300
+        },
+        {
+          "x": -109.1918944434247,
+          "y": 111.71860930601724,
+          "time": 337.5
+        },
+        {
+          "x": -119.29364576775956,
+          "y": 114.7352342717048,
+          "time": 375
+        },
+        {
+          "x": -129.40669590127868,
+          "y": 117.04792180835494,
+          "time": 412.5
+        },
+        {
+          "x": -139.3295878967653,
+          "y": 118.65917579353064,
+          "time": 450
+        },
+        {
+          "x": -148.83575060490566,
+          "y": 119.61002329253681,
+          "time": 487.49999999999994
+        },
+        {
+          "x": -157.6698511650026,
+          "y": 119.98303162025266,
+          "time": 525
+        },
+        {
+          "x": -165.54091163217424,
+          "y": 119.90402839917584,
+          "time": 562.5
+        },
+        {
+          "x": -172.11102550927978,
+          "y": 119.54097611934552,
+          "time": 600
+        },
+        {
+          "x": -176.97884528122376,
+          "y": 119.09657071387888,
+          "time": 637.5
+        },
+        {
+          "x": -179.65895253726285,
+          "y": 118.78767453784839,
+          "time": 675
+        },
+        {
+          "x": -179.56450696846372,
+          "y": 118.79933900076833,
+          "time": 712.5
+        },
+        {
+          "x": -176.01643740130686,
+          "y": 119.19633705889723,
+          "time": 750
+        },
+        {
+          "x": -168.33269451136258,
+          "y": 119.78287205511208,
+          "time": 787.5
+        },
+        {
+          "x": -156.08031119748586,
+          "y": 119.95198041816005,
+          "time": 825
+        },
+        {
+          "x": -139.5187778328374,
+          "y": 118.68370911514303,
+          "time": 862.5
+        },
+        {
+          "x": -119.99999999999997,
+          "y": 114.91933384829669,
+          "time": 900
+        },
+        {
+          "x": -99.79681107706732,
+          "y": 108.2416137375389,
+          "time": 937.5000000000001
+        },
+        {
+          "x": -81.19375490563962,
+          "y": 99.24645680995839,
+          "time": 974.9999999999999
+        },
+        {
+          "x": -65.57766808954034,
+          "y": 89.16819746590491,
+          "time": 1012.5
+        },
+        {
+          "x": -53.26559490144817,
+          "y": 79.19633705889724,
+          "time": 1050
+        },
+        {
+          "x": -43.903760254835106,
+          "y": 70.09842468007068,
+          "time": 1087.5
+        },
+        {
+          "x": -36.90958995766091,
+          "y": 62.21913204292453,
+          "time": 1125
+        },
+        {
+          "x": -31.72206903947385,
+          "y": 55.62830349058008,
+          "time": 1162.5
+        },
+        {
+          "x": -27.8889744907202,
+          "y": 50.2589438165904,
+          "time": 1200
+        },
+        {
+          "x": -25.073762957032883,
+          "y": 45.99366579827294,
+          "time": 1237.5
+        },
+        {
+          "x": -23.03567244319902,
+          "y": 42.7089655171272,
+          "time": 1275
+        },
+        {
+          "x": -21.60634477269845,
+          "y": 40.29443438263196,
+          "time": 1312.5
+        },
+        {
+          "x": -20.670412103234668,
+          "y": 38.65917579353062,
+          "time": 1350
+        },
+        {
+          "x": -20.151208721117136,
+          "y": 37.73233289845011,
+          "time": 1387.5
+        },
+        {
+          "x": -20.000830624038784,
+          "y": 37.46116816857932,
+          "time": 1425
+        },
+        {
+          "x": -20.193430967368116,
+          "y": 37.808246705114314,
+          "time": 1462.5
+        },
+        {
+          "x": -20.720779757521356,
+          "y": 38.74832575139064,
+          "time": 1500
+        },
+        {
+          "x": -21.589330671930156,
+          "y": 40.26510210643049,
+          "time": 1537.5
+        },
+        {
+          "x": -22.818209213912944,
+          "y": 42.34777639209358,
+          "time": 1575
+        },
+        {
+          "x": -24.43764721966778,
+          "y": 44.98734322627551,
+          "time": 1612.5
+        },
+        {
+          "x": -26.487455307705442,
+          "y": 48.17256041302226,
+          "time": 1650
+        },
+        {
+          "x": -29.015175469256093,
+          "y": 51.88566668773882,
+          "time": 1687.5
+        },
+        {
+          "x": -32.07362252718299,
+          "y": 56.09808503129676,
+          "time": 1725
+        },
+        {
+          "x": -35.71763269605596,
+          "y": 60.76652806030158,
+          "time": 1762.5
+        }
+      ],
+      "duration": 1800,
+      "closed": true,
+      "enabled": true,
+      "visible": true,
+      "source": "drawn",
+      "warnings": []
+    }
+  },
+  "mechanisms": [],
+  "settings": {
+    "animationSpeed": 1,
+    "animationDurationMs": 3200,
+    "timingProfile": "linear",
+    "theme": "light",
+    "uiTextScale": "normal",
+    "toolbarVisible": false,
+    "partPanelVisible": true,
+    "autosave": true,
+    "autosaveIntervalSeconds": 60,
+    "performancePreset": "balanced",
+    "physicsSnapMode": "balanced",
+    "simulationFriction": 0.18,
+    "simulationMassKg": 1,
+    "debugVisuals": false,
+    "detailedProcessingSteps": false,
+    "classroomAssessmentKey": "default",
+    "gridUnit": "cm",
+    "fabricationReadyMode": true,
+    "physicalKit": {
+      "profileKey": "letter-15x15-2cm",
+      "gridPitchMm": 20,
+      "sheetWidthMm": 215.9,
+      "sheetHeightMm": 279.4,
+      "boardCells": 15,
+      "holeDiameterMm": 4,
+      "exportMode": "both",
+      "defaultExportFormat": "both",
+      "cutSheetFileType": "pdf"
+    }
+  },
+  "processing": {
+    "stage": "ready",
+    "message": "Waving arm ready",
+    "progress": 100
+  },
+  "selectedPartId": "right_hand_part",
+  "selectedPathId": "path-right-arm",
+  "characterPackage": {
+    "id": "sample-character-package",
+    "createdAt": "2026-08-14T01:15:00.001Z",
+    "sourceImageName": "sample",
+    "outputDir": "sample://built-in",
+    "partsInfo": {
+      "parts": {
+        "torso": {
+          "name": "Torso",
+          "texture_path": "sample-assets/torso.svg",
+          "original_svg_path": "sample-assets/torso.svg",
+          "enhanced_svg_path": "sample-assets/torso-enhanced.svg",
+          "contour_points": [
+            {
+              "x": -50.160000000000004,
+              "y": -105.6
+            },
+            {
+              "x": 50.160000000000004,
+              "y": -105.6
+            },
+            {
+              "x": 63.36,
+              "y": -74.80000000000001
+            },
+            {
+              "x": 64.67999999999999,
+              "y": 83.6
+            },
+            {
+              "x": 47.519999999999996,
+              "y": 110
+            },
+            {
+              "x": -47.519999999999996,
+              "y": 110
+            },
+            {
+              "x": -64.67999999999999,
+              "y": 83.6
+            },
+            {
+              "x": -63.36,
+              "y": -74.80000000000001
+            }
+          ],
+          "contour_source": "imported",
+          "anchor_joint_id": "torso",
+          "transform": {
+            "x": 0,
+            "y": 12,
+            "rotation": 0,
+            "scale": 1
+          },
+          "z_index": 0,
+          "visible": true
+        },
+        "left_leg_upper": {
+          "name": "Left upper leg",
+          "texture_path": "sample-assets/left_leg_upper.svg",
+          "original_svg_path": "sample-assets/left_leg_upper.svg",
+          "enhanced_svg_path": "sample-assets/left_leg_upper-enhanced.svg",
+          "contour_points": [
+            {
+              "x": -24,
+              "y": 30.000000000000004
+            },
+            {
+              "x": -20.784609690826528,
+              "y": 42
+            },
+            {
+              "x": -12.000000000000005,
+              "y": 50.78460969082653
+            },
+            {
+              "x": 1.4695761589768238e-15,
+              "y": 54
+            },
+            {
+              "x": 11.999999999999996,
+              "y": 50.78460969082653
+            },
+            {
+              "x": 20.784609690826528,
+              "y": 42
+            },
+            {
+              "x": 24,
+              "y": 30
+            },
+            {
+              "x": 24,
+              "y": -30
+            },
+            {
+              "x": 20.784609690826528,
+              "y": -42
+            },
+            {
+              "x": 12.000000000000004,
+              "y": -50.78460969082653
+            },
+            {
+              "x": 1.4695761589768238e-15,
+              "y": -54
+            },
+            {
+              "x": -11.999999999999995,
+              "y": -50.78460969082653
+            },
+            {
+              "x": -20.784609690826528,
+              "y": -42
+            },
+            {
+              "x": -24,
+              "y": -30.000000000000004
+            }
+          ],
+          "contour_source": "imported",
+          "anchor_joint_id": "left_hip",
+          "transform": {
+            "x": 42,
+            "y": -114,
+            "rotation": 8,
+            "scale": 1
+          },
+          "z_index": 1,
+          "visible": true
+        },
+        "left_leg_lower": {
+          "name": "Left lower leg",
+          "texture_path": "sample-assets/left_leg_lower.svg",
+          "original_svg_path": "sample-assets/left_leg_lower.svg",
+          "enhanced_svg_path": "sample-assets/left_leg_lower-enhanced.svg",
+          "contour_points": [
+            {
+              "x": -24,
+              "y": 32
+            },
+            {
+              "x": -20.784609690826528,
+              "y": 44
+            },
+            {
+              "x": -12.000000000000005,
+              "y": 52.78460969082653
+            },
+            {
+              "x": 1.4695761589768238e-15,
+              "y": 56
+            },
+            {
+              "x": 11.999999999999996,
+              "y": 52.78460969082653
+            },
+            {
+              "x": 20.784609690826528,
+              "y": 44
+            },
+            {
+              "x": 24,
+              "y": 32
+            },
+            {
+              "x": 24,
+              "y": -32
+            },
+            {
+              "x": 20.784609690826528,
+              "y": -44
+            },
+            {
+              "x": 12.000000000000004,
+              "y": -52.78460969082653
+            },
+            {
+              "x": 1.4695761589768238e-15,
+              "y": -56
+            },
+            {
+              "x": -11.999999999999995,
+              "y": -52.78460969082653
+            },
+            {
+              "x": -20.784609690826528,
+              "y": -44
+            },
+            {
+              "x": -24,
+              "y": -32
+            }
+          ],
+          "contour_source": "imported",
+          "anchor_joint_id": "left_knee",
+          "transform": {
+            "x": 60,
+            "y": -194,
+            "rotation": 8,
+            "scale": 1
+          },
+          "z_index": 1,
+          "visible": true
+        },
+        "right_leg_upper": {
+          "name": "Right upper leg",
+          "texture_path": "sample-assets/right_leg_upper.svg",
+          "original_svg_path": "sample-assets/right_leg_upper.svg",
+          "enhanced_svg_path": "sample-assets/right_leg_upper-enhanced.svg",
+          "contour_points": [
+            {
+              "x": -24,
+              "y": 30.000000000000004
+            },
+            {
+              "x": -20.784609690826528,
+              "y": 42
+            },
+            {
+              "x": -12.000000000000005,
+              "y": 50.78460969082653
+            },
+            {
+              "x": 1.4695761589768238e-15,
+              "y": 54
+            },
+            {
+              "x": 11.999999999999996,
+              "y": 50.78460969082653
+            },
+            {
+              "x": 20.784609690826528,
+              "y": 42
+            },
+            {
+              "x": 24,
+              "y": 30
+            },
+            {
+              "x": 24,
+              "y": -30
+            },
+            {
+              "x": 20.784609690826528,
+              "y": -42
+            },
+            {
+              "x": 12.000000000000004,
+              "y": -50.78460969082653
+            },
+            {
+              "x": 1.4695761589768238e-15,
+              "y": -54
+            },
+            {
+              "x": -11.999999999999995,
+              "y": -50.78460969082653
+            },
+            {
+              "x": -20.784609690826528,
+              "y": -42
+            },
+            {
+              "x": -24,
+              "y": -30.000000000000004
+            }
+          ],
+          "contour_source": "imported",
+          "anchor_joint_id": "right_hip",
+          "transform": {
+            "x": -42,
+            "y": -114,
+            "rotation": -8,
+            "scale": 1
+          },
+          "z_index": 1,
+          "visible": true
+        },
+        "right_leg_lower": {
+          "name": "Right lower leg",
+          "texture_path": "sample-assets/right_leg_lower.svg",
+          "original_svg_path": "sample-assets/right_leg_lower.svg",
+          "enhanced_svg_path": "sample-assets/right_leg_lower-enhanced.svg",
+          "contour_points": [
+            {
+              "x": -24,
+              "y": 32
+            },
+            {
+              "x": -20.784609690826528,
+              "y": 44
+            },
+            {
+              "x": -12.000000000000005,
+              "y": 52.78460969082653
+            },
+            {
+              "x": 1.4695761589768238e-15,
+              "y": 56
+            },
+            {
+              "x": 11.999999999999996,
+              "y": 52.78460969082653
+            },
+            {
+              "x": 20.784609690826528,
+              "y": 44
+            },
+            {
+              "x": 24,
+              "y": 32
+            },
+            {
+              "x": 24,
+              "y": -32
+            },
+            {
+              "x": 20.784609690826528,
+              "y": -44
+            },
+            {
+              "x": 12.000000000000004,
+              "y": -52.78460969082653
+            },
+            {
+              "x": 1.4695761589768238e-15,
+              "y": -56
+            },
+            {
+              "x": -11.999999999999995,
+              "y": -52.78460969082653
+            },
+            {
+              "x": -20.784609690826528,
+              "y": -44
+            },
+            {
+              "x": -24,
+              "y": -32
+            }
+          ],
+          "contour_source": "imported",
+          "anchor_joint_id": "right_knee",
+          "transform": {
+            "x": -60,
+            "y": -194,
+            "rotation": -8,
+            "scale": 1
+          },
+          "z_index": 1,
+          "visible": true
+        },
+        "left_foot_part": {
+          "name": "Left foot",
+          "texture_path": "sample-assets/left_foot_part.svg",
+          "original_svg_path": "sample-assets/left_foot_part.svg",
+          "enhanced_svg_path": "sample-assets/left_foot_part-enhanced.svg",
+          "contour_points": [
+            {
+              "x": -30.360000000000003,
+              "y": -15.08
+            },
+            {
+              "x": 11.549999999999999,
+              "y": -23.779999999999998
+            },
+            {
+              "x": 31.02,
+              "y": -5.800000000000001
+            },
+            {
+              "x": 25.080000000000002,
+              "y": 20.88
+            },
+            {
+              "x": -19.139999999999997,
+              "y": 27.84
+            },
+            {
+              "x": -31.68,
+              "y": 8.7
+            }
+          ],
+          "contour_source": "imported",
+          "anchor_joint_id": "left_foot",
+          "transform": {
+            "x": 82,
+            "y": -238,
+            "rotation": 8,
+            "scale": 1
+          },
+          "z_index": 2,
+          "visible": true
+        },
+        "right_foot_part": {
+          "name": "Right foot",
+          "texture_path": "sample-assets/right_foot_part.svg",
+          "original_svg_path": "sample-assets/right_foot_part.svg",
+          "enhanced_svg_path": "sample-assets/right_foot_part-enhanced.svg",
+          "contour_points": [
+            {
+              "x": -30.360000000000003,
+              "y": -15.08
+            },
+            {
+              "x": 11.549999999999999,
+              "y": -23.779999999999998
+            },
+            {
+              "x": 31.02,
+              "y": -5.800000000000001
+            },
+            {
+              "x": 25.080000000000002,
+              "y": 20.88
+            },
+            {
+              "x": -19.139999999999997,
+              "y": 27.84
+            },
+            {
+              "x": -31.68,
+              "y": 8.7
+            }
+          ],
+          "contour_source": "imported",
+          "anchor_joint_id": "right_foot",
+          "transform": {
+            "x": -82,
+            "y": -238,
+            "rotation": -8,
+            "scale": 1
+          },
+          "z_index": 2,
+          "visible": true
+        },
+        "left_arm_upper": {
+          "name": "Left upper arm",
+          "texture_path": "sample-assets/left_arm_upper.svg",
+          "original_svg_path": "sample-assets/left_arm_upper.svg",
+          "enhanced_svg_path": "sample-assets/left_arm_upper-enhanced.svg",
+          "contour_points": [
+            {
+              "x": -22,
+              "y": 30.000000000000004
+            },
+            {
+              "x": -19.052558883257653,
+              "y": 41
+            },
+            {
+              "x": -11.000000000000005,
+              "y": 49.052558883257646
+            },
+            {
+              "x": 1.3471114790620886e-15,
+              "y": 52
+            },
+            {
+              "x": 10.999999999999998,
+              "y": 49.05255888325765
+            },
+            {
+              "x": 19.052558883257653,
+              "y": 41
+            },
+            {
+              "x": 22,
+              "y": 30
+            },
+            {
+              "x": 22,
+              "y": -30
+            },
+            {
+              "x": 19.052558883257653,
+              "y": -41
+            },
+            {
+              "x": 11.000000000000002,
+              "y": -49.052558883257646
+            },
+            {
+              "x": 1.3471114790620886e-15,
+              "y": -52
+            },
+            {
+              "x": -10.999999999999995,
+              "y": -49.05255888325765
+            },
+            {
+              "x": -19.052558883257653,
+              "y": -41
+            },
+            {
+              "x": -22,
+              "y": -30.000000000000004
+            }
+          ],
+          "contour_source": "imported",
+          "anchor_joint_id": "left_shoulder",
+          "transform": {
+            "x": 80,
+            "y": 56,
+            "rotation": 20,
+            "scale": 1
+          },
+          "z_index": 3,
+          "visible": true
+        },
+        "left_arm_lower": {
+          "name": "Left lower arm",
+          "texture_path": "sample-assets/left_arm_lower.svg",
+          "original_svg_path": "sample-assets/left_arm_lower.svg",
+          "enhanced_svg_path": "sample-assets/left_arm_lower-enhanced.svg",
+          "contour_points": [
+            {
+              "x": -21,
+              "y": 31.000000000000004
+            },
+            {
+              "x": -18.186533479473212,
+              "y": 41.5
+            },
+            {
+              "x": -10.500000000000005,
+              "y": 49.18653347947321
+            },
+            {
+              "x": 1.2858791391047208e-15,
+              "y": 52
+            },
+            {
+              "x": 10.499999999999998,
+              "y": 49.18653347947321
+            },
+            {
+              "x": 18.186533479473212,
+              "y": 41.5
+            },
+            {
+              "x": 21,
+              "y": 31
+            },
+            {
+              "x": 21,
+              "y": -31
+            },
+            {
+              "x": 18.186533479473212,
+              "y": -41.5
+            },
+            {
+              "x": 10.500000000000002,
+              "y": -49.18653347947321
+            },
+            {
+              "x": 1.2858791391047208e-15,
+              "y": -52
+            },
+            {
+              "x": -10.499999999999995,
+              "y": -49.18653347947321
+            },
+            {
+              "x": -18.186533479473212,
+              "y": -41.5
+            },
+            {
+              "x": -21,
+              "y": -31.000000000000004
+            }
+          ],
+          "contour_source": "imported",
+          "anchor_joint_id": "left_elbow",
+          "transform": {
+            "x": 116,
+            "y": -10,
+            "rotation": 18,
+            "scale": 1
+          },
+          "z_index": 3,
+          "visible": true
+        },
+        "right_arm_upper": {
+          "name": "Right upper arm",
+          "texture_path": "sample-assets/right_arm_upper.svg",
+          "original_svg_path": "sample-assets/right_arm_upper.svg",
+          "enhanced_svg_path": "sample-assets/right_arm_upper-enhanced.svg",
+          "contour_points": [
+            {
+              "x": -22,
+              "y": 30.000000000000004
+            },
+            {
+              "x": -19.052558883257653,
+              "y": 41
+            },
+            {
+              "x": -11.000000000000005,
+              "y": 49.052558883257646
+            },
+            {
+              "x": 1.3471114790620886e-15,
+              "y": 52
+            },
+            {
+              "x": 10.999999999999998,
+              "y": 49.05255888325765
+            },
+            {
+              "x": 19.052558883257653,
+              "y": 41
+            },
+            {
+              "x": 22,
+              "y": 30
+            },
+            {
+              "x": 22,
+              "y": -30
+            },
+            {
+              "x": 19.052558883257653,
+              "y": -41
+            },
+            {
+              "x": 11.000000000000002,
+              "y": -49.052558883257646
+            },
+            {
+              "x": 1.3471114790620886e-15,
+              "y": -52
+            },
+            {
+              "x": -10.999999999999995,
+              "y": -49.05255888325765
+            },
+            {
+              "x": -19.052558883257653,
+              "y": -41
+            },
+            {
+              "x": -22,
+              "y": -30.000000000000004
+            }
+          ],
+          "contour_source": "imported",
+          "anchor_joint_id": "right_shoulder",
+          "transform": {
+            "x": -80,
+            "y": 56,
+            "rotation": -20,
+            "scale": 1
+          },
+          "z_index": 3,
+          "visible": true
+        },
+        "right_arm_lower": {
+          "name": "Right lower arm",
+          "texture_path": "sample-assets/right_arm_lower.svg",
+          "original_svg_path": "sample-assets/right_arm_lower.svg",
+          "enhanced_svg_path": "sample-assets/right_arm_lower-enhanced.svg",
+          "contour_points": [
+            {
+              "x": -21,
+              "y": 31.000000000000004
+            },
+            {
+              "x": -18.186533479473212,
+              "y": 41.5
+            },
+            {
+              "x": -10.500000000000005,
+              "y": 49.18653347947321
+            },
+            {
+              "x": 1.2858791391047208e-15,
+              "y": 52
+            },
+            {
+              "x": 10.499999999999998,
+              "y": 49.18653347947321
+            },
+            {
+              "x": 18.186533479473212,
+              "y": 41.5
+            },
+            {
+              "x": 21,
+              "y": 31
+            },
+            {
+              "x": 21,
+              "y": -31
+            },
+            {
+              "x": 18.186533479473212,
+              "y": -41.5
+            },
+            {
+              "x": 10.500000000000002,
+              "y": -49.18653347947321
+            },
+            {
+              "x": 1.2858791391047208e-15,
+              "y": -52
+            },
+            {
+              "x": -10.499999999999995,
+              "y": -49.18653347947321
+            },
+            {
+              "x": -18.186533479473212,
+              "y": -41.5
+            },
+            {
+              "x": -21,
+              "y": -31.000000000000004
+            }
+          ],
+          "contour_source": "imported",
+          "anchor_joint_id": "right_elbow",
+          "transform": {
+            "x": -116,
+            "y": -10,
+            "rotation": -18,
+            "scale": 1
+          },
+          "z_index": 3,
+          "visible": true
+        },
+        "left_hand_part": {
+          "name": "Left hand",
+          "texture_path": "sample-assets/left_hand_part.svg",
+          "original_svg_path": "sample-assets/left_hand_part.svg",
+          "enhanced_svg_path": "sample-assets/left_hand_part-enhanced.svg",
+          "contour_points": [
+            {
+              "x": -12,
+              "y": -15.12
+            },
+            {
+              "x": 11,
+              "y": -17.22
+            },
+            {
+              "x": 18,
+              "y": -2.52
+            },
+            {
+              "x": 11.6,
+              "y": 20.58
+            },
+            {
+              "x": -11.6,
+              "y": 20.58
+            },
+            {
+              "x": -18,
+              "y": 1.68
+            }
+          ],
+          "contour_source": "imported",
+          "anchor_joint_id": "left_hand",
+          "transform": {
+            "x": 134,
+            "y": -54,
+            "rotation": 18,
+            "scale": 1
+          },
+          "z_index": 4,
+          "visible": true
+        },
+        "right_hand_part": {
+          "name": "Right hand",
+          "texture_path": "sample-assets/right_hand_part.svg",
+          "original_svg_path": "sample-assets/right_hand_part.svg",
+          "enhanced_svg_path": "sample-assets/right_hand_part-enhanced.svg",
+          "contour_points": [
+            {
+              "x": -12,
+              "y": -15.12
+            },
+            {
+              "x": 11,
+              "y": -17.22
+            },
+            {
+              "x": 18,
+              "y": -2.52
+            },
+            {
+              "x": 11.6,
+              "y": 20.58
+            },
+            {
+              "x": -11.6,
+              "y": 20.58
+            },
+            {
+              "x": -18,
+              "y": 1.68
+            }
+          ],
+          "contour_source": "imported",
+          "anchor_joint_id": "right_hand",
+          "transform": {
+            "x": -134,
+            "y": -54,
+            "rotation": -18,
+            "scale": 1
+          },
+          "z_index": 4,
+          "visible": true
+        },
+        "head": {
+          "name": "Head",
+          "texture_path": "sample-assets/head.svg",
+          "original_svg_path": "sample-assets/head.svg",
+          "enhanced_svg_path": "sample-assets/head-enhanced.svg",
+          "contour_points": [
+            {
+              "x": -24.18,
+              "y": -30.42
+            },
+            {
+              "x": 0,
+              "y": -36.66
+            },
+            {
+              "x": 24.18,
+              "y": -30.42
+            },
+            {
+              "x": 31.979999999999997,
+              "y": 0
+            },
+            {
+              "x": 21.450000000000003,
+              "y": 30.42
+            },
+            {
+              "x": 0,
+              "y": 35.88
+            },
+            {
+              "x": -21.450000000000003,
+              "y": 30.42
+            },
+            {
+              "x": -31.979999999999997,
+              "y": 0
+            }
+          ],
+          "contour_source": "imported",
+          "anchor_joint_id": "neck",
+          "transform": {
+            "x": 0,
+            "y": 152,
+            "rotation": 0,
+            "scale": 1
+          },
+          "z_index": 5,
+          "visible": true
+        }
+      }
+    },
+    "charCfg": {
+      "joints": {
+        "root": {
+          "id": "root",
+          "name": "root",
+          "position": {
+            "x": 0,
+            "y": -70
+          },
+          "parentId": null,
+          "locked": false,
+          "bendDirection": 1
+        },
+        "hip": {
+          "id": "hip",
+          "name": "hip",
+          "position": {
+            "x": 0,
+            "y": -70
+          },
+          "parentId": "root",
+          "locked": false,
+          "bendDirection": 1
+        },
+        "torso": {
+          "id": "torso",
+          "name": "torso",
+          "position": {
+            "x": 0,
+            "y": 40
+          },
+          "parentId": "hip",
+          "locked": false,
+          "bendDirection": 1
+        },
+        "neck": {
+          "id": "neck",
+          "name": "neck",
+          "position": {
+            "x": 0,
+            "y": 120
+          },
+          "parentId": "torso",
+          "locked": false,
+          "bendDirection": 1
+        },
+        "head_top": {
+          "id": "head_top",
+          "name": "head top",
+          "position": {
+            "x": 0,
+            "y": 170
+          },
+          "parentId": "neck",
+          "locked": false,
+          "bendDirection": 1
+        },
+        "left_shoulder": {
+          "id": "left_shoulder",
+          "name": "left shoulder",
+          "position": {
+            "x": 58,
+            "y": 92
+          },
+          "parentId": "torso",
+          "locked": false,
+          "bendDirection": 1
+        },
+        "left_elbow": {
+          "id": "left_elbow",
+          "name": "left elbow",
+          "position": {
+            "x": 108,
+            "y": 28
+          },
+          "parentId": "left_shoulder",
+          "locked": false,
+          "bendDirection": 1
+        },
+        "left_hand": {
+          "id": "left_hand",
+          "name": "left hand",
+          "position": {
+            "x": 128,
+            "y": -34
+          },
+          "parentId": "left_elbow",
+          "locked": false,
+          "bendDirection": 1
+        },
+        "right_shoulder": {
+          "id": "right_shoulder",
+          "name": "right shoulder",
+          "position": {
+            "x": -58,
+            "y": 92
+          },
+          "parentId": "torso",
+          "locked": false,
+          "bendDirection": 1
+        },
+        "right_elbow": {
+          "id": "right_elbow",
+          "name": "right elbow",
+          "position": {
+            "x": -108,
+            "y": 28
+          },
+          "parentId": "right_shoulder",
+          "locked": false,
+          "bendDirection": 1
+        },
+        "right_hand": {
+          "id": "right_hand",
+          "name": "right hand",
+          "position": {
+            "x": -128,
+            "y": -34
+          },
+          "parentId": "right_elbow",
+          "locked": false,
+          "bendDirection": 1
+        },
+        "left_hip": {
+          "id": "left_hip",
+          "name": "left hip",
+          "position": {
+            "x": 34,
+            "y": -72
+          },
+          "parentId": "root",
+          "locked": false,
+          "bendDirection": 1
+        },
+        "left_knee": {
+          "id": "left_knee",
+          "name": "left knee",
+          "position": {
+            "x": 50,
+            "y": -150
+          },
+          "parentId": "left_hip",
+          "locked": false,
+          "bendDirection": 1
+        },
+        "left_foot": {
+          "id": "left_foot",
+          "name": "left foot",
+          "position": {
+            "x": 72,
+            "y": -218
+          },
+          "parentId": "left_knee",
+          "locked": false,
+          "bendDirection": 1
+        },
+        "right_hip": {
+          "id": "right_hip",
+          "name": "right hip",
+          "position": {
+            "x": -34,
+            "y": -72
+          },
+          "parentId": "root",
+          "locked": false,
+          "bendDirection": 1
+        },
+        "right_knee": {
+          "id": "right_knee",
+          "name": "right knee",
+          "position": {
+            "x": -50,
+            "y": -150
+          },
+          "parentId": "right_hip",
+          "locked": false,
+          "bendDirection": 1
+        },
+        "right_foot": {
+          "id": "right_foot",
+          "name": "right foot",
+          "position": {
+            "x": -72,
+            "y": -218
+          },
+          "parentId": "right_knee",
+          "locked": false,
+          "bendDirection": 1
+        }
+      },
+      "bones": [
+        [
+          "root",
+          "hip"
+        ],
+        [
+          "hip",
+          "torso"
+        ],
+        [
+          "torso",
+          "neck"
+        ],
+        [
+          "neck",
+          "head_top"
+        ],
+        [
+          "torso",
+          "left_shoulder"
+        ],
+        [
+          "left_shoulder",
+          "left_elbow"
+        ],
+        [
+          "left_elbow",
+          "left_hand"
+        ],
+        [
+          "torso",
+          "right_shoulder"
+        ],
+        [
+          "right_shoulder",
+          "right_elbow"
+        ],
+        [
+          "right_elbow",
+          "right_hand"
+        ],
+        [
+          "root",
+          "left_hip"
+        ],
+        [
+          "left_hip",
+          "left_knee"
+        ],
+        [
+          "left_knee",
+          "left_foot"
+        ],
+        [
+          "root",
+          "right_hip"
+        ],
+        [
+          "right_hip",
+          "right_knee"
+        ],
+        [
+          "right_knee",
+          "right_foot"
+        ]
+      ],
+      "root_joint_ids": [
+        "root"
+      ],
+      "metadata": {
+        "sourceFormat": "web-port",
+        "scale": 1,
+        "normalization": "letter-sheet-scene"
+      }
+    },
+    "replacementContext": {
+      "mode": "plain-load",
+      "rebindingSummary": "Waving arm: Right hand path + fitted four-bar mechanism."
+    }
+  }
+}

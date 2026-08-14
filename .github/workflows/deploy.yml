@@ -18,52 +18,68 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: "[deps] Checkout source without LFS smudge"
         uses: actions/checkout@v5
         with:
-          lfs: true
+          lfs: false
 
-      - name: Check ONNX LFS asset
+      - name: "[asset] Check ONNX LFS asset"
         run: |
           git lfs pull --include="public/onnx/pose_model.onnx"
           BYTES="$(wc -c < public/onnx/pose_model.onnx | tr -d ' ')"
-          test "$BYTES" -gt 1000000
+          if [ "$BYTES" -ne 135929562 ]; then
+            echo "::error title=asset/onnx::Expected 135929562 bytes, got $BYTES"
+            exit 1
+          fi
           if head -c 64 public/onnx/pose_model.onnx | grep -q "version https://git-lfs"; then
             echo "public/onnx/pose_model.onnx is a Git LFS pointer, not model bytes" >&2
             exit 1
           fi
+          SHA256="$(sha256sum public/onnx/pose_model.onnx | cut -d' ' -f1)"
+          if [ "$SHA256" != "9fd0dc927f41d1981c64d1ac7f5b22545f369c16b95944d60d93495c5a68eb74" ]; then
+            echo "::error title=asset/onnx::Model SHA-256 mismatch: $SHA256"
+            exit 1
+          fi
 
-      - name: Setup Bun
+      - name: "[deps] Setup Bun"
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
 
-      - name: Install dependencies
+      - name: "[deps] Install locked dependencies"
         run: bun install --frozen-lockfile
 
-      - name: Check release tag
+      - name: "[version] Validate release tag"
         run: |
           VERSION="$(bun -p "require('./package.json').version")"
           test "v${VERSION}" = "${GITHUB_REF_NAME}"
 
-      - name: Test contracts
+      - name: "[contracts] Run repository contracts"
         run: bun run test
 
-      - name: Build
+      - name: "[web] Build GitHub Pages frontend"
         env:
           VITE_BASE_PATH: /ms/
         run: bun run build
 
-      - name: Check built ONNX asset
+      - name: "[asset] Check built ONNX asset"
         run: |
           BYTES="$(wc -c < dist/onnx/pose_model.onnx | tr -d ' ')"
-          test "$BYTES" -gt 1000000
+          if [ "$BYTES" -ne 135929562 ]; then
+            echo "::error title=asset/dist::Expected 135929562 bytes, got $BYTES"
+            exit 1
+          fi
           if head -c 64 dist/onnx/pose_model.onnx | grep -q "version https://git-lfs"; then
             echo "dist/onnx/pose_model.onnx is a Git LFS pointer, not model bytes" >&2
             exit 1
           fi
+          SHA256="$(sha256sum dist/onnx/pose_model.onnx | cut -d' ' -f1)"
+          if [ "$SHA256" != "9fd0dc927f41d1981c64d1ac7f5b22545f369c16b95944d60d93495c5a68eb74" ]; then
+            echo "::error title=asset/dist::Model SHA-256 mismatch: $SHA256"
+            exit 1
+          fi
 
-      - name: Upload artifact
+      - name: "[artifact] Upload static Pages artifact"
         uses: actions/upload-pages-artifact@v5
         with:
           path: ./dist
@@ -75,6 +91,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - name: Deploy to GitHub Pages
+      - name: "[pages] Deploy static Pages artifact"
         id: deployment
         uses: actions/deploy-pages@v5

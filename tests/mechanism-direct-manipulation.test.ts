@@ -14,7 +14,17 @@ import {
   FOUNDRY_VIEW_PRESETS,
 } from "../utils/foundryCamera";
 import { calculateLinkage } from "../utils/kinematics";
-import { connectionSelectionRolesForMechanism } from "../utils/mechanismConnectionSelections";
+import {
+  connectionSelectionIdentity,
+  connectionSelectionRolesForMechanism,
+  mechanismConnectionHoleCandidates,
+  projectMechanismConnectionHoleCandidates,
+} from "../utils/mechanismConnectionSelections";
+import {
+  mechanismPhysicalConnectionCandidates,
+  resolveMechanismPhysicalSelectionAttempt,
+} from "../utils/mechanismPhysicalCandidates";
+import { resolveMechanismCandidateCommit } from "../utils/mechanismEditAuthority";
 import { FOUNDRY_MECHANISM_TYPES } from "../utils/mechanismTemplates";
 import {
   createDefaultMechanism,
@@ -39,9 +49,74 @@ assert.deepEqual(
 
 for (const type of expectedFamilies) {
   const mechanism = createDefaultMechanism(type, `direct-${type}`);
+  const state = calculateLinkage(mechanism, Math.PI / 3);
+  const enumerated = mechanismConnectionHoleCandidates(mechanism, state);
+  let previewEnumerations = 0;
+  const enumeratePreviewCandidates = () => {
+    previewEnumerations += 1;
+    return mechanismPhysicalConnectionCandidates(mechanism, state);
+  };
+  const advertised = enumeratePreviewCandidates();
+  const acceptedIdentities = enumerated
+    .filter((candidate) => resolveMechanismPhysicalSelectionAttempt(
+      mechanism,
+      candidate.role,
+      candidate.selection,
+    ).status === "accepted")
+    .map((candidate) => candidate.identity)
+    .sort();
+  assert.deepEqual(
+    advertised.map((candidate) => candidate.identity).sort(),
+    acceptedIdentities,
+    `${type} preview enumeration and final commit authority expose the same catalog candidates`,
+  );
+  for (const candidate of advertised) {
+    const attempt = resolveMechanismPhysicalSelectionAttempt(
+      mechanism,
+      candidate.role,
+      candidate.selection,
+    );
+    assert.equal(attempt.status, "accepted", `${candidate.identity} passes selection authority`);
+    if (attempt.status !== "accepted") continue;
+    const committed = resolveMechanismCandidateCommit(
+      mechanism,
+      { ...mechanism, ...attempt.updates },
+    );
+    assert.equal(committed.status, "accepted", `${candidate.identity} passes final commit authority`);
+    assert.equal(
+      connectionSelectionIdentity(
+        candidate.role,
+        committed.mechanism.connectionSelections?.[candidate.role]!,
+      ),
+      candidate.identity,
+      `${candidate.identity} is preserved by final commit authority`,
+    );
+  }
+  const nextState = calculateLinkage(mechanism, Math.PI * 1.25);
+  const projected = projectMechanismConnectionHoleCandidates(nextState, advertised);
+  const advertisedIdentities = new Set(advertised.map((candidate) => candidate.identity));
+  const freshlyEnumerated = mechanismConnectionHoleCandidates(mechanism, nextState)
+    .filter((candidate) => advertisedIdentities.has(candidate.identity));
+  assert.deepEqual(
+    projected.map((candidate) => ({
+      identity: candidate.identity,
+      coordinate: candidate.coordinate,
+    })),
+    freshlyEnumerated.map((candidate) => ({
+      identity: candidate.identity,
+      coordinate: candidate.coordinate,
+    })),
+    `${type} frame-only candidate projection preserves fresh catalog geometry`,
+  );
+  projectMechanismConnectionHoleCandidates(calculateLinkage(mechanism, Math.PI * 1.75), advertised);
+  assert.equal(
+    previewEnumerations,
+    1,
+    `${type} ordinary candidate frames perform zero catalog enumerations`,
+  );
   const handles = projectMechanismConnectionHoleHandles({
     mechanism,
-    state: calculateLinkage(mechanism, Math.PI / 3),
+    state,
     camera: { ...FOUNDRY_VIEW_PRESETS.iso, preset: "iso", pan: { x: 0, y: 0 } },
     projectionSize: FOUNDRY_OVERLAY_SIZE,
   });
@@ -57,6 +132,21 @@ for (const type of expectedFamilies) {
   assert.equal(result.status, "accepted", `${type} accepts a shared valid pointer drop`);
   if (result.status === "accepted") {
     assert(result.updates.connectionSelections, `${type} pointer drop returns structural selection updates`);
+    const committed = resolveMechanismCandidateCommit(
+      mechanism,
+      { ...mechanism, ...result.updates },
+    );
+    assert.equal(committed.status, "accepted", `${type} pointer drop passes final commit authority`);
+    const committedSelection = committed.mechanism.connectionSelections?.[target.role];
+    assert(committedSelection, `${type} final commit retains the advertised physical role`);
+    assert.equal(
+      connectionSelectionIdentity(
+        target.role,
+        committedSelection,
+      ),
+      target.identity,
+      `${type} final commit preserves the advertised physical selection`,
+    );
   }
 }
 
