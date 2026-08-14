@@ -1,22 +1,22 @@
 counter	initial_value	unit	evidence	status
-React animation commits	unmeasured	commits/frame	Path and Foundry phase state call sites are present; fresh runtime attribution required	pending-A0
-compileMechanismGraphFabrication	unmeasured	calls/frame	FoundryInspectorPanel and multiple domain consumers call it	pending-A0
-projectMechanismReadiness	unmeasured	calls/frame	DesignInspectorPanel and workflow consumers call it	pending-A0
-sampleFeasibleRange	unmeasured	calls/frame	DesignInspectorPanel and MechanismFoundry call it	pending-A0
-motionSafeParamRange	unmeasured	calls/frame	FoundryInspectorPanel and DesignInspectorPanel call it	pending-A0
-mechanismEditIsSafe	unmeasured	calls/frame	Edit-authority and candidate paths call it	pending-A0
-safety phase linkage evaluations	unmeasured	evaluations/frame	Safety schedule density is mechanism-dependent	pending-A0
-prepareMechanismKinematics	unmeasured	calls/frame	At least fifteen static call sites; runtime cadence unknown	pending-A0
-connection candidate enumeration	unmeasured	calls/frame	Fresh CPU audit required	pending-A0
-motionPreviewForPath	unmeasured	calls/frame	Two live static call sites: PathEditor and SceneSketch	pending-A0
-samplePreparedMotionPreview	unmeasured	calls/frame	Three direct static call sites plus wrapper	pending-A0
-Box3.setFromObject	unmeasured	calls/frame	Two live static call sites: ThreePuppetPreview and ThreeFoundryPreview	pending-A0
-diagnostic JSON bytes	unmeasured	bytes/frame	Production dataset probes are present	pending-A0
-renderer creations	2	static constructor sites	ThreePuppetPreview and ThreeFoundryPreview; session count pending GPU audit	partial
-live WebGL contexts	unmeasured	contexts/session	Fresh GPU audit required	pending-A0
-renderer submissions	at-most-1 Foundry historical	submissions/presented-frame	Historical G3 proves only Foundry; all-stage evidence missing	partial
-shader compilation during warm stage switch	unmeasured	compilations/switch	Fresh GPU audit required	pending-A0
-autosave serialization	unmeasured	serializations/gesture	Fresh CPU audit required	pending-A0
-AI requests	unmeasured	requests/boot	Fresh network audit required	pending-A0
-Rapier requests	unmeasured	requests/before-Physics	Historical Foundry probe reported Rapier ready; fresh network audit required	pending-A0
-study requests	0 historical default	requests/playback	Historical controlled default build only; fresh bundle/runtime proof required	partial
+React animation commits	Path SVG 164/164 rAF proxies; Foundry 21/21; Design 30/31; Assembly 77/78	commits / observed rAF proxy	artifacts/performance/audit-cpu/raw/runtime-evidence.json; React DevTools commit hook	executed-baseline-fail
+compileMechanismGraphFabrication	Foundry 1161/21; Design 1200/31; Blueprint entry 404/12; Assembly 308/78	calls / observed rAF proxy	artifacts/performance/audit-cpu/raw/runtime-evidence.json	executed-baseline-fail
+projectMechanismReadiness	Foundry 0/21; Design 30/31; Blueprint entry 13/12; Assembly 154/78	calls / observed rAF proxy	artifacts/performance/audit-cpu/raw/runtime-evidence.json	executed-baseline-fail
+sampleFeasibleRange	Foundry 660/21; Design 1020/31; Blueprint entry 344/12; Assembly 4/78	calls / observed rAF proxy	artifacts/performance/audit-cpu/raw/runtime-evidence.json	executed-baseline-fail
+motionSafeParamRange	Foundry 160/21; Design 210/31; Blueprint entry 70/12; Assembly 0/78	calls / observed rAF proxy	artifacts/performance/audit-cpu/raw/runtime-evidence.json	executed-baseline-fail
+mechanismEditIsSafe	Foundry 3700/21; Design 5340/31; Blueprint entry 1785/12; Assembly 156/78	calls / observed rAF proxy	artifacts/performance/audit-cpu/raw/runtime-evidence.json	executed-baseline-fail
+safety phase linkage evaluations	Foundry 3720/21; Design 5370/31; Blueprint entry 1795/12; Assembly 156/78	evaluation sets / observed rAF proxy	artifacts/performance/audit-cpu/raw/runtime-evidence.json	executed-baseline-fail
+prepareMechanismKinematics	Foundry 238762/21; Design 351240/31; Blueprint entry 117590/12; Assembly 8479/78	calls / observed rAF proxy	artifacts/performance/audit-cpu/raw/runtime-evidence.json	executed-baseline-fail
+connection candidate enumeration	Foundry 20/21; Design 30/31; Blueprint entry 10/12; Assembly 0/78	physical candidate enumerations / observed rAF proxy	artifacts/performance/audit-cpu/raw/runtime-evidence.json	executed-baseline-fail
+motionPreviewForPath	Path SVG 328/164 exactly 2.0; Path Three 13/15	calls / observed rAF proxy	artifacts/performance/audit-cpu/raw/runtime-evidence.json	executed-baseline-fail
+samplePreparedMotionPreview	Design 60/31; Blueprint entry 20/12; Assembly 154/78	calls / observed rAF proxy	artifacts/performance/audit-cpu/raw/runtime-evidence.json	executed-baseline-fail
+Box3.setFromObject	Path Three 910 for 65 GL clears exactly 14 per clear	calls / clear proxy	artifacts/performance/audit-cpu/raw/runtime-evidence.json	executed-baseline-fail
+diagnostic JSON bytes	Path Three 132978; Foundry 11599; Design 76350; Blueprint entry 58040; Assembly 34946	bytes / measured window	artifacts/performance/audit-cpu/raw/runtime-evidence.json	executed-baseline-fail
+renderer creations	2 static constructor sites; every live Three stage transition acquired another context	constructors and observed lifecycle	artifacts/performance/audit-gpu/raw/static-source-audit.json; artifacts/performance/audit-gpu/report.md	executed-baseline-fail
+live WebGL contexts	21 tracked; 1 attached; 16 non-lost; 15 detached and non-lost after three loops	contexts / session	artifacts/performance/audit-gpu/raw/runtime-headful-attempt-3.json	executed-baseline-fail
+renderer submissions	Path 880/175 = 5.029; Foundry 31/34 = 0.912; Design 51/51 = 1.000; Assembly 245/253 = 0.968	GL clear proxies / observed rAF proxy	artifacts/performance/audit-gpu/raw/runtime-headful-attempt-3.json	proxy-baseline-fail-path
+shader compilation during warm stage switch	6-12 shader compiles and 3-6 program links per Three-stage entry; three loops added 126/63	shader compiles / program links	artifacts/performance/audit-gpu/report.md	executed-baseline-fail
+autosave serialization	Boot serialized ProjectState 3 times / 149604 bytes and wrote 2 snapshots; unchanged steady fixtures recorded 0	calls and bytes / boot or measured window	artifacts/performance/audit-cpu/raw/runtime-evidence.json	executed-boot-fail-steady-unexercised
+AI network requests	1 ONNX model request on boot, intercepted with HTTP 503 after recording	requests / boot	artifacts/performance/audit-cpu/raw/runtime-evidence.json	executed-baseline-fail
+Rapier network requests	1 successful Rapier chunk request in the visible cross-stage Orca buffer before any explicit Physics lens	requests / captured session	artifacts/performance/orca-baseline/raw/network.json	observed-nondeciding-source-attribution
+study network requests	0 named study requests in the captured Orca network buffer	requests / captured session	artifacts/performance/orca-baseline/raw/network.json	observed-nondeciding-bundle-proof-pending
