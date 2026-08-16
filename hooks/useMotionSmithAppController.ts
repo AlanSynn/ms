@@ -57,7 +57,9 @@ const writeGettingStartedHiddenForSession = (hidden: boolean) => {
 const createInitialProject = () => {
   if (typeof window === "undefined") return createEmptyProject();
   try {
-    return readAutosaveProject() ?? createEmptyProject();
+    const initialProject = createEmptyProject();
+    const restored = readAutosaveProject(initialProject);
+    return restored.status === "loaded" ? restored.project : initialProject;
   } catch {
     return createEmptyProject();
   }
