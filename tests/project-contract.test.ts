@@ -2785,6 +2785,8 @@ const b695PlaybackTestText = readFileSync(join(process.cwd(), 'tests', 'b695-pla
 const motionText = readFileSync(join(process.cwd(), 'utils', 'motion.ts'), 'utf8');
 const b695FrameTestText = readFileSync(join(process.cwd(), 'tests', 'b695-frame.test.ts'), 'utf8');
 const b695FitTestText = readFileSync(join(process.cwd(), 'tests', 'b695-fit.test.ts'), 'utf8');
+const blueprintModelRuntimeText = readFileSync(join(process.cwd(), 'runtime', 'blueprint', 'BlueprintModel.ts'), 'utf8');
+const b695BlueprintTestText = readFileSync(join(process.cwd(), 'tests', 'b695-blueprint.test.ts'), 'utf8');
 const modalInertHookText = readFileSync(join(process.cwd(), 'hooks', 'useModalInertEffect.ts'), 'utf8');
 const appPathActionsHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppPathActions.ts'), 'utf8');
 const appCharacterImportActionsHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppCharacterImportActions.ts'), 'utf8');
@@ -3262,6 +3264,15 @@ assert(
     b695FitTestText.includes('rejected four-bar output remains byte-stable with b695'),
   'Fit returns accepted four-bar results before generic fallback construction and keeps accepted/rejected b695 outputs stable',
 );
+assert(
+  blueprintModelRuntimeText.includes('const modelCache = new WeakMap<ProjectState, BlueprintModel>()') &&
+    blueprintModelRuntimeText.includes('const packageCache = new WeakMap<ProjectState, FabricationPackage>()') &&
+    blueprintModelRuntimeText.includes('makeBlueprintPreviewSvg(project, recipes)') &&
+    blueprintModelRuntimeText.includes('createFabricationPackage(project)') &&
+    b695BlueprintTestText.includes('Blueprint reuses the exact model') &&
+    b695BlueprintTestText.includes('cached package PDF bytes remain exact'),
+  'Blueprint caches validation, recipes, preview SVG, and package bytes by immutable ProjectState without changing its visible document contract',
+);
 assert(appText.includes('useWorkspacePlaybackLoop({') && !appText.includes('requestAnimationFrame(') && !appText.includes('animationDeltaRadians('), 'App delegates shared playback timing to useWorkspacePlaybackLoop without owning animation-frame math');
 assert(modalInertHookText.includes('setAttribute("inert", "")') && modalInertHookText.includes('aria-hidden') && modalInertHookText.includes('welcome-modal-open') && appText.includes('useModalInertEffect(appShellRef, modalOpen)') && !appText.includes('document.documentElement.classList.add("welcome-modal-open")') && !appText.includes('useEffect, useRef'), 'App delegates startup/help/about modal inert DOM side effects to useModalInertEffect');
 assert(appText.includes('STARTER_IMAGE_TEMPLATES') && !appText.includes('girl.png?url') && starterImageTemplatesText.includes('girl.png?url') && starterImageTemplatesText.includes('boy.PNG?url') && starterImageTemplatesText.includes('girl-thumb.png?url') && starterImageTemplatesText.includes('boy-thumb.png?url'), 'App delegates starter image template assets to resources/starterImageTemplates without changing starter labels or package URLs');
@@ -3517,7 +3528,7 @@ assert(blueprintCanvasBlock.includes('blueprint-svg-preview') && blueprintCanvas
 assert(!blueprintCanvasBlock.includes('<img') && !blueprintCanvasBlock.includes('alt="Cut sheet"'), 'Blueprint center preview does not expose a broken cut-sheet image placeholder');
 assert(blueprintCanvasBlock.includes('data-visual-level="print-sheet-hero"') && !blueprintControlPanelText.includes('blueprint-more-exports') && !blueprintControlPanelText.includes('Assembly guide') && !blueprintControlPanelText.includes('Teacher files'), 'Blueprint keeps the printable character/mechanism sheet central and removes secondary teacher/assembly buttons from the primary workflow');
 assert(blueprintExportText.includes('<BlueprintControlPanel') && blueprintControlPanelText.includes('data-testid="blueprint-control-panel"') && blueprintControlPanelText.includes('aria-label="Generate package"') && blueprintExportText.includes('<BlueprintDetailPanel') && blueprintDetailPanelText.includes('data-testid="blueprint-stack-summary"'), 'Blueprint left workflow controls/downloads and right recipe detail live outside the stage wrapper behind tested panel seams');
-assert(blueprintExportText.includes('const liveRecipes = activeMechanisms.map') && blueprintExportText.includes('const recipes = liveRecipes.length ? liveRecipes : (pkg?.recipes ?? [])') && blueprintExportText.includes('const previewSvg = makeBlueprintPreviewSvg(project, recipes)'), 'Blueprint center preview always renders the readable live view from live fabrication recipe data; export downloads keep the physical artifact SVG');
+assert(blueprintModelRuntimeText.includes('const liveRecipes = activeMechanisms.map') && blueprintModelRuntimeText.includes('const recipes = liveRecipes.length ? liveRecipes : (pkg?.recipes ?? [])') && blueprintModelRuntimeText.includes('previewSvg: makeBlueprintPreviewSvg(project, recipes)'), 'Blueprint center preview always renders the readable live view from live fabrication recipe data; export downloads keep the physical artifact SVG');
 assert(blueprintExportText.includes('selectBlueprintRecipe(recipes, selectedRecipeId, project.selectedMechanismId)') && blueprintExportText.includes('recipes.find((recipe) => recipe.mechanismId === selectedMechanismId)'), 'Blueprint defaults the detail recipe to the selected live mechanism so fitted mechanisms carry into print/build views');
 assert(blueprintExportText.includes('<BlueprintDetailPanel') && blueprintDetailPanelText.includes('data-testid="blueprint-sensemaking-label"') && blueprintDetailPanelText.includes('requiredPartCount') && assemblySceneFrameComponentText.includes('data-testid="assembly-scene-sensemaking"') && assemblyInspectorPanelText.includes('data-testid="assembly-sensemaking-label"'), 'Blueprint delegates detail inspector rendering while Blueprint and Assembly reuse mechanism sensemaking metadata for compact visual cues');
 assert(!blueprintCanvasBlock.includes('<Canvas project={project}'), 'Blueprint center canvas is a static output sheet, not the animated 3D/2.5D workbench');

@@ -1,11 +1,9 @@
 import React, { useState } from "react";
 import type { AppStage, FabricationRecipe, ProjectAction, ProjectState } from "../../../types";
-import { pendingRecipeForMechanism } from "../../../utils/assemblyPlayback";
 import {
-  createFabricationPackage,
-  makeBlueprintPreviewSvg,
-  validateForFabrication,
-} from "../../../utils/fabrication";
+  buildBlueprintModel,
+  createBlueprintPackage,
+} from "../../../runtime/blueprint/BlueprintModel";
 import {
   EditorStageFrame,
   canvasPane,
@@ -33,23 +31,14 @@ export const BlueprintExport = ({
   dispatch: (action: ProjectAction) => void;
   goStage: (stage: AppStage) => void;
 }) => {
-  const validation = validateForFabrication(project);
+  const { validation, pkg, recipes, previewSvg } = buildBlueprintModel(project);
   const create = () =>
     dispatch({
       type: "set_export",
-      fabricationPackage: createFabricationPackage(project),
+      fabricationPackage: createBlueprintPackage(project),
     });
-  const pkg = project.lastExport;
-  const activeMechanisms = project.mechanisms.filter(
-    (m) => m.visible && m.enabled !== false,
-  );
-  const liveRecipes = activeMechanisms.map((mechanism) =>
-    pendingRecipeForMechanism(project, mechanism),
-  );
-  const recipes = liveRecipes.length ? liveRecipes : (pkg?.recipes ?? []);
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const selectedRecipe = selectBlueprintRecipe(recipes, selectedRecipeId, project.selectedMechanismId);
-  const previewSvg = makeBlueprintPreviewSvg(project, recipes);
   return (
     <EditorStageFrame
       stage="blueprint"
