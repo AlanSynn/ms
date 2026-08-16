@@ -2,13 +2,10 @@ import React from "react";
 import type { MechanismConfig, MechanismType } from "../../../types";
 import { ClassroomExampleVideo } from "../../ui/ClassroomExampleVideo";
 import {
-  fabricationStackSummary,
-  readableFabricationStackSummary,
-} from "../../../utils/fabrication";
-import {
   classroomAssessmentFor,
   classroomUseExampleFor,
 } from "../../../utils/classroomContent";
+import { getInspectorStackSummary } from "../../../utils/mechanismInspectorAnalysis";
 import {
   FOUNDRY_MECHANISM_TYPES,
   FOUNDRY_PRESETS,
@@ -62,7 +59,7 @@ export const FoundryInspectorPanel = ({
     "foundry",
   );
   const useExample = classroomUseExampleFor(foundry.type);
-  const readableStack = readableFabricationStackSummary(foundry);
+  const stackSummary = getInspectorStackSummary(foundry);
 
   return (
   <div className="stage-pane-stack">
@@ -140,10 +137,10 @@ export const FoundryInspectorPanel = ({
     >
       <strong>Stack</strong>
       <span
-        title={fabricationStackSummary(foundry)}
-        data-stack-raw={fabricationStackSummary(foundry)}
+        title={stackSummary.raw}
+        data-stack-raw={stackSummary.raw}
       >
-        {readableStack}
+        {stackSummary.readable}
       </span>
     </div>
     <div className="foundry-view-controls" data-testid="foundry-view-controls">

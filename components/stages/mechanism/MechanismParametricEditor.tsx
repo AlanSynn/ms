@@ -5,17 +5,14 @@ import { SCENE_PX_PER_MM } from "../../../utils/coordinates";
 import {
   FABRICATION_GEAR_SPECS,
   FABRICATION_LINKAGE_SPECS,
-  fabricationGearSpecForPitchRadius,
   fabricationLinkageSpecForSceneLength,
 } from "../../../utils/fabrication";
+import { getInspectorParametricModel } from "../../../utils/mechanismInspectorAnalysis";
 import {
   defaultCamProfileSamples,
-  gearTrainPitchRadii,
   normalizeCamProfileSamples,
 } from "../../../utils/kinematics";
 
-const gearSpecForSceneRadius = (radius: number) =>
-  fabricationGearSpecForPitchRadius(Math.abs(radius) / SCENE_PX_PER_MM);
 const gearSceneRadiusForKey = (key: string) =>
   (
     FABRICATION_GEAR_SPECS.find((spec) => spec.key === key) ??
@@ -40,10 +37,8 @@ export const MechanismParametricEditor = ({
   onChange: (updates: Partial<MechanismConfig>) => void;
   testId?: string;
 }) => {
-  const radii =
-    mechanism.type === "gear" || mechanism.type === "gear_linkage"
-      ? gearTrainPitchRadii(mechanism)
-      : [];
+  const inspectorModel = getInspectorParametricModel(mechanism);
+  const { radii, renderGearControls, renderLinkageControls } = inspectorModel;
   const updateGearRadius = (index: number, key: string) => {
     const next =
       radii.length >= 2
@@ -78,17 +73,6 @@ export const MechanismParametricEditor = ({
       gearTrainRadii: next,
     });
   };
-  const renderGearControls =
-    radii.length >= 2 &&
-    (mechanism.type === "gear" || mechanism.type === "gear_linkage");
-  const renderLinkageControls =
-    mechanism.type === "4bar" || mechanism.type === "gear_linkage";
-  const endpointGearOptions =
-    mechanism.type === "gear_linkage"
-      ? FABRICATION_GEAR_SPECS.filter(
-          (spec) => spec.attachmentHoleCentersMm.length > 0,
-        )
-      : FABRICATION_GEAR_SPECS;
   if (!renderGearControls && !renderLinkageControls && mechanism.type !== "cam")
     return null;
   return (
@@ -99,19 +83,7 @@ export const MechanismParametricEditor = ({
       {renderGearControls && (
         <div className="space-y-2">
           <div className="section-title">Gear sizes</div>
-          {radii.map((radius, index) => {
-            const isOutput = index === radii.length - 1;
-            const label =
-              index === 0
-                ? "Drive gear size"
-                : isOutput
-                  ? "Output gear size"
-                  : `Idler gear ${index} size`;
-            const options =
-              mechanism.type === "gear_linkage" && (index === 0 || isOutput)
-                ? endpointGearOptions
-                : FABRICATION_GEAR_SPECS;
-            const selected = gearSpecForSceneRadius(radius).key;
+          {inspectorModel.gearControls.map(({ index, label, options, selected }) => {
             return (
               <label
                 key={`${label}-${index}`}
@@ -163,14 +135,7 @@ export const MechanismParametricEditor = ({
       {renderLinkageControls && (
         <div className="mt-3 space-y-2">
           <div className="section-title">Link holes</div>
-          {mechanism.type === "4bar" &&
-            (
-              [
-                ["Input link length", "crankLength"],
-                ["Coupler link length", "couplerLength"],
-                ["Output link length", "rockerLength"],
-              ] as const
-            ).map(([label, key]) => (
+          {mechanism.type === "4bar" && inspectorModel.linkageControls.map(({ label, key, value, options }) => (
               <label
                 key={key}
                 className="block text-xs font-black uppercase tracking-wider text-slate-500"
@@ -179,9 +144,7 @@ export const MechanismParametricEditor = ({
                 <select
                   aria-label={label}
                   className="field mt-1"
-                  value={linkageCellsForSceneLength(
-                    Number(mechanism[key] ?? 0),
-                  )}
+                  value={value}
                   onChange={(event) =>
                     onChange({
                       [key]: linkageSceneLengthForCells(
@@ -190,7 +153,7 @@ export const MechanismParametricEditor = ({
                     } as Partial<MechanismConfig>)
                   }
                 >
-                  {FABRICATION_LINKAGE_SPECS.map((spec) => (
+                  {options.map((spec) => (
                     <option key={spec.key} value={spec.cells}>
                       {linkageOptionLabel(spec.holeCentersMm.length)}
                     </option>
@@ -204,7 +167,7 @@ export const MechanismParametricEditor = ({
               <select
                 aria-label="Paired link length"
                 className="field mt-1"
-                value={linkageCellsForSceneLength(mechanism.couplerLength)}
+                value={inspectorModel.pairedLinkValue}
                 onChange={(event) =>
                   onChange({
                     couplerLength: linkageSceneLengthForCells(
@@ -213,7 +176,7 @@ export const MechanismParametricEditor = ({
                   })
                 }
               >
-                {FABRICATION_LINKAGE_SPECS.map((spec) => (
+                {inspectorModel.pairedLinkOptions.map((spec) => (
                   <option key={spec.key} value={spec.cells}>
                     {linkageOptionLabel(spec.holeCentersMm.length)}
                   </option>

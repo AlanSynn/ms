@@ -8,13 +8,15 @@ import type {
   ProjectMotionPath,
   ProjectState,
 } from "../../../types";
-import { sampleFeasibleRange } from "../../../utils/fabrication";
 import {
-  mechanismBindingWarnings,
   motionAnchorJointIds,
   motionChainOptionLabel,
   preferredMotionJointId,
 } from "../../../utils/motion";
+import {
+  getInspectorBindingWarnings,
+  getInspectorFeasibleRange,
+} from "../../../utils/mechanismInspectorAnalysis";
 import { mechanismTemplateLabel } from "../../../utils/mechanismTemplates";
 import {
   MECHANISM_PARAM_META,
@@ -45,14 +47,14 @@ export const DesignInspectorPanel = ({
   onBlueprint,
 }: DesignInspectorPanelProps) => {
   const selectedRange = selectedMechanism
-    ? sampleFeasibleRange(selectedMechanism)
+    ? getInspectorFeasibleRange(selectedMechanism)
     : undefined;
   const motionWarning = selectedRange?.warning
     ? selectedRange.warning.startsWith("No motion")
       ? "No full motion. Try reset or smaller links."
       : "Motion may jam. Try a smaller move."
     : null;
-  const bindingWarnings = mechanismBindingWarnings(project);
+  const bindingWarnings = getInspectorBindingWarnings(project);
   const selectedBindingWarnings = selectedMechanism
     ? (bindingWarnings[selectedMechanism.id] ?? [])
     : [];
