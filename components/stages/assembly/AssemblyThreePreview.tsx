@@ -1,6 +1,9 @@
 import React, { useMemo, useRef, useState } from "react";
 
-import { ThreeFoundryPreview } from "../foundry/ThreeFoundryPreview";
+import {
+  ThreeFoundryPreview,
+  type FoundryPlaybackFrame,
+} from "../foundry/ThreeFoundryPreview";
 import type {
   MechanismConfig,
   Point,
@@ -20,6 +23,7 @@ import type {
   CharacterAssemblyStep,
 } from "../../../utils/assemblyPlayback";
 import type { AssemblySceneFrame } from "../../../utils/assemblySceneFrame";
+import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 
 const assemblyMechanismForProject = (project: ProjectState) =>
   project.mechanisms.find((item) => item.id === project.selectedMechanismId) ??
@@ -173,12 +177,14 @@ export const AssemblyCharacterThreePreview = ({
   progress,
   playing,
   sceneFrame,
+  playbackClock,
 }: {
   project: ProjectState;
   step: CharacterAssemblyStep;
   progress: number;
   playing: boolean;
   sceneFrame: AssemblySceneFrame;
+  playbackClock: PlaybackClock;
 }) => {
   const angle = step.phase === "test-character" ? progress * Math.PI * 2 : 0;
   const mechanism = assemblyMechanismForProject(project);
@@ -219,6 +225,37 @@ export const AssemblyCharacterThreePreview = ({
           }
         : undefined,
     [previewModel, project, sceneModel],
+  );
+  const playbackSample = useMemo(
+    () => (phase: number): FoundryPlaybackFrame | undefined => {
+      if (!mechanism) return undefined;
+      const sampleProgress = (((phase / (Math.PI * 2)) % 1) + 1) % 1;
+      const sampleAngle =
+        step.phase === "test-character" ? sampleProgress * Math.PI * 2 : 0;
+      const sampleModel = buildAutomataSceneModel(
+        project,
+        mechanism,
+        sampleAngle,
+        "assembly-live",
+      );
+      const samplePreview = sampleModel.foundryPreview;
+      if (!samplePreview) return undefined;
+      return {
+        simulation: samplePreview.physicalSimulation,
+        automataContext: {
+          project,
+          animatedParts: sampleModel.animatedParts,
+          animatedSceneObjects: sampleModel.animatedSceneObjects,
+          skeleton: sampleModel.skeleton,
+          paths: [],
+          showCharacter: true,
+          showSkeleton: false,
+        },
+        assemblySceneFrame: { ...sceneFrame, progress: sampleProgress },
+        explode: stepLift(sceneFrame.motion, sampleProgress, playing),
+      };
+    },
+    [mechanism, playing, project, sceneFrame, step.phase],
   );
 
   if (!previewModel || !mechanism) {
@@ -298,6 +335,11 @@ export const AssemblyCharacterThreePreview = ({
         assemblySceneFrame={sceneFrame}
         viewerTab="assembly"
         automataContext={automataContext}
+        playback={{
+          clock: playbackClock,
+          sample: playbackSample,
+          minFrameIntervalMs: 1000 / 30,
+        }}
       >
         <div className="assembly-three-hud">3D build</div>
         <svg
@@ -318,6 +360,7 @@ export const AssemblyMechanismThreePreview = ({
   progress,
   playing,
   sceneFrame,
+  playbackClock,
 }: {
   project: ProjectState;
   mechanism: MechanismConfig;
@@ -325,6 +368,7 @@ export const AssemblyMechanismThreePreview = ({
   progress: number;
   playing: boolean;
   sceneFrame: AssemblySceneFrame;
+  playbackClock: PlaybackClock;
 }) => {
   const angle = progress * Math.PI * 2;
   const explode = stepLift(step.motion, progress, playing);
@@ -361,6 +405,36 @@ export const AssemblyMechanismThreePreview = ({
           }
         : undefined,
     [previewModel, project, sceneModel, showAutomataContext],
+  );
+  const playbackSample = useMemo(
+    () => (phase: number): FoundryPlaybackFrame | undefined => {
+      const sampleProgress = (((phase / (Math.PI * 2)) % 1) + 1) % 1;
+      const sampleModel = buildAutomataSceneModel(
+        project,
+        mechanism,
+        sampleProgress * Math.PI * 2,
+        "assembly-live",
+      );
+      const samplePreview = sampleModel.foundryPreview;
+      if (!samplePreview) return undefined;
+      const sampleShowAutomataContext =
+        step.phase === "connect-character" || step.phase === "test-motion";
+      return {
+        simulation: samplePreview.physicalSimulation,
+        automataContext: {
+          project,
+          animatedParts: sampleModel.animatedParts,
+          animatedSceneObjects: sampleModel.animatedSceneObjects,
+          skeleton: sampleModel.skeleton,
+          paths: [],
+          showCharacter: sampleShowAutomataContext,
+          showSkeleton: false,
+        },
+        assemblySceneFrame: { ...sceneFrame, progress: sampleProgress },
+        explode: stepLift(sceneFrame.motion, sampleProgress, playing),
+      };
+    },
+    [mechanism, playing, project, sceneFrame, step.phase],
   );
 
   if (!previewModel) {
@@ -448,6 +522,11 @@ export const AssemblyMechanismThreePreview = ({
         assemblySceneFrame={sceneFrame}
         viewerTab="assembly"
         automataContext={automataContext}
+        playback={{
+          clock: playbackClock,
+          sample: playbackSample,
+          minFrameIntervalMs: 1000 / 30,
+        }}
       >
         <div className="assembly-three-hud">Build animation</div>
         <svg

@@ -21,6 +21,7 @@ import type {
   SceneObject,
 } from "../types";
 import type { ClassroomLessonTemplate } from "../utils/project";
+import type { PlaybackClock } from "../runtime/playback/externalPlaybackClock";
 
 export type AppStageRouterProps = {
   editorStage: AppStage;
@@ -28,6 +29,7 @@ export type AppStageRouterProps = {
   dispatch: (action: ProjectAction) => void;
   goStage: (stage: AppStage) => void;
   playerDock: ReactNode;
+  playbackClock: PlaybackClock;
 
   pendingCharacter: PendingCharacterReview | null;
   onOpenGettingStarted: () => void;
@@ -89,6 +91,7 @@ export const AppStageRouter = ({
   dispatch,
   goStage,
   playerDock,
+  playbackClock,
   pendingCharacter,
   onOpenGettingStarted,
   onAcceptPendingCharacter,
@@ -174,6 +177,7 @@ export const AppStageRouter = ({
         setIsPlaying={setIsPlaying}
         angle={angle}
         setAngle={setAngle}
+        playbackClock={playbackClock}
         goStage={goStage}
         viewport={viewport}
         setViewport={setViewport}
@@ -187,6 +191,7 @@ export const AppStageRouter = ({
         selectedPart={selectedPart}
         selectedSceneObject={selectedSceneObject}
         selectedPath={selectedPath}
+        playbackClock={playbackClock}
         goStage={goStage}
         onExport={onFoundryExport}
       />
@@ -199,7 +204,9 @@ export const AppStageRouter = ({
         dispatch={dispatch}
         showTrace={showTrace}
         setShowTrace={setShowTrace}
+        isPlaying={isPlaying}
         angle={angle}
+        playbackClock={playbackClock}
         onOptimize={onOptimize}
         onRecommendations={onRecommendations}
         optimizerBusy={optimizerBusy}
@@ -224,6 +231,7 @@ export const AppStageRouter = ({
         playing={assemblyPlaying}
         setPlaying={setAssemblyPlaying}
         setStepCount={setAssemblyStepCount}
+        playbackClock={playbackClock}
       />
     )}
     {editorStage === "options" && (

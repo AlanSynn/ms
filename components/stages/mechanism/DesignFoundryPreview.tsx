@@ -12,12 +12,18 @@ import {
 } from "../../../utils/foundryCamera";
 import { buildAutomataSceneModel } from "../../../utils/automataSceneModel";
 import { pointsToSvgPath } from "../../../utils/mechanismPreview";
-import { ThreeFoundryPreview } from "../foundry/ThreeFoundryPreview";
+import {
+  ThreeFoundryPreview,
+  type FoundryPlaybackFrame,
+} from "../foundry/ThreeFoundryPreview";
+import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 
 type DesignFoundryPreviewProps = {
   project: ProjectState;
   mechanism?: MechanismConfig;
   angle: number;
+  playbackClock: PlaybackClock;
+  isPlaying: boolean;
   showTrace: boolean;
   dispatch: (action: ProjectAction) => void;
 };
@@ -33,6 +39,8 @@ export const DesignFoundryPreview = ({
   project,
   mechanism,
   angle,
+  playbackClock,
+  isPlaying,
   showTrace,
   dispatch,
 }: DesignFoundryPreviewProps) => {
@@ -81,6 +89,22 @@ export const DesignFoundryPreview = ({
   );
   const showUserPath = showTrace && showUserPathPreview;
   const showMechanismPath = showTrace && showMechanismPathPreview;
+  const playbackSample = (phase: number): FoundryPlaybackFrame | undefined => {
+    const frame = buildAutomataSceneModel(project, mechanism, phase, "design-live");
+    if (!frame.foundryPreview || !frame.mechanism) return undefined;
+    return {
+      simulation: frame.foundryPreview.physicalSimulation,
+      automataContext: {
+        project,
+        animatedParts: frame.animatedParts,
+        animatedSceneObjects: frame.animatedSceneObjects,
+        skeleton: frame.skeleton,
+        paths: [],
+        showCharacter: true,
+        showSkeleton: false,
+      },
+    };
+  };
   const userPathD = useMemo(() => {
     if (!showUserPath || !sceneModel.foundryPreview?.userPathPoints.length) return "";
     const projected = sceneModel.foundryPreview.userPathPoints
@@ -269,6 +293,15 @@ export const DesignFoundryPreview = ({
       <ThreeFoundryPreview
         mechanism={sceneModel.foundryPreview.mechanism}
         simulation={sceneModel.foundryPreview.physicalSimulation}
+      playback={
+        isPlaying
+          ? {
+              clock: playbackClock,
+              sample: playbackSample,
+              minFrameIntervalMs: 1000 / 30,
+            }
+          : undefined
+      }
         kit={project.settings.physicalKit}
         camera={camera}
         rigOpacity={0.94}

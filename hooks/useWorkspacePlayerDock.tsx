@@ -1,6 +1,7 @@
 import { useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { WorkspacePlayerDock } from "../components/AppShell";
 import type { AppStage } from "../types";
+import type { PlaybackClock } from "../runtime/playback/externalPlaybackClock";
 
 export type WorkspacePlayerDockState = {
   playerDock: ReactNode;
@@ -20,6 +21,7 @@ type UseWorkspacePlayerDockOptions = {
   setIsPlaying: Dispatch<SetStateAction<boolean>>;
   angle: number;
   setAngle: Dispatch<SetStateAction<number>>;
+  playbackClock: PlaybackClock;
   speed: number;
   drawMode: boolean;
 };
@@ -31,6 +33,7 @@ export const useWorkspacePlayerDock = ({
   setIsPlaying,
   angle,
   setAngle,
+  playbackClock,
   speed,
   drawMode,
 }: UseWorkspacePlayerDockOptions): WorkspacePlayerDockState => {
@@ -41,6 +44,7 @@ export const useWorkspacePlayerDock = ({
 
   const goSharedAssemblyStep = (index: number) => {
     const maxStepIndex = Math.max(0, assemblyStepCount - 1);
+    playbackClock.setPhase(0);
     setAssemblyStepProgress(0);
     setAssemblyStepIndex(Math.max(0, Math.min(maxStepIndex, index)));
   };
@@ -56,6 +60,7 @@ export const useWorkspacePlayerDock = ({
         setIsPlaying={isAssemblyStage ? setAssemblyPlaying : setIsPlaying}
         angle={angle}
         setAngle={setAngle}
+        playbackClock={playbackClock}
         speed={speed}
         drawMode={drawMode}
         stepPlayback={

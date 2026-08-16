@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
+import { useWorkspacePlaybackLoop } from "../../../hooks/useWorkspacePlaybackLoop";
+import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 
 type AssemblyGuidePlaybackOptions = {
   activeStepCount: number;
@@ -9,6 +11,7 @@ type AssemblyGuidePlaybackOptions = {
   setStepCount: Dispatch<SetStateAction<number>>;
   setStepIndex: Dispatch<SetStateAction<number>>;
   setStepProgress: Dispatch<SetStateAction<number>>;
+  playbackClock: PlaybackClock;
 };
 
 export const useAssemblyGuidePlayback = ({
@@ -19,6 +22,7 @@ export const useAssemblyGuidePlayback = ({
   setStepCount,
   setStepIndex,
   setStepProgress,
+  playbackClock,
 }: AssemblyGuidePlaybackOptions) => {
   const stepProgressRef = useRef(0);
 
@@ -29,6 +33,7 @@ export const useAssemblyGuidePlayback = ({
   const goAssemblyStep = useCallback(
     (next: number | ((index: number) => number)) => {
       stepProgressRef.current = 0;
+      playbackClock.setPhase(0);
       setStepProgress(0);
       setStepIndex((index) => {
         const nextIndex = typeof next === "function" ? next(index) : next;
@@ -38,38 +43,46 @@ export const useAssemblyGuidePlayback = ({
         );
       });
     },
-    [activeStepCount, setStepIndex, setStepProgress],
+    [activeStepCount, playbackClock, setStepIndex, setStepProgress],
   );
 
   useEffect(() => {
     stepProgressRef.current = 0;
+    playbackClock.setPhase(0);
     setStepIndex(0);
     setStepProgress(0);
     setPlaying(false);
-  }, [resetKey, setPlaying, setStepIndex, setStepProgress]);
+  }, [playbackClock, resetKey, setPlaying, setStepIndex, setStepProgress]);
 
-  useEffect(() => {
-    if (!playing || activeStepCount < 2) return;
-    let frame = 0;
-    let last = performance.now();
-    const stepMs = 1400;
-    const tick = (time: number) => {
-      const delta = Math.min(120, time - last);
-      last = time;
-      const next = stepProgressRef.current + delta / stepMs;
+  const phaseAdvance = useCallback(
+    (elapsedMs: number, previousPhase: number) => {
+      if (!playing || activeStepCount < 2) return previousPhase;
+      const next =
+        stepProgressRef.current + Math.min(120, Math.max(0, elapsedMs)) / 1400;
       if (next >= 1) {
         stepProgressRef.current = 0;
-        setStepProgress(0);
         setStepIndex((index) => (index >= activeStepCount - 1 ? 0 : index + 1));
-      } else {
-        stepProgressRef.current = next;
-        setStepProgress(next);
+        return 0;
       }
-      frame = window.requestAnimationFrame(tick);
-    };
-    frame = window.requestAnimationFrame(tick);
-    return () => window.cancelAnimationFrame(frame);
-  }, [playing, activeStepCount, setStepIndex, setStepProgress]);
+      stepProgressRef.current = next;
+      return next * Math.PI * 2;
+    },
+    [activeStepCount, playing, setStepIndex],
+  );
+
+  useWorkspacePlaybackLoop({
+    stage: "assembly",
+    isPlaying: playing && activeStepCount >= 2,
+    drawMode: false,
+    optimizerBusy: false,
+    showGettingStarted: false,
+    playbackDurationMs: 1400,
+    animationSpeed: 1,
+    timingProfile: "linear",
+    playbackClock,
+    phaseAdvance,
+    driverStage: "assembly",
+  });
 
   return { goAssemblyStep };
 };

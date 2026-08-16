@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { ClassroomMechanismUseExample } from "../../utils/classroomContent";
 import {
@@ -10,6 +10,7 @@ import { defaultPhysicalKit } from "../../utils/coordinates";
 import { fitMechanismSimulation } from "../../utils/mechanismPreview";
 import { createDefaultMechanism } from "../../utils/project";
 import { MechanismLinkagePreview } from "../stages/foundry/MechanismLinkagePreview";
+import { updateClassroomGeneratedLoop } from "./classroomGeneratedLoopPlayback";
 
 const usePrefersReducedMotion = () => {
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -32,7 +33,8 @@ const ClassroomGeneratedLoop = ({
   example: ClassroomMechanismUseExample;
 }) => {
   const reducedMotion = usePrefersReducedMotion();
-  const [phase, setPhase] = useState(Math.PI / 5);
+  const phase = Math.PI / 5;
+  const loopRef = useRef<SVGSVGElement>(null);
   const mechanism = useMemo(
     () => createDefaultMechanism(example.mechanismType, `classroom-${example.mechanismType}-loop`),
     [example.mechanismType],
@@ -44,12 +46,19 @@ const ClassroomGeneratedLoop = ({
     let frameId = 0;
     const startedAt = performance.now();
     const tick = (time: number) => {
-      setPhase(((time - startedAt) / 1200) % (Math.PI * 2));
+      if (loopRef.current) {
+        updateClassroomGeneratedLoop(
+          loopRef.current,
+          mechanism,
+          kit,
+          ((time - startedAt) / 1200) % (Math.PI * 2),
+        );
+      }
       frameId = window.requestAnimationFrame(tick);
     };
     frameId = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frameId);
-  }, [reducedMotion]);
+  }, [kit, mechanism, reducedMotion]);
 
   const simulation = useMemo(
     () => fitMechanismSimulation(mechanism, phase, 160, 96, 56),
@@ -58,6 +67,7 @@ const ClassroomGeneratedLoop = ({
 
   return (
     <svg
+      ref={loopRef}
       viewBox="0 0 160 96"
       role="img"
       aria-label={`${example.label} generated mechanism loop`}

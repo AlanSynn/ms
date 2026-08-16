@@ -51,6 +51,7 @@ import {
   type FoundryOverlaySize,
 } from "../../../utils/foundryCamera";
 import type { MechanismPreviewSimulation } from "../../../utils/mechanismPreview";
+import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 import { setRendererPixelRatioCap } from "../../../utils/threeResourceKit";
 import { fittedGearTrainCenters } from "./foundryPreviewGeometry";
 import { FoundryPreviewStateProbe } from "./FoundryPreviewStateProbe";
@@ -84,6 +85,11 @@ const E2E_DIAGNOSTICS = __MOTIONSMITH_E2E_DIAGNOSTICS__;
 type ThreeFoundryPreviewProps = {
   mechanism: MechanismConfig;
   simulation: MechanismPreviewSimulation;
+  playback?: {
+    clock: PlaybackClock;
+    sample: (phase: number) => FoundryPlaybackFrame | undefined;
+    minFrameIntervalMs?: number;
+  };
   kit: PhysicalKitSettings;
   camera: FoundryCamera;
   rigOpacity: number;
@@ -136,6 +142,13 @@ type FoundryAutomataContext = {
   selectedPathId?: string;
   showCharacter?: boolean;
   showSkeleton?: boolean;
+};
+
+export type FoundryPlaybackFrame = {
+  simulation: MechanismPreviewSimulation;
+  automataContext?: FoundryAutomataContext;
+  assemblySceneFrame?: FoundryAssemblySceneFrame;
+  explode?: number;
 };
 
 const FOUNDRY_PREVIEW_WIDTH = 360;
@@ -469,6 +482,7 @@ const renderFoundryAutomataContext = ({
 export const ThreeFoundryPreview = ({
   mechanism,
   simulation,
+  playback,
   kit,
   camera,
   rigOpacity,
@@ -513,6 +527,12 @@ export const ThreeFoundryPreview = ({
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const cameraStateRef = useRef(camera);
   const dynamicBuildCountRef = useRef(0);
+  const automataContextRef = useRef<FoundryAutomataContext | undefined>(automataContext);
+  const assemblySceneFrameRef = useRef<FoundryAssemblySceneFrame | undefined>(assemblySceneFrame);
+  const renderDynamicRef = useRef<((frame: FoundryPlaybackFrame) => void) | null>(null);
+  const lastPlaybackRenderTimeRef = useRef(-Infinity);
+  automataContextRef.current = automataContext;
+  assemblySceneFrameRef.current = assemblySceneFrame;
   const geometryCacheRef = useRef<Map<string, THREE.BufferGeometry>>(new Map());
   const materialCacheRef = useRef<Map<string, THREE.Material>>(new Map());
   const [physicsKernelRuntime, setPhysicsKernelRuntime] = useState<
@@ -1304,11 +1324,95 @@ export const ThreeFoundryPreview = ({
     renderCamera(cameraStateRef.current);
   }, [showGrid]);
 
-  useEffect(() => {
+  const renderDynamicScene = (frame: FoundryPlaybackFrame) => {
+    const { simulation } = frame;
+    const activeAutomataContext =
+      frame.automataContext ?? automataContextRef.current;
+    const activeAssemblySceneFrame =
+      frame.assemblySceneFrame ?? assemblySceneFrameRef.current;
+    const activeExplode = frame.explode ?? explode;
+    const frameStackLayerZ = renderPlan.layers.map(
+      (item) =>
+        item.z +
+        activeExplode *
+          item.stackIndex *
+          FABRICATION_RENDER_LAYER_Z_STEP *
+          1.5,
+    );
+    const frameGearMeshPlaneZ =
+      (isGearTrain || isPlanetaryGear) &&
+      activeExplode <= 0 &&
+      gearLayerIndexes.length
+        ? frameStackLayerZ[gearLayerIndexes[0]]
+        : undefined;
+    const frameRenderedLayerZ = foundryRenderedLayerZForMechanism(
+      mechanism.type,
+      renderPlan.layers,
+      frameStackLayerZ,
+      frameGearMeshPlaneZ,
+    );
+    const frameLocalSpacerZsForPin = (pin: FoundryPinStackPoint) =>
+      foundryLocalSpacerZsForPin(
+        mechanism.type,
+        pin,
+        frameRenderedLayerZ,
+        renderPlan.layers,
+      );
+    const frameLocalSpacerZForPin = (
+      pin: FoundryPinStackPoint,
+      spacerLayerIndex?: number,
+    ) =>
+      foundryLocalSpacerZForPin(
+        mechanism.type,
+        pin,
+        frameRenderedLayerZ,
+        renderPlan.layers,
+        spacerLayerIndex,
+      );
+    const frameGearCenters = isGearTrain
+      ? fittedGearTrainCenters(
+          gearRadii,
+          simulation.state.p1,
+          simulation.state.p2,
+        )
+      : [];
+    const frameAssemblyPinPoints = isGearTrain
+      ? mechanism.type === "gear_linkage"
+        ? [
+            ...frameGearCenters,
+            simulation.state.j1,
+            simulation.state.j2,
+            simulation.state.effector,
+          ].filter((point): point is Point => Boolean(point))
+        : frameGearCenters
+      : foundryAssemblyPinPoints(mechanism.type, simulation.state);
+    const framePinStackPoints = foundryPinStackPoints(
+      mechanism.type,
+      frameAssemblyPinPoints,
+      movingLayerIndexes,
+      spacerLayerIndexes,
+    );
+    const framePinStacks = foundryPinStacks(
+      framePinStackPoints,
+      frameRenderedLayerZ,
+      {
+        includeSpacerZ: usesLocalSpacerPins,
+        spacerZForPin: frameLocalSpacerZsForPin,
+      },
+    );
+    const framePinBottomZ = framePinStacks.length
+      ? Math.min(...framePinStacks.map((pin) => pin.bottomZ))
+      : (frameRenderedLayerZ[0] ?? 0.22) - 0.08;
+    const framePinTopZ = framePinStacks.length
+      ? Math.max(...framePinStacks.map((pin) => pin.topZ))
+      : (frameRenderedLayerZ.at(-1) ?? 0.22) + 0.18;
+    const framePathLayerZ = framePinTopZ + 0.08;
+    const framePinionRotation = simulation.driveAngleDeg;
     const scene = sceneRef.current;
     const renderer = rendererRef.current;
     const cam = cameraRef.current;
     if (!scene || !renderer || !cam) return;
+
     const old = scene.getObjectByName("foundry-dynamic");
     if (old) {
       scene.remove(old);
@@ -1349,61 +1453,61 @@ export const ThreeFoundryPreview = ({
       simulation,
       primitives,
       renderPlan,
-      renderedLayerZ,
-      pinStacks,
-      localSpacerZForPin,
+      renderedLayerZ: frameRenderedLayerZ,
+      pinStacks: framePinStacks,
+      localSpacerZForPin: frameLocalSpacerZForPin,
       visiblePathTraces,
-      pathLayerZ,
+      pathLayerZ: framePathLayerZ,
       showPathPreview,
       showTrail,
-      pinionRotation,
+      pinionRotation: framePinionRotation,
       isGearTrain,
       gearRadii,
-      gearCenters,
+      gearCenters: frameGearCenters,
       gearUsesMeshPhases,
       gearOutputRatioForDisplay,
-      assemblySceneFrame,
+      assemblySceneFrame: activeAssemblySceneFrame,
     });
     renderFoundryAssemblySceneOverlay({
       root,
-      frame: assemblySceneFrame,
+      frame: activeAssemblySceneFrame,
       mechanism,
       simulation,
       kit,
-      pinBottomZ,
-      pinTopZ,
-      pathLayerZ,
+      pinBottomZ: framePinBottomZ,
+      pinTopZ: framePinTopZ,
+      pathLayerZ: framePathLayerZ,
       pathPoints,
     });
     renderFoundryAutomataContext({
       root,
-      context: automataContext,
-      assemblySceneFrame,
+      context: activeAutomataContext,
+      assemblySceneFrame: activeAssemblySceneFrame,
       materialCache: materialCacheRef.current,
       onLoaded: () => renderCamera(cameraStateRef.current),
-      baseZ: pinTopZ + 0.16,
+      baseZ: framePinTopZ + 0.16,
     });
 
     dynamicBuildCountRef.current += 1;
     if (E2E_DIAGNOSTICS && stateRef.current) {
       const visiblePartIds =
-        automataContext?.showCharacter
-          ? automataContext.project.partOrder.filter(
+        activeAutomataContext?.showCharacter
+          ? activeAutomataContext.project.partOrder.filter(
               (id) =>
-                (automataContext.animatedParts?.[id] ??
-                  automataContext.project.parts[id])?.visible,
+                (activeAutomataContext.animatedParts?.[id] ??
+                  activeAutomataContext.project.parts[id])?.visible,
             )
           : [];
       const visibleObjectIds =
-        automataContext?.showCharacter
-          ? automataContext.project.sceneObjectOrder.filter(
+        activeAutomataContext?.showCharacter
+          ? activeAutomataContext.project.sceneObjectOrder.filter(
               (id) =>
-                (automataContext.animatedSceneObjects?.[id] ??
-                  automataContext.project.sceneObjects[id])?.visible,
+                (activeAutomataContext.animatedSceneObjects?.[id] ??
+                  activeAutomataContext.project.sceneObjects[id])?.visible,
             )
           : [];
       const visiblePartArtIds = visiblePartIds.filter(
-        (id) => Boolean(automataContext?.project.parts[id]?.textureUrl),
+        (id) => Boolean(activeAutomataContext?.project.parts[id]?.textureUrl),
       );
       stateRef.current.dataset.threeDynamicBuildCount = String(
         dynamicBuildCountRef.current,
@@ -1415,13 +1519,13 @@ export const ThreeFoundryPreview = ({
         materialCacheRef.current.size,
       );
       stateRef.current.dataset.threeAutomataContext =
-        automataContext?.showCharacter ? "shown" : "absent";
+        activeAutomataContext?.showCharacter ? "shown" : "absent";
       stateRef.current.dataset.partCount = String(visiblePartIds.length);
       stateRef.current.dataset.sceneObjectCount = String(visibleObjectIds.length);
       stateRef.current.dataset.selectedPartId =
-        automataContext?.project.selectedPartId ?? "";
+        activeAutomataContext?.project.selectedPartId ?? "";
       stateRef.current.dataset.selectedSceneObjectId =
-        automataContext?.project.selectedSceneObjectId ?? "";
+        activeAutomataContext?.project.selectedSceneObjectId ?? "";
       stateRef.current.dataset.threeAutomataPartCount = String(
         visiblePartIds.length,
       );
@@ -1447,7 +1551,7 @@ export const ThreeFoundryPreview = ({
         const cam = cameraRef.current;
         if (!renderer || !cam) return null;
         const rect = renderer.domElement.getBoundingClientRect();
-        const projected = sceneTo3(point, pinTopZ + 0.16).project(cam);
+        const projected = sceneTo3(point, framePinTopZ + 0.16).project(cam);
         const x = rect.left + ((projected.x + 1) / 2) * rect.width;
         const y = rect.top + ((1 - projected.y) / 2) * rect.height;
         const radius = 24;
@@ -1471,8 +1575,8 @@ export const ThreeFoundryPreview = ({
               fallbackScreenTarget(
                 "object",
                 id,
-                (automataContext?.animatedSceneObjects?.[id] ??
-                  automataContext?.project.sceneObjects[id])?.transform ?? { x: 0, y: 0 },
+                (activeAutomataContext?.animatedSceneObjects?.[id] ??
+                  activeAutomataContext?.project.sceneObjects[id])?.transform ?? { x: 0, y: 0 },
               ),
             )
             .filter((target): target is FoundryScreenTarget => Boolean(target)),
@@ -1485,8 +1589,8 @@ export const ThreeFoundryPreview = ({
               fallbackScreenTarget(
                 "part",
                 id,
-                (automataContext?.animatedParts?.[id] ??
-                  automataContext?.project.parts[id])?.transform ?? { x: 0, y: 0 },
+                (activeAutomataContext?.animatedParts?.[id] ??
+                  activeAutomataContext?.project.parts[id])?.transform ?? { x: 0, y: 0 },
               ),
             )
             .filter((target): target is FoundryScreenTarget => Boolean(target)),
@@ -1505,6 +1609,12 @@ export const ThreeFoundryPreview = ({
         : "";
     }
     renderCamera(cameraStateRef.current);
+  };
+  renderDynamicRef.current = renderDynamicScene;
+
+  useEffect(() => {
+    if (playback) return;
+    renderDynamicScene({ simulation, automataContext, assemblySceneFrame });
   }, [
     mechanism,
     simulation,
@@ -1526,7 +1636,30 @@ export const ThreeFoundryPreview = ({
     pathPoints,
     localSpacerZForPin,
     automataContext,
+    playback,
   ]);
+
+  useEffect(() => {
+    if (!playback) return;
+    lastPlaybackRenderTimeRef.current = -Infinity;
+    const apply = (phase: number, time: number, force = false) => {
+      const minFrameInterval = playback.minFrameIntervalMs ?? 0;
+      if (
+        !force &&
+        time !== 0 &&
+        time - lastPlaybackRenderTimeRef.current < minFrameInterval
+      )
+        return;
+      lastPlaybackRenderTimeRef.current = time;
+      const frame = playback.sample(phase);
+      if (frame) renderDynamicRef.current?.(frame);
+    };
+    apply(playback.clock.getPhase(), 0, true);
+    return playback.clock.subscribe((frame) => {
+      if (frame.phaseChanged || frame.elapsedMs === 0)
+        apply(frame.phase, frame.time, frame.elapsedMs === 0);
+    });
+  }, [playback]);
 
   return (
     <div

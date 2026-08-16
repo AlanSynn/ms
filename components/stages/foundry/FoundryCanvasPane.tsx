@@ -19,10 +19,13 @@ import {
 } from "./FoundryCanvasChrome";
 import {
   FoundryOverlayLayer,
+  type FoundryOverlayPlaybackFrame,
   type FoundryParamHandle,
   type FoundryParamHandleId,
 } from "./FoundryOverlayLayer";
 import { ThreeFoundryPreview } from "./ThreeFoundryPreview";
+import type { FoundryPlaybackFrame } from "./ThreeFoundryPreview";
+import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 
 type FoundryCanvasPaneProps = {
   foundry: MechanismConfig;
@@ -30,6 +33,8 @@ type FoundryCanvasPaneProps = {
   foundryPlaying: boolean;
   foundryPhase: number;
   foundryPhaseDegrees: number;
+  playbackClock: PlaybackClock;
+  playbackSample: (phase: number) => FoundryPlaybackFrame | undefined;
   foundryCamera: FoundryCamera;
   foundryCameraLabel: string;
   foundryRigOpacity: number;
@@ -102,6 +107,11 @@ type FoundryCanvasPaneProps = {
   ) => React.PointerEventHandler<SVGCircleElement>;
   onParamPointerMove: React.PointerEventHandler<SVGCircleElement>;
   onParamPointerUp: React.PointerEventHandler<SVGCircleElement>;
+  playbackOverlay: {
+    clock: PlaybackClock;
+    sample: (phase: number) => FoundryOverlayPlaybackFrame | undefined;
+    minFrameIntervalMs?: number;
+  };
 };
 
 export const FoundryCanvasPane = ({
@@ -110,6 +120,8 @@ export const FoundryCanvasPane = ({
   foundryPlaying,
   foundryPhase,
   foundryPhaseDegrees,
+  playbackClock,
+  playbackSample,
   foundryCamera,
   foundryCameraLabel,
   foundryRigOpacity,
@@ -175,6 +187,7 @@ export const FoundryCanvasPane = ({
   onParamPointerDown,
   onParamPointerMove,
   onParamPointerUp,
+  playbackOverlay,
 }: FoundryCanvasPaneProps) => {
   const pathFitError = useMemo(() => {
     if (!userPathPoints.length || !previewPoints.length) return undefined;
@@ -277,6 +290,7 @@ export const FoundryCanvasPane = ({
     <FoundryPlaybackPanel
       foundryPlaying={foundryPlaying}
       foundryPhaseDegrees={foundryPhaseDegrees}
+      playbackClock={playbackClock}
       onTogglePlaying={onTogglePlaying}
       onResetPreview={onResetPreview}
       onPhaseChange={onPhaseChange}
@@ -284,6 +298,11 @@ export const FoundryCanvasPane = ({
     <ThreeFoundryPreview
       mechanism={landedFoundry}
       simulation={selectedPhysicalSimulation}
+      playback={{
+        clock: playbackClock,
+        sample: playbackSample,
+        minFrameIntervalMs: 1000 / 30,
+      }}
       kit={kit}
       camera={foundryCamera}
       rigOpacity={foundryRigOpacity / 100}
@@ -360,6 +379,7 @@ export const FoundryCanvasPane = ({
         onParamPointerDown={onParamPointerDown}
         onParamPointerMove={onParamPointerMove}
         onParamPointerUp={onParamPointerUp}
+        playback={playbackOverlay}
       />
     </ThreeFoundryPreview>
     <div hidden data-testid="foundry-toolbar-state">

@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FoundryCanvasPane } from "./FoundryCanvasPane";
+import { useWorkspacePlaybackLoop } from "../../../hooks/useWorkspacePlaybackLoop";
+import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 import { FoundryInspectorPanel } from "./FoundryInspectorPanel";
 import { FoundryWorkflowPanel } from "./FoundryWorkflowPanel";
-import type { FoundryParamHandle, FoundryParamHandleId } from "./FoundryOverlayLayer";
+import type {
+  FoundryOverlayPlaybackFrame,
+  FoundryParamHandle,
+  FoundryParamHandleId,
+} from "./FoundryOverlayLayer";
 import {
   foundryAssemblyPinPoints,
   foundryPinStackPoints,
@@ -105,6 +111,7 @@ export const MechanismFoundry = ({
   selectedPart,
   selectedSceneObject,
   selectedPath,
+  playbackClock,
   goStage,
   onExport,
 }: {
@@ -114,6 +121,7 @@ export const MechanismFoundry = ({
   selectedPart?: BodyPartLayer;
   selectedSceneObject?: SceneObject;
   selectedPath?: ProjectMotionPath;
+  playbackClock: PlaybackClock;
   goStage: (stage: AppStage) => void;
   onExport: (pkg: FoundryExportPackage) => void;
 }) => {
@@ -261,6 +269,35 @@ export const MechanismFoundry = ({
       ),
     [landedFoundry, selectedPath?.points],
   );
+  const foundryPhaseRemainderRef = useRef(0);
+  useWorkspacePlaybackLoop({
+    stage: "foundry",
+    isPlaying: foundryPlaying,
+    drawMode: false,
+    optimizerBusy: false,
+    showGettingStarted: false,
+    playbackDurationMs: (Math.PI * 2) / 0.0025,
+    animationSpeed: project.settings.animationSpeed,
+    timingProfile: "linear",
+    playbackClock,
+    phaseAdvance: (elapsedMs, previousPhase) => {
+      foundryPhaseRemainderRef.current += elapsedMs;
+      if (foundryPhaseRemainderRef.current < FOUNDRY_ANIMATION_COMMIT_MS)
+        return previousPhase;
+      const committedElapsed = foundryPhaseRemainderRef.current;
+      foundryPhaseRemainderRef.current %= FOUNDRY_ANIMATION_COMMIT_MS;
+      return (
+        previousPhase +
+        Math.min(96, committedElapsed) *
+          0.0025 *
+          project.settings.animationSpeed
+      );
+    },
+    driverStage: "foundry",
+  });
+  useEffect(() => {
+    if (!foundryPlaying) foundryPhaseRemainderRef.current = 0;
+  }, [foundryPlaying]);
   const foundryPlaybackFrame = useMemo(
     () =>
       createFoundryPlaybackFrame(
@@ -430,6 +467,41 @@ export const MechanismFoundry = ({
     foundryProjectionSize,
     0,
   );
+  const playbackOverlaySample = (phase: number): FoundryOverlayPlaybackFrame => {
+    const frame = createFoundryPlaybackFrame(
+      landedFoundry,
+      phase,
+      foundryFitContext,
+    );
+    const physicalSimulation = {
+      ...frame.simulation,
+      pathPoints: previewPoints,
+      pathD: pointsToSvgPath(previewPoints),
+    };
+    const overlay = buildFoundryPhysicsOverlay(
+      landedFoundry,
+      physicalSimulation,
+      frame.playbackPhaseRad,
+      project.settings,
+      previewPoints,
+    );
+    return {
+      projectedPlayhead: projectOverlay(overlay.playhead),
+      projectedVelocityTip: projectOverlay(overlay.velocityTip),
+      projectedForceTip: projectOverlay(overlay.forceTip),
+      projectedFrictionTip: projectOverlay(overlay.frictionTip),
+      projectedDriveOrigin: projectOverlay(physicalSimulation.state.j1),
+      projectedDriveTip: projectOverlay(overlay.driveTip),
+      playheadSource: overlay.playheadSource,
+      velocityRaw: overlay.velocityRaw,
+      forceRaw: overlay.forceRaw,
+      velocityMagnitude: overlay.velocityMagnitude,
+      forceMagnitude: overlay.forceMagnitude,
+      frictionMagnitude: overlay.frictionMagnitude,
+      constraintError: overlay.constraintError,
+      physicsRule: overlay.rule,
+    };
+  };
   const rawFoundryParamHandles: Array<Omit<FoundryParamHandle, "z" | "screen">> = [
     {
       id: "M",
@@ -813,9 +885,17 @@ export const MechanismFoundry = ({
       selectedPath.id,
     );
   };
+  const setFoundryPhaseAndClock = (phase: number) => {
+    playbackClock.setPhase(phase);
+    setFoundryPhase(phase);
+  };
+  const toggleFoundryPlaying = () => {
+    if (foundryPlaying) setFoundryPhaseAndClock(playbackClock.getPhase());
+    setFoundryPlaying((value) => !value);
+  };
   const applyPathFit = (mechanism = foundry) => {
     setFoundryPlaying(false);
-    setFoundryPhase(0);
+    setFoundryPhaseAndClock(0);
     setManualAnchor(null);
     setSelectedOutputTraceId(null);
     setShowUserPathPreview(true);
@@ -824,7 +904,7 @@ export const MechanismFoundry = ({
   };
   const resetFoundryPreview = () => {
     setFoundryPlaying(false);
-    setFoundryPhase(0);
+    setFoundryPhaseAndClock(0);
     setManualAnchor(null);
     setSelectedOutputTraceId(null);
     setIsPickingAnchor(false);
@@ -846,28 +926,6 @@ export const MechanismFoundry = ({
       recommendation: FOUNDRY_PRESETS.balanced.recommendation,
     });
   };
-  useEffect(() => {
-    if (!foundryPlaying) return;
-    let frame = 0;
-    let last = performance.now();
-    const tick = (time: number) => {
-      const elapsed = time - last;
-      if (elapsed >= FOUNDRY_ANIMATION_COMMIT_MS) {
-        last = time - (elapsed % FOUNDRY_ANIMATION_COMMIT_MS);
-        setFoundryPhase(
-          (prev) =>
-            (prev +
-              Math.min(96, elapsed) *
-                0.0025 *
-                project.settings.animationSpeed) %
-            (Math.PI * 2),
-        );
-      }
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [foundryPlaying, project.settings.animationSpeed]);
   const makePackage = (): FoundryExportPackage => {
     const mechanismId = uid("mech");
     const state = calculateLinkage(landedFoundry, 0);
@@ -972,6 +1030,19 @@ export const MechanismFoundry = ({
             foundryPlaying={foundryPlaying}
             foundryPhase={foundryPhase}
             foundryPhaseDegrees={foundryPhaseDegrees}
+            playbackClock={playbackClock}
+            playbackSample={(phase) => ({
+              simulation: createFoundryPlaybackFrame(
+                landedFoundry,
+                phase,
+                foundryFitContext,
+              ).simulation,
+            })}
+            playbackOverlay={{
+              clock: playbackClock,
+              sample: playbackOverlaySample,
+              minFrameIntervalMs: 1000 / 30,
+            }}
             foundryCamera={foundryCamera}
             foundryCameraLabel={foundryCameraLabel}
             foundryRigOpacity={foundryRigOpacity}
@@ -1026,11 +1097,11 @@ export const MechanismFoundry = ({
             onToggleVelocity={() => setShowVelocity((value) => !value)}
             onCycleOutputTrace={cycleOutputTrace}
             onToggleTrail={() => setShowTrail((value) => !value)}
-            onTogglePlaying={() => setFoundryPlaying((value) => !value)}
+            onTogglePlaying={toggleFoundryPlaying}
             onResetPreview={resetFoundryPreview}
             onPhaseChange={(degrees) => {
               setFoundryPlaying(false);
-              setFoundryPhase((degrees * Math.PI) / 180);
+              setFoundryPhaseAndClock((degrees * Math.PI) / 180);
             }}
             onAnchorPick={handleAnchorPick}
             onPointerDown={handleFoundryPointerDown}

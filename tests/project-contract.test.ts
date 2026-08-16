@@ -2780,6 +2780,8 @@ const appStageRouterText = readFileSync(join(process.cwd(), 'components', 'AppSt
 const appDerivedStateHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppDerivedState.ts'), 'utf8');
 const workspacePlayerDockHookText = readFileSync(join(process.cwd(), 'hooks', 'useWorkspacePlayerDock.tsx'), 'utf8');
 const workspacePlaybackLoopHookText = readFileSync(join(process.cwd(), 'hooks', 'useWorkspacePlaybackLoop.ts'), 'utf8');
+const externalPlaybackClockText = readFileSync(join(process.cwd(), 'runtime', 'playback', 'externalPlaybackClock.ts'), 'utf8');
+const b695PlaybackTestText = readFileSync(join(process.cwd(), 'tests', 'b695-playback.test.ts'), 'utf8');
 const modalInertHookText = readFileSync(join(process.cwd(), 'hooks', 'useModalInertEffect.ts'), 'utf8');
 const appPathActionsHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppPathActions.ts'), 'utf8');
 const appCharacterImportActionsHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppCharacterImportActions.ts'), 'utf8');
@@ -3226,7 +3228,18 @@ assert(foundry3dText.includes('fabrication-stack-separated'), '4bar previews kee
 assert(mechanismLinkagePreviewText.includes('FABRICATION_LINKAGE_WIDTH_MM * SCENE_PX_PER_MM') && mechanismLinkagePreviewText.includes('FABRICATION_HOLE_RADIUS_MM * SCENE_PX_PER_MM'), 'Foundry 2D mechanism plates use centralized fabrication linkage and hole dimensions');
 assert(mechanismLinkagePreviewText.includes('fabricationRingGearPathD'), '2D Foundry planetary preview uses shared ring gear geometry');
 assert(foundry3dText.includes('fabricationRingGearProfileForPitchRadius'), '3D Foundry ring uses shared fabrication ring gear geometry');
-assert(workspacePlaybackLoopHookText.includes('SHARED_PLAYBACK_STAGES') && workspacePlaybackLoopHookText.includes('!SHARED_PLAYBACK_STAGES.includes(stage)') && workspacePlaybackLoopHookText.includes('requestAnimationFrame(tick)') && workspacePlaybackLoopHookText.includes('animationDeltaRadians') && workspacePlaybackLoopHookText.includes('stage !== "path" && drawMode'), 'shared playback rAF and Path draw reset only run from the extracted workspace playback loop hook');
+assert(
+  workspacePlaybackLoopHookText.includes('SHARED_PLAYBACK_STAGES') &&
+    workspacePlaybackLoopHookText.includes('!SHARED_PLAYBACK_STAGES.includes(stage)') &&
+    workspacePlaybackLoopHookText.includes('playbackClock.start') &&
+    !workspacePlaybackLoopHookText.includes('requestAnimationFrame(') &&
+    workspacePlaybackLoopHookText.includes('animationDeltaRadians') &&
+    workspacePlaybackLoopHookText.includes('stage !== "path" && drawMode') &&
+    externalPlaybackClockText.includes('phaseRef') &&
+    externalPlaybackClockText.includes('subscribe') &&
+    b695PlaybackTestText.includes('at most 10 Hz'),
+  'shared playback uses one external phase clock, keeps Path draw reset behavior, and leaves frame-rate phase updates out of React'
+);
 assert(appText.includes('useWorkspacePlaybackLoop({') && !appText.includes('requestAnimationFrame(') && !appText.includes('animationDeltaRadians('), 'App delegates shared playback timing to useWorkspacePlaybackLoop without owning animation-frame math');
 assert(modalInertHookText.includes('setAttribute("inert", "")') && modalInertHookText.includes('aria-hidden') && modalInertHookText.includes('welcome-modal-open') && appText.includes('useModalInertEffect(appShellRef, modalOpen)') && !appText.includes('document.documentElement.classList.add("welcome-modal-open")') && !appText.includes('useEffect, useRef'), 'App delegates startup/help/about modal inert DOM side effects to useModalInertEffect');
 assert(appText.includes('STARTER_IMAGE_TEMPLATES') && !appText.includes('girl.png?url') && starterImageTemplatesText.includes('girl.png?url') && starterImageTemplatesText.includes('boy.PNG?url') && starterImageTemplatesText.includes('girl-thumb.png?url') && starterImageTemplatesText.includes('boy-thumb.png?url'), 'App delegates starter image template assets to resources/starterImageTemplates without changing starter labels or package URLs');
@@ -3305,8 +3318,7 @@ assert(appUiText.includes('workspace-player-prev-step') && appUiText.includes('w
 assert(!`${appText}
 ${mechanismDesignStageText}
 ${designFoundryPreviewText}`.includes('data-testid="design-foundry-playback-hud"'), 'Mechanism Design uses the shared workspace player instead of a duplicate local playback HUD');
-assert(foundry3dText.includes('FOUNDRY_ANIMATION_COMMIT_MS') && foundry3dText.includes('data-three-animation-commit-ms'), 'Foundry exposes a bounded animation commit budget for browser perf tests');
-assert(foundry3dText.includes('time - (elapsed % FOUNDRY_ANIMATION_COMMIT_MS)'), 'Foundry playback carries requestAnimationFrame remainder instead of dropping animation time under load');
+assert(foundry3dText.includes('renderDynamicRef') && foundry3dText.includes('playback.clock.subscribe') && foundry3dText.includes('frame.phaseChanged'), 'Foundry playback renders external-clock samples directly into the existing Three scene');
 assert(foundry3dText.includes("scene.remove(old)") && foundry3dText.includes("disposeFoundryThreeObject(old)"), 'Foundry disposes noncached dynamic resources when replacing animation groups');
 assert(foundry3dText.includes('geometryCacheRef') && foundry3dText.includes('materialCacheRef'), 'Foundry caches reusable Three geometry/material resources during playback');
 assert(foundry3dText.includes('foundryCached') && foundry3dText.includes('data-three-geometry-cache-size'), 'Foundry tags cached resources and exposes cache size for browser perf tests');
@@ -3530,7 +3542,7 @@ assert(assemblySceneFrameText.includes("step.phase === 'fixed-pins'") && assembl
 assert(assemblyControlPanelText.includes('activeAssemblyMode === "mechanism" &&') && assemblyControlPanelText.includes('data-testid="assembly-lane-switch"') && assemblyControlPanelText.includes('assembly-recipe-card text-left'), 'Character assembly mode hides mechanism-only lane and recipe controls');
 assert(assemblyPlaybackText.includes('export const buildCharacterAssemblyPlan') && assemblyPlaybackText.includes("kind: 'character'") && assemblyPlaybackText.includes('mechanismAssemblySteps: []') && assemblyPlaybackText.includes('sceneToBoardRaw(joint.position') && assemblyPlaybackText.includes('board?.valid ? board.label : undefined'), 'Character assembly plan is derived separately from mechanism recipe steps and does not fake clamped board holes');
 assert(assemblyBlock.includes('useAssemblyGuidePlayback') && !assemblyBlock.includes('stepProgressRef') && !assemblyBlock.includes('window.requestAnimationFrame(tick)'), 'Assembly Guide delegates playback timing/reset choreography to a harnessable hook seam');
-assert(assemblyGuidePlaybackHookText.includes('export const useAssemblyGuidePlayback') && assemblyGuidePlaybackHookText.includes('setStepCount(activeStepCount)') && assemblyGuidePlaybackHookText.includes('const stepMs = 1400') && assemblyGuidePlaybackHookText.includes('window.requestAnimationFrame(tick)') && assemblyGuidePlaybackHookText.includes('setPlaying(false)'), 'Assembly playback hook preserves step count reporting, rAF progress timing, and reset-to-stopped behavior');
+assert(assemblyGuidePlaybackHookText.includes('export const useAssemblyGuidePlayback') && assemblyGuidePlaybackHookText.includes('setStepCount(activeStepCount)') && assemblyGuidePlaybackHookText.includes('playbackClock') && assemblyGuidePlaybackHookText.includes('phaseAdvance') && assemblyGuidePlaybackHookText.includes('1400') && !assemblyGuidePlaybackHookText.includes('window.requestAnimationFrame(tick)') && assemblyGuidePlaybackHookText.includes('setPlaying(false)'), 'Assembly playback hook preserves step count reporting, external-clock phase timing, and reset-to-stopped behavior');
 const assemblyGuideLiveModel = buildAssemblyGuideModel({ project: sample, selectedRecipeId: null, assemblyMode: 'mechanism', lane: 'kit', stepIndex: 0 });
 assert.equal(assemblyGuideLiveModel.selectedRecipe?.mechanismId, sample.mechanisms[0].id, 'Assembly guide model prefers live project mechanisms before package recipes');
 assert.equal(assemblyGuideLiveModel.activeAssemblyMode, 'mechanism', 'Assembly guide model defaults to mechanism mode when a live recipe exists');

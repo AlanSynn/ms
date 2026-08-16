@@ -1,4 +1,5 @@
 import { AssemblySceneFrame } from "./AssemblySceneFrame";
+import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 import {
   AssemblyCharacterThreePreview,
   AssemblyMechanismThreePreview,
@@ -33,6 +34,7 @@ export const AssemblyCanvasPane = ({
   progress,
   playing,
   hasCharacterAssembly,
+  playbackClock,
 }: {
   project: ProjectState;
   activeAssemblyMode: AssemblyMode;
@@ -45,6 +47,7 @@ export const AssemblyCanvasPane = ({
   progress: number;
   playing: boolean;
   hasCharacterAssembly: boolean;
+  playbackClock: PlaybackClock;
 }) => {
   const selectedMechanism = selectedRecipe
     ? project.mechanisms.find(
@@ -84,8 +87,9 @@ export const AssemblyCanvasPane = ({
             progress={progress}
             playing={playing}
             sceneFrame={characterFrame}
+            playbackClock={playbackClock}
           />
-          <AssemblySceneFrame frame={characterFrame} />
+          <AssemblySceneFrame frame={characterFrame} playbackClock={playbackClock} />
         </div>
       ) : selectedRecipe && currentStep && selectedMechanism && mechanismFrame ? (
         <div className="assembly-simulation-stack" data-testid="assembly-mechanism-simulation-stack">
@@ -96,8 +100,9 @@ export const AssemblyCanvasPane = ({
             progress={progress}
             playing={playing}
             sceneFrame={mechanismFrame}
+            playbackClock={playbackClock}
           />
-          <AssemblySceneFrame frame={mechanismFrame} />
+          <AssemblySceneFrame frame={mechanismFrame} playbackClock={playbackClock} />
         </div>
       ) : (
         <div className="blueprint-empty-state">

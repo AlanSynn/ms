@@ -1,3 +1,4 @@
+import React from "react";
 import { BodyPartLayer, ProjectState } from "../../../types";
 import { sceneToSvg } from "../../../utils/coordinates";
 import {
@@ -13,12 +14,14 @@ export const PartShape = ({
   selected,
   drawMode,
   onSelect,
+  nodeRef,
 }: {
   part: BodyPartLayer;
   skeleton?: ProjectState["skeleton"];
   selected: boolean;
   drawMode?: boolean;
   onSelect: () => void;
+  nodeRef?: React.Ref<SVGGElement>;
 }) => {
   if (!part.visible) return null;
   const p = sceneToSvg(part.transform);
@@ -40,6 +43,7 @@ export const PartShape = ({
   const stroke = selected ? "#5a6cff" : "#94a3b8";
   return (
     <g
+      ref={nodeRef}
       data-canvas-interactive="true"
       data-testid={`path-part-${part.id}`}
       data-assembly-underlay="plate-art-layer"
@@ -129,4 +133,3 @@ export const PartShape = ({
     </g>
   );
 };
-

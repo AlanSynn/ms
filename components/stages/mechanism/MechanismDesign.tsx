@@ -3,6 +3,7 @@ import type { AppStage, MechanismConfig, ProjectAction, ProjectState } from "../
 import { DesignFoundryPreview } from "./DesignFoundryPreview";
 import { DesignInspectorPanel } from "./DesignInspectorPanel";
 import { DesignWorkflowPanel } from "./DesignWorkflowPanel";
+import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 
 export const MechanismDesign = ({
   project,
@@ -11,7 +12,9 @@ export const MechanismDesign = ({
   dispatch,
   showTrace,
   setShowTrace,
+  isPlaying,
   angle,
+  playbackClock,
   onOptimize,
   onRecommendations,
   optimizerBusy,
@@ -26,7 +29,9 @@ export const MechanismDesign = ({
   dispatch: (action: ProjectAction) => void;
   showTrace: boolean;
   setShowTrace: (v: boolean) => void;
+  isPlaying: boolean;
   angle: number;
+  playbackClock: PlaybackClock;
   onOptimize: () => void;
   onRecommendations: () => void;
   optimizerBusy: boolean;
@@ -56,6 +61,8 @@ export const MechanismDesign = ({
           project={project}
           mechanism={selectedMechanism}
           angle={angle}
+          playbackClock={playbackClock}
+          isPlaying={isPlaying}
           showTrace={showTrace}
           dispatch={dispatch}
         />,

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type {
   FoundryCamera,
   FoundryCameraPreset,
@@ -6,6 +7,7 @@ import type {
 import { FOUNDRY_VIEW_PRESETS } from "../../../utils/foundryCamera";
 import { VIEWER3D_CONTRACT_VERSION } from "../../../utils/viewer3d";
 import { ContextHelp } from "../../ui/ContextHelp";
+import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 
 export const FoundrySimBadge = ({ foundryPlaying }: { foundryPlaying: boolean }) => (
   <div className="foundry-sim-badge" data-testid="foundry-sim-badge">
@@ -160,6 +162,7 @@ export const FoundryCameraControls = ({
 type FoundryPlaybackPanelProps = {
   foundryPlaying: boolean;
   foundryPhaseDegrees: number;
+  playbackClock?: PlaybackClock;
   onTogglePlaying: () => void;
   onResetPreview: () => void;
   onPhaseChange: (phase: number) => void;
@@ -168,11 +171,28 @@ type FoundryPlaybackPanelProps = {
 export const FoundryPlaybackPanel = ({
   foundryPlaying,
   foundryPhaseDegrees,
+  playbackClock,
   onTogglePlaying,
   onResetPreview,
   onPhaseChange,
-}: FoundryPlaybackPanelProps) => (
-  <div
+}: FoundryPlaybackPanelProps) => {
+  const phaseInputRef = useRef<HTMLInputElement>(null);
+  const phasePercentRef = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!playbackClock) return;
+    let lastUpdate = -Infinity;
+    const update = (phase: number, time: number) => {
+      if (time !== 0 && time - lastUpdate < 100) return;
+      lastUpdate = time;
+      const degrees = (((phase / (Math.PI * 2)) % 1 + 1) % 1) * 360;
+      if (phaseInputRef.current) phaseInputRef.current.value = String(degrees);
+      if (phasePercentRef.current) phasePercentRef.current.textContent = `${Math.round((degrees / 360) * 100)}%`;
+    };
+    update(playbackClock.getPhase(), 0);
+    return playbackClock.subscribe((frame) => update(frame.phase, frame.time));
+  }, [playbackClock]);
+
+  return <div
     className="foundry-playback-hud foundry-toolbar"
     data-testid="foundry-toolbar"
     aria-label="Foundry playback"
@@ -187,6 +207,7 @@ export const FoundryPlaybackPanel = ({
       Reset
     </button>
     <input
+      ref={phaseInputRef}
       aria-label="Foundry phase"
       type="range"
       min="0"
@@ -194,6 +215,6 @@ export const FoundryPlaybackPanel = ({
       value={foundryPhaseDegrees}
       onChange={(event) => onPhaseChange(Number(event.target.value))}
     />
-    <span>{Math.round((foundryPhaseDegrees / 360) * 100)}%</span>
+    <span ref={phasePercentRef}>{Math.round((foundryPhaseDegrees / 360) * 100)}%</span>
   </div>
-);
+};

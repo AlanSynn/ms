@@ -28,6 +28,7 @@ import { addDrawSamplePoint, normalizeDrawTimedPoints, type DrawSamplePoint } fr
 import { PathCanvasPane } from "./PathCanvasPane";
 import { PathInspectorPanel } from "./PathInspectorPanel";
 import { PathWorkflowPanel } from "./PathWorkflowPanel";
+import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 
 export const PathEditor = ({
   project,
@@ -44,6 +45,7 @@ export const PathEditor = ({
   setIsPlaying,
   angle,
   setAngle,
+  playbackClock,
   goStage,
   viewport,
   setViewport,
@@ -66,6 +68,7 @@ export const PathEditor = ({
   setIsPlaying: (v: boolean) => void;
   angle: number;
   setAngle: React.Dispatch<React.SetStateAction<number>>;
+  playbackClock: PlaybackClock;
   goStage: (stage: AppStage) => void;
   viewport: CanvasViewport;
   setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
@@ -296,6 +299,19 @@ export const PathEditor = ({
             pathLocked={pathLocked}
             isPlaying={isPlaying}
             angle={angle}
+            playbackClock={playbackClock}
+            playbackSample={(phase) =>
+              selectedPath?.visible &&
+              selectedPath.enabled &&
+              selectedPath.points.length > 1
+                ? motionPreviewForPath(
+                    project,
+                    selectedPath,
+                    phase,
+                    previewTargetJointId,
+                  )
+                : undefined
+            }
             viewport={viewport}
             setViewport={setViewport}
             pathViewMode={pathViewMode}

@@ -10,6 +10,8 @@ import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STA
 import { DEFAULT_PUPPET_VIEWER_LAYERS, VIEWER3D_CAMERA_PRESETS, VIEWER3D_CONTRACT_VERSION, createViewer3DContract, viewer3DLayerDataValue, type Viewer3DCameraPreset, type Viewer3DTabKey } from '../utils/viewer3d';
 import { REFERENCE_AUTHORABLE_TYPES, referenceRequiredPartsHoleCount } from '../utils/mechanismReference';
 import { mechanismRequiredParts } from '../utils/project';
+import type { MotionPreview } from '../utils/motion';
+import type { PlaybackClock } from '../runtime/playback/externalPlaybackClock';
 import { cachedThreeResource, clearThreeGroup, disposeMarkedThreeMaterials, disposeThreeObjectGraph, setRendererPixelRatioCap } from '../utils/threeResourceKit';
 
 const VIEW_SCALE = 35;
@@ -91,6 +93,11 @@ type ViewerScreenTarget = {
   bottom: number;
   radius: number;
   visible: boolean;
+};
+
+type PuppetPlayback = {
+  clock: PlaybackClock;
+  sample: (phase: number) => MotionPreview | undefined;
 };
 
 const to3 = (point: Point, z = 0) => new THREE.Vector3(point.x / VIEW_SCALE, point.y / VIEW_SCALE, z);
@@ -691,7 +698,7 @@ const mechanismGeometrySignature = (mechanisms: MechanismConfig[]) => mechanisms
   mechanism.showOutputGear
 ].join(':')).join('|');
 
-export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneObjects = {}, skeleton, mechanisms, paths, selectedPathId, angle = 0, viewport, setViewport, inputMode = 'always', testId = 'three-puppet', cameraPresets = PUPPET_CAMERA_PRESETS, showToolbar = true, initialLayers, assemblyOverlay, onSelectPart, onSelectSceneObject, onSelectMechanism, onSelectOnlyPointerDown, onSelectOnlyPointerMove, onSelectOnlyPointerUp, onSelectOnlyPointerCancel, onSelectOnlyWheel }: {
+export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneObjects = {}, skeleton, mechanisms, paths, selectedPathId, angle = 0, playback, viewport, setViewport, inputMode = 'always', testId = 'three-puppet', cameraPresets = PUPPET_CAMERA_PRESETS, showToolbar = true, initialLayers, assemblyOverlay, onSelectPart, onSelectSceneObject, onSelectMechanism, onSelectOnlyPointerDown, onSelectOnlyPointerMove, onSelectOnlyPointerUp, onSelectOnlyPointerCancel, onSelectOnlyWheel }: {
   project?: ProjectState;
   animatedParts?: Record<string, BodyPartLayer>;
   animatedSceneObjects?: Record<string, SceneObject>;
@@ -700,6 +707,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   paths?: ProjectMotionPath[];
   selectedPathId?: string;
   angle?: number;
+  playback?: PuppetPlayback;
   viewport?: CanvasViewport;
   setViewport?: React.Dispatch<React.SetStateAction<CanvasViewport>>;
   inputMode?: 'always' | '3d-only' | 'select-only' | 'none';
@@ -1575,6 +1583,75 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     });
     render();
   }, [angle, renderedMechanisms, rendererStatus]);
+
+  useEffect(() => {
+    if (!playback || rendererStatus !== 'webgl') return;
+    const applyPreview = (preview: MotionPreview | undefined) => {
+      const materials = materialsRef.current;
+      if (!materials) return;
+      const animated = preview?.parts ?? {};
+      const visibleParts = (project?.partOrder ?? [])
+        .map(id => animated[id] ?? project?.parts[id])
+        .filter((part): part is BodyPartLayer => Boolean(part));
+      visibleParts.forEach((part, index) => {
+        const mesh = partMeshesRef.current.get(part.id);
+        if (!mesh) return;
+        const assemblyOffset = assemblyOffsetForPart(index, visibleParts.length, assemblyExplodeAmount);
+        mesh.visible = part.visible;
+        mesh.position.set(
+          (part.transform.x + assemblyOffset.x) / VIEW_SCALE,
+          (part.transform.y + assemblyOffset.y) / VIEW_SCALE,
+          part.zIndex * 0.035 + assemblyOffset.z,
+        );
+        mesh.rotation.z = (part.transform.rotation * Math.PI) / 180;
+        mesh.scale.set(part.transform.scale, part.transform.scale, 1);
+        mesh.material = project?.selectedPartId === part.id ? materials.selected : materials.part;
+      });
+
+      const animatedObjects = preview?.sceneObjects ?? {};
+      (project?.sceneObjectOrder ?? []).forEach(id => {
+        const object = animatedObjects[id] ?? project?.sceneObjects[id];
+        const group = sceneObjectRefs.current.get(id);
+        if (!object || !group) return;
+        group.visible = object.visible;
+        group.position.set(object.transform.x / VIEW_SCALE, object.transform.y / VIEW_SCALE, object.zIndex * 0.035 + 0.12);
+        group.rotation.z = (object.transform.rotation * Math.PI) / 180;
+        group.scale.set(object.transform.scale, object.transform.scale, 1);
+        group.renderOrder = 30 + object.zIndex;
+      });
+
+      const previewSkeleton = preview?.skeleton ?? activeSkeleton;
+      if (previewSkeleton) {
+        previewSkeleton.bones.forEach(([a, b]) => {
+          const mesh = boneRefs.current.get(`${a}-${b}`);
+          const ja = previewSkeleton.joints[a];
+          const jb = previewSkeleton.joints[b];
+          if (mesh) updateUnitBar(mesh, ja?.position, jb?.position, 0.18);
+        });
+        Object.values(previewSkeleton.joints).forEach(joint => {
+          const visual = jointRefs.current.get(joint.id);
+          if (!visual) return;
+          const p = to3(joint.position, 0.35);
+          visual.pin.position.copy(p);
+          visual.washer.position.set(p.x, p.y, 0.55);
+        });
+      }
+      render();
+    };
+
+    applyPreview(playback.sample(playback.clock.getPhase()));
+    return playback.clock.subscribe(frame => {
+      if (frame.phaseChanged || frame.elapsedMs === 0) {
+        applyPreview(playback.sample(frame.phase));
+      }
+    });
+  }, [
+    activeSkeleton,
+    assemblyExplodeAmount,
+    playback,
+    project,
+    rendererStatus,
+  ]);
 
   useEffect(() => {
     const roots = rootsRef.current;

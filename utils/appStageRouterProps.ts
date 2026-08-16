@@ -2,7 +2,12 @@ import type { AppStageRouterProps } from "../components/AppStageRouter";
 
 type BaseRouterProps = Pick<
   AppStageRouterProps,
-  "editorStage" | "project" | "dispatch" | "goStage" | "playerDock"
+  | "editorStage"
+  | "project"
+  | "dispatch"
+  | "goStage"
+  | "playerDock"
+  | "playbackClock"
 >;
 
 type CharacterRouterProps = Pick<
@@ -90,6 +95,7 @@ export const buildAppStageRouterProps = ({
   dispatch,
   goStage,
   playerDock,
+  playbackClock,
   character,
   selection,
   path,
@@ -103,6 +109,7 @@ export const buildAppStageRouterProps = ({
   dispatch,
   goStage,
   playerDock,
+  playbackClock,
   ...character,
   ...selection,
   ...path,

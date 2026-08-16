@@ -10,6 +10,7 @@ import type {
   ProjectState,
 } from "../../../types";
 import type { MotionPreview } from "../../../utils/motion";
+import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 import { SceneSketch } from "./SceneSketch";
 
 interface PathCanvasPaneProps {
@@ -29,6 +30,8 @@ interface PathCanvasPaneProps {
   pathLocked: boolean;
   isPlaying: boolean;
   angle: number;
+  playbackClock: PlaybackClock;
+  playbackSample: (phase: number) => MotionPreview | undefined;
   viewport: CanvasViewport;
   setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
   pathViewMode: "2d" | "3d";
@@ -53,6 +56,8 @@ export const PathCanvasPane = ({
   pathLocked,
   isPlaying,
   angle,
+  playbackClock,
+  playbackSample,
   viewport,
   setViewport,
   pathViewMode,
@@ -105,6 +110,8 @@ export const PathCanvasPane = ({
         pathLocked={pathLocked}
         isPlaying={isPlaying}
         angle={angle}
+        playbackClock={playbackClock}
+        playbackSample={playbackSample}
         viewport={viewport}
         setViewport={setViewport}
       />
@@ -118,6 +125,10 @@ export const PathCanvasPane = ({
         paths={selectedPath ? [selectedPath] : []}
         selectedPathId={selectedPath?.id}
         angle={angle}
+        playback={isPlaying ? {
+          clock: playbackClock,
+          sample: playbackSample,
+        } : undefined}
         viewport={viewport}
         setViewport={setViewport}
         inputMode="always"

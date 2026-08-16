@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import type { PlaybackClock } from '../../runtime/playback/externalPlaybackClock';
 
 export type WorkspaceStepPlayback = {
   stepIndex: number;
@@ -6,11 +7,12 @@ export type WorkspaceStepPlayback = {
   onStepChange: (index: number) => void;
 };
 
-export const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, speed, drawMode, stepPlayback }: {
+export const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, playbackClock, speed, drawMode, stepPlayback }: {
   isPlaying: boolean;
   setIsPlaying: (value: boolean) => void;
   angle: number;
   setAngle: React.Dispatch<React.SetStateAction<number>>;
+  playbackClock: PlaybackClock;
   speed: number;
   drawMode: boolean;
   stepPlayback?: WorkspaceStepPlayback;
@@ -23,8 +25,13 @@ export const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, 
     : ((angle / (Math.PI * 2)) % 1 + 1) % 1;
   const percent = Math.round(progress * 100);
   const goStep = (next: number) => stepPlayback?.onStepChange(Math.max(0, Math.min(maxStepIndex, next)));
+  const togglePlayback = () => {
+    if (!stepPlayback && isPlaying) setAngle(playbackClock.getPhase());
+    setIsPlaying(!isPlaying);
+  };
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
+  const scrubberRef = useRef<HTMLInputElement>(null);
   const dragStart = useRef<{ x: number; y: number; offset: { x: number; y: number } } | null>(null);
   const stopDragListeners = useRef<(() => void) | null>(null);
 
@@ -45,6 +52,20 @@ export const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, 
   };
 
   useEffect(() => () => stopDragListeners.current?.(), []);
+
+  useEffect(() => {
+    if (stepPlayback) return;
+    let lastControlUpdate = -Infinity;
+    const updateScrubber = (phase: number, time: number) => {
+      if (time - lastControlUpdate < 100 && time !== 0) return;
+      lastControlUpdate = time;
+      if (scrubberRef.current) {
+        scrubberRef.current.value = String(Math.round((((phase / (Math.PI * 2)) % 1 + 1) % 1) * 100));
+      }
+    };
+    updateScrubber(playbackClock.getPhase(), 0);
+    return playbackClock.subscribe((frame) => updateScrubber(frame.phase, frame.time));
+  }, [playbackClock, stepPlayback]);
 
   const startDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return;
@@ -80,9 +101,15 @@ export const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, 
     </button>
     <div className="player-actions">
       {stepPlayback && <button type="button" data-testid="workspace-player-prev-step" aria-label="Previous assembly step" disabled={stepIndex <= 0} onClick={() => goStep(stepIndex - 1)}>←</button>}
-      <button type="button" aria-label={isPlaying ? 'Pause' : 'Play'} onClick={() => setIsPlaying(!isPlaying)}>{isPlaying ? 'Ⅱ' : '▶'}</button>
+      <button type="button" aria-label={isPlaying ? 'Pause' : 'Play'} onClick={togglePlayback}>{isPlaying ? 'Ⅱ' : '▶'}</button>
       {stepPlayback && <button type="button" data-testid="workspace-player-next-step" aria-label="Next assembly step" disabled={stepIndex >= maxStepIndex} onClick={() => goStep(stepIndex + 1)}>→</button>}
-      <button type="button" aria-label="Start over" onClick={() => stepPlayback ? goStep(0) : setAngle(0)}>↺</button>
+      <button type="button" aria-label="Start over" onClick={() => {
+        if (stepPlayback) goStep(0);
+        else {
+          playbackClock.setPhase(0);
+          setAngle(0);
+        }
+      }}>↺</button>
       <span>{speed.toFixed(1)}x</span>
     </div>
     <input
@@ -90,8 +117,16 @@ export const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, 
       type="range"
       min={0}
       max={stepPlayback ? maxStepIndex : 100}
+      ref={scrubberRef}
       value={stepPlayback ? stepIndex : percent}
-      onChange={event => stepPlayback ? goStep(Number(event.currentTarget.value)) : setAngle((Number(event.currentTarget.value) / 100) * Math.PI * 2)}
+      onChange={event => {
+        if (stepPlayback) goStep(Number(event.currentTarget.value));
+        else {
+          const next = (Number(event.currentTarget.value) / 100) * Math.PI * 2;
+          playbackClock.setPhase(next);
+          setAngle(next);
+        }
+      }}
     />
   </aside>;
 };

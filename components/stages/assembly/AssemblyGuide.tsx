@@ -9,6 +9,7 @@ import {
   type AssemblyGuideMode,
 } from "./assemblyGuideModel";
 import { useAssemblyGuidePlayback } from "./useAssemblyGuidePlayback";
+import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 import {
   EditorStageFrame,
   canvasPane,
@@ -37,6 +38,7 @@ export const AssemblyGuide = ({
   playing,
   setPlaying,
   setStepCount,
+  playbackClock,
 }: {
   project: ProjectState;
   dispatch: (action: ProjectAction) => void;
@@ -48,6 +50,7 @@ export const AssemblyGuide = ({
   playing: boolean;
   setPlaying: Dispatch<SetStateAction<boolean>>;
   setStepCount: Dispatch<SetStateAction<number>>;
+  playbackClock: PlaybackClock;
 }) => {
   const validation = validateForFabrication(project);
   const create = () =>
@@ -94,6 +97,7 @@ export const AssemblyGuide = ({
     setStepCount,
     setStepIndex,
     setStepProgress,
+    playbackClock,
   });
 
   const downloadAssemblyPdf = () =>
@@ -165,6 +169,7 @@ export const AssemblyGuide = ({
             progress={stepProgress}
             playing={playing}
             hasCharacterAssembly={hasCharacterAssembly}
+            playbackClock={playbackClock}
           />,
         ),
         inspector: inspectorPane(

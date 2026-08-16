@@ -29,6 +29,10 @@ import { useProjectAutosave } from "./useProjectAutosave";
 import { useProjectHistory } from "./useProjectHistory";
 import { useWorkspacePlaybackLoop } from "./useWorkspacePlaybackLoop";
 import { useWorkspacePlayerDock } from "./useWorkspacePlayerDock";
+import {
+  createPlaybackClock,
+  type PlaybackClock,
+} from "../runtime/playback/externalPlaybackClock";
 
 type FoundryState = MechanismConfig;
 
@@ -80,6 +84,9 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   const [hideGettingStartedThisSession, setHideGettingStartedThisSession] =
     useState(readGettingStartedHiddenForSession);
   const [angle, setAngle] = useState(0);
+  const playbackClockRef = useRef<PlaybackClock | null>(null);
+  if (!playbackClockRef.current) playbackClockRef.current = createPlaybackClock();
+  const playbackClock = playbackClockRef.current;
   const [isPlaying, setIsPlaying] = useState(true);
   const [showTrace, setShowTrace] = useState(true);
   const [showRecommendations, setShowRecommendations] = useState(false);
@@ -99,6 +106,10 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   const appShellRef = useRef<HTMLDivElement>(null);
   const assessmentQueryApplied = useRef(false);
   useProjectAutosave(project);
+
+  useEffect(() => {
+    playbackClock.setPhase(angle);
+  }, [angle, playbackClock]);
 
   useEffect(() => {
     if (assessmentQueryApplied.current || typeof window === "undefined") return;
@@ -207,6 +218,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     playbackDurationMs,
     animationSpeed: project.settings.animationSpeed,
     timingProfile: project.settings.timingProfile,
+    playbackClock,
     setAngle,
     setDrawMode,
   });
@@ -263,6 +275,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     setIsPlaying,
     angle,
     setAngle,
+    playbackClock,
     speed: project.settings.animationSpeed,
     drawMode,
   });
@@ -285,6 +298,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     dispatch,
     goStage,
     playerDock,
+    playbackClock,
     character: {
       pendingCharacter,
       onOpenGettingStarted: () => setShowGettingStarted(true),

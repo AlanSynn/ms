@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import type {
   CanvasViewport,
@@ -15,7 +15,11 @@ import {
   sceneToSvg,
   SCENE_VIEW,
 } from "../../../utils/coordinates";
-import { motionPreviewForPath, preferredMotionJointId } from "../../../utils/motion";
+import {
+  motionPreviewForPath,
+  preferredMotionJointId,
+  type MotionPreview,
+} from "../../../utils/motion";
 import {
   canvasPanOffset,
   canvasViewBoxForViewport,
@@ -23,6 +27,7 @@ import {
 } from "../../../utils/viewport";
 import { formatGridLabel } from "../../../utils/units";
 import { PartShape } from "./PartShape";
+import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 
 export const SceneSketch = ({
   project,
@@ -41,6 +46,8 @@ export const SceneSketch = ({
   pathLocked,
   isPlaying,
   angle,
+  playbackClock,
+  playbackSample,
   viewport,
   setViewport,
 }: {
@@ -60,9 +67,23 @@ export const SceneSketch = ({
   pathLocked?: boolean;
   isPlaying: boolean;
   angle: number;
+  playbackClock: PlaybackClock;
+  playbackSample: (phase: number) => MotionPreview | undefined;
   viewport: CanvasViewport;
   setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
 }) => {
+  const partNodesRef = useRef(new Map<string, SVGGElement>());
+  const objectNodesRef = useRef(new Map<string, SVGGElement>());
+  const jointNodesRef = useRef(new Map<string, SVGGElement>());
+  const boneNodesRef = useRef(new Map<string, SVGLineElement>());
+  const targetNodeRef = useRef<SVGGElement | null>(null);
+  const nodeRef =
+    <T extends Element>(map: Map<string, T>, id: string) =>
+    (node: T | null) => {
+      if (node) map.set(id, node);
+      else map.delete(id);
+    };
+
   const kit = project.settings.physicalKit;
   const sheet = sceneBoundsForSheet(kit);
   const pathMechanism = selectedPath
@@ -94,6 +115,79 @@ export const SceneSketch = ({
   const previewSkeleton = pathPreview?.skeleton ?? project.skeleton;
   const previewParts = pathPreview?.parts ?? {};
   const previewSceneObjects = pathPreview?.sceneObjects ?? {};
+
+  useEffect(() => {
+    if (!isPlaying) return;
+    const applyPreview = (preview: MotionPreview | undefined) => {
+      const parts = preview?.parts ?? {};
+      project.partOrder.forEach((id) => {
+        const part = parts[id] ?? project.parts[id];
+        const node = partNodesRef.current.get(id);
+        if (!part || !node) return;
+        const center = sceneToSvg(part.transform);
+        node.setAttribute(
+          "transform",
+          `translate(${center.x} ${center.y}) rotate(${-part.transform.rotation})`,
+        );
+      });
+
+      const sceneObjects = preview?.sceneObjects ?? {};
+      project.sceneObjectOrder.forEach((id) => {
+        const object = sceneObjects[id] ?? project.sceneObjects[id];
+        const base = project.sceneObjects[id];
+        const node = objectNodesRef.current.get(id);
+        if (!object || !base || !node) return;
+        const dx = object.transform.x - base.transform.x;
+        const dy = -(object.transform.y - base.transform.y);
+        node.setAttribute("transform", `translate(${dx} ${dy})`);
+      });
+
+      const skeleton = preview?.skeleton ?? project.skeleton;
+      if (skeleton) {
+        skeleton.bones.forEach(([a, b]) => {
+          const line = boneNodesRef.current.get(`${a}-${b}`);
+          const ja = skeleton.joints[a];
+          const jb = skeleton.joints[b];
+          if (!line || !ja || !jb) return;
+          const pa = sceneToSvg(ja.position);
+          const pb = sceneToSvg(jb.position);
+          line.setAttribute("x1", String(pa.x));
+          line.setAttribute("y1", String(pa.y));
+          line.setAttribute("x2", String(pb.x));
+          line.setAttribute("y2", String(pb.y));
+        });
+        Object.values(skeleton.joints).forEach((joint) => {
+          const group = jointNodesRef.current.get(joint.id);
+          const circle = group?.querySelector("circle");
+          if (!circle) return;
+          const point = sceneToSvg(joint.position);
+          circle.setAttribute("cx", String(point.x));
+          circle.setAttribute("cy", String(point.y));
+        });
+      }
+
+      const targetNode = targetNodeRef.current;
+      const targetCircle = targetNode?.querySelector("circle");
+      const targetText = targetNode?.querySelector("text");
+      if (targetNode && targetCircle && targetText) {
+        if (preview?.target) {
+          const point = sceneToSvg(preview.target);
+          targetNode.style.display = "";
+          targetCircle.setAttribute("cx", String(point.x));
+          targetCircle.setAttribute("cy", String(point.y));
+          targetText.setAttribute("x", String(point.x + 14));
+          targetText.setAttribute("y", String(point.y - 10));
+        } else {
+          targetNode.style.display = "none";
+        }
+      }
+    };
+
+    applyPreview(playbackSample(playbackClock.getPhase()));
+    return playbackClock.subscribe((frame) => {
+      applyPreview(playbackSample(frame.phase));
+    });
+  }, [isPlaying, playbackClock, playbackSample, project]);
   const objectShape = (object: SceneObject) => {
     const center = sceneToSvg(object.transform);
     const scale = object.transform.scale || 1;
@@ -320,6 +414,7 @@ export const SceneSketch = ({
         return (
           <line
             key={`${a}-${b}`}
+            ref={nodeRef(boneNodesRef.current, `${a}-${b}`)}
             x1={pa.x}
             y1={pa.y}
             x2={pb.x}
@@ -335,10 +430,11 @@ export const SceneSketch = ({
         .filter(Boolean)
         .map((part) => (
           <React.Fragment key={part.id}>
-            <PartShape
-              part={part}
-              skeleton={previewSkeleton}
-              selected={project.selectedPartId === part.id}
+          <PartShape
+            part={part}
+            skeleton={previewSkeleton}
+            nodeRef={nodeRef(partNodesRef.current, part.id)}
+            selected={project.selectedPartId === part.id}
               drawMode={drawMode}
               onSelect={() =>
                 dispatch({ type: "select_part", partId: part.id })
@@ -352,6 +448,7 @@ export const SceneSketch = ({
         .map((object) => (
           <g
             key={object.id}
+            ref={nodeRef(objectNodesRef.current, object.id)}
             data-canvas-interactive="true"
             className={drawMode ? undefined : "cursor-pointer"}
             onClick={(e) => {
@@ -371,6 +468,7 @@ export const SceneSketch = ({
           return (
             <g
               key={j.id}
+              ref={nodeRef(jointNodesRef.current, j.id)}
               data-canvas-interactive={pickable ? "true" : undefined}
               className={pickable ? "cursor-pointer" : undefined}
               onClick={(e) => {
@@ -442,7 +540,7 @@ export const SceneSketch = ({
           const target = pathPreview.target;
           const p = sceneToSvg(target);
           return (
-            <g pointerEvents="none">
+            <g pointerEvents="none" ref={targetNodeRef}>
               <circle
                 cx={p.x}
                 cy={p.y}

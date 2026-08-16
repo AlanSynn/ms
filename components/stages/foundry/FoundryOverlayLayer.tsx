@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import type { Point } from "../../../types";
 import type { FoundryOverlaySize } from "../../../utils/foundryCamera";
+import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 
 export type FoundryParamHandleId = "M" | "A" | "B" | "C" | "D";
 
@@ -11,6 +12,23 @@ export type FoundryParamHandle = {
   draggable: boolean;
   z: number;
   screen: Point;
+};
+
+export type FoundryOverlayPlaybackFrame = {
+  projectedPlayhead?: Point;
+  projectedVelocityTip?: Point;
+  projectedForceTip?: Point;
+  projectedFrictionTip?: Point;
+  projectedDriveOrigin?: Point;
+  projectedDriveTip?: Point;
+  playheadSource: string;
+  velocityRaw: Point;
+  forceRaw: Point;
+  velocityMagnitude: number;
+  forceMagnitude: number;
+  frictionMagnitude: number;
+  constraintError: number;
+  physicsRule: string;
 };
 
 type FoundryOverlayLayerProps = {
@@ -42,6 +60,11 @@ type FoundryOverlayLayerProps = {
   ) => React.PointerEventHandler<SVGCircleElement>;
   onParamPointerMove: React.PointerEventHandler<SVGCircleElement>;
   onParamPointerUp: React.PointerEventHandler<SVGCircleElement>;
+  playback?: {
+    clock: PlaybackClock;
+    sample: (phase: number) => FoundryOverlayPlaybackFrame | undefined;
+    minFrameIntervalMs?: number;
+  };
 };
 
 export const FoundryOverlayLayer = ({
@@ -71,8 +94,130 @@ export const FoundryOverlayLayer = ({
   onParamPointerDown,
   onParamPointerMove,
   onParamPointerUp,
-}: FoundryOverlayLayerProps) => (
+  playback,
+}: FoundryOverlayLayerProps) => {
+  const overlayRef = useRef<SVGSVGElement>(null);
+
+  useEffect(() => {
+    if (!playback) return;
+    let lastFrameTime = -Infinity;
+    const setAttribute = (node: Element | null, name: string, value: string) => {
+      node?.setAttribute(name, value);
+    };
+    const setPoint = (
+      node: Element | null,
+      xName: string,
+      yName: string,
+      point?: Point,
+    ) => {
+      if (!point) return;
+      setAttribute(node, xName, String(point.x));
+      setAttribute(node, yName, String(point.y));
+    };
+    const apply = (
+      frame: FoundryOverlayPlaybackFrame,
+      time: number,
+      force = false,
+    ) => {
+      const minFrameInterval = playback.minFrameIntervalMs ?? 0;
+      if (!force && time !== 0 && time - lastFrameTime < minFrameInterval) return;
+      lastFrameTime = time;
+      const svg = overlayRef.current;
+      if (!svg) return;
+      const playhead = svg.querySelector('[data-testid="foundry-playhead"]');
+      const forces = svg.querySelector('[data-testid="foundry-forces-overlay"]');
+      const velocity = svg.querySelector('[data-testid="foundry-velocity-overlay"]');
+      setPoint(playhead, "cx", "cy", frame.projectedPlayhead);
+      setPoint(
+        svg.querySelector('[data-testid="foundry-force-vector"]'),
+        "x1",
+        "y1",
+        frame.projectedPlayhead,
+      );
+      setPoint(
+        svg.querySelector('[data-testid="foundry-force-vector"]'),
+        "x2",
+        "y2",
+        frame.projectedForceTip,
+      );
+      setPoint(
+        svg.querySelector('[data-testid="foundry-drive-force-vector"]'),
+        "x1",
+        "y1",
+        frame.projectedDriveOrigin,
+      );
+      setPoint(
+        svg.querySelector('[data-testid="foundry-drive-force-vector"]'),
+        "x2",
+        "y2",
+        frame.projectedDriveTip,
+      );
+      setPoint(
+        svg.querySelector('[data-testid="foundry-friction-vector"]'),
+        "x1",
+        "y1",
+        frame.projectedPlayhead,
+      );
+      setPoint(
+        svg.querySelector('[data-testid="foundry-friction-vector"]'),
+        "x2",
+        "y2",
+        frame.projectedFrictionTip,
+      );
+      setPoint(
+        svg.querySelector('[data-testid="foundry-velocity-vector"]'),
+        "x1",
+        "y1",
+        frame.projectedPlayhead,
+      );
+      setPoint(
+        svg.querySelector('[data-testid="foundry-velocity-vector"]'),
+        "x2",
+        "y2",
+        frame.projectedVelocityTip,
+      );
+      setAttribute(forces, "data-origin-source", frame.playheadSource);
+      setAttribute(forces, "data-physics-rule", frame.physicsRule);
+      setAttribute(forces, "data-fx", frame.forceRaw.x.toFixed(3));
+      setAttribute(forces, "data-fy", frame.forceRaw.y.toFixed(3));
+      setAttribute(forces, "data-force-magnitude", frame.forceMagnitude.toFixed(3));
+      setAttribute(forces, "data-friction-magnitude", frame.frictionMagnitude.toFixed(3));
+      setAttribute(forces, "data-constraint-error", frame.constraintError.toFixed(3));
+      setAttribute(velocity, "data-origin-source", frame.playheadSource);
+      setAttribute(velocity, "data-vx", frame.velocityRaw.x.toFixed(3));
+      setAttribute(velocity, "data-vy", frame.velocityRaw.y.toFixed(3));
+      setAttribute(velocity, "data-speed", frame.velocityMagnitude.toFixed(3));
+      const forceText = forces?.querySelectorAll("text") ?? [];
+      if (forceText[0]) {
+        forceText[0].setAttribute("x", String((frame.projectedForceTip?.x ?? 0) + 5));
+        forceText[0].setAttribute("y", String((frame.projectedForceTip?.y ?? 0) - 3));
+      }
+      if (forceText[1]) {
+        forceText[1].setAttribute("x", String((frame.projectedDriveTip?.x ?? 0) + 5));
+        forceText[1].setAttribute("y", String((frame.projectedDriveTip?.y ?? 0) + 9));
+      }
+      if (forceText[2]) {
+        forceText[2].setAttribute("x", String((frame.projectedFrictionTip?.x ?? 0) + 5));
+        forceText[2].setAttribute("y", String((frame.projectedFrictionTip?.y ?? 0) + 9));
+      }
+      const velocityText = velocity?.querySelector("text");
+      if (velocityText) {
+        velocityText.setAttribute("x", String((frame.projectedVelocityTip?.x ?? 0) + 5));
+        velocityText.setAttribute("y", String((frame.projectedVelocityTip?.y ?? 0) - 3));
+      }
+    };
+    const initial = playback.sample(playback.clock.getPhase());
+    if (initial) apply(initial, 0, true);
+    return playback.clock.subscribe((clockFrame) => {
+      if (!clockFrame.phaseChanged && clockFrame.elapsedMs !== 0) return;
+      const frame = playback.sample(clockFrame.phase);
+      if (frame) apply(frame, clockFrame.time, clockFrame.elapsedMs === 0);
+    });
+  }, [playback]);
+
+  return (
   <svg
+    ref={overlayRef}
     data-testid="foundry-preview-overlay"
     viewBox={`0 0 ${foundryProjectionSize.width} ${foundryProjectionSize.height}`}
     className="foundry-preview-overlay"
@@ -285,4 +430,5 @@ export const FoundryOverlayLayer = ({
       </g>
     )}
   </svg>
-);
+  );
+};

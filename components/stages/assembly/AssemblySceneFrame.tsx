@@ -1,9 +1,36 @@
+import { useEffect, useRef } from "react";
 import type { AssemblySceneFrame as AssemblySceneFrameModel } from "../../../utils/assemblySceneFrame";
+import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 
 const coordText = (coords: string[]) => (coords.length ? coords.join(" · ") : "None");
 
-export const AssemblySceneFrame = ({ frame }: { frame: AssemblySceneFrameModel }) => (
-  <section
+export const AssemblySceneFrame = ({
+  frame,
+  playbackClock,
+}: {
+  frame: AssemblySceneFrameModel;
+  playbackClock?: PlaybackClock;
+}) => {
+  const rootRef = useRef<HTMLElement>(null);
+  const progressRef = useRef<HTMLDivElement>(null);
+  const progressFillRef = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!playbackClock) return;
+    const update = (phase: number) => {
+      const progress = (((phase / (Math.PI * 2)) % 1) + 1) % 1;
+      const percent = Math.round(progress * 100);
+      rootRef.current?.setAttribute("data-progress", String(percent));
+      progressRef.current?.setAttribute("data-progress", String(percent));
+      if (progressFillRef.current) {
+        progressFillRef.current.style.width = `${percent}%`;
+      }
+    };
+    update(playbackClock.getPhase());
+    return playbackClock.subscribe((clockFrame) => update(clockFrame.phase));
+  }, [playbackClock]);
+
+  return <section
+    ref={rootRef}
     className="assembly-scene-frame assembly-readonly-step-strip"
     data-testid="assembly-readonly-step-strip"
     data-assembly-frame-version={frame.version}
@@ -32,12 +59,16 @@ export const AssemblySceneFrame = ({ frame }: { frame: AssemblySceneFrameModel }
     <p className="assembly-scene-instruction">{frame.instruction}</p>
     {frame.check && <p className="assembly-scene-check">Check: {frame.check}</p>}
     <div
+      ref={progressRef}
       className="assembly-visual-progress"
       data-testid="assembly-visual-progress"
       data-progress={Math.round(frame.progress * 100)}
       aria-hidden="true"
     >
-      <span style={{ width: `${Math.round(frame.progress * 100)}%` }} />
+      <span
+        ref={progressFillRef}
+        style={{ width: `${Math.round(frame.progress * 100)}%` }}
+      />
     </div>
     <div
       className="assembly-scene-sensemaking"
@@ -58,5 +89,5 @@ export const AssemblySceneFrame = ({ frame }: { frame: AssemblySceneFrameModel }
         </span>
       ))}
     </div>
-  </section>
-);
+  </section>;
+};
