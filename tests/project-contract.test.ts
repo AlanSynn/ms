@@ -2787,6 +2787,9 @@ const b695FrameTestText = readFileSync(join(process.cwd(), 'tests', 'b695-frame.
 const b695FitTestText = readFileSync(join(process.cwd(), 'tests', 'b695-fit.test.ts'), 'utf8');
 const blueprintModelRuntimeText = readFileSync(join(process.cwd(), 'runtime', 'blueprint', 'BlueprintModel.ts'), 'utf8');
 const b695BlueprintTestText = readFileSync(join(process.cwd(), 'tests', 'b695-blueprint.test.ts'), 'utf8');
+const studyArtifactText = readFileSync(join(process.cwd(), 'infrastructure', 'study-final', 'artifact.ts'), 'utf8');
+const finalStudyHookText = readFileSync(join(process.cwd(), 'hooks', 'useFinalStudyArtifact.ts'), 'utf8');
+const b695StudyTestText = readFileSync(join(process.cwd(), 'tests', 'b695-study.test.ts'), 'utf8');
 const modalInertHookText = readFileSync(join(process.cwd(), 'hooks', 'useModalInertEffect.ts'), 'utf8');
 const appPathActionsHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppPathActions.ts'), 'utf8');
 const appCharacterImportActionsHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppCharacterImportActions.ts'), 'utf8');
@@ -3272,6 +3275,18 @@ assert(
     b695BlueprintTestText.includes('Blueprint reuses the exact model') &&
     b695BlueprintTestText.includes('cached package PDF bytes remain exact'),
   'Blueprint caches validation, recipes, preview SVG, and package bytes by immutable ProjectState without changing its visible document contract',
+);
+assert(
+  studyArtifactText.includes("motionsmith-final-study-v1") &&
+    studyArtifactText.includes('FINAL_STUDY_ARTIFACT_MAX_BYTES') &&
+    studyArtifactText.includes('blueprintReached') &&
+    studyArtifactText.includes('packageGenerated') &&
+    studyArtifactText.includes('emitFinalStudyArtifact') &&
+    finalStudyHookText.includes('__MOTIONSMITH_STUDY_SUMMARY_ENABLED__') &&
+    finalStudyHookText.includes('!blueprintReached') &&
+    b695StudyTestText.includes('study refuses a second artifact') &&
+    b695StudyTestText.includes("!payload.includes('generatedPath')"),
+  'study is one opt-in bounded semantic artifact with no playback/frame or raw-motion collection',
 );
 assert(appText.includes('useWorkspacePlaybackLoop({') && !appText.includes('requestAnimationFrame(') && !appText.includes('animationDeltaRadians('), 'App delegates shared playback timing to useWorkspacePlaybackLoop without owning animation-frame math');
 assert(modalInertHookText.includes('setAttribute("inert", "")') && modalInertHookText.includes('aria-hidden') && modalInertHookText.includes('welcome-modal-open') && appText.includes('useModalInertEffect(appShellRef, modalOpen)') && !appText.includes('document.documentElement.classList.add("welcome-modal-open")') && !appText.includes('useEffect, useRef'), 'App delegates startup/help/about modal inert DOM side effects to useModalInertEffect');

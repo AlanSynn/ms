@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import type { AppStage, FabricationRecipe, ProjectAction, ProjectState } from "../../../types";
+import { FinalStudyArtifactGate } from "../../../hooks/useFinalStudyArtifact";
 import {
   buildBlueprintModel,
   createBlueprintPackage,
@@ -77,11 +78,28 @@ export const BlueprintExport = ({
           </div>,
         ),
         inspector: inspectorPane(
-          <BlueprintDetailPanel
-            project={project}
-            recipes={recipes}
-            selectedRecipe={selectedRecipe}
-          />,
+          __MOTIONSMITH_STUDY_SUMMARY_ENABLED__ ? (
+            <>
+              <FinalStudyArtifactGate
+                project={project}
+                recipes={recipes}
+                readiness={validation.errors.length ? "blocked" : "ready"}
+                blueprintReached
+                packageGenerated={Boolean(pkg)}
+              />
+              <BlueprintDetailPanel
+                project={project}
+                recipes={recipes}
+                selectedRecipe={selectedRecipe}
+              />
+            </>
+          ) : (
+            <BlueprintDetailPanel
+              project={project}
+              recipes={recipes}
+              selectedRecipe={selectedRecipe}
+            />
+          ),
         ),
       }}
     />
