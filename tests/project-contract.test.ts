@@ -2782,6 +2782,8 @@ const workspacePlayerDockHookText = readFileSync(join(process.cwd(), 'hooks', 'u
 const workspacePlaybackLoopHookText = readFileSync(join(process.cwd(), 'hooks', 'useWorkspacePlaybackLoop.ts'), 'utf8');
 const externalPlaybackClockText = readFileSync(join(process.cwd(), 'runtime', 'playback', 'externalPlaybackClock.ts'), 'utf8');
 const b695PlaybackTestText = readFileSync(join(process.cwd(), 'tests', 'b695-playback.test.ts'), 'utf8');
+const motionText = readFileSync(join(process.cwd(), 'utils', 'motion.ts'), 'utf8');
+const b695FrameTestText = readFileSync(join(process.cwd(), 'tests', 'b695-frame.test.ts'), 'utf8');
 const modalInertHookText = readFileSync(join(process.cwd(), 'hooks', 'useModalInertEffect.ts'), 'utf8');
 const appPathActionsHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppPathActions.ts'), 'utf8');
 const appCharacterImportActionsHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppCharacterImportActions.ts'), 'utf8');
@@ -3239,6 +3241,18 @@ assert(
     externalPlaybackClockText.includes('subscribe') &&
     b695PlaybackTestText.includes('at most 10 Hz'),
   'shared playback uses one external phase clock, keeps Path draw reset behavior, and leaves frame-rate phase updates out of React'
+);
+assert(
+  motionText.includes('motionPathRuntimeCache') &&
+    motionText.includes('motionPreviewCache') &&
+    motionText.includes('sameMechanismSet') &&
+    motionText.includes('pathSamplerFor') &&
+    motionText.includes('preparedChain?: string[]') &&
+    motionText.includes('createMotionPathPreviewRuntime') &&
+    b695FrameTestText.includes('legacyMotionPreviewForPath') &&
+    b695FrameTestText.includes('project motion projection is reused') &&
+    b695FrameTestText.includes('prepared path runtime is cached by immutable project/path identity'),
+  'frame projection reuses path and IK preparation while the contract test compares optimized output with the legacy path preview',
 );
 assert(appText.includes('useWorkspacePlaybackLoop({') && !appText.includes('requestAnimationFrame(') && !appText.includes('animationDeltaRadians('), 'App delegates shared playback timing to useWorkspacePlaybackLoop without owning animation-frame math');
 assert(modalInertHookText.includes('setAttribute("inert", "")') && modalInertHookText.includes('aria-hidden') && modalInertHookText.includes('welcome-modal-open') && appText.includes('useModalInertEffect(appShellRef, modalOpen)') && !appText.includes('document.documentElement.classList.add("welcome-modal-open")') && !appText.includes('useEffect, useRef'), 'App delegates startup/help/about modal inert DOM side effects to useModalInertEffect');

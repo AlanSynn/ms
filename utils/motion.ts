@@ -13,6 +13,28 @@ export interface MotionPreview {
     warnings?: Record<string, string[]>;
 }
 
+export type MotionPathPreviewRuntime = {
+    pointAt: (angle: number) => Point;
+    previewAt: (angle: number) => MotionPreview;
+};
+
+type MotionPreviewCacheEntry = {
+    angle: number;
+    mechanisms: MechanismConfig[];
+    preview: MotionPreview;
+};
+
+const motionPreviewCache = new WeakMap<ProjectState, MotionPreviewCacheEntry[]>();
+const motionPathRuntimeCache = new WeakMap<
+    ProjectState,
+    WeakMap<ProjectMotionPath, Map<string, MotionPathPreviewRuntime>>
+>();
+
+const sameMechanismSet = (
+    left: MechanismConfig[],
+    right: MechanismConfig[],
+) => left.length === right.length && left.every((mechanism, index) => mechanism === right[index]);
+
 export type MotionChainKind = 'invalid' | 'root-only' | 'two-joint-direct' | 'three-joint-ik' | 'multi-joint';
 
 export interface MotionChainDescriptor {
@@ -51,6 +73,88 @@ const projectPathSegments = (points: Point[], closed: boolean) => {
     return segments;
 };
 
+type MotionPathSampler = (angle: number) => Point;
+
+const motionPathSamplerCache = new WeakMap<ProjectMotionPath, MotionPathSampler>();
+
+const pathSamplerFor = (path: ProjectMotionPath): MotionPathSampler => {
+    const cached = motionPathSamplerCache.get(path);
+    if (cached) return cached;
+
+    const timedPoints = path.timedPoints?.length
+        ? [...path.timedPoints].sort((a, b) => a.time - b.time)
+        : undefined;
+    const timedDuration = path.duration || timedPoints?.at(-1)?.time || 1;
+    const timedLast = timedPoints?.at(-1);
+    const usesTimedClosedDistance = Boolean(
+        timedPoints &&
+        timedPoints.length > 1 &&
+        path.closed &&
+        timedLast &&
+        timedLast.time >= timedDuration - 1e-6,
+    );
+    const timedDistanceSegments = usesTimedClosedDistance
+        ? projectPathSegments(timedPoints!, true)
+        : [];
+    const timedDistanceTotal = timedDistanceSegments.reduce(
+        (sum, segment) => sum + segment.length,
+        0,
+    ) || 1;
+    const pointSegments = projectPathSegments(path.points, path.closed);
+    const pointTotal = pointSegments.reduce(
+        (sum, segment) => sum + segment.length,
+        0,
+    ) || 1;
+
+    const sampler: MotionPathSampler = (angle) => {
+        const phase = cyclePhase(angle);
+        if (timedPoints?.length) {
+            if (usesTimedClosedDistance) {
+                let target = phase * timedDistanceTotal;
+                for (const segment of timedDistanceSegments) {
+                    if (target <= segment.length) {
+                        return pointBetween(segment.a, segment.b, target / (segment.length || 1));
+                    }
+                    target -= segment.length;
+                }
+                return timedPoints[0] ?? { x: 0, y: 0 };
+            }
+
+            const time = phase * timedDuration;
+            let previous = timedPoints[0];
+            for (let index = 1; index < timedPoints.length; index += 1) {
+                const next = timedPoints[index];
+                if (time <= next.time) {
+                    const span = Math.max(1e-6, next.time - previous.time);
+                    const t = Math.max(0, Math.min(1, (time - previous.time) / span));
+                    return pointBetween(previous, next, t);
+                }
+                previous = next;
+            }
+            if (path.closed && timedPoints.length > 1) {
+                const last = timedPoints[timedPoints.length - 1];
+                const returnDuration = timedDuration - last.time;
+                if (returnDuration > 1e-6) {
+                    const t = Math.max(0, Math.min(1, (time - last.time) / returnDuration));
+                    return pointBetween(last, timedPoints[0], t);
+                }
+            }
+            return timedPoints[timedPoints.length - 1] ?? { x: 0, y: 0 };
+        }
+
+        let target = phase * pointTotal;
+        for (const segment of pointSegments) {
+            if (target <= segment.length) {
+                return pointBetween(segment.a, segment.b, target / (segment.length || 1));
+            }
+            target -= segment.length;
+        }
+        return path.points[path.points.length - 1] ?? { x: 0, y: 0 };
+    };
+    motionPathSamplerCache.set(path, sampler);
+    return sampler;
+};
+
 export const pointOnGeneratedMechanismPath = (points: Point[], angle: number): Point | undefined => {
     if (points.length < 2) return points[0];
     const scaled = cyclePhase(angle) * points.length;
@@ -59,54 +163,7 @@ export const pointOnGeneratedMechanismPath = (points: Point[], angle: number): P
 };
 
 export const pointOnProjectPath = (path: ProjectMotionPath, angle: number): Point => {
-    const phase = cyclePhase(angle);
-    if (path.timedPoints?.length) {
-        const timed = [...path.timedPoints].sort((a, b) => a.time - b.time);
-        const duration = path.duration || timed.at(-1)?.time || 1;
-        const lastTimed = timed.at(-1);
-        if (path.closed && timed.length > 1 && lastTimed && lastTimed.time >= duration - 1e-6) {
-            const segments = projectPathSegments(timed, true);
-            const total = segments.reduce((sum, seg) => sum + seg.length, 0) || 1;
-            let target = phase * total;
-            for (const seg of segments) {
-                if (target <= seg.length) {
-                    return pointBetween(seg.a, seg.b, target / (seg.length || 1));
-                }
-                target -= seg.length;
-            }
-            return timed[0] ?? { x: 0, y: 0 };
-        }
-        const time = phase * duration;
-        let prev = timed[0];
-        for (const next of timed.slice(1)) {
-            if (time <= next.time) {
-                const span = Math.max(1e-6, next.time - prev.time);
-                const t = Math.max(0, Math.min(1, (time - prev.time) / span));
-                return pointBetween(prev, next, t);
-            }
-            prev = next;
-        }
-        if (path.closed && timed.length > 1) {
-            const last = lastTimed!;
-            const returnDuration = duration - last.time;
-            if (returnDuration > 1e-6) {
-                const t = Math.max(0, Math.min(1, (time - last.time) / returnDuration));
-                return pointBetween(last, timed[0], t);
-            }
-        }
-        return timed.at(-1) ?? { x: 0, y: 0 };
-    }
-    const segments = projectPathSegments(path.points, path.closed);
-    const total = segments.reduce((sum, seg) => sum + seg.length, 0) || 1;
-    let target = phase * total;
-    for (const seg of segments) {
-        if (target <= seg.length) {
-            const t = target / (seg.length || 1);
-            return pointBetween(seg.a, seg.b, t);
-        }
-        target -= seg.length;
-    }
-    return path.points.at(-1) ?? { x: 0, y: 0 };
+    return pathSamplerFor(path)(angle);
 };
 
 const descendantJoints = (skeleton: StandardSkeleton | null | undefined, rootJointId: string) => {
@@ -401,12 +458,12 @@ const partWithAnimatedSegment = (part: BodyPartLayer, before: StandardSkeleton, 
     return anchor ? placeBodyPartPivotAt(rotated, anchor, after) : rotated;
 };
 
-const solveChainTargets = (skeleton: StandardSkeleton, rootJointId: string, targetJointId: string, target: Point, pinTarget = false): Record<string, Point> => {
+const solveChainTargets = (skeleton: StandardSkeleton, rootJointId: string, targetJointId: string, target: Point, pinTarget = false, preparedChain?: string[]): Record<string, Point> => {
     const root = skeleton.joints[rootJointId]?.position;
     const oldTarget = skeleton.joints[targetJointId]?.position;
     if (!root || !oldTarget || targetJointId === rootJointId) return {};
 
-    const chain = motionJointChain(skeleton, rootJointId, targetJointId);
+    const chain = preparedChain ?? motionJointChain(skeleton, rootJointId, targetJointId);
     if (chain.length === 2) {
         const length = Math.hypot(oldTarget.x - root.x, oldTarget.y - root.y);
         const direction = Math.atan2(target.y - root.y, target.x - root.x);
@@ -533,14 +590,194 @@ export const motionPreviewForSceneObject = (
     };
 };
 
+type PreparedMotionPathTarget = {
+    skeleton: StandardSkeleton;
+    targetJointId: string;
+    rootJointId: string;
+    chain: string[];
+    rootDescendantIds: string[];
+    targetDescendantIds: string[];
+    affectedPartIds: string[];
+};
+
+export const createMotionPathPreviewRuntime = (
+    project: ProjectState,
+    path: ProjectMotionPath,
+    targetJointId?: string,
+): MotionPathPreviewRuntime => {
+    let projectCache = motionPathRuntimeCache.get(project);
+    if (!projectCache) {
+        projectCache = new WeakMap();
+        motionPathRuntimeCache.set(project, projectCache);
+    }
+    let pathCache = projectCache.get(path);
+    if (!pathCache) {
+        pathCache = new Map();
+        projectCache.set(path, pathCache);
+    }
+    const cacheKey = targetJointId ?? "\u0000default";
+    const cached = pathCache.get(cacheKey);
+    if (cached) return cached;
+
+    const pointAt = pathSamplerFor(path);
+    const targetPart = path.partId ? project.parts[path.partId] : undefined;
+    const skeleton = project.skeleton;
+    let prepared: PreparedMotionPathTarget | undefined;
+    if (!path.sceneObjectId && targetPart && skeleton) {
+        const resolvedTargetJointId = targetJointId
+            ?? preferredMotionJointId(
+                project,
+                path.partId,
+                path.targetAnchorJointId,
+                { preferDistalWhenRoot: !path.targetAnchorJointId },
+            )
+            ?? targetPart.anchorJointId;
+        const rootJointId = resolveMotionRootJointId(
+            skeleton,
+            targetPart.anchorJointId,
+            resolvedTargetJointId,
+            path.chainRootJointId,
+        );
+        const rootJoint = skeleton.joints[rootJointId];
+        const targetJoint = skeleton.joints[resolvedTargetJointId];
+        if (rootJoint && targetJoint) {
+            const rootDescendantSet = descendantJoints(skeleton, rootJointId);
+            prepared = {
+                skeleton,
+                targetJointId: resolvedTargetJointId,
+                rootJointId,
+                chain: motionJointChain(skeleton, rootJointId, resolvedTargetJointId),
+                rootDescendantIds: [...rootDescendantSet],
+                targetDescendantIds: [...descendantJoints(skeleton, resolvedTargetJointId)],
+                affectedPartIds: visualPartIdsForJoints(project, targetPart.id, rootDescendantSet),
+            };
+        }
+    }
+
+    const runtime: MotionPathPreviewRuntime = {
+        pointAt,
+        previewAt: (angle) => {
+            const target = pointAt(angle);
+            if (path.sceneObjectId) {
+                return motionPreviewForSceneObject(
+                    project,
+                    path.sceneObjectId,
+                    target,
+                    { parts: {}, sceneObjects: {}, skeleton: project.skeleton },
+                );
+            }
+            if (!prepared || !targetPart) {
+                const fallbackTargetJointId = targetJointId
+                    ?? preferredMotionJointId(
+                        project,
+                        path.partId,
+                        path.targetAnchorJointId,
+                        { preferDistalWhenRoot: !path.targetAnchorJointId },
+                    );
+                return motionPreviewForTarget(
+                    project,
+                    path.partId,
+                    fallbackTargetJointId,
+                    target,
+                    { parts: {}, sceneObjects: {}, skeleton: project.skeleton },
+                    { rootJointId: path.chainRootJointId },
+                );
+            }
+
+            const {
+                skeleton: preparedSkeleton,
+                targetJointId: preparedTargetJointId,
+                rootJointId,
+                chain,
+                rootDescendantIds,
+                targetDescendantIds,
+                affectedPartIds,
+            } = prepared;
+            const rootJoint = preparedSkeleton.joints[rootJointId];
+            const targetJoint = preparedSkeleton.joints[preparedTargetJointId];
+            if (!rootJoint || !targetJoint) {
+                return motionPreviewForTarget(
+                    project,
+                    path.partId,
+                    preparedTargetJointId,
+                    target,
+                    { parts: {}, sceneObjects: {}, skeleton: preparedSkeleton },
+                    { rootJointId },
+                );
+            }
+
+            if (preparedTargetJointId === rootJointId) {
+                const dx = target.x - rootJoint.position.x;
+                const dy = target.y - rootJoint.position.y;
+                const jointUpdates: Record<string, Point> = {};
+                rootDescendantIds.forEach((id) => {
+                    const joint = preparedSkeleton.joints[id];
+                    if (joint) jointUpdates[id] = { x: joint.position.x + dx, y: joint.position.y + dy };
+                });
+                const nextSkeleton = withJointUpdates(preparedSkeleton, jointUpdates);
+                const parts: Record<string, BodyPartLayer> = {};
+                affectedPartIds.forEach((partId) => {
+                    const part = project.parts[partId];
+                    const anchor = nextSkeleton?.joints[part.anchorJointId]?.position;
+                    parts[partId] = anchor
+                        ? placeBodyPartPivotAt(part, anchor, nextSkeleton)
+                        : part;
+                });
+                return {
+                    parts,
+                    sceneObjects: {},
+                    skeleton: nextSkeleton,
+                    target,
+                    targetJointId: preparedTargetJointId,
+                    rootJointId,
+                };
+            }
+
+            const jointUpdates = solveChainTargets(
+                preparedSkeleton,
+                rootJointId,
+                preparedTargetJointId,
+                target,
+                false,
+                chain,
+            );
+            const solvedTarget = jointUpdates[preparedTargetJointId] ?? targetJoint.position;
+            const endDx = solvedTarget.x - targetJoint.position.x;
+            const endDy = solvedTarget.y - targetJoint.position.y;
+            targetDescendantIds.forEach((id) => {
+                if (!jointUpdates[id] && preparedSkeleton.joints[id]) {
+                    jointUpdates[id] = {
+                        x: preparedSkeleton.joints[id].position.x + endDx,
+                        y: preparedSkeleton.joints[id].position.y + endDy,
+                    };
+                }
+            });
+            const nextSkeleton = withJointUpdates(preparedSkeleton, jointUpdates);
+            const parts: Record<string, BodyPartLayer> = {};
+            affectedPartIds.forEach((partId) => {
+                const part = project.parts[partId];
+                parts[partId] = partWithAnimatedSegment(part, preparedSkeleton, nextSkeleton);
+            });
+            return {
+                parts,
+                sceneObjects: {},
+                skeleton: nextSkeleton,
+                target: solvedTarget,
+                targetJointId: preparedTargetJointId,
+                rootJointId,
+            };
+        },
+    };
+    pathCache.set(cacheKey, runtime);
+    return runtime;
+};
+
 export const motionPreviewForPath = (
     project: ProjectState,
     path: ProjectMotionPath,
     angle: number,
-    targetJointId = preferredMotionJointId(project, path.partId, path.targetAnchorJointId, { preferDistalWhenRoot: !path.targetAnchorJointId })
-): MotionPreview => path.sceneObjectId
-    ? motionPreviewForSceneObject(project, path.sceneObjectId, pointOnProjectPath(path, angle), { parts: {}, sceneObjects: {}, skeleton: project.skeleton })
-    : motionPreviewForTarget(project, path.partId, targetJointId, pointOnProjectPath(path, angle), { parts: {}, sceneObjects: {}, skeleton: project.skeleton }, { rootJointId: path.chainRootJointId });
+    targetJointId?: string,
+): MotionPreview => createMotionPathPreviewRuntime(project, path, targetJointId).previewAt(angle);
 
 export const mechanismBindingWarnings = (project: ProjectState, mechanisms: MechanismConfig[] = project.mechanisms) => {
     const warnings: Record<string, string[]> = {};
@@ -602,6 +839,11 @@ export const mechanismBindingWarnings = (project: ProjectState, mechanisms: Mech
 };
 
 export const motionPreviewForProject = (project: ProjectState, mechanisms: MechanismConfig[], angle: number): MotionPreview => {
+    const cached = motionPreviewCache.get(project)?.find(
+        (entry) => entry.angle === angle && sameMechanismSet(entry.mechanisms, mechanisms),
+    );
+    if (cached) return cached.preview;
+
     const warnings = mechanismBindingWarnings(project, mechanisms);
     const drivenTargets = new Set<string>();
     let preview: MotionPreview = { parts: {}, sceneObjects: {}, skeleton: project.skeleton, warnings };
@@ -639,7 +881,12 @@ export const motionPreviewForProject = (project: ProjectState, mechanisms: Mecha
         drivenTargets.add(key);
         preview = motionPreviewForTarget(project, m.targetPartId, targetJointId, generatedTarget ?? state.effector, preview, { pinTarget: true, rootJointId });
     });
-    return { ...preview, warnings };
+    const result = { ...preview, warnings };
+    const entries = motionPreviewCache.get(project) ?? [];
+    entries.push({ angle, mechanisms: [...mechanisms], preview: result });
+    if (entries.length > 8) entries.splice(0, entries.length - 8);
+    motionPreviewCache.set(project, entries);
+    return result;
 };
 
 export const animatedPartsForProject = (project: ProjectState, mechanisms: MechanismConfig[], angle: number): Record<string, BodyPartLayer> => {
