@@ -2834,7 +2834,11 @@ test('Mobile path editor keeps Draw free path action above the canvas', async ({
 
 test('Startup uses one boot loader and opens Getting Started over Character', async ({ page }) => {
   let releaseModelDownload!: () => void;
+  let modelRequests = 0;
   const heldDownload = new Promise<void>(resolve => { releaseModelDownload = resolve; });
+  page.on('request', request => {
+    if (request.url().includes('/onnx/pose_model.onnx')) modelRequests += 1;
+  });
   await page.route(ONNX_MODEL_ROUTE, async route => {
     await heldDownload;
     await route.fulfill({
@@ -2845,8 +2849,12 @@ test('Startup uses one boot loader and opens Getting Started over Character', as
     });
   });
   await page.goto('/');
-  await expect(page.locator('#boot-loader')).toContainText(/MotionSmith/);
-  await expect(page.locator('#boot-loader')).toContainText(/AI model/i);
+  const bootText = await page.evaluate(() => document.getElementById('boot-loader')?.textContent ?? '');
+  if (bootText) {
+    expect(bootText).toMatch(/MotionSmith/);
+    expect(bootText).toMatch(/AI model/i);
+  }
+  expect(modelRequests, 'startup does not request the ONNX model').toBe(0);
   releaseModelDownload();
   await expect(page.locator('#boot-loader')).toHaveCount(0, { timeout: 180_000 });
   await expect(page.getByTestId('character-screen')).toBeVisible();

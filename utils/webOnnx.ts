@@ -459,7 +459,7 @@ const bundledAssetUrl = (path: string) => new URL(path, window.location.href).hr
 export const modelUrl = () => publicAssetUrl('onnx/pose_model.onnx');
 export const ortWasmUrl = () => bundledAssetUrl(ortWasmJsepUrl);
 
-export type WebOnnxCacheStage = 'checking' | 'missing' | 'downloading' | 'cached' | 'error';
+export type WebOnnxCacheStage = 'checking' | 'available' | 'missing' | 'downloading' | 'cached' | 'error';
 
 export interface WebOnnxCacheStatus {
     stage: WebOnnxCacheStage;
