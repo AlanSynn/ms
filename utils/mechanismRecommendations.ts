@@ -759,10 +759,10 @@ export const fitMechanismToTargetPath = (
   const object = path?.sceneObjectId ? project.sceneObjects[path.sceneObjectId] : undefined;
   if (!path || (!part && !object) || path.points.length < 3)
     return snapMechanismAnchor(normalizeGearMeshMechanism(mechanism), project);
-  if (mechanism.type === "4bar") {
-    const fittedFourBar = fitFourBarKitMechanismToPath(project, mechanism, path);
-    if (fittedFourBar) return fittedFourBar;
-  }
+  const acceptedFourBarFit = mechanism.type === "4bar"
+    ? fitFourBarKitMechanismToPath(project, mechanism, path)
+    : undefined;
+  if (acceptedFourBarFit) return acceptedFourBarFit;
   const fittedCandidate = mechanism.type === "gear_linkage"
     ? fitGearLinkageOutputToPath(
         project,

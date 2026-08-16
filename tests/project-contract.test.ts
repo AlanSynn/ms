@@ -2784,6 +2784,7 @@ const externalPlaybackClockText = readFileSync(join(process.cwd(), 'runtime', 'p
 const b695PlaybackTestText = readFileSync(join(process.cwd(), 'tests', 'b695-playback.test.ts'), 'utf8');
 const motionText = readFileSync(join(process.cwd(), 'utils', 'motion.ts'), 'utf8');
 const b695FrameTestText = readFileSync(join(process.cwd(), 'tests', 'b695-frame.test.ts'), 'utf8');
+const b695FitTestText = readFileSync(join(process.cwd(), 'tests', 'b695-fit.test.ts'), 'utf8');
 const modalInertHookText = readFileSync(join(process.cwd(), 'hooks', 'useModalInertEffect.ts'), 'utf8');
 const appPathActionsHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppPathActions.ts'), 'utf8');
 const appCharacterImportActionsHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppCharacterImportActions.ts'), 'utf8');
@@ -3253,6 +3254,13 @@ assert(
     b695FrameTestText.includes('project motion projection is reused') &&
     b695FrameTestText.includes('prepared path runtime is cached by immutable project/path identity'),
   'frame projection reuses path and IK preparation while the contract test compares optimized output with the legacy path preview',
+);
+assert(
+  mechanismRecommendationsText.includes('const acceptedFourBarFit = mechanism.type === "4bar"') &&
+    mechanismRecommendationsText.includes('if (acceptedFourBarFit) return acceptedFourBarFit;') &&
+    b695FitTestText.includes('accepted four-bar output remains byte-stable with b695') &&
+    b695FitTestText.includes('rejected four-bar output remains byte-stable with b695'),
+  'Fit returns accepted four-bar results before generic fallback construction and keeps accepted/rejected b695 outputs stable',
 );
 assert(appText.includes('useWorkspacePlaybackLoop({') && !appText.includes('requestAnimationFrame(') && !appText.includes('animationDeltaRadians('), 'App delegates shared playback timing to useWorkspacePlaybackLoop without owning animation-frame math');
 assert(modalInertHookText.includes('setAttribute("inert", "")') && modalInertHookText.includes('aria-hidden') && modalInertHookText.includes('welcome-modal-open') && appText.includes('useModalInertEffect(appShellRef, modalOpen)') && !appText.includes('document.documentElement.classList.add("welcome-modal-open")') && !appText.includes('useEffect, useRef'), 'App delegates startup/help/about modal inert DOM side effects to useModalInertEffect');
