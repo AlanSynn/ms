@@ -6,13 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:e2e": "MOTIONSMITH_E2E_DIAGNOSTICS=1 bun run build",
     "preview": "vite preview",
     "tauri": "tauri",
     "build:exe": "bun scripts/with-rustup-cargo.mjs tauri build --bundles app",
     "test": "bun run test:contracts",
     "test:contracts": "bun tests/project-contract.test.ts",
     "build:dmg": "bun scripts/with-rustup-cargo.mjs tauri build --bundles dmg",
-    "test:browser": "bun run build && env -u NO_COLOR PLAYWRIGHT_SERVER=preview playwright test",
+    "test:browser": "bun run build:e2e && env -u NO_COLOR PLAYWRIGHT_SERVER=preview playwright test",
     "build:tauri-frontend": "tsc && vite build --base ./"
   },
   "dependencies": {

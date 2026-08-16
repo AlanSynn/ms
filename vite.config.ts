@@ -4,6 +4,18 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const packageVersion = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version;
+const profileFlag = (name: string) => {
+  const value = process.env[name];
+  if (value !== undefined && value !== '0' && value !== '1') {
+    throw new Error(`${name} must be 0, 1, or unset`);
+  }
+  return value === '1';
+};
+const studySummaryEnabled = profileFlag('MOTIONSMITH_SUMMARY');
+const e2eDiagnosticsEnabled = profileFlag('MOTIONSMITH_E2E_DIAGNOSTICS');
+if (studySummaryEnabled && e2eDiagnosticsEnabled) {
+  throw new Error('Study and E2E diagnostics profiles are mutually exclusive');
+}
 
 export default defineConfig(() => {
   // Use relative paths for Tauri; allow GitHub Pages project paths for web builds.
@@ -19,6 +31,8 @@ export default defineConfig(() => {
     envPrefix: ['VITE_', 'TAURI_'],
     define: {
       __APP_VERSION__: JSON.stringify(packageVersion),
+      __MOTIONSMITH_E2E_DIAGNOSTICS__: JSON.stringify(e2eDiagnosticsEnabled),
+      __MOTIONSMITH_STUDY_SUMMARY_ENABLED__: JSON.stringify(studySummaryEnabled),
     },
     plugins: [
       {

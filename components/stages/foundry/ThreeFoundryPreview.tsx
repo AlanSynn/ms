@@ -79,6 +79,8 @@ import {
   type FoundryPinStackPoint,
 } from "./foundryPreviewStacks";
 
+const E2E_DIAGNOSTICS = __MOTIONSMITH_E2E_DIAGNOSTICS__;
+
 type ThreeFoundryPreviewProps = {
   mechanism: MechanismConfig;
   simulation: MechanismPreviewSimulation;
@@ -1005,7 +1007,7 @@ export const ThreeFoundryPreview = ({
     cam.position.copy(foundryCameraPosition(view));
     cam.lookAt(foundryCameraTarget(view));
     renderer.render(scene, cam);
-    if (!stateRef.current) return;
+    if (!E2E_DIAGNOSTICS || !stateRef.current) return;
     const rect = renderer.domElement.getBoundingClientRect();
     const projectWorld = (point: THREE.Vector3) => {
       const projected = point.clone().project(cam);
@@ -1134,7 +1136,7 @@ export const ThreeFoundryPreview = ({
         object = object.parent;
       }
     }
-    if (onAutomataSceneObjectSelect && stateRef.current) {
+    if (E2E_DIAGNOSTICS && onAutomataSceneObjectSelect && stateRef.current) {
       try {
         const targets = JSON.parse(
           stateRef.current.dataset.threeSceneObjectScreenTargets || "[]",
@@ -1169,7 +1171,7 @@ export const ThreeFoundryPreview = ({
         return true;
       }
     }
-    if (onAutomataPartSelect && stateRef.current) {
+    if (E2E_DIAGNOSTICS && onAutomataPartSelect && stateRef.current) {
       try {
         const targets = JSON.parse(
           stateRef.current.dataset.threePartScreenTargets || "[]",
@@ -1231,7 +1233,7 @@ export const ThreeFoundryPreview = ({
     setRendererPixelRatioCap(renderer);
     renderer.shadowMap.enabled = false;
     renderer.domElement.className = "foundry-three-canvas";
-    renderer.domElement.dataset.testid = "foundry-three-canvas";
+    if (E2E_DIAGNOSTICS) renderer.domElement.dataset.testid = "foundry-three-canvas";
     host.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
     scene.background = new THREE.Color("#f8f9ff");
@@ -1317,7 +1319,7 @@ export const ThreeFoundryPreview = ({
     scene.add(root);
     if (renderPlan.validationErrors.length || physicalValidationErrors.length) {
       dynamicBuildCountRef.current += 1;
-      if (stateRef.current) {
+      if (E2E_DIAGNOSTICS && stateRef.current) {
         stateRef.current.dataset.threeDynamicBuildCount = String(
           dynamicBuildCountRef.current,
         );
@@ -1383,7 +1385,7 @@ export const ThreeFoundryPreview = ({
     });
 
     dynamicBuildCountRef.current += 1;
-    if (stateRef.current) {
+    if (E2E_DIAGNOSTICS && stateRef.current) {
       const visiblePartIds =
         automataContext?.showCharacter
           ? automataContext.project.partOrder.filter(
@@ -1551,7 +1553,7 @@ export const ThreeFoundryPreview = ({
       data-layer-trail={viewer3DLayerDataValue(showTrail)}
     >
       <div ref={hostRef} className="foundry-three-host" />
-      <FoundryPreviewStateProbe
+      {E2E_DIAGNOSTICS && <FoundryPreviewStateProbe
         stateRef={stateRef}
         viewerContract={viewerContract}
         camera={camera}
@@ -1621,7 +1623,7 @@ export const ThreeFoundryPreview = ({
         physicalValidationSummary={physicalValidationSummary}
         assemblySceneFrame={assemblySceneFrame}
         assemblyLayerFocusSummary={assemblyLayerFocusSummary}
-      />
+      />}
       {children}
     </div>
   );

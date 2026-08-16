@@ -18,6 +18,7 @@ const FABRICATION_HOLE_RADIUS_3D = Math.max(0.04, (FABRICATION_HOLE_RADIUS_MM * 
 const THICKNESS = 0.22;
 const SUPPORTED_MECHANISM_TYPES: MechanismType[] = [...REFERENCE_AUTHORABLE_TYPES];
 const PUPPET_CAMERA_PRESETS: Viewer3DCameraPreset[] = ['front', 'iso'];
+const E2E_DIAGNOSTICS = __MOTIONSMITH_E2E_DIAGNOSTICS__;
 type RendererStatus = 'pending' | 'webgl' | 'unavailable';
 type LinkKey = 'base' | 'driver' | 'coupler' | 'output' | 'effector' | 'follower';
 
@@ -945,7 +946,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     const renderer = rendererRef.current;
     if (scene && camera && renderer) {
       renderer.render(scene, camera);
-      if (stateRef.current) {
+      if (E2E_DIAGNOSTICS && stateRef.current) {
         const screenTargets = roundedScreenTargets(collectViewerScreenTargets());
         stateRef.current.dataset.threeSceneVisibleObjectCount = String(estimatedObjectCount);
         stateRef.current.dataset.threeSceneObjectCount = String(estimatedObjectCount);
@@ -971,7 +972,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     }
 
     setRendererPixelRatioCap(renderer);
-    renderer.domElement.dataset.testid = `${testId}-canvas`;
+    if (E2E_DIAGNOSTICS) renderer.domElement.dataset.testid = `${testId}-canvas`;
     renderer.domElement.className = 'three-puppet-canvas';
     host.appendChild(renderer.domElement);
 
@@ -1604,7 +1605,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   }, [cameraOrbit.pitch, cameraOrbit.yaw, cameraPreset, rendererStatus, viewport?.offset.x, viewport?.offset.y, viewport?.zoom]);
 
   useEffect(() => {
-    if (stateRef.current) stateRef.current.dataset.threeSceneObjectCount = String(estimatedObjectCount);
+    if (E2E_DIAGNOSTICS && stateRef.current) stateRef.current.dataset.threeSceneObjectCount = String(estimatedObjectCount);
   }, [estimatedObjectCount]);
 
   const handleViewerWheel = (event: React.WheelEvent<HTMLDivElement>) => {
@@ -1866,7 +1867,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
           ))}
       </div>
     )}
-    <div
+    {E2E_DIAGNOSTICS && <div
       ref={stateRef}
       data-testid={`${testId}-state`}
       className="three-puppet-state"
@@ -2012,6 +2013,6 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       data-three-scene-visible-object-count={estimatedObjectCount}
       data-three-render-triangles={0}
       data-thickness-mm={Math.round(THICKNESS * VIEW_SCALE)}
-    />
+    />}
   </div>;
 };
