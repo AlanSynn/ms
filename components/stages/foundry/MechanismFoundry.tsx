@@ -47,6 +47,7 @@ import {
 import { buildFoundryPhysicsOverlay } from "../../../utils/physicsSession";
 import {
   FABRICATION_RENDER_LAYER_Z_STEP,
+  feasibilityStatusForRange,
   fabricationRenderPlanForMechanism,
   sampleFeasibleRange,
 } from "../../../utils/fabrication";
@@ -258,6 +259,7 @@ export const MechanismFoundry = ({
     () => sampleFeasibleRange(landedFoundry),
     [landedFoundry],
   );
+  const feasibilityStatus = feasibilityStatusForRange(range);
   const library = MECHANISM_LIBRARY[foundry.type];
   const classroomSensemaking = library.classroomSensemaking;
   const feasibilityText = range.warning ?? "360°";
@@ -1191,6 +1193,7 @@ export const MechanismFoundry = ({
             classroomSensemaking={classroomSensemaking}
             foundryRigOpacity={foundryRigOpacity}
             foundryExplode={foundryExplode}
+            feasibilityStatus={feasibilityStatus}
             showSensemaking={showSensemaking}
             onRigOpacityChange={setFoundryRigOpacity}
             onExplodeChange={setFoundryExplode}

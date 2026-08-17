@@ -75,8 +75,8 @@ export {
     fabricationStackSummary,
     readableFabricationStackSummary
 } from './fabricationStackModel';
-export type { FabricationFeasibleRange } from './fabricationReadiness';
-export { sampleFeasibleRange } from './fabricationReadiness';
+export type { FabricationFeasibleRange, FabricationFeasibilityStatus } from './fabricationReadiness';
+export { feasibilityLabelForStatus, feasibilityStatusForRange, sampleFeasibleRange } from './fabricationReadiness';
 export type { FabricationRenderKind, FabricationRenderLayer, FabricationRenderPlan } from './fabricationRenderPlan';
 export {
     FABRICATION_RENDER_BASE_Z,

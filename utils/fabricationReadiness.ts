@@ -12,6 +12,26 @@ export type FabricationFeasibleRange = {
     warning: string | null;
 };
 
+export type FabricationFeasibilityStatus = 'valid' | 'may-jam' | 'no-motion';
+
+export const feasibilityStatusForRange = (
+    range: Pick<FabricationFeasibleRange, 'percentValid' | 'warning'>,
+): FabricationFeasibilityStatus => {
+    if (range.percentValid <= 0) return 'no-motion';
+    return range.warning ? 'may-jam' : 'valid';
+};
+
+export const feasibilityLabelForStatus = (status: FabricationFeasibilityStatus) => {
+    switch (status) {
+        case 'no-motion':
+            return 'No motion';
+        case 'may-jam':
+            return 'May jam';
+        default:
+            return 'Valid';
+    }
+};
+
 export const sampleFeasibleRange = (mechanism: MechanismConfig, samples = 96): FabricationFeasibleRange => {
     const profileWarning = mechanism.type === 'cam'
         ? camProfileSmoothnessWarning(mechanism.camProfileSamples)

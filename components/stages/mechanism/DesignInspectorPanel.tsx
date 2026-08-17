@@ -17,11 +17,13 @@ import {
   getInspectorBindingWarnings,
   getInspectorFeasibleRange,
 } from "../../../utils/mechanismInspectorAnalysis";
+import { feasibilityStatusForRange } from "../../../utils/fabrication";
 import { mechanismTemplateLabel } from "../../../utils/mechanismTemplates";
 import {
   MECHANISM_PARAM_META,
   shouldShowMechanismParam,
 } from "./mechanismParamPolicy";
+import { MechanismFeasibilityStatus } from "./MechanismFeasibilityStatus";
 
 type DesignInspectorPanelProps = {
   project: ProjectState;
@@ -48,6 +50,9 @@ export const DesignInspectorPanel = ({
 }: DesignInspectorPanelProps) => {
   const selectedRange = selectedMechanism
     ? getInspectorFeasibleRange(selectedMechanism)
+    : undefined;
+  const selectedFeasibilityStatus = selectedRange
+    ? feasibilityStatusForRange(selectedRange)
     : undefined;
   const motionWarning = selectedRange?.warning
     ? selectedRange.warning.startsWith("No motion")
@@ -217,6 +222,12 @@ export const DesignInspectorPanel = ({
             }
             testId="design-parametric-editor"
           />
+          {selectedFeasibilityStatus && (
+            <MechanismFeasibilityStatus
+              status={selectedFeasibilityStatus}
+              testId="design-feasibility-status"
+            />
+          )}
           <div className="section-title">Parameters</div>
           {MECHANISM_PARAM_META.filter((p) =>
             shouldShowMechanismParam(selectedMechanism.type, p.key),

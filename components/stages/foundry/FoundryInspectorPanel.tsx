@@ -14,6 +14,8 @@ import {
 } from "../../../utils/mechanismTemplates";
 import { MiniNumber } from "../../ui/InspectorControls";
 import { MechanismParametricEditor } from "../mechanism/MechanismParametricEditor";
+import { MechanismFeasibilityStatus } from "../mechanism/MechanismFeasibilityStatus";
+import type { FabricationFeasibilityStatus } from "../../../utils/fabrication";
 import {
   MECHANISM_PARAM_META,
   shouldShowMechanismParam,
@@ -29,6 +31,7 @@ export const FoundryInspectorPanel = ({
   classroomSensemaking,
   foundryRigOpacity,
   foundryExplode,
+  feasibilityStatus,
   showSensemaking,
   onRigOpacityChange,
   onExplodeChange,
@@ -44,6 +47,7 @@ export const FoundryInspectorPanel = ({
   classroomSensemaking: FoundrySensemaking;
   foundryRigOpacity: number;
   foundryExplode: number;
+  feasibilityStatus: FabricationFeasibilityStatus;
   showSensemaking: boolean;
   onRigOpacityChange: (value: number) => void;
   onExplodeChange: (value: number) => void;
@@ -186,6 +190,10 @@ export const FoundryInspectorPanel = ({
       mechanism={foundry}
       onChange={onUpdateParams}
       testId="foundry-parametric-editor"
+    />
+    <MechanismFeasibilityStatus
+      status={feasibilityStatus}
+      testId="foundry-feasibility-status"
     />
     <details className="advanced-panel">
       <summary>Mechanism options</summary>

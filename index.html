@@ -325,6 +325,14 @@
       .status-cache-pill.downloading { color: var(--ms-accent); border-color: var(--ms-accent-line); background: linear-gradient(90deg, rgba(139,92,246,.14), rgba(244,114,182,.12)); }
       .status-cache-pill.cached { color: #047857; border-color: rgba(16,185,129,.26); background: rgba(16,185,129,.10); }
       .status-cache-pill.error { color: #b91c1c; border-color: rgba(239,68,68,.25); background: rgba(239,68,68,.08); }
+      .mechanism-feasibility-status { display: flex; align-items: center; justify-content: space-between; gap: .7rem; border: 1px solid var(--ms-line); border-radius: 999px; background: #fff; color: var(--ms-text-soft); padding: .48rem .7rem; font-size: .76rem; font-weight: 720; }
+      .mechanism-feasibility-status strong { color: var(--ms-text); }
+      .mechanism-feasibility-status[data-status="valid"] { border-color: rgba(16,185,129,.28); background: rgba(16,185,129,.08); color: #047857; }
+      .mechanism-feasibility-status[data-status="valid"] strong { color: #047857; }
+      .mechanism-feasibility-status[data-status="may-jam"] { border-color: rgba(245,158,11,.32); background: rgba(245,158,11,.10); color: #a16207; }
+      .mechanism-feasibility-status[data-status="may-jam"] strong { color: #92400e; }
+      .mechanism-feasibility-status[data-status="no-motion"] { border-color: rgba(239,68,68,.28); background: rgba(239,68,68,.08); color: #b91c1c; }
+      .mechanism-feasibility-status[data-status="no-motion"] strong { color: #991b1b; }
       .workflow-status-strip { position: relative; z-index: 30; margin-left: var(--ms-rail-width); display: flex; flex-wrap: nowrap; gap: .35rem; overflow: hidden; border-top: 1px solid var(--ms-line); background: rgba(248,250,252,.82); padding: .28rem 1rem; color: var(--ms-text-soft); font-size: .7rem; font-weight: 650; backdrop-filter: blur(14px); }
       .workflow-status-strip span { min-width: 0; border: 1px solid var(--ms-line); border-radius: 999px; background: #fff; padding: .22rem .48rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .workflow-status-strip strong { color: var(--ms-accent); margin-right: .25rem; }

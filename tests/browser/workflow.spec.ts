@@ -2535,6 +2535,36 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   expectCleanPage(pageErrors, consoleErrors);
 });
 
+test('Slider edits expose immediate feasibility without auto-fitting link choices', async ({ page }) => {
+  await page.goto('/');
+  await openFabricationReadyFourBar(page);
+  await clickStage(page, 'Foundry');
+  await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
+  await page.getByText('Mechanism options', { exact: true }).click();
+
+  await page.getByLabel('ground number', { exact: true }).fill('120');
+  await page.getByLabel('Input link length').selectOption('2');
+  await page.getByLabel('Coupler link length').selectOption('4');
+  await page.getByLabel('Output link length').selectOption('2');
+
+  await expect(page.getByLabel('ground number', { exact: true })).toHaveValue('120');
+  await expect(page.getByLabel('Input link length')).toHaveValue('2');
+  await expect(page.getByLabel('Coupler link length')).toHaveValue('4');
+  await expect(page.getByLabel('Output link length')).toHaveValue('2');
+  await expect(page.getByTestId('foundry-feasibility-status')).toHaveAttribute('data-status', 'may-jam');
+  await expect(page.getByTestId('foundry-feasibility-status')).toContainText('May jam');
+
+  await clickStage(page, 'Design');
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+  await expect(page.getByTestId('design-feasibility-status')).toBeVisible();
+  await page.getByLabel('ground number', { exact: true }).fill('120');
+  await page.getByLabel('Input link length').selectOption('2');
+  await page.getByLabel('Coupler link length').selectOption('4');
+  await page.getByLabel('Output link length').selectOption('2');
+  await expect(page.getByTestId('design-feasibility-status')).toHaveAttribute('data-status', 'may-jam');
+  await expect(page.getByTestId('design-feasibility-status')).toContainText('May jam');
+});
+
 test('Character tab owns body layer and skeleton edits used by design controls', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];

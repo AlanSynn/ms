@@ -18,7 +18,7 @@ import { makeCutSheetPdf as directMakeCutSheetPdf } from '../utils/fabricationCu
 import { makeCustomPartsPdf as directMakeCustomPartsPdf, makeCustomPartsStl as directMakeCustomPartsStl, makeCustomPartsSvg as directMakeCustomPartsSvg } from '../utils/fabricationCustomParts';
 import { fabricationGearPathD as profileFabricationGearPathD, fabricationGearProfileForPitchRadius as profileFabricationGearProfileForPitchRadius, fabricationRingGearPathD as profileFabricationRingGearPathD, fabricationRingGearProfileForPitchRadius as profileFabricationRingGearProfileForPitchRadius } from '../utils/fabricationProfiles';
 import { createFabricationRecipe as directCreateFabricationRecipe } from '../utils/fabricationRecipes';
-import { closePhysicalValue as readinessClosePhysicalValue, closeToBoardPitch as readinessCloseToBoardPitch, closeToFabricationLinkage as readinessCloseToFabricationLinkage, physicalTolerance as readinessPhysicalTolerance, sampleFeasibleRange as readinessSampleFeasibleRange } from '../utils/fabricationReadiness';
+import { closePhysicalValue as readinessClosePhysicalValue, closeToBoardPitch as readinessCloseToBoardPitch, closeToFabricationLinkage as readinessCloseToFabricationLinkage, feasibilityLabelForStatus, feasibilityStatusForRange, physicalTolerance as readinessPhysicalTolerance, sampleFeasibleRange as readinessSampleFeasibleRange } from '../utils/fabricationReadiness';
 import { FABRICATION_RENDER_LAYER_Z_STEP as renderPlanLayerZStep, FABRICATION_RENDER_MIN_CLEARANCE as renderPlanMinClearance, FABRICATION_RENDER_PART_DEPTH as renderPlanPartDepth, fabricationRenderPlanForMechanism as renderPlanForMechanism, validateFabricationStack as renderPlanValidateFabricationStack } from '../utils/fabricationRenderPlan';
 import { FABRICATION_LINKAGE_ROLE_MIN_HOLES as sizingRoleMinHoles, PLANETARY_GEAR_PLANET_COUNT as sizingPlanetCount, fabricationLinkageHoleCountsForMechanism as sizingFabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism as sizingFabricationLinkageSceneLengthsForMechanism, planetaryGearConventionForMechanism as sizingPlanetaryGearConventionForMechanism, planetaryPlanetCenters as sizingPlanetaryPlanetCenters } from '../utils/fabricationSizing';
 import { fabricationLinkageSpecForSceneLength as stackModelFabricationLinkageSpecForSceneLength, fabricationStackForMechanism as stackModelFabricationStackForMechanism, fabricationStackSummary as stackModelFabricationStackSummary, readableFabricationStackSummary as stackModelReadableFabricationStackSummary } from '../utils/fabricationStackModel';
@@ -1362,6 +1362,12 @@ assert(validateMechanismPreviewReadiness(blockedPlanetary).some(error => error.i
 const readinessRange = sampleFeasibleRange(roleMinimumFourBar, 12);
 assert.deepEqual(readinessSampleFeasibleRange(roleMinimumFourBar, 12), readinessRange, 'fabricationReadiness preserves public feasible-range sampling behind the fabrication facade');
 assert(readinessRange.percentValid > 0 && readinessRange.percentValid <= 1, 'fabricationReadiness preserves bounded feasible-range percentages');
+assert.equal(feasibilityStatusForRange({ percentValid: 1, warning: null }), 'valid', 'feasible-range status marks a complete sweep as valid');
+assert.equal(feasibilityStatusForRange({ percentValid: 0.5, warning: 'Motion 50% · 0°–180°' }), 'may-jam', 'feasible-range status marks a partial sweep as may jam');
+assert.equal(feasibilityStatusForRange({ percentValid: 0, warning: 'No motion' }), 'no-motion', 'feasible-range status marks an empty sweep as no motion');
+assert.equal(feasibilityLabelForStatus('valid'), 'Valid', 'feasibility status exposes a novice-readable valid label');
+assert.equal(feasibilityLabelForStatus('may-jam'), 'May jam', 'feasibility status exposes a novice-readable partial-motion label');
+assert.equal(feasibilityLabelForStatus('no-motion'), 'No motion', 'feasibility status exposes a novice-readable blocked label');
 assert.equal(readinessPhysicalTolerance(100), 3, 'fabricationReadiness preserves physical tolerance scaling');
 assert(readinessClosePhysicalValue(103, 100), 'fabricationReadiness preserves close physical value checks at tolerance boundary');
 assert(readinessCloseToBoardPitch(roleMinimumFourBar.groundLength), 'fabricationReadiness preserves board-pitch snapping checks');
