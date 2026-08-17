@@ -1,7 +1,7 @@
 import { BodyPartLayer, MechanismConfig, Point, ProjectMotionPath, ProjectState, SceneObject, StandardJoint, StandardSkeleton } from '../types';
-import { calculateLinkage } from './kinematics';
+import { calculateLinkage, mechanismTracePointForState } from './kinematics';
 import { placeBodyPartPivotAt } from './coordinates';
-import { mechanismMatchesPathOwner } from './pathTargets';
+import { mechanismMatchesPathOwner, mechanismPathFitBindingIssues } from './pathTargets';
 
 export interface MotionPreview {
     parts: Record<string, BodyPartLayer>;
@@ -779,6 +779,13 @@ export const motionPreviewForPath = (
     targetJointId?: string,
 ): MotionPreview => createMotionPathPreviewRuntime(project, path, targetJointId).previewAt(angle);
 
+export const mechanismPathFitIsUsable = (project: ProjectState, mechanism: MechanismConfig) =>
+    mechanism.type !== '4bar' ||
+    !mechanism.targetPathId ||
+    Boolean(mechanism.targetSceneObjectId) ||
+    (mechanism.fabricationMetadata?.pathFit?.status === 'fit' &&
+        mechanismPathFitBindingIssues(project, mechanism).length === 0);
+
 export const mechanismBindingWarnings = (project: ProjectState, mechanisms: MechanismConfig[] = project.mechanisms) => {
     const warnings: Record<string, string[]> = {};
     const add = (mechanismId: string, message: string) => {
@@ -786,6 +793,21 @@ export const mechanismBindingWarnings = (project: ProjectState, mechanisms: Mech
     };
     const drivenTargets = new Map<string, string>();
     mechanisms.filter(m => m.visible && m.enabled !== false).forEach(m => {
+        const pathFit = m.fabricationMetadata?.pathFit;
+        if (m.type === '4bar' && m.targetPathId && !m.targetSceneObjectId && pathFit?.status !== 'fit') {
+            add(
+                m.id,
+                pathFit?.status === 'rejected' || pathFit?.status === 'closest'
+                    ? 'No fabrication-valid path fit.'
+                    : 'Fit path first.',
+            );
+        } else if (mechanismPathFitBindingIssues(project, m).length) {
+            add(m.id, 'No fabrication-valid path fit.');
+        } else if (pathFit?.status === 'rejected' || pathFit?.status === 'closest') {
+            add(m.id, 'No fabrication-valid path fit.');
+        } else if (pathFit?.status === 'unfitted') {
+            add(m.id, 'Fit path first.');
+        }
         if (m.targetSceneObjectId) {
             const object = project.sceneObjects[m.targetSceneObjectId];
             if (!object) {
@@ -848,30 +870,37 @@ export const motionPreviewForProject = (project: ProjectState, mechanisms: Mecha
     const drivenTargets = new Set<string>();
     let preview: MotionPreview = { parts: {}, sceneObjects: {}, skeleton: project.skeleton, warnings };
     mechanisms.filter(m => m.visible && m.enabled !== false).forEach(m => {
+        if (!mechanismPathFitIsUsable(project, m)) return;
         if (m.targetSceneObjectId) {
             const object = project.sceneObjects[m.targetSceneObjectId];
             if (!object) return;
             const state = calculateLinkage(m, angle);
-            const generatedTarget = pointOnGeneratedMechanismPath(m.generatedPath ?? [], angle);
-            if (!state.isValid && !generatedTarget) {
+            if (!state.isValid) {
                 warnings[m.id] = [...(warnings[m.id] ?? []), 'Current mechanism angle is outside the valid motion range.'];
                 return;
             }
-            if (!state.isValid) warnings[m.id] = [...(warnings[m.id] ?? []), 'Current mechanism angle is outside the valid motion range.'];
+            const physicalTarget = mechanismTracePointForState(
+                m.type,
+                state,
+                m.fabricationMetadata?.pathFit?.outputTraceId,
+            );
             const key = `object:${m.targetSceneObjectId}`;
             if (drivenTargets.has(key)) return;
             drivenTargets.add(key);
-            preview = motionPreviewForSceneObject(project, m.targetSceneObjectId, generatedTarget ?? state.effector, preview);
+            preview = motionPreviewForSceneObject(project, m.targetSceneObjectId, physicalTarget, preview);
             return;
         }
         if (!m.targetPartId || !project.parts[m.targetPartId]) return;
         const state = calculateLinkage(m, angle);
-        const generatedTarget = pointOnGeneratedMechanismPath(m.generatedPath ?? [], angle);
-        if (!state.isValid && !generatedTarget) {
+        if (!state.isValid) {
             warnings[m.id] = [...(warnings[m.id] ?? []), 'Current mechanism angle is outside the valid motion range.'];
             return;
         }
-        if (!state.isValid) warnings[m.id] = [...(warnings[m.id] ?? []), 'Current mechanism angle is outside the valid motion range.'];
+        const physicalTarget = mechanismTracePointForState(
+            m.type,
+            state,
+            m.fabricationMetadata?.pathFit?.outputTraceId,
+        );
         const path = m.targetPathId ? project.paths[m.targetPathId] : undefined;
         const targetJointId = preferredMotionJointId(project, m.targetPartId, m.targetAnchorJointId ?? path?.targetAnchorJointId);
         const rootOptions = motionChainRootJointIds(project, m.targetPartId, targetJointId);
@@ -879,7 +908,7 @@ export const motionPreviewForProject = (project: ProjectState, mechanisms: Mecha
         const key = `${m.targetPartId}:${rootJointId ?? project.parts[m.targetPartId].anchorJointId}:${targetJointId ?? project.parts[m.targetPartId].anchorJointId}`;
         if (drivenTargets.has(key)) return;
         drivenTargets.add(key);
-        preview = motionPreviewForTarget(project, m.targetPartId, targetJointId, generatedTarget ?? state.effector, preview, { pinTarget: true, rootJointId });
+        preview = motionPreviewForTarget(project, m.targetPartId, targetJointId, physicalTarget, preview, { pinTarget: true, rootJointId });
     });
     const result = { ...preview, warnings };
     const entries = motionPreviewCache.get(project) ?? [];

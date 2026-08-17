@@ -51,13 +51,22 @@ export const physicalTolerance = (value: number) => Math.max(1, Math.abs(value) 
 export const closePhysicalValue = (actual: number, expected: number) =>
     Math.abs(actual - expected) <= physicalTolerance(expected || actual || 1);
 
-export const closeToBoardPitch = (sceneLength: number) => {
-    const pitch = REFERENCE_DEFAULTS.pitchMm * SCENE_PX_PER_MM;
+const fabricationPitchMmFor = (mechanism?: Pick<MechanismConfig, 'fabricationMetadata'>) => {
+    const pitchMm = mechanism?.fabricationMetadata?.gridPitchMm;
+    return typeof pitchMm === 'number' && Number.isFinite(pitchMm) && pitchMm > 0
+        ? pitchMm
+        : REFERENCE_DEFAULTS.pitchMm;
+};
+
+export const closeToBoardPitch = (sceneLength: number, pitchMm: number = REFERENCE_DEFAULTS.pitchMm) => {
+    const pitch = pitchMm * SCENE_PX_PER_MM;
     const cells = Math.max(1, Math.round(Math.abs(sceneLength) / Math.max(1, pitch)));
     return closePhysicalValue(Math.abs(sceneLength), cells * pitch);
 };
 
-export const closeToFabricationLinkage = (sceneLength: number, minHoleCount = 2) => {
-    const spec = fabricationLinkageSpecForSceneLength(sceneLength, REFERENCE_DEFAULTS.pitchMm, minHoleCount);
+export const closeToFabricationLinkage = (sceneLength: number, minHoleCount = 2, pitchMm: number = REFERENCE_DEFAULTS.pitchMm) => {
+    const spec = fabricationLinkageSpecForSceneLength(sceneLength, pitchMm, minHoleCount);
     return closePhysicalValue(Math.abs(sceneLength), spec.lengthMm * SCENE_PX_PER_MM);
 };
+
+export const fabricationPitchMmForMechanism = fabricationPitchMmFor;

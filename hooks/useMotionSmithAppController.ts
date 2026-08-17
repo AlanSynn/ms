@@ -193,6 +193,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     exportMechanismSvg,
     exportMechanismDxf,
     exportFoundryMechanism,
+    commitFoundryDraft,
     applyRecommendedMechanism,
   } = useAppMechanismActions({
     project,
@@ -336,6 +337,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     foundryStage: {
       foundry,
       setFoundry,
+      onFoundryDraftChange: commitFoundryDraft,
       onFoundryExport: exportFoundryMechanism,
     },
     mechanism: {

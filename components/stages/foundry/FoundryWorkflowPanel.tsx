@@ -22,12 +22,20 @@ import { createDefaultMechanism } from "../../../utils/project";
 import { StageLeftSummary } from "../stageLayout";
 import { MechanismLinkagePreview } from "./MechanismLinkagePreview";
 
+type MechanismPathFitState = NonNullable<
+  NonNullable<MechanismConfig["fabricationMetadata"]>["pathFit"]
+>["status"];
+
 export const FoundryWorkflowPanel = ({
   project,
   goStage,
   foundry,
   foundryPhase,
   targetReady,
+  fitRequired,
+  fitState,
+  fitError,
+  fitMaxError,
   isPickingAnchor,
   hardBlocked,
   onToggleAnchorPick,
@@ -40,6 +48,10 @@ export const FoundryWorkflowPanel = ({
   foundry: MechanismConfig;
   foundryPhase: number;
   targetReady: boolean;
+  fitRequired?: boolean;
+  fitState?: MechanismPathFitState;
+  fitError?: number;
+  fitMaxError?: number;
   isPickingAnchor: boolean;
   hardBlocked: boolean;
   onToggleAnchorPick: () => void;
@@ -84,6 +96,19 @@ export const FoundryWorkflowPanel = ({
         <Boxes size={16} /> Use mechanism
       </button>
       {!targetReady && <div className="warning">Draw a path first.</div>}
+      {fitRequired && targetReady && (!fitState || fitState === "unfitted") && (
+        <div className="warning">Fit path first.</div>
+      )}
+      {fitRequired && fitState === "closest" && (
+        <div className="warning">
+          No valid fabrication fit
+          {fitError === undefined ? "" : ` · closest ${Math.round(fitError)} px`}
+          {fitMaxError === undefined ? "" : ` · max ${Math.round(fitMaxError)} px`}
+        </div>
+      )}
+      {fitRequired && fitState === "rejected" && (
+        <div className="warning">No valid fabrication fit.</div>
+      )}
       <h4 className="section-title mt-4">Templates</h4>
       <div
         className="mechanism-choice-grid"

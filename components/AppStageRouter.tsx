@@ -64,6 +64,7 @@ export type AppStageRouterProps = {
 
   foundry: MechanismConfig;
   setFoundry: (mechanism: MechanismConfig) => void;
+  onFoundryDraftChange: (mechanism: MechanismConfig) => void;
   onFoundryExport: (pkg: FoundryExportPackage) => void;
 
   selectedMechanism?: MechanismConfig;
@@ -119,6 +120,7 @@ export const AppStageRouter = ({
   setViewport,
   foundry,
   setFoundry,
+  onFoundryDraftChange,
   onFoundryExport,
   selectedMechanism,
   updateMechanism,
@@ -188,6 +190,7 @@ export const AppStageRouter = ({
         project={project}
         foundry={foundry}
         setFoundry={setFoundry}
+        onDraftChange={onFoundryDraftChange}
         selectedPart={selectedPart}
         selectedSceneObject={selectedSceneObject}
         selectedPath={selectedPath}

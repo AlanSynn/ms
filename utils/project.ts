@@ -23,6 +23,7 @@ import { primaryFoundryPlaybackPath } from './foundryPlayback';
 import { clampNumber, finiteNumber, sanitizeHexColor, sanitizeMechanismType, sanitizePoint } from './sanitize';
 import { isUsableContourPoints } from './partGeometry';
 import { DEFAULT_CLASSROOM_ASSESSMENT_KEY, normalizeClassroomAssessmentKey } from './classroomContent';
+import { fitFourBarKitMechanismToPath, rejectedFourBarPathFit } from './fourBarPathFit';
 
 export const APP_STATE_VERSION = 1;
 
@@ -388,10 +389,42 @@ export const mechanismWithGeneratedPath = (mechanism: MechanismConfig, options: 
         targetPathId: mechanism.targetPathId,
         requiredParts: mechanismRequiredParts(mechanism)
     },
-    generatedPath: options.preserveGeneratedPath && mechanism.generatedPath?.length
-        ? mechanism.generatedPath
-        : generatedMechanismPath(mechanism)
+    generatedPath:
+        mechanism.type === '4bar' &&
+        mechanism.targetPathId &&
+        !mechanism.targetSceneObjectId &&
+        mechanism.fabricationMetadata?.pathFit?.status !== 'fit'
+        ? undefined
+        : options.preserveGeneratedPath && mechanism.generatedPath?.length
+            ? mechanism.generatedPath
+            : generatedMechanismPath(mechanism)
 });
+
+export const invalidateMechanismPathFit = (mechanism: MechanismConfig): MechanismConfig => {
+    const pathFit = mechanism.fabricationMetadata?.pathFit;
+    const isFitWarning = (warning: string) =>
+        warning.startsWith('Closest kit fit:') || warning === 'No fabrication-valid path fit.';
+    if (!pathFit && (mechanism.type !== '4bar' || !mechanism.targetPathId || mechanism.targetSceneObjectId)) return mechanism;
+    return {
+        ...mechanism,
+        warnings: (mechanism.warnings ?? []).filter((warning) => !isFitWarning(warning)),
+        fabricationMetadata: {
+            ...(mechanism.fabricationMetadata ?? {}),
+            warnings: (mechanism.fabricationMetadata?.warnings ?? []).filter((warning) => !isFitWarning(warning)),
+            pathFit: {
+                ...(pathFit ?? {}),
+                status: 'unfitted',
+                targetPathId: mechanism.targetPathId ?? pathFit?.targetPathId,
+                error: undefined,
+                maxError: undefined,
+                tangentError: undefined,
+                maxTangentError: undefined,
+                phaseOffset: undefined,
+                direction: undefined,
+            },
+        },
+    };
+};
 
 const preserveGeneratedPathFor = (mechanism: MechanismConfig) =>
     Boolean(mechanism.foundryExport || mechanism.generatedPath?.length);
@@ -445,7 +478,7 @@ const reconcileMechanismTargets = (
     parts: Record<string, BodyPartLayer>,
     paths: Record<string, ProjectMotionPath>,
     sceneObjects: Record<string, SceneObject> = {},
-    options: { preserveGeneratedPath?: boolean } = {},
+    options: { preserveGeneratedPath?: boolean; preserveRejectedPathFit?: boolean } = {},
     skeleton?: StandardSkeleton | null
 ) => {
     let targetSceneObjectId = mechanism.targetSceneObjectId && sceneObjects[mechanism.targetSceneObjectId] ? mechanism.targetSceneObjectId : undefined;
@@ -485,7 +518,17 @@ const reconcileMechanismTargets = (
         targetAnchorJointId,
         activeVisualPartIds: targetPartId ? [targetPartId] : []
     });
-    return mechanismWithGeneratedPath(normalized, options);
+    const pathFitStatus = normalized.fabricationMetadata?.pathFit?.status;
+    const fitReady = Boolean(
+        targetPathId &&
+        normalized.fabricationMetadata?.pathFit &&
+        ((pathFitStatus === 'fit' && options.preserveGeneratedPath) ||
+            (pathFitStatus === 'rejected' && options.preserveRejectedPathFit)),
+    );
+    return mechanismWithGeneratedPath(
+        fitReady ? normalized : invalidateMechanismPathFit(normalized),
+        options,
+    );
 };
 
 export const createEmptyProject = (): ProjectState => ({
@@ -862,7 +905,7 @@ export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState =
         mechanisms = project.mechanisms.map(mechanism => mechanismWithGeneratedPath(mechanism));
     }
 
-    return {
+    const lessonProject: ProjectState = {
         ...project,
         metadata: {
             ...project.metadata,
@@ -884,6 +927,21 @@ export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState =
         } : project.characterPackage,
         processing: { stage: 'ready', message: `${lesson.shortLabel} ready`, progress: 100 }
     };
+    const lessonMechanism = lessonProject.mechanisms[0];
+    const lessonPath = lessonMechanism?.targetPathId
+        ? lessonProject.paths[lessonMechanism.targetPathId]
+        : undefined;
+    if (lessonMechanism?.type === '4bar' && lessonPath) {
+        const fitted = fitFourBarKitMechanismToPath(
+            lessonProject,
+            lessonMechanism,
+            lessonPath,
+        );
+        lessonProject.mechanisms = [
+            fitted ?? rejectedFourBarPathFit(lessonProject, lessonMechanism, lessonPath),
+        ];
+    }
+    return lessonProject;
 };
 
 export const resetProjectToLessonBaseline = (project: ProjectState): ProjectState | undefined => {
@@ -1322,7 +1380,10 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
                     project.parts,
                     paths,
                     project.sceneObjects,
-                    { preserveGeneratedPath: preserveGeneratedPathFor(m) && pathGeneratedGeometryUnchanged(previousPath, path) },
+                    {
+                        preserveGeneratedPath: preserveGeneratedPathFor(m) && pathGeneratedGeometryUnchanged(previousPath, path),
+                        preserveRejectedPathFit: pathGeneratedGeometryUnchanged(previousPath, path),
+                    },
                     project.skeleton
                 )
                 : m);
@@ -1345,9 +1406,9 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
             return touch({ ...project, paths, mechanisms, selectedPathId: project.selectedPathId === action.pathId ? undefined : project.selectedPathId });
         }
         case 'set_mechanisms':
-            return touch({ ...project, mechanisms: action.mechanisms.map(m => reconcileMechanismTargets(m, project.parts, project.paths, project.sceneObjects, { preserveGeneratedPath: preserveGeneratedPathFor(m) }, project.skeleton)), selectedMechanismId: action.selectedMechanismId ?? project.selectedMechanismId });
+            return touch({ ...project, mechanisms: action.mechanisms.map(m => reconcileMechanismTargets(m, project.parts, project.paths, project.sceneObjects, { preserveGeneratedPath: preserveGeneratedPathFor(m), preserveRejectedPathFit: true }, project.skeleton)), selectedMechanismId: action.selectedMechanismId ?? project.selectedMechanismId });
         case 'upsert_mechanism': {
-            const mechanism = reconcileMechanismTargets(action.mechanism, project.parts, project.paths, project.sceneObjects, { preserveGeneratedPath: preserveGeneratedPathFor(action.mechanism) }, project.skeleton);
+            const mechanism = reconcileMechanismTargets(action.mechanism, project.parts, project.paths, project.sceneObjects, { preserveGeneratedPath: preserveGeneratedPathFor(action.mechanism), preserveRejectedPathFit: true }, project.skeleton);
             const exists = project.mechanisms.some(m => m.id === mechanism.id);
             const mechanisms = exists ? project.mechanisms.map(m => m.id === mechanism.id ? mechanism : m) : [...project.mechanisms, mechanism];
             return touch({ ...project, mechanisms, selectedMechanismId: mechanism.id });
@@ -1361,7 +1422,10 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
                 physicalKit: { ...project.settings.physicalKit, ...(action.settings.physicalKit ?? {}) }
             }, project.settings);
             const invalidatesExport = Boolean(action.settings.physicalKit || action.settings.fabricationReadyMode !== undefined || action.settings.physicsSnapMode !== undefined || action.settings.simulationFriction !== undefined || action.settings.simulationMassKg !== undefined);
-            return invalidatesExport ? touch({ ...project, settings }) : { ...project, settings };
+            const mechanisms = action.settings.physicalKit
+                ? project.mechanisms.map(invalidateMechanismPathFit)
+                : project.mechanisms;
+            return invalidatesExport ? touch({ ...project, settings, mechanisms }) : { ...project, settings, mechanisms };
         }
         case 'set_export':
             return touch({ ...project, lastExport: action.fabricationPackage }, { preserveExport: true });
@@ -1653,7 +1717,7 @@ export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
         selectedSceneObjectId: data.selectedSceneObjectId && sceneObjects[data.selectedSceneObjectId] ? data.selectedSceneObjectId : undefined,
         skeleton,
         paths,
-        mechanisms: (Array.isArray(data.mechanisms) ? data.mechanisms : fallback.mechanisms).map(m => reconcileMechanismTargets(normalizeMechanismSnapshot(m), parts, paths, sceneObjects, { preserveGeneratedPath: true }, skeleton)),
+        mechanisms: (Array.isArray(data.mechanisms) ? data.mechanisms : fallback.mechanisms).map(m => reconcileMechanismTargets(normalizeMechanismSnapshot(m), parts, paths, sceneObjects, { preserveGeneratedPath: true, preserveRejectedPathFit: true }, skeleton)),
         settings: normalizeAppSettings(data.settings, fallback.settings),
         processing: data.processing ?? idleProcessing(),
         lastExport: undefined

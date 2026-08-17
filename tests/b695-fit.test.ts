@@ -30,16 +30,19 @@ const rejected = fitMechanismToTargetPath(
 
 assert.equal(
   sha256(accepted),
-  'b648398934a2d10f5dc9365b7a875b16a5de67ce7fb00b6a07fd20b7280bae70',
-  'accepted four-bar output remains byte-stable with b695',
+  '7404fb0411d9a2ad25a6f8fbbeac96154b10ae2b6bc3fd3ce2501700e9631d3e',
+  'rejected four-bar output remains byte-stable after hard physical trace fitting',
 );
 assert.equal(
   sha256(rejected),
-  '7623c31343c0c4bbec3f55626c401fc076a80f0ece65e7c3f28d260bb8788ebd',
-  'rejected four-bar output remains byte-stable with b695',
+  'ac962d72e51eb1f1add4bceb2d4f2b307f0ea33170d724df76f42e1f5c02486b',
+  'short-path four-bar rejection remains byte-stable with b695',
 );
-assert.equal(accepted.warnings?.length, 0, 'accepted four-bar keeps b695 warning status');
-assert.equal(rejected.targetPathId, 'path-right-arm', 'short-path fallback keeps the prior target path');
+assert.equal(accepted.fabricationMetadata?.pathFit?.status, 'rejected', 'four-bar fitting rejects a fabrication-valid candidate that misses hard target tolerance');
+assert.equal(accepted.generatedPath, undefined, 'rejected four-bar does not expose a misleading generated target path');
+assert(accepted.warnings?.includes('No fabrication-valid path fit.'), 'rejected four-bar exposes a direct fit blocker');
+assert.equal(rejected.targetPathId, 'short-fit', 'short-path rejection keeps the selected target path');
+assert.equal(rejected.fabricationMetadata?.pathFit?.status, 'rejected', 'short-path four-bar fitting records an explicit rejection');
 
 const recommendationsSource = readFileSync(
   new URL('../utils/mechanismRecommendations.ts', import.meta.url),

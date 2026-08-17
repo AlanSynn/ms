@@ -32,23 +32,27 @@ const parseBoardCoordinate = (coord: string) => {
     return { col: match[1].charCodeAt(0) - 65, row: Number(match[2]) - 1 };
 };
 
-const formatBoardCoordinate = (col: number, row: number) =>
-    col >= 0 && col < 15 && row >= 0 && row < 15
+const formatBoardCoordinate = (col: number, row: number, boardCells = 15) =>
+    col >= 0 && col < boardCells && row >= 0 && row < boardCells
         ? `${String.fromCharCode(65 + col)}${row + 1}`
         : `off-board(${col},${row})`;
 
-const offsetBoardCoordinate = (coord: string, dc: number, dr: number) => {
+const offsetBoardCoordinate = (coord: string, dc: number, dr: number, boardCells = 15) => {
     const point = parseBoardCoordinate(coord);
-    return point ? formatBoardCoordinate(point.col + dc, point.row + dr) : coord;
+    return point ? formatBoardCoordinate(point.col + dc, point.row + dr, boardCells) : coord;
 };
 
 
-const translateBoardCoordinate = (coord: string, from: string, to: string) => {
+const translateBoardCoordinate = (coord: string, from: string, to: string, boardCells = 15) => {
     const point = parseBoardCoordinate(coord);
     const origin = parseBoardCoordinate(from);
     const target = parseBoardCoordinate(to);
     if (!point || !origin || !target) return coord;
-    return formatBoardCoordinate(point.col + target.col - origin.col, point.row + target.row - origin.row);
+    return formatBoardCoordinate(
+        point.col + target.col - origin.col,
+        point.row + target.row - origin.row,
+        boardCells,
+    );
 };
 
 const referenceOriginCoordinate = (mechanism: MechanismConfig) => {
@@ -143,10 +147,11 @@ const placedPrefabStep = (
     mechanism: MechanismConfig,
     step: FabricationRecipe['assemblySteps'][number],
     boardCoordinate: string,
+    boardCells = 15,
 ): FabricationRecipe['assemblySteps'][number] => {
     const origin = referenceOriginCoordinate(mechanism);
     const coords = origin
-        ? step.coords?.map(coord => translateBoardCoordinate(coord, origin, boardCoordinate))
+        ? step.coords?.map(coord => translateBoardCoordinate(coord, origin, boardCoordinate, boardCells))
         : step.coords;
     const coordRoles = step.coordRoles ?? [];
     const firstBoardIndex = coordRoles.findIndex(role => isBoardFixedCoordRole(role));
@@ -164,14 +169,17 @@ const placedPrefabStep = (
     };
 };
 
-const dynamicFourBarSteps = (mechanism: MechanismConfig, boardCoordinate: string): FabricationRecipe['assemblySteps'] => {
+const dynamicFourBarSteps = (mechanism: MechanismConfig, boardCoordinate: string, boardCells = 15): FabricationRecipe['assemblySteps'] => {
     const recipe = referenceRecipeForType('4bar');
     const inputCells = sceneLengthCells(mechanism.crankLength, REFERENCE_DEFAULTS.fourBar.input, 2);
     const couplerCells = sceneLengthCells(mechanism.couplerLength, REFERENCE_DEFAULTS.fourBar.coupler, 4);
     const outputCells = sceneLengthCells(mechanism.rockerLength, REFERENCE_DEFAULTS.fourBar.output, 2);
     const groundCells = sceneLengthCells(mechanism.groundLength, REFERENCE_DEFAULTS.fourBar.ground, 2);
     const a = boardCoordinate;
-    const d = offsetBoardCoordinate(a, 0, groundCells);
+    const groundAngle = (((mechanism.groundAngle ?? 270) % 360) + 360) % 360;
+    const dc = Math.round(Math.cos((groundAngle * Math.PI) / 180) * groundCells);
+    const dr = Math.round(-Math.sin((groundAngle * Math.PI) / 180) * groundCells);
+    const d = offsetBoardCoordinate(a, dc, dr, boardCells);
     const b = recipe.assemblySteps[1]?.coords?.[1] ?? 'G6';
     const c = recipe.assemblySteps[2]?.coords?.[1] ?? 'G10';
     return [
@@ -188,14 +196,14 @@ const dynamicFourBarSteps = (mechanism: MechanismConfig, boardCoordinate: string
     ].map((step, index) => ({ ...step, index: index + 1 }));
 };
 
-const dynamicGearSteps = (mechanism: MechanismConfig, boardCoordinate: string): FabricationRecipe['assemblySteps'] => {
+const dynamicGearSteps = (mechanism: MechanismConfig, boardCoordinate: string, boardCells = 15): FabricationRecipe['assemblySteps'] => {
     const recipe = referenceRecipeForType('gear');
     const radii = gearTrainPitchRadii(mechanism);
     const coords = radii.reduce<string[]>((list, radius, index) => {
         if (index === 0) return [boardCoordinate];
         const previous = radii[index - 1];
         const previousCoord = list[index - 1] ?? boardCoordinate;
-        return [...list, offsetBoardCoordinate(previousCoord, 0, gearCellDistance(previous, radius))];
+        return [...list, offsetBoardCoordinate(previousCoord, 0, gearCellDistance(previous, radius), boardCells)];
     }, []);
     const gearStep = (index: number, label: string, coord: string, radius: number, roleLabel: 'drive' | 'idler' | 'output'): FabricationRecipe['assemblySteps'][number] => {
         const spec = fabricationGearSpecForPitchRadius(Math.abs(radius) / SCENE_PX_PER_MM);
@@ -236,7 +244,7 @@ const dynamicGearSteps = (mechanism: MechanismConfig, boardCoordinate: string): 
     return steps;
 };
 
-const dynamicGearLinkageSteps = (mechanism: MechanismConfig, boardCoordinate: string): FabricationRecipe['assemblySteps'] => {
+const dynamicGearLinkageSteps = (mechanism: MechanismConfig, boardCoordinate: string, boardCells = 15): FabricationRecipe['assemblySteps'] => {
     const recipe = referenceRecipeForType('gear_linkage');
     const radii = gearTrainPitchRadii(mechanism);
     const outputSpanCells = radii.length > 2
@@ -244,17 +252,21 @@ const dynamicGearLinkageSteps = (mechanism: MechanismConfig, boardCoordinate: st
         : sceneLengthCells(mechanism.groundLength, REFERENCE_DEFAULTS.gearLinkage.centerDistance, 2);
     const gearCoords = radii.map((radius, index) => {
         if (index === 0) return boardCoordinate;
-        if (radii.length <= 2) return offsetBoardCoordinate(boardCoordinate, 0, outputSpanCells);
+        if (radii.length <= 2) return offsetBoardCoordinate(boardCoordinate, 0, outputSpanCells, boardCells);
         const offsetCells = radii.slice(1, index + 1).reduce((sum, current, currentIndex) => sum + gearCellDistance(radii[currentIndex], current), 0);
-        return offsetBoardCoordinate(boardCoordinate, 0, offsetCells);
+        return offsetBoardCoordinate(boardCoordinate, 0, offsetCells, boardCells);
     });
     const drive = gearCoords[0] ?? boardCoordinate;
     const output = gearCoords.at(-1) ?? drive;
     const drivePoint = parseBoardCoordinate(drive);
     const outputPoint = parseBoardCoordinate(output);
     const connector = drivePoint && outputPoint
-        ? formatBoardCoordinate(Math.round((drivePoint.col + outputPoint.col) / 2), Math.round((drivePoint.row + outputPoint.row) / 2))
-        : offsetBoardCoordinate(drive, 0, Math.max(1, Math.round(outputSpanCells / 2)));
+        ? formatBoardCoordinate(
+            Math.round((drivePoint.col + outputPoint.col) / 2),
+            Math.round((drivePoint.row + outputPoint.row) / 2),
+            boardCells,
+        )
+        : offsetBoardCoordinate(drive, 0, Math.max(1, Math.round(outputSpanCells / 2)), boardCells);
     const outputLink = currentStackLabel(mechanism, 'Output L', 'Output L4 linkage');
     const driveLink = currentStackLabel(mechanism, 'Drive L', 'Drive L4 linkage');
     const linkagePartKey = `linkages:linkage-${sceneLengthCells(mechanism.couplerLength, REFERENCE_DEFAULTS.gearLinkage.outputLinkage, 2)}-cell`;
@@ -295,13 +307,13 @@ const dynamicGearLinkageSteps = (mechanism: MechanismConfig, boardCoordinate: st
     return steps.map((step, index) => ({ ...step, index: index + 1 }));
 };
 
-export const prefabAssemblySteps = (mechanism: MechanismConfig, boardCoordinate: string): FabricationRecipe['assemblySteps'] => {
+export const prefabAssemblySteps = (mechanism: MechanismConfig, boardCoordinate: string, boardCells = 15): FabricationRecipe['assemblySteps'] => {
     const recipe = referenceRecipeForType(mechanism.type);
     if (recipe.exportReady && recipe.assemblySteps.length) {
-        if (mechanism.type === '4bar') return dynamicFourBarSteps(mechanism, boardCoordinate);
-        if (mechanism.type === 'gear') return dynamicGearSteps(mechanism, boardCoordinate);
-        if (mechanism.type === 'gear_linkage') return dynamicGearLinkageSteps(mechanism, boardCoordinate);
-        return recipe.assemblySteps.map(step => placedPrefabStep(mechanism, step, boardCoordinate));
+        if (mechanism.type === '4bar') return dynamicFourBarSteps(mechanism, boardCoordinate, boardCells);
+        if (mechanism.type === 'gear') return dynamicGearSteps(mechanism, boardCoordinate, boardCells);
+        if (mechanism.type === 'gear_linkage') return dynamicGearLinkageSteps(mechanism, boardCoordinate, boardCells);
+        return recipe.assemblySteps.map(step => placedPrefabStep(mechanism, step, boardCoordinate, boardCells));
     }
     const plan = fabricationRenderPlanForMechanism(mechanism);
     const moduleLabel = `${mechanismTypeLabel(mechanism.type)} prebuilt module`;
@@ -344,7 +356,11 @@ export const createFabricationRecipe = (project: ProjectState, mechanism: Mechan
     const targetPath = mechanism.targetPathId ? project.paths[mechanism.targetPathId] : undefined;
     const targetAnchorJointId = targetPart ? preferredMotionJointId(project, mechanism.targetPartId, mechanism.targetAnchorJointId) : undefined;
     const range = sampleFeasibleRange(mechanism);
-    const assemblySteps = prefabAssemblySteps(mechanism, board.label);
+    const assemblySteps = prefabAssemblySteps(
+        mechanism,
+        board.label,
+        project.settings.physicalKit.boardCells,
+    );
     const warnings = [...new Set([
         ...(mechanism.warnings ?? []),
         ...((mechanism.fabricationMetadata as { warnings?: string[] } | undefined)?.warnings ?? []),

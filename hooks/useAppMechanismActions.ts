@@ -16,8 +16,12 @@ import {
   generateSmartConfig,
   mutateConfig,
 } from "../utils/optimizer";
-import { preferredMotionJointId } from "../utils/motion";
-import { downloadText, mechanismWithGeneratedPath } from "../utils/project";
+import { mechanismPathFitIsUsable, preferredMotionJointId } from "../utils/motion";
+import {
+  downloadText,
+  invalidateMechanismPathFit,
+  mechanismWithGeneratedPath,
+} from "../utils/project";
 import {
   fitMechanismToTargetPath,
   fitRecommendedMechanismToSheet,
@@ -43,6 +47,10 @@ const GENERATED_PATH_GEOMETRY_KEYS = new Set<keyof MechanismConfig>([
   "camProfileSamples",
   "driverGroupId",
   "driverPhaseOffset",
+  "targetPartId",
+  "targetSceneObjectId",
+  "targetPathId",
+  "targetAnchorJointId",
   "rodLength",
   "phase",
   "transform",
@@ -87,6 +95,28 @@ export const useAppMechanismActions = ({
   setShowRecommendations: (show: boolean) => void;
 }) => {
   const [optimizerBusy, setOptimizerBusy] = useState(false);
+
+  const commitFoundryDraft = useCallback(
+    (draft: MechanismConfig) => {
+      if (!draft.targetPathId || !project.paths[draft.targetPathId]) return;
+      const existingTarget = project.mechanisms.find(
+        (mechanism) =>
+          mechanism.targetPathId === draft.targetPathId &&
+          mechanism.targetSceneObjectId === draft.targetSceneObjectId &&
+          (!draft.targetSceneObjectId
+            ? mechanism.targetPartId === draft.targetPartId
+            : true),
+      );
+      dispatch({
+        type: "upsert_mechanism",
+        mechanism: {
+          ...draft,
+          id: existingTarget?.id ?? draft.id,
+        },
+      });
+    },
+    [dispatch, project],
+  );
 
   const updateMechanism = useCallback(
     (id: string, updates: Partial<MechanismConfig>) => {
@@ -154,7 +184,11 @@ export const useAppMechanismActions = ({
               nextUpdates.targetPathId,
             )
           : mechanismWithGeneratedPath({
-              ...normalized,
+              ...(
+                changesGeneratedPathGeometry(updates)
+                  ? invalidateMechanismPathFit(normalized)
+                  : normalized
+              ),
               activeVisualPartIds: normalized.targetPartId
                 ? [normalized.targetPartId]
                 : [],
@@ -249,6 +283,26 @@ export const useAppMechanismActions = ({
       );
       const activeVisualPartIds = selectedPart ? [selectedPart.id] : [];
       const fittedFoundryParameters = pkg.parameters as Partial<MechanismConfig>;
+      const packagePathFit =
+        fittedFoundryParameters.fabricationMetadata?.pathFit ??
+        foundry.fabricationMetadata?.pathFit;
+      const packageFitCandidate: MechanismConfig = {
+        ...foundry,
+        ...fittedFoundryParameters,
+        targetPartId: pkg.targetPartId,
+        targetSceneObjectId: pkg.targetSceneObjectId,
+        targetPathId: pkg.targetPathId,
+        targetAnchorJointId: pkg.targetAnchorJointId,
+      };
+      if (
+        pkg.mechanismType === "4bar" &&
+        pkg.targetPathId &&
+        (packagePathFit?.status !== "fit" ||
+          !mechanismPathFitIsUsable(project, packageFitCandidate))
+      ) {
+        setCommandStatus("No fabrication-valid path fit.");
+        return;
+      }
       const rawMechanism = mechanismWithGeneratedPath(
         {
           ...foundry,
@@ -326,6 +380,7 @@ export const useAppMechanismActions = ({
     exportMechanismSvg,
     exportMechanismDxf,
     exportFoundryMechanism,
+    commitFoundryDraft,
     applyRecommendedMechanism,
   };
 };

@@ -15,6 +15,7 @@ import {
     closePhysicalValue,
     closeToBoardPitch,
     closeToFabricationLinkage,
+    fabricationPitchMmForMechanism,
     physicalTolerance,
     sampleFeasibleRange
 } from './fabricationReadiness';
@@ -127,11 +128,12 @@ export const validateMechanismPreviewReadiness = (mechanism: MechanismConfig): s
     if ((mechanism.type === 'gear' || mechanism.type === 'gear_linkage' || mechanism.type === 'planetary_gear') && (mechanism.gearRatio ?? 0) === 0) errors.push('gear ratio 0.');
 
     if (mechanism.type === '4bar') {
+        const pitchMm = fabricationPitchMmForMechanism(mechanism);
         const lengthsAreFabricationSnapped =
-            closeToBoardPitch(mechanism.groundLength) &&
-            closeToFabricationLinkage(mechanism.crankLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.driver) &&
-            closeToFabricationLinkage(mechanism.couplerLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.coupler) &&
-            closeToFabricationLinkage(mechanism.rockerLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.output);
+            closeToBoardPitch(mechanism.groundLength, pitchMm) &&
+            closeToFabricationLinkage(mechanism.crankLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.driver, pitchMm) &&
+            closeToFabricationLinkage(mechanism.couplerLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.coupler, pitchMm) &&
+            closeToFabricationLinkage(mechanism.rockerLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.output, pitchMm);
         if (!lengthsAreFabricationSnapped) errors.push('snap four-bar linkage lengths.');
     }
 
@@ -182,7 +184,13 @@ export const validateForFabrication = (project: ProjectState) => {
     const snapTolerance = project.settings.physicsSnapMode === 'fast' ? 4 : project.settings.physicsSnapMode === 'high' ? 0.25 : 0.5;
     const fabricationSeverity: FabricationIssue['severity'] = project.settings.fabricationReadyMode ? 'error' : 'warning';
     const insideSheet = (p: { x: number; y: number }) => p.x >= sheet.x && p.x <= sheet.x + sheet.width && p.y >= sheet.y && p.y <= sheet.y + sheet.height;
-    const isValidBoardCoordinate = (coord: string | undefined) => /^[A-O](?:[1-9]|1[0-5])$/.test(coord ?? '');
+    const isValidBoardCoordinate = (coord: string | undefined) => {
+        const match = /^([A-Z]+)(\d+)$/.exec(coord ?? '');
+        if (!match) return false;
+        const column = match[1].split('').reduce((value, letter) => value * 26 + letter.charCodeAt(0) - 64, 0) - 1;
+        const row = Number(match[2]) - 1;
+        return column >= 0 && column < project.settings.physicalKit.boardCells && row >= 0 && row < project.settings.physicalKit.boardCells;
+    };
     if (!project.partOrder.length) add('error', 'No character in scene.', { recoveryStage: 'character', recoveryAction: 'Load a character package' });
     const activeMechanisms = project.mechanisms.filter(m => m.visible && m.enabled !== false);
     if (!activeMechanisms.length) add('error', 'No enabled mechanism to export.', { recoveryStage: 'design', recoveryAction: 'Enable or add a mechanism' });
@@ -265,7 +273,7 @@ export const validateForFabrication = (project: ProjectState) => {
             add('warning', `${m.id}: near board edge ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move inward' });
         }
         if (board.valid) {
-            const offBoardStep = prefabAssemblySteps(m, board.label).find(step => (step.coords ?? []).some((coord, index) =>
+            const offBoardStep = prefabAssemblySteps(m, board.label, project.settings.physicalKit.boardCells).find(step => (step.coords ?? []).some((coord, index) =>
                 isBoardFixedCoordRole(step.coordRoles?.[index] ?? '') && !isValidBoardCoordinate(coord)
             ));
             if (offBoardStep) {

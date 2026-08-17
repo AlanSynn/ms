@@ -38,9 +38,9 @@ export const sheetMmToScene = (p: Point, kit: PhysicalKitSettings): Point => ({
 export const sceneToBoardRaw = (p: Point, kit: PhysicalKitSettings) => {
     const xMm = p.x / SCENE_PX_PER_MM;
     const yMm = p.y / SCENE_PX_PER_MM;
-    const center = Math.floor(kit.boardCells / 2);
-    const col = Math.round(xMm / kit.gridPitchMm) + center;
-    const row = center - Math.round(yMm / kit.gridPitchMm);
+    const center = (kit.boardCells - 1) / 2;
+    const col = Math.round(xMm / kit.gridPitchMm + center);
+    const row = Math.round(center - yMm / kit.gridPitchMm);
     const valid = col >= 0 && row >= 0 && col < kit.boardCells && row < kit.boardCells;
     const label = valid ? `${String.fromCharCode(65 + col)}${row + 1}` : `off-board(${col},${row})`;
     return { col, row, label, xMm, yMm, valid };
@@ -55,7 +55,7 @@ export const sceneToBoard = (p: Point, kit: PhysicalKitSettings) => {
 };
 
 export const boardToScene = (col: number, row: number, kit: PhysicalKitSettings): Point => {
-    const center = Math.floor(kit.boardCells / 2);
+    const center = (kit.boardCells - 1) / 2;
     return {
         x: (col - center) * kit.gridPitchMm * SCENE_PX_PER_MM,
         y: (center - row) * kit.gridPitchMm * SCENE_PX_PER_MM

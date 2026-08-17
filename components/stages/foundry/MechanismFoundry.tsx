@@ -83,7 +83,10 @@ import {
   normalizeGearMeshMechanism,
 } from "../../../utils/mechanismRecommendations";
 import { createDefaultMechanism, mechanismWithGeneratedPath, uid } from "../../../utils/project";
-import { preferredMotionJointId } from "../../../utils/motion";
+import {
+  mechanismPathFitIsUsable,
+  preferredMotionJointId,
+} from "../../../utils/motion";
 
 const traceDistanceToGeneratedPath = (
   trace: { points: Point[] },
@@ -108,6 +111,7 @@ export const MechanismFoundry = ({
   project,
   foundry,
   setFoundry,
+  onDraftChange,
   selectedPart,
   selectedSceneObject,
   selectedPath,
@@ -118,6 +122,7 @@ export const MechanismFoundry = ({
   project: ProjectState;
   foundry: MechanismConfig;
   setFoundry: (m: MechanismConfig) => void;
+  onDraftChange: (m: MechanismConfig) => void;
   selectedPart?: BodyPartLayer;
   selectedSceneObject?: SceneObject;
   selectedPath?: ProjectMotionPath;
@@ -164,17 +169,17 @@ export const MechanismFoundry = ({
     handle: FoundryParamHandleId;
   } | null>(null);
   const targetReady = Boolean(
-    (selectedPart || selectedSceneObject) &&
     selectedPath &&
     selectedPath.enabled &&
-    selectedPath.points.length >= 3,
+    selectedPath.points.length >= 3 &&
+    (selectedPath.sceneObjectId || project.parts[selectedPath.partId]),
   );
-  const targetIkJointId = selectedPart
+  const targetIkJointId = selectedPath && !selectedPath.sceneObjectId
     ? preferredMotionJointId(
         project,
-        selectedPart.id,
-        selectedPath?.targetAnchorJointId,
-        { preferDistalWhenRoot: !selectedPath?.targetAnchorJointId },
+        selectedPath.partId,
+        selectedPath.targetAnchorJointId,
+        { preferDistalWhenRoot: !selectedPath.targetAnchorJointId },
       )
     : undefined;
   const foundryPathAnchor =
@@ -228,12 +233,15 @@ export const MechanismFoundry = ({
       }));
     const generatedPath = landedFoundry.generatedPath ?? [];
     if (!generatedPath.length || traces.length < 2) return traces;
-    const fittedTrace = traces.reduce((best, trace) =>
-      traceDistanceToGeneratedPath(trace, generatedPath) <
-      traceDistanceToGeneratedPath(best, generatedPath)
-        ? trace
-        : best,
-    );
+    const fitTraceId = landedFoundry.fabricationMetadata?.pathFit?.outputTraceId;
+    const fittedTrace = fitTraceId
+      ? traces.find((trace) => trace.id === fitTraceId) ?? traces[0]
+      : traces.reduce((best, trace) =>
+          traceDistanceToGeneratedPath(trace, generatedPath) <
+          traceDistanceToGeneratedPath(best, generatedPath)
+            ? trace
+            : best,
+        );
     return traces.map((trace) => ({
       ...trace,
       primary: trace.id === fittedTrace.id,
@@ -563,11 +571,28 @@ export const MechanismFoundry = ({
     setSelectedOutputTraceId(next?.id ?? null);
     setShowPathPreview(true);
   };
+  const committedTargetMechanism = project.mechanisms.find(
+    (mechanism) =>
+      mechanism.targetPathId === foundry.targetPathId &&
+      mechanism.targetSceneObjectId === foundry.targetSceneObjectId &&
+      (foundry.targetSceneObjectId || mechanism.targetPartId === foundry.targetPartId),
+  );
+  const effectiveFitMechanism = committedTargetMechanism ?? foundry;
+  const effectivePathFit =
+    selectedPath?.id === foundry.targetPathId
+      ? effectiveFitMechanism.fabricationMetadata?.pathFit
+      : undefined;
+  const pathFitStatus = effectivePathFit?.status;
+  const pathFitUsable =
+    pathFitStatus === "fit" &&
+    mechanismPathFitIsUsable(project, effectiveFitMechanism);
+  const fitRequired = foundry.type === "4bar";
   const hardBlocked =
     !targetReady ||
     range.percentValid === 0 ||
     !Number.isFinite(landing.x) ||
-    !Number.isFinite(landing.y);
+    !Number.isFinite(landing.y) ||
+      (fitRequired && targetReady && !pathFitUsable);
   const foundryCameraLabel =
     foundryCamera.preset === "custom"
       ? "Custom view"
@@ -575,6 +600,10 @@ export const MechanismFoundry = ({
   const foundryPhaseDegrees = Math.round(
     ((((foundryPhase / (Math.PI * 2)) % 1) + 1) % 1) * 360,
   );
+  const setFoundryDraft = (mechanism: MechanismConfig) => {
+    setFoundry(mechanism);
+    onDraftChange(mechanism);
+  };
   const applyAnchor = (point: Point) => {
     const board = sceneToBoard(point, project.settings.physicalKit);
     const snapped = boardToScene(
@@ -583,7 +612,7 @@ export const MechanismFoundry = ({
       project.settings.physicalKit,
     );
     setManualAnchor(snapped);
-    setFoundry({
+    setFoundryDraft(invalidatePathFit({
       ...foundry,
       anchorX: snapped.x,
       anchorY: snapped.y,
@@ -598,7 +627,7 @@ export const MechanismFoundry = ({
         x: snapped.x,
         y: snapped.y,
       },
-    });
+    }));
   };
   const updateFoundryProjectionSize = (size: FoundryOverlaySize) =>
     setFoundryProjectionSize((prev) =>
@@ -705,20 +734,48 @@ export const MechanismFoundry = ({
       preset: "custom",
     }));
   };
+  const invalidatePathFit = (mechanism: MechanismConfig): MechanismConfig => {
+    const pathFit = mechanism.fabricationMetadata?.pathFit;
+    if (!pathFit) return mechanism;
+    const warnings = (mechanism.warnings ?? []).filter(
+      (warning) => !warning.startsWith("Closest kit fit:") && warning !== "No fabrication-valid path fit.",
+    );
+    return {
+      ...mechanism,
+      warnings,
+      fabricationMetadata: {
+        ...(mechanism.fabricationMetadata ?? {}),
+        warnings: (mechanism.fabricationMetadata?.warnings ?? []).filter(
+          (warning) => !warning.startsWith("Closest kit fit:") && warning !== "No fabrication-valid path fit.",
+        ),
+        pathFit: {
+          ...pathFit,
+          status: "unfitted",
+          error: undefined,
+          maxError: undefined,
+          phaseOffset: undefined,
+          direction: undefined,
+        },
+      },
+    };
+  };
   const refreshEditedFoundryMechanism = (mechanism: MechanismConfig) => {
-    const normalized = normalizeGearMeshMechanism(mechanism);
+    const normalized = invalidatePathFit(normalizeGearMeshMechanism(mechanism));
     if (normalized.type !== "4bar" || !normalized.generatedPath?.length)
       return mechanismWithGeneratedPath(normalized);
     const bcTraces = generateMechanismPointTraces(normalized, 96).traces.filter(
       (trace) => trace.id === "B" || trace.id === "C",
     );
     if (bcTraces.length === 0) return mechanismWithGeneratedPath(normalized);
-    const selectedTrace = bcTraces.reduce((best, trace) =>
-      traceDistanceToGeneratedPath(trace, normalized.generatedPath ?? []) <
-      traceDistanceToGeneratedPath(best, normalized.generatedPath ?? [])
-        ? trace
-        : best,
-    );
+    const fitTraceId = normalized.fabricationMetadata?.pathFit?.outputTraceId;
+    const selectedTrace = fitTraceId
+      ? bcTraces.find((trace) => trace.id === fitTraceId) ?? bcTraces[0]
+      : bcTraces.reduce((best, trace) =>
+          traceDistanceToGeneratedPath(trace, normalized.generatedPath ?? []) <
+          traceDistanceToGeneratedPath(best, normalized.generatedPath ?? [])
+            ? trace
+            : best,
+        );
     return mechanismWithGeneratedPath(
       { ...normalized, generatedPath: selectedTrace.points },
       { preserveGeneratedPath: true },
@@ -731,7 +788,7 @@ export const MechanismFoundry = ({
         y: key === "anchorY" ? value : (foundry.anchorY ?? landing.y),
       };
       setManualAnchor(anchor);
-      setFoundry(
+      setFoundryDraft(
         refreshEditedFoundryMechanism({
           ...foundry,
           [key]: value,
@@ -750,10 +807,10 @@ export const MechanismFoundry = ({
       );
       return;
     }
-    setFoundry(refreshEditedFoundryMechanism({ ...foundry, [key]: value }));
+    setFoundryDraft(refreshEditedFoundryMechanism({ ...foundry, [key]: value }));
   };
   const updateFoundryParams = (updates: Partial<MechanismConfig>) => {
-    setFoundry(refreshEditedFoundryMechanism({ ...foundry, ...updates }));
+    setFoundryDraft(refreshEditedFoundryMechanism({ ...foundry, ...updates }));
   };
   const foundryPointFromOverlayEvent = (
     event: React.PointerEvent<SVGCircleElement>,
@@ -866,7 +923,7 @@ export const MechanismFoundry = ({
     },
   });
   const setAnchoredFoundry = (mechanism: MechanismConfig) =>
-    setFoundry(normalizeGearMeshMechanism(keepCurrentAnchor(mechanism)));
+    setFoundryDraft(invalidatePathFit(normalizeGearMeshMechanism(keepCurrentAnchor(mechanism))));
   const createPathFittedFoundry = (mechanism: MechanismConfig) => {
     const anchored = keepCurrentAnchor(mechanism);
     if (!targetReady || !selectedPath) return normalizeGearMeshMechanism(anchored);
@@ -900,7 +957,7 @@ export const MechanismFoundry = ({
     setSelectedOutputTraceId(null);
     setShowUserPathPreview(true);
     setShowPathPreview(true);
-    setFoundry(createPathFittedFoundry(mechanism));
+    setFoundryDraft(createPathFittedFoundry(mechanism));
   };
   const resetFoundryPreview = () => {
     setFoundryPlaying(false);
@@ -939,6 +996,10 @@ export const MechanismFoundry = ({
         ? state.j2
         : (state.effector ?? state.j2));
     const preset = foundry.presetId ?? "balanced";
+    const fitWarnings = [
+      ...(landedFoundry.warnings ?? []),
+      ...(landedFoundry.fabricationMetadata?.warnings ?? []),
+    ];
     return {
       id: `foundry-${Date.now().toString(36)}`,
       createdAt: new Date().toISOString(),
@@ -959,8 +1020,8 @@ export const MechanismFoundry = ({
         steps: preview.length,
         loop: true,
       },
-      targetPartId: selectedPart?.id,
-      targetSceneObjectId: selectedSceneObject?.id,
+      targetPartId: selectedPath?.sceneObjectId ? undefined : selectedPath?.partId,
+      targetSceneObjectId: selectedPath?.sceneObjectId,
       targetPathId: selectedPath?.id,
       targetAnchorJointId: targetIkJointId,
       metadata: {
@@ -971,7 +1032,10 @@ export const MechanismFoundry = ({
         simulationFriction: project.settings.simulationFriction,
         simulationMassKg: project.settings.simulationMassKg,
       },
-      warnings: range.warning ? [range.warning] : [],
+      warnings: [...new Set([
+        ...fitWarnings,
+        ...(range.warning ? [range.warning] : []),
+      ])],
       source: "mechanism-foundry",
     };
   };
@@ -1009,12 +1073,16 @@ export const MechanismFoundry = ({
       className="foundry-stage-frame"
       layout={{
         workflow: workflowPane(
-          <FoundryWorkflowPanel
+      <FoundryWorkflowPanel
             project={project}
             goStage={goStage}
             foundry={foundry}
             foundryPhase={foundryPhase}
             targetReady={targetReady}
+            fitRequired={fitRequired}
+            fitState={foundry.fabricationMetadata?.pathFit?.status}
+            fitError={effectivePathFit?.error}
+            fitMaxError={effectivePathFit?.maxError}
             isPickingAnchor={isPickingAnchor}
             hardBlocked={hardBlocked}
             onToggleAnchorPick={() => setIsPickingAnchor((value) => !value)}

@@ -229,6 +229,19 @@ export const DesignFoundryPreview = ({
       data-mechanism-path-preview={showMechanismPath ? "shown" : "hidden"}
       data-design-motion-source={sceneModel.motionSource}
       data-design-generated-path-count={sceneModel.mechanism.generatedPath?.length ?? 0}
+      data-design-generated-path-error={
+        sceneModel.generatedPathError === undefined
+          ? "missing"
+          : sceneModel.generatedPathError.toFixed(3)
+      }
+      data-design-fit-status={
+        sceneModel.mechanism.fabricationMetadata?.pathFit?.status ?? "unfitted"
+      }
+      data-design-fit-error={
+        sceneModel.mechanism.fabricationMetadata?.pathFit?.error === undefined
+          ? "missing"
+          : sceneModel.mechanism.fabricationMetadata.pathFit.error.toFixed(3)
+      }
       data-design-visible-mechanism-count={sceneModel.mechanisms.length}
       data-design-target-joint-id={sceneModel.targetJointId ?? ""}
       data-design-target-error={targetError === undefined ? "missing" : targetError.toFixed(3)}

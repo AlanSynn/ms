@@ -641,6 +641,26 @@ export const mechanismTraceDefinitionsForState = (
     ];
 };
 
+export const mechanismTracePointForState = (
+    type: MechanismConfig['type'],
+    state: JointState,
+    traceId?: string,
+): Point => {
+    const traces = mechanismTraceDefinitionsForState(type, state);
+    return traces.find((trace) => trace.id === traceId)?.point
+        ?? state.effector;
+};
+
+export const mechanismTracePointAt = (
+    config: MechanismConfig,
+    crankAngleRad: number,
+    traceId?: string,
+): Point => mechanismTracePointForState(
+    config.type,
+    calculateLinkage(config, crankAngleRad),
+    traceId,
+);
+
 /**
  * Physical traces shown in Foundry: moving joints/pins, not an arbitrary
  * coupler-effector curve. Keep generateCurvePoints as the optimizer/exporter

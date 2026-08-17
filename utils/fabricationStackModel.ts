@@ -17,7 +17,7 @@ export type FabricationStackLayer = {
     color: string;
 };
 
-export type FabricationStackMechanism = Pick<MechanismConfig, 'type'> & Partial<Pick<MechanismConfig, 'crankLength' | 'rockerLength' | 'couplerLength' | 'gearTrainRadii'>>;
+export type FabricationStackMechanism = Pick<MechanismConfig, 'type'> & Partial<Pick<MechanismConfig, 'crankLength' | 'rockerLength' | 'couplerLength' | 'gearTrainRadii' | 'fabricationMetadata'>>;
 
 export const STACK_COLORS: Record<FabricationStackLayer['role'], string> = {
     base: '#e2e8f0',
@@ -80,9 +80,12 @@ export const fabricationStackForMechanism = (mechanism: FabricationStackMechanis
         );
     }
     if (mechanism.type === '4bar') {
-        const inputSpec = fabricationLinkageSpecForSceneLength(mechanism.crankLength ?? REFERENCE_DEFAULTS.fourBar.input, REFERENCE_DEFAULTS.pitchMm, 3);
-        const couplerSpec = fabricationLinkageSpecForSceneLength(mechanism.couplerLength ?? REFERENCE_DEFAULTS.fourBar.coupler, REFERENCE_DEFAULTS.pitchMm, 4);
-        const outputSpec = fabricationLinkageSpecForSceneLength(mechanism.rockerLength ?? REFERENCE_DEFAULTS.fourBar.output, REFERENCE_DEFAULTS.pitchMm, 3);
+        const pitchMm = typeof mechanism.fabricationMetadata?.gridPitchMm === 'number' && mechanism.fabricationMetadata.gridPitchMm > 0
+            ? mechanism.fabricationMetadata.gridPitchMm
+            : REFERENCE_DEFAULTS.pitchMm;
+        const inputSpec = fabricationLinkageSpecForSceneLength(mechanism.crankLength ?? REFERENCE_DEFAULTS.fourBar.input, pitchMm, 3);
+        const couplerSpec = fabricationLinkageSpecForSceneLength(mechanism.couplerLength ?? REFERENCE_DEFAULTS.fourBar.coupler, pitchMm, 4);
+        const outputSpec = fabricationLinkageSpecForSceneLength(mechanism.rockerLength ?? REFERENCE_DEFAULTS.fourBar.output, pitchMm, 3);
         return linked(
             layer(`Input L${inputSpec.cells} linkage`, 'linkage'),
             spacer(),

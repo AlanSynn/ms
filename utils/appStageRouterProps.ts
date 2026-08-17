@@ -53,7 +53,7 @@ type ViewportRouterProps = Pick<
 
 type FoundryRouterProps = Pick<
   AppStageRouterProps,
-  "foundry" | "setFoundry" | "onFoundryExport"
+  "foundry" | "setFoundry" | "onFoundryDraftChange" | "onFoundryExport"
 >;
 
 type MechanismRouterProps = Pick<

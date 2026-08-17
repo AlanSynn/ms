@@ -11,7 +11,13 @@ import { mechanismFeature, type MechanismFeatureIssue } from './mechanismFeature
 import { normalizeGearMeshMechanism } from './mechanismRecommendations';
 import { buildMechanismSceneContract, type MechanismSceneContract } from './mechanismSceneContract';
 import { buildFoundryMechanismPreviewModel, type FoundryMechanismPreviewModel } from './foundryPreviewModel';
-import { mechanismBindingWarnings, motionPreviewForProject, pointOnGeneratedMechanismPath } from './motion';
+import {
+    mechanismBindingWarnings,
+    mechanismPathFitIsUsable,
+    motionPreviewForProject,
+    pointOnGeneratedMechanismPath,
+    pointOnProjectPath,
+} from './motion';
 
 export type AutomataSceneMode = 'design-live' | 'assembly-live';
 
@@ -30,7 +36,8 @@ export type AutomataSceneModel = {
     generatedTarget?: Point;
     targetJointId?: string;
     targetError?: number;
-    motionSource: 'generatedPath' | 'linkage-effector' | 'missing-target' | 'none';
+    generatedPathError?: number;
+    motionSource: 'linkage-trace' | 'linkage-effector' | 'missing-target' | 'none';
     featureLabel?: string;
     featureIssues: MechanismFeatureIssue[];
     warnings: Record<string, string[]>;
@@ -98,11 +105,19 @@ export const buildAutomataSceneModel = (
     const selectedMotionPreview = motionPreviewForProject(project, [normalizedMechanism], angle);
     const mechanismPath = generatedPathForMechanism(normalizedMechanism);
     const generatedTarget = mechanismPath ? pointOnGeneratedMechanismPath(mechanismPath.points, angle) : undefined;
-    const targetError = generatedTarget && selectedMotionPreview.target
+    const authoredTarget = userPath ? pointOnProjectPath(userPath, angle) : undefined;
+    const targetError = authoredTarget && selectedMotionPreview.target
+        ? Math.hypot(selectedMotionPreview.target.x - authoredTarget.x, selectedMotionPreview.target.y - authoredTarget.y)
+        : undefined;
+    const generatedPathError = generatedTarget && selectedMotionPreview.target
         ? Math.hypot(selectedMotionPreview.target.x - generatedTarget.x, selectedMotionPreview.target.y - generatedTarget.y)
         : undefined;
-    const motionSource = generatedTarget && selectedMotionPreview.target
-        ? 'generatedPath'
+    const motionSource = selectedMotionPreview.target
+        ? normalizedMechanism.fabricationMetadata?.pathFit?.outputTraceId
+            ? 'linkage-trace'
+            : 'linkage-effector'
+        : normalizedMechanism.type === '4bar' && normalizedMechanism.targetPathId && !mechanismPathFitIsUsable(project, normalizedMechanism)
+            ? 'missing-target'
         : generatedTarget
             ? 'missing-target'
             : 'linkage-effector';
@@ -123,6 +138,7 @@ export const buildAutomataSceneModel = (
         generatedTarget,
         targetJointId: selectedMotionPreview.targetJointId,
         targetError,
+        generatedPathError,
         motionSource,
         featureLabel: feature.label,
         featureIssues: feature.validate(normalizedMechanism),

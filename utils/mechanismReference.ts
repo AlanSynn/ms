@@ -171,10 +171,11 @@ export const referenceRequiredPartsForMechanism = (mechanism: Pick<MechanismConf
     const parts = recipe.requiredParts.map(partRequirement => ({ ...partRequirement }));
     if (mechanism.type === '4bar') {
         const normalized = normalizeFourBarToFabrication(mechanism);
+        const pitchMm = fabricationPitchMmForMechanism(normalized);
         return aggregatePartRequirements([
-            linkageRequirementForSceneLength(normalized.crankLength ?? REFERENCE_DEFAULTS.fourBar.input),
-            linkageRequirementForSceneLength(normalized.couplerLength ?? REFERENCE_DEFAULTS.fourBar.coupler),
-            linkageRequirementForSceneLength(normalized.rockerLength ?? REFERENCE_DEFAULTS.fourBar.output),
+            linkageRequirementForSceneLength(normalized.crankLength ?? REFERENCE_DEFAULTS.fourBar.input, pitchMm),
+            linkageRequirementForSceneLength(normalized.couplerLength ?? REFERENCE_DEFAULTS.fourBar.coupler, pitchMm),
+            linkageRequirementForSceneLength(normalized.rockerLength ?? REFERENCE_DEFAULTS.fourBar.output, pitchMm),
             ...parts.filter(partRequirement => partRequirement.category !== 'linkages')
         ]);
     }
@@ -211,10 +212,22 @@ const sceneGearRadiusForSpec = (spec: FabricationGearSpec) => mmToScene(spec.pit
 const sceneLinkageLengthForSpec = (spec: FabricationLinkageSpec) => mmToScene(spec.lengthMm);
 const finiteSceneNumber = (value: unknown, fallback: number) =>
     typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-const nearestFabricationLinkageSceneLength = (value: unknown, fallback: number, minHoleCount = 2) =>
-    sceneLinkageLengthForSpec(fabricationLinkageSpecForSceneLength(finiteSceneNumber(value, fallback), minHoleCount));
-const nearestBoardPitchSceneLength = (value: unknown, fallback: number) => {
-    const pitchMm = FABRICATION_DEFAULT_GRID_PITCH_MM;
+const fabricationPitchMmForMechanism = (mechanism: Partial<MechanismConfig>) => {
+    const pitchMm = mechanism.fabricationMetadata?.gridPitchMm;
+    return typeof pitchMm === 'number' && Number.isFinite(pitchMm) && pitchMm > 0
+        ? pitchMm
+        : FABRICATION_DEFAULT_GRID_PITCH_MM;
+};
+const nearestFabricationLinkageSceneLength = (value: unknown, fallback: number, minHoleCount = 2, pitchMm = FABRICATION_DEFAULT_GRID_PITCH_MM) => {
+    const lengthMm = sceneToMm(finiteSceneNumber(value, fallback));
+    const candidates = FABRICATION_LINKAGE_SPECS.filter(spec => spec.holeCentersMm.length >= Math.max(2, minHoleCount));
+    const available = candidates.length ? candidates : FABRICATION_LINKAGE_SPECS;
+    const spec = available.reduce((best, candidate) =>
+        Math.abs(candidate.cells * pitchMm - lengthMm) < Math.abs(best.cells * pitchMm - lengthMm) ? candidate : best
+    );
+    return mmToScene(spec.cells * pitchMm);
+};
+const nearestBoardPitchSceneLength = (value: unknown, fallback: number, pitchMm = FABRICATION_DEFAULT_GRID_PITCH_MM) => {
     const lengthMm = sceneToMm(finiteSceneNumber(value, fallback));
     const cells = Math.max(1, Math.round(lengthMm / pitchMm));
     return mmToScene(cells * pitchMm);
@@ -321,8 +334,10 @@ const gearRequirementsForMechanism = (mechanism: Partial<MechanismConfig>) =>
     normalizeGearTrainRadii(mechanism, REFERENCE_DEFAULTS.gearTrain.driveRadius, REFERENCE_DEFAULTS.gearTrain.outputRadius, { endpointsNeedAttachment: mechanism.type === 'gear_linkage' })
         .map(radius => gearRequirementForSceneRadius(radius));
 
-const linkageRequirementForSceneLength = (sceneLength: number) => {
-    const spec = fabricationLinkageSpecForSceneLength(sceneLength);
+const linkageRequirementForSceneLength = (sceneLength: number, pitchMm = FABRICATION_DEFAULT_GRID_PITCH_MM) => {
+    const spec = FABRICATION_LINKAGE_SPECS.reduce((best, candidate) =>
+        Math.abs(candidate.cells * pitchMm * SCENE_PX_PER_MM - sceneLength) < Math.abs(best.cells * pitchMm * SCENE_PX_PER_MM - sceneLength) ? candidate : best
+    );
     return part(`linkages:${spec.key}`, 'linkages', spec.key, `L${spec.cells} linkage`, 1);
 };
 
@@ -671,14 +686,17 @@ export const normalizeGearLinkageToReference = <T extends Partial<MechanismConfi
     };
 };
 
-export const normalizeFourBarToFabrication = <T extends Partial<MechanismConfig>>(mechanism: T): T => ({
-    ...mechanism,
-    groundLength: nearestBoardPitchSceneLength(mechanism.groundLength, REFERENCE_DEFAULTS.fourBar.ground),
-    crankLength: nearestFabricationLinkageSceneLength(mechanism.crankLength, REFERENCE_DEFAULTS.fourBar.input, 3),
-    couplerLength: nearestFabricationLinkageSceneLength(mechanism.couplerLength, REFERENCE_DEFAULTS.fourBar.coupler, 4),
-    rockerLength: nearestFabricationLinkageSceneLength(mechanism.rockerLength, REFERENCE_DEFAULTS.fourBar.output, 3),
-    assemblyMode: mechanism.assemblyMode ?? 'open'
-});
+export const normalizeFourBarToFabrication = <T extends Partial<MechanismConfig>>(mechanism: T): T => {
+    const pitchMm = fabricationPitchMmForMechanism(mechanism);
+    return {
+        ...mechanism,
+        groundLength: nearestBoardPitchSceneLength(mechanism.groundLength, REFERENCE_DEFAULTS.fourBar.ground, pitchMm),
+        crankLength: nearestFabricationLinkageSceneLength(mechanism.crankLength, REFERENCE_DEFAULTS.fourBar.input, 3, pitchMm),
+        couplerLength: nearestFabricationLinkageSceneLength(mechanism.couplerLength, REFERENCE_DEFAULTS.fourBar.coupler, 4, pitchMm),
+        rockerLength: nearestFabricationLinkageSceneLength(mechanism.rockerLength, REFERENCE_DEFAULTS.fourBar.output, 3, pitchMm),
+        assemblyMode: mechanism.assemblyMode ?? 'open'
+    };
+};
 
 export const normalizeMechanismToReference = <T extends Partial<MechanismConfig> & Pick<MechanismConfig, 'type'>>(mechanism: T): T => {
     if (mechanism.type === '4bar') {

@@ -25,6 +25,22 @@ export interface Transform {
     scale: number;
 }
 
+export type MechanismPathFitStatus = 'unfitted' | 'fit' | 'closest' | 'rejected';
+
+export interface MechanismPathFitMetadata {
+    status: MechanismPathFitStatus;
+    targetPathId?: string;
+    outputTraceId?: string;
+    phaseOffset?: number;
+    direction?: 1 | -1;
+    error?: number;
+    maxError?: number;
+    tangentError?: number;
+    maxTangentError?: number;
+    tolerance?: number;
+    kitProfileKey?: string;
+}
+
 export interface MechanismConfig {
     id: string;
     type: MechanismType;
@@ -77,6 +93,7 @@ export interface MechanismConfig {
         targetPathId?: string;
         requiredParts?: FabricationPartRequirement[];
         warnings?: string[];
+        pathFit?: MechanismPathFitMetadata;
     };
     foundryExport?: FoundryExportPackage;
     showOutputGear?: boolean;

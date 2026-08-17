@@ -1,4 +1,11 @@
-import type { BodyPartLayer, MechanismConfig, MechanismType, Point, ProjectMotionPath, ProjectState } from "../types";
+import type {
+  BodyPartLayer,
+  MechanismConfig,
+  MechanismType,
+  Point,
+  ProjectMotionPath,
+  ProjectState,
+} from "../types";
 import { generateCurvePoints, gearTrainOutputRatio, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from "./kinematics";
 import { generateSmartConfig } from "./optimizer";
 import { createDefaultMechanism, mechanismWithGeneratedPath } from "./project";
@@ -8,7 +15,10 @@ import { motionAnchorJointIds, preferredMotionJointId } from "./motion";
 import { MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY } from "./mechanismTemplates";
 import { isReferenceFoundryVisible, normalizeMechanismToFabricationSet, normalizeMechanismToReference } from "./mechanismReference";
 import { fitPathToBox } from "./mechanismPreview";
-import { fitFourBarKitMechanismToPath } from "./fourBarPathFit";
+import {
+  fitFourBarKitMechanismToPath,
+  rejectedFourBarPathFit,
+} from "./fourBarPathFit";
 import { generateFoundryPlaybackPointTraces, primaryFoundryPlaybackPath } from "./foundryPlayback";
 
 export type MechanismRecommendation = {
@@ -757,12 +767,20 @@ export const fitMechanismToTargetPath = (
   const path = targetPathId ? project.paths[targetPathId] : undefined;
   const part = path && !path.sceneObjectId ? project.parts[path.partId] : undefined;
   const object = path?.sceneObjectId ? project.sceneObjects[path.sceneObjectId] : undefined;
-  if (!path || (!part && !object) || path.points.length < 3)
+  if (!path || (!part && !object))
     return snapMechanismAnchor(normalizeGearMeshMechanism(mechanism), project);
+  if (path.points.length < 3) {
+    return mechanism.type === "4bar"
+      ? rejectedFourBarPathFit(project, mechanism, path)
+      : snapMechanismAnchor(normalizeGearMeshMechanism(mechanism), project);
+  }
   const acceptedFourBarFit = mechanism.type === "4bar"
     ? fitFourBarKitMechanismToPath(project, mechanism, path)
     : undefined;
   if (acceptedFourBarFit) return acceptedFourBarFit;
+  if (mechanism.type === "4bar") {
+    return rejectedFourBarPathFit(project, mechanism, path);
+  }
   const fittedCandidate = mechanism.type === "gear_linkage"
     ? fitGearLinkageOutputToPath(
         project,
@@ -903,16 +921,18 @@ export const buildMechanismRecommendations = (
         project,
         initialMechanism,
       );
-      const mechanism = initialErrors.length
-        ? fitRecommendedMechanismToSheet(
-            project,
-            readyMechanismFallbackForPath(
+      const mechanism = candidate.type === "4bar"
+        ? fitMechanismToTargetPath(project, initialMechanism, selectedPath.id)
+        : initialErrors.length
+          ? fitRecommendedMechanismToSheet(
               project,
-              initialMechanism,
-              selectedPath,
-            ),
-          )
-        : initialMechanism;
+              readyMechanismFallbackForPath(
+                project,
+                initialMechanism,
+                selectedPath,
+              ),
+            )
+          : initialMechanism;
       const range = sampleFeasibleRange(mechanism);
       const fabricationErrors = fabricationErrorsForCandidate(
         project,
@@ -941,6 +961,11 @@ export const buildMechanismRecommendations = (
         fabricationErrors,
       };
     })
-    .filter((option) => option.fabricationErrors.length === 0)
+    .filter(
+      (option) =>
+        option.fabricationErrors.length === 0 ||
+        (option.type === "4bar" &&
+          option.mechanism.fabricationMetadata?.pathFit?.status === "rejected"),
+    )
     .sort((a, b) => b.score - a.score);
 };
