@@ -4,15 +4,11 @@ import { readFileSync } from 'node:fs';
 const hook = readFileSync('hooks/useAppOnnxBootstrap.ts', 'utf8');
 const pill = readFileSync('components/shell/OnnxCacheStatusPill.tsx', 'utf8');
 const worker = readFileSync('workers/webOnnxCacheWorker.ts', 'utf8');
-const effectStart = hook.indexOf('useEffect(() => {');
-const effect = hook.slice(effectStart, hook.indexOf('  }, [warmInBackground]);', effectStart));
-
-assert(effect.includes('warmInBackground') && effect.includes('requestIdleCallback'), 'AI cache preparation is scheduled after the workspace effect');
-assert(!effect.includes('new Worker'), 'boot effect does not create an AI worker');
-assert(hook.includes('stage: "available"') && effect.includes('setOnnxCacheStatus(initialOnnxCacheStatus)'), 'boot publishes an immediately usable status before background preparation');
-assert(hook.includes('warmWebOnnxCacheInWorker(setOnnxCacheStatus)') && hook.includes('setTimeout(start, 700)'), 'background cache preparation uses a worker with a fallback idle schedule');
+assert(hook.includes('stage: "missing"'), 'boot starts with an explicit unloaded AI status');
+assert(!hook.includes('useEffect') && !hook.includes('requestIdleCallback') && !hook.includes('setTimeout('), 'boot does not schedule an AI cache request');
+assert(hook.includes('prepareModel') && hook.includes('warmWebOnnxCacheInWorker(setOnnxCacheStatus)'), 'explicit AI preparation uses the worker cache seam');
 assert(worker.includes('worker.onmessage') && worker.includes('cache.put') && worker.includes('download disconnected after'), 'AI cache preparation validates and stores bytes off the main thread');
-assert(hook.includes('warmInBackground()'), 'explicit cache action reuses background preparation');
-assert(pill.includes("status.stage === 'cached' || status.stage === 'available'") && pill.includes("status.stage === 'checking'") && pill.includes("'AI preparing…'") && pill.includes("ready ? 'cached' : status.stage"), 'background preparation has an explicit non-blocking status');
+assert(hook.includes('const cacheOnnxModel') && hook.includes('const result = await prepareModel()'), 'the cache button is the explicit AI preparation action');
+assert(pill.includes("status.stage === 'cached' || status.stage === 'available'") && pill.includes("status.stage === 'checking'") && pill.includes("'AI preparing…'") && pill.includes("ready ? 'cached' : status.stage"), 'explicit preparation keeps a compact cache status');
 
-console.log('b695 AI background-prep contract ok');
+console.log('b695 AI on-demand contract ok');

@@ -3026,21 +3026,10 @@ test('Mobile path editor keeps Draw free path action above the canvas', async ({
 });
 
 
-test('Startup releases the workspace before background AI preparation and opens Getting Started over Character', async ({ page }) => {
-  let releaseModelDownload!: () => void;
+test('Startup opens the workspace without preparing AI until an explicit cache action', async ({ page }) => {
   let modelRequests = 0;
-  const heldDownload = new Promise<void>(resolve => { releaseModelDownload = resolve; });
   page.on('request', request => {
     if (request.url().includes('/onnx/pose_model.onnx')) modelRequests += 1;
-  });
-  await page.route(ONNX_MODEL_ROUTE, async route => {
-    await heldDownload;
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/octet-stream',
-      headers: { 'content-length': String(TEST_ONNX_MODEL_BYTES.length) },
-      body: TEST_ONNX_MODEL_BYTES,
-    });
   });
   await page.goto('/');
   const bootText = await page.evaluate(() => document.getElementById('boot-loader')?.textContent ?? '');
@@ -3050,19 +3039,15 @@ test('Startup releases the workspace before background AI preparation and opens 
   }
   await expect(page.locator('#boot-loader')).toHaveCount(0, { timeout: 180_000 });
   await expect(page.getByTestId('character-screen')).toBeVisible();
-  await expect(page.getByTestId('getting-started-dialog')).toBeVisible();
-  await expect.poll(() => modelRequests, { timeout: 15_000, message: 'AI preparation starts after the workspace is interactive' }).toBeGreaterThan(0);
-  await page.getByTestId('getting-started-hide-session').locator('input').check();
-  await page.getByTestId('getting-started-card-guided').click();
-  await expect(page.getByTestId('guided-project-library')).toBeVisible();
-  await page.getByTestId('guided-project-card-waving-arm').click();
-  await expect(page.getByTestId('character-screen')).toBeVisible();
-  await expect(page.getByTestId('getting-started-dialog')).toHaveCount(0);
-  releaseModelDownload();
+  const gettingStarted = page.getByTestId('getting-started-dialog');
+  await expect(gettingStarted).toBeVisible();
+  await expect(page.getByTestId('onnx-cache-status')).toContainText('Get AI');
+  await expect.poll(() => modelRequests, { message: 'startup does not request the ONNX model' }).toBe(0);
+  await gettingStarted.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(gettingStarted).toHaveCount(0);
+  await page.getByTestId('onnx-cache-status').click();
+  await expect.poll(() => modelRequests, { timeout: 15_000, message: 'explicit Get AI starts model preparation' }).toBeGreaterThan(0);
   await expect(page.getByTestId('onnx-cache-status')).toContainText('AI ready', { timeout: 180_000 });
-  await page.reload();
-  await expect(page.locator('#boot-loader')).toHaveCount(0, { timeout: 180_000 });
-  await expect(page.getByTestId('getting-started-dialog')).toHaveCount(0);
 });
 
 test('Mobile startup shows compact Getting Started with a session opt-out', async ({ page }) => {

@@ -119,7 +119,7 @@ export const useAppCharacterImportActions = ({
         type: "set_processing",
         processing: {
           stage: "error",
-          message: "Image processing failed",
+          message: "AI could not load on this network. Use a starter character or load a character file.",
           progress: 0,
           error: error instanceof Error ? error.message : String(error),
         },
