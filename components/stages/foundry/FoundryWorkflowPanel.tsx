@@ -34,8 +34,6 @@ export const FoundryWorkflowPanel = ({
   targetReady,
   fitRequired,
   fitState,
-  fitError,
-  fitMaxError,
   isPickingAnchor,
   hardBlocked,
   onToggleAnchorPick,
@@ -99,15 +97,10 @@ export const FoundryWorkflowPanel = ({
       {fitRequired && targetReady && (!fitState || fitState === "unfitted") && (
         <div className="warning">Fit path first.</div>
       )}
-      {fitRequired && fitState === "closest" && (
+      {fitRequired && (fitState === "closest" || fitState === "rejected") && (
         <div className="warning">
-          No valid fabrication fit
-          {fitError === undefined ? "" : ` · closest ${Math.round(fitError)} px`}
-          {fitMaxError === undefined ? "" : ` · max ${Math.round(fitMaxError)} px`}
+          No valid fabrication fit. Try a shorter path or another mechanism.
         </div>
-      )}
-      {fitRequired && fitState === "rejected" && (
-        <div className="warning">No valid fabrication fit.</div>
       )}
       <h4 className="section-title mt-4">Templates</h4>
       <div

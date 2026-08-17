@@ -1826,7 +1826,7 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await expect(twelveBoardFoundry).toHaveAttribute('data-fit-anchor-grid', /\S/);
   await expect(twelveBoardFoundry).toHaveAttribute('data-fit-target-path', 'fabrication-fit-path');
   await expect(page.getByRole('button', { name: /Use mechanism/i })).toBeDisabled();
-  await expect(page.getByText('No valid fabrication fit.', { exact: true })).toBeVisible();
+  await expect(page.getByText('No valid fabrication fit. Try a shorter path or another mechanism.', { exact: true })).toBeVisible();
   await clickStage(page, 'Mechanism Design');
   await expect(page.getByTestId('design-shared-foundry-preview')).toHaveAttribute('data-design-fit-status', 'rejected');
   await expect(page.getByTestId('design-shared-foundry-preview')).toHaveAttribute('data-design-motion-source', 'missing-target');
@@ -3510,7 +3510,7 @@ test('Unfitted classroom path stays blocked until a fabrication-valid fit exists
   await expect(page.getByTestId('foundry-fit-path')).toBeEnabled();
   await page.getByTestId('foundry-fit-path').click();
   await expect(page.getByTestId('foundry-fit-path-row')).toContainText('Fit path');
-  await expect(page.getByText('No valid fabrication fit.')).toBeVisible();
+  await expect(page.getByText('No valid fabrication fit. Try a shorter path or another mechanism.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /Use mechanism/i })).toBeDisabled();
   await expect.poll(async () => page.evaluate(() => {
     const mechanism = JSON.parse(localStorage.getItem('motionsmith.autosave') ?? '{}')?.mechanisms?.[0];
