@@ -2007,6 +2007,124 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   expectCleanPage(pageErrors, consoleErrors);
 });
 
+test('Mechanism target ownership stays on the arm when a foot path is added', async ({ page }) => {
+  await page.goto('/');
+
+  const readOwnership = () => page.evaluate(() => {
+    const snapshot = JSON.parse(localStorage.getItem('motionsmith.autosave') ?? '{}') as {
+      mechanisms?: Array<{
+        id: string;
+        targetPartId?: string;
+        targetPathId?: string;
+        targetAnchorJointId?: string;
+      }>;
+      paths?: Record<string, {
+        id: string;
+        partId?: string;
+        targetAnchorJointId?: string;
+      }>;
+    };
+    return {
+      mechanisms: (snapshot.mechanisms ?? []).map((mechanism: {
+        id: string;
+        targetPartId?: string;
+        targetPathId?: string;
+        targetAnchorJointId?: string;
+      }) => ({
+        id: mechanism.id,
+        targetPartId: mechanism.targetPartId,
+        targetPathId: mechanism.targetPathId,
+        targetAnchorJointId: mechanism.targetAnchorJointId,
+      })),
+      paths: Object.values(snapshot.paths ?? {}).map((path: {
+        id: string;
+        partId?: string;
+        targetAnchorJointId?: string;
+      }) => ({
+        id: path.id,
+        partId: path.partId,
+        targetAnchorJointId: path.targetAnchorJointId,
+      })),
+    };
+  });
+
+  // The fixture is a sample humanoid with an arm-owned path whose four-bar
+  // fit is deterministic, so this exercises the same Fit → Use handoff.
+  await openFabricationReadyFourBar(page);
+  await page.getByLabel('Motion target').selectOption('right_arm_lower');
+  await expect(page.getByLabel('Motion target')).toHaveValue('right_arm_lower');
+  await applyFourBarFromFoundry(page);
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+
+  await expect.poll(async () => {
+    const ownership = await readOwnership();
+    return ownership.mechanisms.find(mechanism => mechanism.targetPathId === 'fabrication-fit-path');
+  }, { message: 'the fitted mechanism remains bound to the arm path' }).toMatchObject({
+    targetPartId: 'right_arm_lower',
+    targetPathId: 'fabrication-fit-path',
+    targetAnchorJointId: 'right_hand',
+  });
+
+  await clickStage(page, 'Foundry');
+  const foundryToolbar = page.getByTestId('foundry-toolbar');
+  await foundryToolbar.getByRole('button', { name: 'Play', exact: true }).click();
+  await expect(page.getByTestId('foundry-toolbar-state')).toContainText('playing');
+  await foundryToolbar.getByRole('button', { name: 'Reset', exact: true }).click();
+  await expect(page.getByTestId('foundry-toolbar-state')).toContainText('paused');
+
+  await clickStage(page, 'Path');
+  await page.getByLabel('Motion target').selectOption('right_foot_part');
+  await expect(page.getByLabel('Motion target')).toHaveValue('right_foot_part');
+  await expect(page.getByTestId('free-draw-status')).toContainText('No path yet');
+  await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
+  await expect(page.getByTestId('path-view-2d')).toHaveAttribute('aria-pressed', 'true');
+  const pathCanvas = page.getByTestId('path-three-puppet-canvas');
+  const canvasBox = await pathCanvas.boundingBox();
+  expect(canvasBox, 'foot path canvas receives a second target stroke').toBeTruthy();
+  await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.42, canvasBox!.y + canvasBox!.height * 0.56);
+  await page.mouse.down();
+  await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.5, canvasBox!.y + canvasBox!.height * 0.6, { steps: 3 });
+  await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.58, canvasBox!.y + canvasBox!.height * 0.54, { steps: 3 });
+  await page.mouse.up();
+  await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
+  await page.getByLabel('Motion handle').selectOption('right_foot');
+  await expect(page.getByLabel('Motion handle')).toHaveValue('right_foot');
+
+  await expect.poll(async () => {
+    const ownership = await readOwnership();
+    return {
+      armMechanism: ownership.mechanisms.find(mechanism => mechanism.targetPathId === 'fabrication-fit-path'),
+      footPath: ownership.paths.find(path => path.partId === 'right_foot_part'),
+    };
+  }, { message: 'adding a foot path does not overwrite arm mechanism ownership' }).toMatchObject({
+    armMechanism: {
+      targetPartId: 'right_arm_lower',
+      targetPathId: 'fabrication-fit-path',
+      targetAnchorJointId: 'right_hand',
+    },
+    footPath: {
+      partId: 'right_foot_part',
+      targetAnchorJointId: 'right_foot',
+    },
+  });
+
+  await clickStage(page, 'Foundry');
+  await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
+  await clickStage(page, 'Design');
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+  await expect(page.getByTestId('design-shared-foundry-preview')).toHaveAttribute('data-design-target-joint-id', 'right_hand');
+
+  const finalOwnership = await readOwnership();
+  const armMechanism = finalOwnership.mechanisms.find(mechanism => mechanism.targetPathId === 'fabrication-fit-path');
+  const footPath = finalOwnership.paths.find(path => path.partId === 'right_foot_part');
+  expect(armMechanism).toMatchObject({
+    targetPartId: 'right_arm_lower',
+    targetPathId: 'fabrication-fit-path',
+    targetAnchorJointId: 'right_hand',
+  });
+  expect(footPath?.id).not.toBe(armMechanism?.targetPathId);
+});
+
 test('Foundry sensemaking shows library, partial range, and exported metadata', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
