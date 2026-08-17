@@ -64,6 +64,12 @@ export const BlueprintExport = ({
             data-testid="blueprint-canvas-preview"
             data-visual-level="3d-components"
           >
+            <div className="blueprint-legend" data-testid="blueprint-legend" aria-label="Blueprint legend">
+              <span><i className="blueprint-legend-swatch character" aria-hidden="true" />Character</span>
+              <span><i className="blueprint-legend-swatch mechanism" aria-hidden="true" />Mechanism</span>
+              <span><i className="blueprint-legend-swatch board" aria-hidden="true" />Board</span>
+              <span><i className="blueprint-legend-swatch path" aria-hidden="true" />Motion path</span>
+            </div>
             <ThreePuppetPreview
               project={project}
               skeleton={project.skeleton}

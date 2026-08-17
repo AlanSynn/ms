@@ -350,6 +350,13 @@
       .blueprint-more-exports summary::-webkit-details-marker { display: none; }
       .blueprint-more-exports[open] summary, .blueprint-more-exports summary:hover { color: var(--ms-accent); border-color: var(--ms-accent-line); background: var(--ms-accent-soft); }
       .blueprint-document-preview, .assembly-canvas-document { position: relative; height: 100%; min-height: 0; padding: .6rem; }
+      .blueprint-legend { position: absolute; left: 1.6rem; bottom: 1.35rem; z-index: 34; display: flex; flex-wrap: wrap; gap: .35rem; max-width: calc(100% - 3.2rem); border: 1px solid var(--ms-line); border-radius: 999px; background: rgba(255,255,255,.96); box-shadow: 0 12px 32px rgba(15,23,42,.08); padding: .35rem .5rem; color: var(--ms-text-soft); font-size: .68rem; font-weight: 720; pointer-events: none; }
+      .blueprint-legend span { display: inline-flex; align-items: center; gap: .28rem; white-space: nowrap; }
+      .blueprint-legend-swatch { display: inline-block; width: .62rem; height: .62rem; border-radius: 50%; border: 1px solid rgba(15,23,42,.18); }
+      .blueprint-legend-swatch.character { background: #cbd5e1; }
+      .blueprint-legend-swatch.mechanism { background: #60a5fa; }
+      .blueprint-legend-swatch.board { border-radius: .15rem; background: #f8fafc; border-color: #94a3b8; }
+      .blueprint-legend-swatch.path { background: #8b5cf6; }
       .blueprint-document-title { position: absolute; left: 1.6rem; top: 1.45rem; z-index: 2; border: 1px solid var(--ms-line); border-radius: 999px; background: rgba(255,255,255,.9); color: var(--ms-muted); padding: .38rem .65rem; font-size: .72rem; font-weight: 720; letter-spacing: .04em; box-shadow: 0 12px 32px rgba(15,23,42,.07); }
       .blueprint-document-preview > .three-puppet-overlay { overflow: hidden; border: 1px solid var(--ms-line); border-radius: 1.35rem; background: #fff; box-shadow: 0 22px 70px rgba(8,10,18,.09); }
       .blueprint-empty-state { display: grid; place-items: center; height: 100%; min-height: 24rem; border: 1px dashed var(--ms-line-strong); border-radius: 1.35rem; background: rgba(255,255,255,.72); color: var(--ms-muted); padding: 2rem; text-align: center; font-weight: 720; }

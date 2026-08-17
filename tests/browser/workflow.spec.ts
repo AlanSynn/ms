@@ -2565,6 +2565,21 @@ test('Slider edits expose immediate feasibility without auto-fitting link choice
   await expect(page.getByTestId('design-feasibility-status')).toContainText('May jam');
 });
 
+test('Blueprint names the four visual layers without replacing the shared scene', async ({ page }) => {
+  await page.goto('/');
+  await openFabricationReadyFourBar(page);
+  await clickStage(page, 'Blueprint');
+  const legend = page.getByTestId('blueprint-legend');
+  await expect(legend).toBeVisible();
+  await expect(legend).toContainText('Character');
+  await expect(legend).toContainText('Mechanism');
+  await expect(legend).toContainText('Board');
+  await expect(legend).toContainText('Motion path');
+  await expect(legend.locator('.blueprint-legend-swatch')).toHaveCount(4);
+  await expect(page.getByTestId('blueprint-three-puppet-canvas')).toBeVisible();
+  await expect(page.getByTestId('blueprint-three-puppet-state')).toHaveAttribute('data-view-mode', '2d');
+});
+
 test('Character tab owns body layer and skeleton edits used by design controls', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
