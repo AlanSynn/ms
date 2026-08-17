@@ -7,10 +7,12 @@ export const OnnxCacheStatusPill = ({ status, onDownload }: { status: WebOnnxCac
   const ready = status.stage === 'cached' || status.stage === 'available';
   const label = ready
     ? 'AI ready'
-    : status.stage === 'downloading'
-      ? `AI ${status.progress}% ${formatBytes(status.bytesLoaded)}`
-      : status.stage === 'error'
-        ? 'Try again'
-        : 'Get AI';
+    : status.stage === 'checking'
+      ? 'AI preparing…'
+      : status.stage === 'downloading'
+        ? `AI ${status.progress}% ${formatBytes(status.bytesLoaded)}`
+        : status.stage === 'error'
+          ? 'Try again'
+          : 'Get AI';
   return <button type="button" className={`status-cache-pill ${ready ? 'cached' : status.stage}`} data-testid="onnx-cache-status" disabled={busy || ready} onClick={onDownload} aria-label={status.error ?? label}>{label}</button>;
 };

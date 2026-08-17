@@ -599,6 +599,41 @@ export const warmWebOnnxCache = async (onStatus: (status: WebOnnxCacheStatus) =>
     }
 };
 
+export const warmWebOnnxCacheInWorker = (
+    onStatus: (status: WebOnnxCacheStatus) => void = () => {},
+): Promise<WebOnnxCacheStatus> => {
+    if (typeof Worker === 'undefined') return warmWebOnnxCache(onStatus);
+
+    return new Promise((resolve) => {
+        let settled = false;
+        const worker = new Worker(new URL('../workers/webOnnxCacheWorker.ts', import.meta.url), { type: 'module' });
+        const settle = (result: WebOnnxCacheStatus) => {
+            if (settled) return;
+            settled = true;
+            worker.terminate();
+            onStatus(result);
+            resolve(result);
+        };
+        worker.addEventListener('message', (event: MessageEvent<{ type: 'status'; status: WebOnnxCacheStatus }>) => {
+            if (event.data?.type !== 'status') return;
+            onStatus(event.data.status);
+            if (event.data.status.stage === 'cached' || event.data.status.stage === 'error') settle(event.data.status);
+        });
+        worker.addEventListener('error', () => {
+            worker.terminate();
+            void warmWebOnnxCache(onStatus).then(resolve);
+        }, { once: true });
+        worker.postMessage({
+            type: 'warm',
+            url: modelUrl(),
+            cacheName: MODEL_CACHE_NAME,
+            label: MODEL_LABEL,
+            minBytes: MIN_MODEL_BYTES,
+            bytesHeader: MODEL_BYTES_HEADER,
+        });
+    });
+};
+
 const loadWebOnnxModelBuffer = async (onStatus: (status: WebOnnxCacheStatus) => void = () => {}) => {
     const cached = await readCachedModel();
     if (cached) {
