@@ -260,6 +260,10 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     setShowGettingStarted(false);
     setStage("character");
   };
+  const openHome = () => {
+    setStage("character");
+    setShowGettingStarted(true);
+  };
   const {
     playerDock,
     assemblyStepIndex,
@@ -368,6 +372,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     project,
     stage,
     goStage,
+    onHome: openHome,
     commandHandlers,
     importProject,
     stageRouterProps,

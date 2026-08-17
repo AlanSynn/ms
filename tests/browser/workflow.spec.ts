@@ -750,6 +750,44 @@ const expectProjectCounts = async (page: Page, parts: number, paths: number, mec
   await expect(page.getByTestId('stage-project-card')).not.toBeVisible();
 };
 
+test('Header and rail Home reopen Getting Started without resetting the project', async ({ page }) => {
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await clickStage(page, 'Foundry');
+  await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
+  await expect(page.getByTestId('getting-started-dialog')).toHaveCount(0);
+
+  const openAndVerifyHome = async (activate: () => Promise<void>) => {
+    await activate();
+    const dialog = page.getByTestId('getting-started-dialog');
+    await expect(dialog).toBeVisible();
+    await expect(page.getByTestId('character-screen')).toBeVisible();
+    const puppet = page.getByTestId('character-three-puppet-state');
+    await expect(puppet).toHaveAttribute('data-part-count', /[1-9]\d*/);
+    let close = dialog.getByRole('button', { name: 'Close', exact: true });
+    if (!(await close.count())) {
+      await dialog.getByRole('button', { name: 'Starters', exact: true }).click();
+      close = dialog.getByRole('button', { name: 'Close', exact: true });
+    }
+    await close.click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByTestId('character-screen')).toBeVisible();
+    await clickStage(page, 'Path');
+    await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
+    await expect(page.getByTestId('path-three-puppet-state')).toHaveAttribute('data-three-path-count', '1');
+    await clickStage(page, 'Character');
+    await expect(page.getByTestId('character-screen')).toBeVisible();
+  };
+
+  await openAndVerifyHome(() => page.getByTestId('header-home').click());
+  await clickStage(page, 'Foundry');
+  await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
+  await openAndVerifyHome(async () => {
+    await page.getByTestId('rail-home').focus();
+    await page.keyboard.press('Enter');
+  });
+});
+
 test('character → path → foundry → design → blueprint runs end-to-end in browser', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];

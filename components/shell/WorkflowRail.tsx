@@ -7,9 +7,11 @@ const APP_VERSION = __APP_VERSION__;
 
 const MotionSmithLogoMark = ({ className = '' }: { className?: string }) => <img className={`motionsmith-logo-mark ${className}`.trim()} src={motionSmithIconUrl} alt="" aria-hidden="true" decoding="async" draggable={false}/>;
 
-export const WorkflowRail = ({ stage, goStage }: { stage: AppStage; goStage: (stage: AppStage) => void }) => (
+export const WorkflowRail = ({ stage, goStage, onHome }: { stage: AppStage; goStage: (stage: AppStage) => void; onHome: () => void }) => (
   <nav className="workflow-rail workspace-steps" data-testid="workspace-steps" aria-label="Workflow">
-    <div className="workflow-rail-brand" aria-hidden="true"><MotionSmithLogoMark className="workflow-rail-app-icon" /></div>
+    <button type="button" className="workflow-rail-brand" data-testid="rail-home" onClick={onHome} aria-label="Home">
+      <MotionSmithLogoMark className="workflow-rail-app-icon" />
+    </button>
     {STAGES.map(item => {
       const navItem = STAGE_PANE_NAV_ITEMS.find(nav => nav.target === item.id);
       return <button key={item.id} type="button" aria-label={item.label} aria-current={stage === item.id ? 'step' : undefined} onClick={() => goStage(item.id)} className={stage === item.id ? 'active' : ''}>

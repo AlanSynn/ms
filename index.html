@@ -94,6 +94,8 @@
       .workflow-rail { position: fixed; left: 0; top: 0; bottom: 0; z-index: 60; width: var(--ms-rail-width); display: flex; flex-direction: column; align-items: stretch; gap: .42rem; border-right: 1px solid var(--ms-line); border-radius: 0; border-left: 0; border-top: 0; border-bottom: 0; background: rgba(255,255,255,.94); box-shadow: 0 14px 36px rgba(15,23,42,.07); padding: .72rem .55rem; backdrop-filter: blur(18px); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
       .workflow-rail::-webkit-scrollbar { display: none; }
       .workflow-rail-brand { display: grid; place-items: center; height: 2.85rem; border-radius: 1rem; background: #fff; box-shadow: 0 14px 30px rgba(47,86,214,.12); overflow: hidden; }
+      .workflow-rail > .workflow-rail-brand { width: 100%; min-height: 2.85rem; border: 0; cursor: pointer; padding: 0; }
+      .workflow-rail > .workflow-rail-brand:hover { background: #fff; }
       .workflow-rail button { position: relative; display: grid; grid-template-rows: auto auto; justify-items: center; gap: .22rem; min-height: 3.85rem; border-radius: 1.05rem; background: transparent; color: var(--ms-muted); padding: .5rem .24rem; transition: background .18s ease, color .18s ease, transform .18s ease, box-shadow .18s ease; }
       .workflow-rail button:hover, .workflow-rail button.active { color: var(--ms-accent); background: var(--ms-accent-soft); }
       .workflow-rail button.active { box-shadow: inset 0 0 0 1px var(--ms-accent-line); }
@@ -103,12 +105,15 @@
       .brand-kicker { display: grid; place-items: center; width: 1.82rem; height: 1.82rem; border-radius: .68rem; background: var(--ms-accent); color: #fff; font-family: var(--ms-font-display); font-size: .68rem; font-weight: 800; letter-spacing: -.04em; line-height: 1; box-shadow: 0 10px 24px rgba(139,92,246,.18); white-space: nowrap; }
       .app-header-icon { width: 2.1rem; height: 2.1rem; border-radius: .75rem; object-fit: cover; background: transparent; padding: 0; box-shadow: 0 10px 24px rgba(47,86,214,.12); }
       .brand-title { margin: 0; color: var(--ms-text); font-family: var(--ms-font-display); font-size: 1.08rem; line-height: 1; font-weight: 800; letter-spacing: -.035em; white-space: nowrap; }
+      .app-header-home { display: inline-flex; min-width: 0; align-items: center; gap: .58rem; border: 0; border-radius: .9rem; background: transparent; color: inherit; cursor: pointer; font: inherit; padding: .18rem .24rem .18rem 0; text-align: left; transition: color .18s ease, transform .18s ease; }
+      .app-header-home:hover { color: var(--ms-accent); }
+      .app-header-home:active { transform: translateY(1px); }
+      .app-header-home:focus-visible, .workflow-rail > .workflow-rail-brand:focus-visible { outline: 2px solid var(--ms-accent); outline-offset: 3px; }
       h1, h2, h3, h4, .modal-sheet h3, .template-tile strong { font-family: var(--ms-font-display); }
       kbd, .blueprint-label, .label-mono { font-family: var(--ms-font-mono); }
       .workflow-rail-short { max-width: 100%; color: inherit; font-size: .66rem; font-weight: 720; line-height: .84rem; text-align: center; white-space: normal; overflow-wrap: anywhere; }
       .workflow-rail-full { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
       .app-header { position: fixed; left: var(--ms-rail-width); right: 0; top: 0; height: var(--ms-header-height); z-index: 50; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0 1.1rem; background: rgba(255,255,255,.90); box-shadow: 0 4px 20px rgba(139,92,246,.05); }
-      .app-header-brand { display: flex; min-width: 0; align-items: center; gap: .58rem; }
       .app-header-actions { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: .6rem; }
       .quick-toolbar { display: flex; align-items: center; gap: .35rem; }
       .quick-toolbar .btn-secondary, .quick-toolbar .btn-primary { min-height: 2rem; border-radius: 999px; padding: .42rem .65rem; font-size: .76rem; }
@@ -510,7 +515,7 @@
         .app-shell { display: block; height: auto; max-height: none; overflow: visible; }
         .app-rail, .workflow-rail { display: none; }
         .app-header { position: sticky; left: 0; right: 0; height: auto; min-height: 3.55rem; padding: .7rem .9rem; flex-wrap: wrap; }
-        .app-header-brand { width: 100%; }
+        .app-header-home { width: 100%; }
         .app-header-actions { width: 100%; justify-content: flex-start; }
         .brand-kicker { display: none; }
         .workspace-steps { display: none; }

@@ -29,6 +29,7 @@ export type AppWorkspaceShellProps = {
   project: ProjectState;
   stage: AppStage;
   goStage: (stage: AppStage) => void;
+  onHome: () => void;
   commandHandlers: AppCommandHandlerMap;
   importProject: (file: File) => void | Promise<void>;
   stageRouterProps: AppStageRouterProps;
@@ -75,6 +76,7 @@ export const AppWorkspaceShell = ({
   project,
   stage,
   goStage,
+  onHome,
   commandHandlers,
   importProject,
   stageRouterProps,
@@ -121,10 +123,16 @@ export const AppWorkspaceShell = ({
         }}
       />
       <div ref={appShellRef} className="relative grid min-h-screen app-shell">
-        <WorkflowRail stage={stage} goStage={goStage} />
+        <WorkflowRail stage={stage} goStage={goStage} onHome={onHome} />
         <section className="relative flex min-w-0 flex-col">
           <header className="app-header border-b border-slate-300/70 bg-white/50 backdrop-blur-xl">
-            <div className="app-header-brand">
+            <button
+              type="button"
+              className="app-header-home"
+              data-testid="header-home"
+              onClick={onHome}
+              aria-label="Home"
+            >
               <img
                 className="brand-kicker app-header-icon"
                 src={motionSmithIconUrl}
@@ -135,7 +143,7 @@ export const AppWorkspaceShell = ({
               />
               <h1 className="brand-title">MotionSmith</h1>
               <h2 className="current-stage-title">{stageMeta?.label}</h2>
-            </div>
+            </button>
             <div className="app-header-actions">
               <TopCommandBar commandHandlers={commandHandlers} />
               {project.settings.toolbarVisible && (
