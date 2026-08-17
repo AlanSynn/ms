@@ -20,7 +20,7 @@ export const VIEWER3D_CAMERA_PRESETS: Record<Viewer3DCameraPreset, Viewer3DCamer
     mode: '2d',
     position: [0, 0, 1],
     up: [0, 1, 0],
-    distance: 16,
+    distance: 24,
     foundry: { yaw: 0, pitch: 0, zoom: 0.86 }
   },
   top: {

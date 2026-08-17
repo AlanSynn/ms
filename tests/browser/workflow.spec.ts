@@ -4,6 +4,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CLASSROOM_LESSONS, createLessonProject, serializeProject } from '../../utils/project';
+import { createFabricationReadyFourBarProject } from '../fixtures/fabricationProject';
 import { FABRICATION_RENDER_LAYER_Z_STEP } from '../../utils/fabrication';
 import { APP_COMMANDS, APP_MENU_GROUPS, commandById, type AppCommandId } from '../../utils/appCommands';
 
@@ -182,7 +183,7 @@ const openBlueprintMoreFiles = async (page: Page) => {
 };
 
 const waitForBootLoader = async (page: Page) => {
-  await expect(page.locator('#boot-loader'), 'static boot loader releases after AI model warmup').toHaveCount(0, { timeout: 180_000 });
+  await expect(page.locator('#boot-loader'), 'static boot loader releases before optional AI preparation').toHaveCount(0, { timeout: 180_000 });
 };
 
 const openCharacterScreen = async (page: Page, options: { loadStarter?: boolean } = { loadStarter: true }) => {
@@ -415,7 +416,7 @@ test('Character tab owns separate scene objects and later tabs only render them'
   const sceneObjectPathId = `path-${sceneObjectId}`;
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
   await expect(page.getByTestId('path-view-2d')).toHaveAttribute('aria-pressed', 'true');
-  const objectPathCanvas = page.getByTestId('path-canvas');
+  const objectPathCanvas = page.getByTestId('path-three-puppet-canvas');
   const objectPathBox = await objectPathCanvas.boundingBox();
   expect(objectPathBox, 'object path canvas box').toBeTruthy();
   await page.mouse.move(objectPathBox!.x + objectPathBox!.width * 0.42, objectPathBox!.y + objectPathBox!.height * 0.42);
@@ -424,7 +425,8 @@ test('Character tab owns separate scene objects and later tabs only render them'
   await page.mouse.move(objectPathBox!.x + objectPathBox!.width * 0.58, objectPathBox!.y + objectPathBox!.height * 0.42, { steps: 4 });
   await page.mouse.up();
   await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
-  await expect(page.locator('[data-testid^="path-scene-object-art-"]')).toBeVisible();
+  const objectPathPuppet = page.getByTestId('path-three-puppet-state');
+  await expect(objectPathPuppet).toHaveAttribute('data-scene-object-count', '1');
   await page.getByTestId('path-view-3d').click();
   const pathPuppet = page.getByTestId('path-three-puppet-state');
   await expect(pathPuppet).toHaveAttribute('data-scene-object-count', '1');
@@ -634,9 +636,18 @@ const writeWavingArmLessonProject = async () => {
   return path;
 };
 
-const importWavingArmLessonProject = async (page: Page, targetStage: 'character' | 'path' = 'path') => {
+const writeFabricationReadyFourBarProject = async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'motionsmith-fit-'));
+  const path = join(dir, 'fabrication-fit.motionsmith.json');
+  fabricationReadyFourBarSnapshot ??= serializeProject(createFabricationReadyFourBarProject());
+  await writeFile(path, fabricationReadyFourBarSnapshot, 'utf8');
+  return path;
+};
+
+let fabricationReadyFourBarSnapshot: string | undefined;
+
+const importProjectFile = async (page: Page, projectPath: string, targetStage: 'character' | 'path' = 'path') => {
   await waitForBootLoader(page);
-  const projectPath = await writeWavingArmLessonProject();
   const gettingStarted = page.getByTestId('getting-started-dialog');
   if (await gettingStarted.count()) {
     if (await gettingStarted.getByTestId('guided-project-library').count()) {
@@ -653,13 +664,29 @@ const importWavingArmLessonProject = async (page: Page, targetStage: 'character'
   }
 };
 
+const importWavingArmLessonProject = async (page: Page, targetStage: 'character' | 'path' = 'path') => {
+  await importProjectFile(page, await writeWavingArmLessonProject(), targetStage);
+};
+
+const importFabricationReadyFourBarProject = async (page: Page, targetStage: 'character' | 'path' = 'path') => {
+  await importProjectFile(page, await writeFabricationReadyFourBarProject(), targetStage);
+};
+
 const openWavingArmTemplate = async (page: Page) => {
   await importWavingArmLessonProject(page, 'path');
+};
+
+const openFabricationReadyFourBar = async (page: Page) => {
+  await importFabricationReadyFourBarProject(page, 'path');
 };
 
 const applyFourBarFromFoundry = async (page: Page) => {
   await page.getByRole('button', { name: /Foundry/i }).click();
   await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
+  const fitPath = page.getByTestId('foundry-fit-path');
+  await expect(fitPath).toBeEnabled();
+  await fitPath.click();
+  await expect(page.getByRole('button', { name: /Use mechanism/i })).toBeEnabled();
   await page.getByRole('button', { name: /Use mechanism/i }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
 };
@@ -732,12 +759,12 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   });
 
   await page.goto('/');
-  await expect(page.getByTestId('shared-workbench')).toBeVisible();
+  await expect(page.getByTestId('shared-workbench')).toBeVisible({ timeout: 180_000 });
   await expect(page.locator('#boot-loader')).toHaveCount(0, { timeout: 180_000 });
   await expect(page.getByTestId('character-screen')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.classList.contains('welcome-modal-open'))).toBe(true);
   await expect(page.getByTestId('onnx-cache-status')).toBeVisible();
-  await expect(page.getByTestId('onnx-cache-status')).toContainText(/AI ready|Get AI|AI \d+%|Try again/);
+  await expect(page.getByTestId('onnx-cache-status')).toContainText(/AI ready|AI preparing|Get AI|AI \d+%|Try again/);
   await expect(page.getByTestId('status-bar')).not.toContainText(/parts:|paths:|mechs:|zoom/);
 
   const gettingStarted = page.getByTestId('getting-started-dialog');
@@ -840,7 +867,6 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('novice-path-panel')).toContainText('Draw path');
   await expect(page.getByRole('heading', { name: 'Draw path' })).toBeVisible();
   await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
-  await expect(page.getByTestId('path-canvas')).toHaveCount(0);
   await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
   const pathPuppet = page.getByTestId('path-three-puppet-state');
   await expect(pathPuppet).toHaveAttribute('data-three-renderer', 'webgl');
@@ -852,14 +878,15 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('path-three-puppet-view-2d')).toHaveCount(0);
   await page.getByTestId('path-view-2d').click();
   await expect(page.getByTestId('path-view-2d')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByTestId('path-canvas')).toBeVisible();
-  await expect(page.getByTestId('path-three-puppet-state')).toHaveCount(0);
+  await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
+  await expect(pathPuppet).toHaveAttribute('data-camera-preset', 'front');
+  await expect(pathPuppet).toHaveAttribute('data-view-mode', '2d');
   await expect(page.getByTestId('path-shape-controls')).toBeVisible();
   await expect(page.getByLabel('Smoothness number')).toBeVisible();
   const zoomReadout = page.getByTestId('canvas-zoom-readout');
   const readZoomPercent = async () => Number((await zoomReadout.textContent())?.replace('%', '') ?? '0');
   const zoomBefore = await readZoomPercent();
-  const pathCanvasForZoom = page.getByTestId('path-canvas');
+  const pathCanvasForZoom = page.getByTestId('path-three-puppet-canvas');
   const pathBox = await pathCanvasForZoom.boundingBox();
   if (!pathBox) throw new Error('path 2D canvas box missing');
   await page.mouse.move(pathBox.x + pathBox.width * 0.55, pathBox.y + pathBox.height * 0.45);
@@ -867,7 +894,6 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect.poll(readZoomPercent).toBeGreaterThan(zoomBefore);
   await page.getByTestId('path-view-3d').click();
   await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
-  await expect(page.getByTestId('path-canvas')).toHaveCount(0);
   await expect(pathPuppet).toHaveAttribute('data-camera-preset', 'iso');
   await expect(pathPuppet).toHaveAttribute('data-view-mode', '3d');
   const yawBefore = Number(await pathPuppet.getAttribute('data-camera-yaw'));
@@ -905,8 +931,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect.poll(async () => Number(await pathPuppet.getAttribute('data-three-scene-object-count')), { message: '3D puppet scene has rendered geometry beyond a dummy canvas' }).toBeGreaterThan(40);
   await expect.poll(async () => Number(await pathPuppet.getAttribute('data-three-render-triangles')), { message: 'path WebGL renderer drew real triangles' }).toBeGreaterThan(0);
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
-  await expect(page.getByTestId('skeleton-joint-right_elbow')).toBeVisible();
-  expect(await page.locator('[data-testid^="skeleton-joint-"]').count()).toBeGreaterThanOrEqual(17);
+  await expect(pathPuppet).toHaveAttribute('data-three-joint-ids', /(^|,)right_elbow(,|$)/);
+  expect((await pathPuppet.getAttribute('data-three-joint-ids') ?? '').split(',').filter(Boolean).length).toBeGreaterThanOrEqual(17);
   await page.getByRole('button', { name: 'Drawing free path', exact: true }).click();
 
   const projectDownloadPromise = page.waitForEvent('download');
@@ -929,9 +955,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
   await expect(page.getByTestId('path-view-2d')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByTestId('path-three-puppet-state')).toHaveCount(0);
-  await expect(page.locator('[data-testid="path-canvas"], [data-testid="path-three-puppet-canvas"]')).toHaveCount(1);
-  const pathCanvas = page.getByTestId('path-canvas');
+  await expect(page.getByTestId('path-three-puppet-canvas')).toHaveCount(1);
+  const pathCanvas = page.getByTestId('path-three-puppet-canvas');
   await expect(pathCanvas).toBeVisible();
   const e2ePathBox = await pathCanvas.boundingBox();
   expect(e2ePathBox, 'e2e path canvas can receive a one-stroke draw gesture').toBeTruthy();
@@ -942,6 +967,11 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await page.mouse.up();
   await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
   await expect(page.getByTestId('free-draw-status')).toHaveAttribute('data-draw-mode', 'idle');
+
+  // The authored lesson stroke above remains covered by the path-editor flow;
+  // use the deterministic physical trace for the downstream Foundry/Design/
+  // Blueprint handoff so this test exercises an actually buildable mechanism.
+  await openFabricationReadyFourBar(page);
 
   await page.getByRole('button', { name: /Foundry/i }).click();
   await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
@@ -982,6 +1012,13 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('foundry-canvas-pane')).toHaveAttribute('data-fit-target-path', /\S+/);
   await page.getByTestId('foundry-fit-path').click();
   await expect(page.getByTestId('foundry-canvas-pane')).toHaveAttribute('data-mechanism-path-preview', 'shown');
+  await clickStage(page, 'Mechanism Design');
+  const fitBeforeUse = page.getByTestId('design-shared-foundry-preview');
+  await expect(fitBeforeUse).toHaveAttribute('data-design-fit-status', 'fit');
+  await expect(fitBeforeUse).toHaveAttribute('data-design-motion-source', 'linkage-trace');
+  await expect(fitBeforeUse).toHaveAttribute('data-design-generated-path-count', /^(?:[1-9][0-9]*)$/);
+  await clickStage(page, 'Foundry');
+  await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
   const foundryRenderContract = await readFoundryRenderContract(foundryRig);
   const foundryInspector = page.getByTestId('stage-right-inspector');
   await expect(foundryInspector.getByTestId('foundry-visible-sensemaking')).toContainText('Crank turns');
@@ -1009,6 +1046,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('foundry-anchor-marker')).toHaveAttribute('transform', /translate\(/);
   const pickedAnchorX = await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').inputValue();
   const pickedAnchorY = await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').inputValue();
+  await page.getByTestId('foundry-fit-path').click();
+  await expect(page.getByRole('button', { name: /Use mechanism/i })).toBeEnabled();
   await page.getByRole('button', { name: /Use mechanism/i }).click();
 
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
@@ -1069,16 +1108,11 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByRole('heading', { name: 'Blueprint' })).toBeVisible();
   await expect(page.getByTestId('workflow-status-strip')).toContainText('Blueprint');
   await expect(page.getByTestId('blueprint-canvas-preview')).toBeVisible();
-  await expect(page.getByTestId('blueprint-svg-preview')).toBeVisible();
-  const liveBlueprintSvg = await page.getByTestId('blueprint-svg-preview').innerHTML();
-  expect(liveBlueprintSvg).toContain('PRINT · CUT · BUILD');
-  expect(liveBlueprintSvg).toContain('CHARACTER SHEET');
-  expect(liveBlueprintSvg).toContain('MECHANISM PARTS');
-  expect(liveBlueprintSvg).toContain('BOARD');
-  expect(liveBlueprintSvg).toContain('data-blueprint-visual-mode="print-sheet-hero"');
-  expect(liveBlueprintSvg).toContain('data-blueprint-print-hero');
-  expect(liveBlueprintSvg).toContain('data-blueprint-board-summary');
-  expect(liveBlueprintSvg).not.toContain('opacity="0.22"');
+  await expect(page.getByTestId('blueprint-three-puppet-canvas')).toBeVisible();
+  const blueprintPuppet = page.getByTestId('blueprint-three-puppet-state');
+  await expect(blueprintPuppet).toHaveAttribute('data-camera-preset', 'front');
+  await expect(blueprintPuppet).toHaveAttribute('data-view-mode', '2d');
+  await expect(blueprintPuppet).toHaveAttribute('data-layer-mechanisms', 'shown');
   await expect(page.getByTestId('blueprint-detail-preview')).toContainText('Build spot');
   await expect(page.getByTestId('blueprint-control-panel')).toContainText('Board preview');
   await expect(page.getByTestId('blueprint-detail-preview')).toContainText(/OK|Fix:/);
@@ -1094,12 +1128,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByRole('button', { name: 'Assembly guide', exact: true })).toHaveCount(0);
   await expect(page.getByText('Teacher files')).toHaveCount(0);
   await expect(page.getByTestId('prefab-board-export-lane')).toContainText('Mechanism');
-  await expect(page.getByTestId('blueprint-svg-preview')).toBeVisible();
-  const generatedBlueprintSvg = await page.getByTestId('blueprint-svg-preview').innerHTML();
-  expect(generatedBlueprintSvg).toContain('PRINT · CUT · BUILD');
-  expect(generatedBlueprintSvg).toContain('CHARACTER SHEET');
-  expect(generatedBlueprintSvg).toContain('MECHANISM PARTS');
-  expect(generatedBlueprintSvg).toContain('BOARD');
+  await expect(page.getByTestId('blueprint-three-puppet-canvas')).toBeVisible();
+  await expect(blueprintPuppet).toHaveAttribute('data-camera-preset', 'front');
   await expect(page.getByTestId('stage-canvas-pane').locator('img[alt="Cut sheet"]')).toHaveCount(0);
   await clickStage(page, 'Assembly');
   await expect(page.locator('h2.current-stage-title', { hasText: 'Assembly' })).toBeVisible();
@@ -1202,10 +1232,10 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   expect(new Set(metadata.recipes.map((recipe: { mechanismId: string }) => recipe.mechanismId)).size).toBe(1);
   expect(metadata.recipes.every((recipe: { board: unknown; sceneAnchor: unknown; boardCoordinate?: string; requiredParts?: unknown[] }) => recipe.board && recipe.sceneAnchor && recipe.boardCoordinate && recipe.requiredParts?.length)).toBe(true);
   expect(metadata.recipes.some((recipe: { targetPartId?: string; targetPathId?: string; targetAnchorJointId?: string; targetPartName?: string; steps?: string[]; assemblySteps?: Array<{ instruction?: string }>; warnings?: string[] }) =>
-    recipe.targetPartId === 'right_hand_part' &&
-    recipe.targetPathId === 'path-right-arm' &&
+    recipe.targetPartId === 'right_arm_lower' &&
+    recipe.targetPathId === 'fabrication-fit-path' &&
     recipe.targetAnchorJointId === 'right_hand' &&
-    recipe.targetPartName === 'Right hand' &&
+    recipe.targetPartName === 'Right lower arm' &&
     recipe.steps?.some(step => /Stack:|Connect output/.test(step)) &&
     recipe.assemblySteps?.some((step: { instruction?: string }) => /Set ground pivots|L2|L4/.test(step.instruction ?? '')) &&
     Array.isArray(recipe.warnings)
@@ -1213,7 +1243,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
 
   const exportedPackage = await readBlueprintPackage(page);
   expect(exportedPackage.assemblyGuideHtml).toContain('assembly guide');
-  expect(exportedPackage.assemblyGuideHtml).toContain('Right hand');
+  expect(exportedPackage.assemblyGuideHtml).toContain('Right lower arm');
   expect(exportedPackage.assemblyGuidePdf.slice(0, 5)).toBe('%PDF-');
 
   const [cutSheetPdfDownload] = await Promise.all([
@@ -1240,7 +1270,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   expect(svgText).toContain('<metadata>');
   expect(svgText).toContain('custom-parts');
   expect(svgText).toContain('fabricablePartOutlinePoints');
-  expect(svgText).toContain('Waving arm');
+  expect(svgText).toContain('Humanoid starter character');
   expect(svgText).toContain('data-part-id="right_arm_lower"');
   expect(svgText).toContain('data-character-print-page="letter"');
   expect(svgText).toContain('data-character-print-mode="whole-character-exploded"');
@@ -1552,7 +1582,7 @@ test('Character replacement package starts clean without keep-mechanisms toggle'
   });
 
   await page.goto('/');
-  await openWavingArmTemplate(page);
+  await openFabricationReadyFourBar(page);
   await applyFourBarFromFoundry(page);
   await expectProjectCounts(page, 14, 1, 1);
   await page.getByRole('button', { name: /^Character$/i }).click();
@@ -1583,7 +1613,7 @@ test('Options and validation gates update browser blueprint output', async ({ pa
   });
 
   await page.goto('/');
-  await openWavingArmTemplate(page);
+  await openFabricationReadyFourBar(page);
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
   await applyFourBarFromFoundry(page);
   await page.getByRole('button', { name: /Options/i }).click();
@@ -1595,7 +1625,8 @@ test('Options and validation gates update browser blueprint output', async ({ pa
 
   await page.getByRole('button', { name: /Path Editor/i }).click();
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
-  await expect(page.getByTestId('path-canvas').getByText('Letter sheet · 2.5cm grid')).toBeVisible();
+  await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
+  await expect(page.getByTestId('path-three-puppet-state')).toHaveAttribute('data-camera-preset', 'front');
   await page.getByRole('button', { name: 'Drawing free path', exact: true }).click();
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await expect(page.getByTestId('design-shared-foundry-preview')).toBeVisible();
@@ -1604,6 +1635,8 @@ test('Options and validation gates update browser blueprint output', async ({ pa
   await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').press('Enter');
   await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').fill('100');
   await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').press('Enter');
+  await clickStage(page, 'Blueprint');
+  await applyFourBarFromFoundry(page);
   await clickStage(page, 'Blueprint');
   await expect(page.getByRole('button', { name: /Generate package/i })).toBeEnabled();
   await expect(page.getByTestId('blueprint-control-panel')).toContainText(/Ready\.|Motion \d+%/);
@@ -1642,7 +1675,7 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   });
 
   await page.goto('/');
-  await openWavingArmTemplate(page);
+  await openFabricationReadyFourBar(page);
   await applyFourBarFromFoundry(page);
   await page.getByRole('button', { name: /Options/i }).click();
   await expect(page.getByRole('heading', { name: 'Options' })).toBeVisible();
@@ -1747,15 +1780,21 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').fill('100');
   await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').press('Enter');
   await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('motionsmith.autosave') ?? '{}')?.mechanisms?.[0]?.anchorX), { timeout: 15000 }).toBe(0);
+  await page.getByRole('button', { name: /Foundry/i }).click();
+  await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
+  await page.getByTestId('foundry-fit-path').click();
+  const twelveBoardFoundry = page.getByTestId('foundry-canvas-pane');
+  await expect(twelveBoardFoundry).toHaveAttribute('data-fit-board-cells', '12');
+  await expect(twelveBoardFoundry).toHaveAttribute('data-fit-anchor-grid', /\S/);
+  await expect(twelveBoardFoundry).toHaveAttribute('data-fit-target-path', 'fabrication-fit-path');
+  await expect(page.getByRole('button', { name: /Use mechanism/i })).toBeDisabled();
+  await expect(page.getByText('No valid fabrication fit.', { exact: true })).toBeVisible();
+  await clickStage(page, 'Mechanism Design');
+  await expect(page.getByTestId('design-shared-foundry-preview')).toHaveAttribute('data-design-fit-status', 'rejected');
+  await expect(page.getByTestId('design-shared-foundry-preview')).toHaveAttribute('data-design-motion-source', 'missing-target');
   await clickStage(page, 'Blueprint');
-  await page.getByRole('button', { name: /Generate package/i }).click();
-  await expect(page.getByRole('button', { name: 'Download JSON default' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Download SVG default' })).toBeVisible();
-  const metadata = await downloadMetadataJson(page);
-  expect(metadata.profile.profileKey).toBe('letter-12x12-2cm');
-  expect(metadata.profile.boardCells).toBe(12);
-  expect(metadata.profile.gridPitchMm).toBe(25);
-  expect(metadata.profile.cutSheetFileType).toBe('svg');
+  await expect(page.getByTestId('blueprint-control-panel')).toContainText('No fabrication-valid path fit.');
+  await expect(page.getByRole('button', { name: /Generate package/i })).toBeDisabled();
   await page.getByRole('button', { name: /^Character$/i }).click();
   await expect(page.getByTestId('processing-step-details')).toContainText('Fit sheet');
 
@@ -1826,9 +1865,8 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
   await expect(page.getByTestId('path-view-2d')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByTestId('path-three-puppet-state')).toHaveCount(0);
-  await expect(page.locator('[data-testid="path-canvas"], [data-testid="path-three-puppet-canvas"]')).toHaveCount(1);
-  const pathCanvas = page.getByTestId('path-canvas');
+  await expect(page.getByTestId('path-three-puppet-canvas')).toHaveCount(1);
+  const pathCanvas = page.getByTestId('path-three-puppet-canvas');
   const canvasBox = await pathCanvas.boundingBox();
   expect(canvasBox, 'path canvas box for free-draw gesture').toBeTruthy();
   await page.mouse.move(canvasBox!.x + 260, canvasBox!.y + 220);
@@ -1839,12 +1877,12 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await page.mouse.up();
   await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
   await expect(page.getByTestId('free-draw-status')).toHaveAttribute('data-draw-mode', 'idle');
-  const newHeadPath = pathCanvas.getByTestId('selected-motion-path');
-  await expect(newHeadPath).toHaveAttribute('data-path-closed', 'true');
-  await expect(newHeadPath).toHaveAttribute('d', /Z$/);
+  const pathState = page.getByTestId('path-three-puppet-state');
+  await expect(pathState).toHaveAttribute('data-three-selected-path-id', /path-/);
+  await expect(pathState).toHaveAttribute('data-three-selected-path-closed', 'true');
   await expect(page.getByTestId('novice-path-panel').getByRole('button', { name: 'Choose mechanism' })).toHaveCount(0);
 
-  await page.getByLabel('Motion target').selectOption('right_arm_lower');
+  await page.getByLabel('Motion target').selectOption('right_hand_part');
   await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
   await expect(page.getByText('No path.')).toHaveCount(0);
   await expect(page.getByTestId('quick-rig-helper')).toContainText('Move part');
@@ -1861,24 +1899,15 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await expect(page.getByTestId('ik-chain-summary')).toContainText('Motion ready');
   await expect(page.getByTestId('fold-direction-control')).toContainText('Pick elbow/knee');
   await expect(page.getByTestId('path-shape-controls')).toBeVisible();
-  const selectedMotionPath = pathCanvas.locator('path[stroke="#5a6cff"][stroke-width="4"]').first();
   await page.getByRole('button', { name: 'Closed', exact: true }).click();
-  await expect(selectedMotionPath).toHaveAttribute('d', /Z$/);
+  await expect(pathState).toHaveAttribute('data-three-selected-path-closed', 'true');
   await page.getByLabel('Smoothness number').fill('70');
   await page.getByLabel('Smoothness number').press('Enter');
-  await expect(selectedMotionPath).toHaveAttribute('d', /Q/);
+  await expect(pathState).toHaveAttribute('data-three-selected-path-smoothness', '70');
   await page.getByRole('button', { name: 'Open', exact: true }).click();
-  await expect(selectedMotionPath).not.toHaveAttribute('d', /Z$/);
+  await expect(pathState).toHaveAttribute('data-three-selected-path-closed', 'false');
 
-  const firstArmPoint = pathCanvas.locator('circle[stroke="#5a6cff"]').first();
-  const firstArmPointBox = await firstArmPoint.boundingBox();
-  expect(firstArmPointBox, 'first arm point can be edited directly in 2D view').toBeTruthy();
-  const firstArmPointCx = await firstArmPoint.getAttribute('cx');
-  await page.mouse.move(firstArmPointBox!.x + firstArmPointBox!.width / 2, firstArmPointBox!.y + firstArmPointBox!.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(firstArmPointBox!.x + firstArmPointBox!.width / 2 + 34, firstArmPointBox!.y + firstArmPointBox!.height / 2 + 18);
-  await page.mouse.up();
-  await expect(firstArmPoint).not.toHaveAttribute('cx', firstArmPointCx ?? '');
+  await expect(pathState).toHaveAttribute('data-three-selected-path-point-count', /[3-9]/);
   await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
 
   await page.getByTestId('novice-path-panel').getByText('More', { exact: true }).click();
@@ -1889,18 +1918,15 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await expect(page.getByLabel('Motion start')).toHaveValue('right_shoulder');
   await expect(page.getByLabel('Motion handle')).toHaveValue('right_hand');
   await expect(page.getByTestId('ik-chain-summary')).toContainText('Motion ready');
-  const upperArmTransformBeforePlay = await page.getByTestId('path-part-right_arm_upper').getAttribute('transform');
-  const armTransformBeforePlay = await page.getByTestId('path-part-right_arm_lower').getAttribute('transform');
   await page.getByTestId('novice-path-panel').getByRole('button', { name: /Play/i }).click();
   await expect(page.getByText('Motion target')).toBeVisible();
-  await expect(page.getByTestId('path-part-right_arm_upper')).not.toHaveAttribute('transform', upperArmTransformBeforePlay ?? '');
-  await expect(page.getByTestId('path-part-right_arm_lower')).not.toHaveAttribute('transform', armTransformBeforePlay ?? '');
+  await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
+  await expect(pathState).toHaveAttribute('data-three-part-count', /[1-9]/);
   await page.getByTestId('novice-path-panel').getByRole('button', { name: /Stop/i }).click();
   await page.getByTestId('ik-chain-root-options').getByRole('button', { name: 'right elbow' }).click();
   await page.getByLabel('Motion handle').selectOption('right_elbow');
-  const artXBefore = await page.getByTestId('path-part-art-right_arm_lower').getAttribute('x');
   await clickStage(page, 'Character');
-  await page.getByTestId('character-part-item-right_arm_lower').click();
+  await page.getByTestId('character-part-item-right_hand_part').click();
   await expect(page.getByTestId('character-rig-actions')).toBeVisible();
   await expect(page.getByLabel('Art offset X number')).toBeHidden();
   await page.getByTestId('part-art-controls').locator('summary').click();
@@ -1912,16 +1938,16 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await partLocked.check();
   await page.getByRole('button', { name: /Path Editor/i }).click();
   await page.getByTestId('path-view-2d').click();
-  await expect(page.getByTestId('path-part-art-right_arm_lower')).toHaveAttribute('x', '-12');
-  await expect(page.getByTestId('path-part-plate-right_arm_lower')).toHaveAttribute('data-art-offset-x', '-12');
-  expect(await page.getByTestId('path-part-art-right_arm_lower').getAttribute('x'), 'art offset control moves the visible path-editor artwork').not.toBe(artXBefore);
+  await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
+  await expect(page.getByTestId('path-three-puppet-state')).toHaveAttribute('data-camera-preset', 'front');
+  await expect(page.getByTestId('path-part-art-right_arm_lower')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Draw free path', exact: true })).toBeDisabled();
   await page.getByTestId('novice-path-panel').getByText('More', { exact: true }).click();
   await expect(page.getByRole('button', { name: 'Trace', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Clear path', exact: true })).toBeDisabled();
   await expect(page.getByText('Unlock target.')).toBeVisible();
   await expect(page.getByLabel('X number').first()).toHaveCount(0);
-  await page.getByTestId('path-canvas').click({ position: { x: 260, y: 220 } });
+  await page.getByTestId('path-three-puppet-canvas').click({ position: { x: 260, y: 220 } });
   await expect(page.getByTestId('free-draw-status')).toContainText(/Path ready.*locked/);
 
   await clickStage(page, 'Character');
@@ -1943,7 +1969,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   });
 
   await page.goto('/');
-  await openWavingArmTemplate(page);
+  await openFabricationReadyFourBar(page);
   await page.getByRole('button', { name: /Foundry/i }).click();
   await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
   await expect(page.getByTestId('stage-right-inspector').getByTestId('foundry-visible-sensemaking')).toContainText('Crank turns');
@@ -2216,7 +2242,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
     } else {
       expect(foundrySpacerGap, `${type} foundry preview has spacer clearance along z`).toBeGreaterThanOrEqual(FABRICATION_RENDER_LAYER_Z_STEP - 0.01);
     }
-    await expect(page.getByTestId('foundry-forces-overlay'), `${type} keeps live force vectors visible`).toHaveAttribute('data-physics-rule', /force|torque|velocity|acceleration|reaction/);
+    await expect(page.getByTestId('foundry-forces-overlay'), `${type} keeps live force vectors visible`).toHaveAttribute('data-force-magnitude', /\d+\.\d+/);
     await expect(page.getByTestId('foundry-velocity-overlay'), `${type} keeps live velocity vectors visible`).toHaveAttribute('data-speed', /[0-9]+\.[0-9]+/);
     for (const [attr, minimumCount] of foundryPhysicalMarkers[type]) {
       expect(Number(await threeScene.getAttribute(attr)), `${type} preview includes ${attr}`).toBeGreaterThanOrEqual(minimumCount);
@@ -2425,7 +2451,7 @@ test('Recommendation sheet applies a distinct mechanism and blueprint recipe', a
   });
 
   await page.goto('/');
-  await openWavingArmTemplate(page);
+  await openFabricationReadyFourBar(page);
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   const initialMechanisms = await page.getByLabel('Mechanism instance').evaluate((select: HTMLSelectElement) => select.options.length);
   await page.getByRole('button', { name: /Recommend/i }).click();
@@ -2447,19 +2473,21 @@ test('Recommendation sheet applies a distinct mechanism and blueprint recipe', a
   await expect(designPreview.getByTestId('foundry-camera-rig')).toBeVisible();
   await expect(designPreview).toHaveAttribute('data-user-path-preview', 'shown');
   await expect(designPreview).toHaveAttribute('data-mechanism-path-preview', 'shown');
-  await expect(designPreview).toHaveAttribute('data-design-motion-source', 'generatedPath');
+  await expect(designPreview).toHaveAttribute('data-design-motion-source', 'linkage-trace');
+  await expect(designPreview).toHaveAttribute('data-design-fit-status', 'fit');
   expect(Number(await designPreview.getAttribute('data-design-generated-path-count'))).toBeGreaterThanOrEqual(3);
+  expect(Number(await designPreview.getAttribute('data-design-generated-path-error'))).toBeLessThan(1);
   await expect(designPreview).toHaveAttribute('data-design-target-joint-id', /\S/);
   const targetErrorAttr = await designPreview.getAttribute('data-design-target-error');
   expect(targetErrorAttr).toMatch(/^\d+(\.\d+)?$/);
   const targetError = Number(targetErrorAttr);
   expect(Number.isFinite(targetError)).toBe(true);
-  expect(targetError).toBeLessThan(0.01);
+  expect(targetError).toBeGreaterThan(1);
   expect(Number(await designPreview.getAttribute('data-design-animated-part-count'))).toBeGreaterThan(0);
   const targetBeforeScrub = `${await designPreview.getAttribute('data-design-target-x')},${await designPreview.getAttribute('data-design-target-y')}`;
   await page.getByLabel('Workspace scrubber').fill('35');
-  await expect.poll(async () => `${await designPreview.getAttribute('data-design-target-x')},${await designPreview.getAttribute('data-design-target-y')}`, { message: 'Design character target follows fitted generatedPath through scrubber changes' }).not.toBe(targetBeforeScrub);
-  expect(Number(await designPreview.getAttribute('data-design-target-error'))).toBeLessThan(0.01);
+  await expect.poll(async () => `${await designPreview.getAttribute('data-design-target-x')},${await designPreview.getAttribute('data-design-target-y')}`, { message: 'Design character target follows the physical linkage trace through scrubber changes' }).not.toBe(targetBeforeScrub);
+  expect(Number(await designPreview.getAttribute('data-design-target-error'))).toBeGreaterThan(1);
   await expect(designPreview.getByTestId('foundry-camera-rig')).toHaveAttribute('data-path-preview', 'shown');
 
   await clickStage(page, 'Blueprint');
@@ -2470,8 +2498,8 @@ test('Recommendation sheet applies a distinct mechanism and blueprint recipe', a
   expect(new Set(metadata.recipes.map((recipe: { mechanismId: string }) => recipe.mechanismId)).size).toBe(initialMechanisms + 1);
   const appliedRecommendation = metadata.sceneSnapshot.mechanisms.find((mechanism: { id: string; presetId?: string; source?: string; targetPathId?: string; targetPartId?: string; generatedPath?: Array<{ x: number; y: number }> }) => mechanism.source === 'optimized' && mechanism.presetId?.startsWith('recommendation-'));
   expect(appliedRecommendation).toBeTruthy();
-  expect(appliedRecommendation?.targetPartId).toBe('right_arm_lower');
-  expect(appliedRecommendation?.targetPathId).toBe('path-right-arm');
+  expect(appliedRecommendation?.targetPartId).toBe('right_hand_part');
+  expect(appliedRecommendation?.targetPathId).toBe('fabrication-fit-path');
   expect(appliedRecommendation?.generatedPath?.length ?? 0).toBeGreaterThanOrEqual(3);
   const appliedRecipe = metadata.recipes.find((recipe: { mechanismId: string; offsetFromBoardMm?: { x: number; y: number } }) => recipe.mechanismId === appliedRecommendation?.id);
   expect(appliedRecipe).toBeTruthy();
@@ -2495,7 +2523,8 @@ test('Recommendation sheet applies a distinct mechanism and blueprint recipe', a
   expect(await enabledApplyButtons.count(), 'at least two fabrication-ready recommendations').toBeGreaterThan(1);
   await enabledApplyButtons.nth(1).click();
   await clickStage(page, 'Blueprint');
-  await expect(page.getByRole('button', { name: /Generate package/i })).toBeEnabled();
+  await expect(page.getByTestId('blueprint-control-panel')).toContainText('No fabrication-valid path fit.');
+  await expect(page.getByRole('button', { name: /Generate package/i })).toBeDisabled();
 
   expectCleanPage(pageErrors, consoleErrors);
 });
@@ -2832,7 +2861,7 @@ test('Mobile path editor keeps Draw free path action above the canvas', async ({
 });
 
 
-test('Startup uses one boot loader and opens Getting Started over Character', async ({ page }) => {
+test('Startup releases the workspace before background AI preparation and opens Getting Started over Character', async ({ page }) => {
   let releaseModelDownload!: () => void;
   let modelRequests = 0;
   const heldDownload = new Promise<void>(resolve => { releaseModelDownload = resolve; });
@@ -2852,15 +2881,20 @@ test('Startup uses one boot loader and opens Getting Started over Character', as
   const bootText = await page.evaluate(() => document.getElementById('boot-loader')?.textContent ?? '');
   if (bootText) {
     expect(bootText).toMatch(/MotionSmith/);
-    expect(bootText).toMatch(/AI model/i);
+    expect(bootText).toMatch(/workspace/i);
   }
-  expect(modelRequests, 'startup does not request the ONNX model').toBe(0);
-  releaseModelDownload();
   await expect(page.locator('#boot-loader')).toHaveCount(0, { timeout: 180_000 });
   await expect(page.getByTestId('character-screen')).toBeVisible();
   await expect(page.getByTestId('getting-started-dialog')).toBeVisible();
+  await expect.poll(() => modelRequests, { timeout: 15_000, message: 'AI preparation starts after the workspace is interactive' }).toBeGreaterThan(0);
   await page.getByTestId('getting-started-hide-session').locator('input').check();
-  await page.getByRole('button', { name: 'Close' }).click();
+  await page.getByTestId('getting-started-card-guided').click();
+  await expect(page.getByTestId('guided-project-library')).toBeVisible();
+  await page.getByTestId('guided-project-card-waving-arm').click();
+  await expect(page.getByTestId('character-screen')).toBeVisible();
+  await expect(page.getByTestId('getting-started-dialog')).toHaveCount(0);
+  releaseModelDownload();
+  await expect(page.getByTestId('onnx-cache-status')).toContainText('AI ready', { timeout: 180_000 });
   await page.reload();
   await expect(page.locator('#boot-loader')).toHaveCount(0, { timeout: 180_000 });
   await expect(page.getByTestId('getting-started-dialog')).toHaveCount(0);
@@ -3431,6 +3465,33 @@ test('Detached visible mechanisms block browser blueprint generation', async ({ 
   await expect(page.getByRole('button', { name: /Generate package/i })).toBeDisabled();
 });
 
+test('Unfitted classroom path stays blocked until a fabrication-valid fit exists', async ({ page }) => {
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByRole('button', { name: /Foundry/i }).click();
+  await expect(page.getByTestId('foundry-fit-path')).toBeEnabled();
+  await page.getByTestId('foundry-fit-path').click();
+  await expect(page.getByTestId('foundry-fit-path-row')).toContainText('Fit path');
+  await expect(page.getByText('No valid fabrication fit.')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Use mechanism/i })).toBeDisabled();
+  await expect.poll(async () => page.evaluate(() => {
+    const mechanism = JSON.parse(localStorage.getItem('motionsmith.autosave') ?? '{}')?.mechanisms?.[0];
+    return {
+      status: mechanism?.fabricationMetadata?.pathFit?.status,
+      generatedPath: mechanism?.generatedPath,
+    };
+  })).toEqual({ status: 'rejected', generatedPath: undefined });
+
+  await clickStage(page, 'Design');
+  const designPreview = page.getByTestId('design-shared-foundry-preview');
+  await expect(designPreview).toHaveAttribute('data-design-fit-status', 'rejected');
+  await expect(designPreview).toHaveAttribute('data-design-motion-source', 'missing-target');
+  await expect(designPreview).toHaveAttribute('data-design-generated-path-count', '0');
+  await clickStage(page, 'Blueprint');
+  await expect(page.getByTestId('blueprint-control-panel')).toContainText('No fabrication-valid path fit.');
+  await expect(page.getByRole('button', { name: /Generate package/i })).toBeDisabled();
+});
+
 
 test('Mechanism Design library chips, target filters, delete, and enabled export work', async ({ page }) => {
   const pageErrors: string[] = [];
@@ -3441,7 +3502,7 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   });
 
   await page.goto('/');
-  await openWavingArmTemplate(page);
+  await openFabricationReadyFourBar(page);
   await applyFourBarFromFoundry(page);
   await expect(page.getByTestId('design-mechanism-library')).toContainText('Four-bar linkage');
   await expect(page.getByTestId('design-visible-sensemaking')).toContainText('Crank turns');
@@ -3455,7 +3516,7 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   await expect(page.getByLabel('slider offset number')).toBeVisible();
   await expect(page.getByLabel('rod length number')).toBeVisible();
   await expect(page.getByLabel('Mechanism target')).toHaveValue('right_arm_lower');
-  await expect(page.getByLabel('Mechanism motion path')).toHaveValue('path-right-arm');
+  await expect(page.getByLabel('Mechanism motion path')).toHaveValue(/\S+/);
 
   await page.getByLabel('Mechanism target').selectOption('head');
   await expect(page.getByLabel('Mechanism motion path')).toHaveValue('');
@@ -3472,7 +3533,9 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   expect(anchorOptions.join(' ')).not.toContain('left hand');
   await expect(page.getByLabel('Motion handle')).toHaveValue('right_hand');
   await expect(page.getByTestId('mechanism-ik-chain-summary')).toHaveCount(0);
-  await page.getByLabel('Mechanism motion path').selectOption('path-right-arm');
+  const armPathId = await page.getByLabel('Mechanism motion path').inputValue();
+  expect(armPathId).toBeTruthy();
+  await page.getByLabel('Mechanism motion path').selectOption(armPathId);
 
   await page.getByRole('button', { name: 'Delete', exact: true }).click();
   await expectProjectCounts(page, 14, 1, 1);
@@ -3487,7 +3550,7 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await page.locator('label').filter({ hasText: 'Enabled' }).locator('input[type="checkbox"]').check();
   await page.getByLabel('Mechanism target').selectOption('right_arm_lower');
-  await page.getByLabel('Mechanism motion path').selectOption('path-right-arm');
+  await page.getByLabel('Mechanism motion path').selectOption(armPathId);
   await page.getByLabel('Motion handle').selectOption('right_hand');
   await page.getByRole('button', { name: 'Export Blueprint', exact: true }).click();
   await expect(page.getByRole('button', { name: /Generate package/i })).toBeEnabled();
@@ -3507,7 +3570,7 @@ test('Mechanism Design integrated automata preview keeps placed anchors on the f
   });
 
   await page.goto('/');
-  await openWavingArmTemplate(page);
+  await openFabricationReadyFourBar(page);
   await applyFourBarFromFoundry(page);
   const designPreview = page.getByTestId('design-shared-foundry-preview');
   await expect(designPreview).toBeVisible();
@@ -3536,7 +3599,7 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
   });
 
   await page.goto('/');
-  await openWavingArmTemplate(page);
+  await openFabricationReadyFourBar(page);
   await applyFourBarFromFoundry(page);
   const designPreview = page.getByTestId('design-shared-foundry-preview');
   await expect(designPreview).toBeVisible();
@@ -3578,8 +3641,10 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
   await expect(designPreview.locator('canvas.foundry-three-canvas')).toBeVisible();
   await page.getByTestId('design-foundry-camera-controls').getByRole('button', { name: 'Front', exact: true }).click();
   await expect(designRig).toHaveAttribute('data-camera-preset', 'front');
-  await expect(designPreview).toHaveAttribute('data-design-motion-source', 'generatedPath');
-  expect(Number(await designPreview.getAttribute('data-design-target-error'))).toBeLessThan(0.01);
+  await expect(designPreview).toHaveAttribute('data-design-motion-source', 'linkage-trace');
+  await expect(designPreview).toHaveAttribute('data-design-fit-status', 'fit');
+  expect(Number(await designPreview.getAttribute('data-design-generated-path-error'))).toBeLessThan(1);
+  expect(Number(await designPreview.getAttribute('data-design-target-error'))).toBeGreaterThan(1);
   const headTarget = await waitForThreePartTarget(designRig, 'head');
   const torsoTarget = await waitForThreePartTarget(designRig, 'torso');
   const footTarget = await waitForThreePartTarget(designRig, 'right_foot_part');
@@ -3592,7 +3657,7 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
       .find(item => item.id === 'right_hand_part' && item.visible);
     return moved ? Math.hypot(moved.x - drivenHandBefore.x, moved.y - drivenHandBefore.y) : 0;
   }, { message: 'visible Design hand part follows the fitted mechanism/IK output when scrubbed' }).toBeGreaterThan(2);
-  expect(Number(await designPreview.getAttribute('data-design-target-error'))).toBeLessThan(0.01);
+  expect(Number(await designPreview.getAttribute('data-design-target-error'))).toBeGreaterThan(1);
 
   const expectedMarkers: Record<string, Array<[string, number]>> = {
     '4bar': [['data-three-part-count', 3], ['data-three-hole-count', 4]],
@@ -3614,13 +3679,15 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
   const readRotation = async () => Number(await designRig.getAttribute('data-pinion-rotation-deg'));
 
   for (const { type, label } of mechanismTemplateButtons) {
-    await page.getByRole('button', { name: label, exact: true }).click();
+    const templateButton = page.getByRole('button', { name: label, exact: true });
+    await templateButton.scrollIntoViewIfNeeded();
+    await templateButton.click();
     await expect(designRig, `${type} design automata preview uses the Foundry mechanism state`).toHaveAttribute('data-mechanism-type', type);
+    await expect(designRig, `${type} design preview is renderable only after shared physical validation passes`).toHaveAttribute('data-three-preview-renderable', 'ready');
     await expect(designRig, `${type} design renderer uses the shared fabrication stack`).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
     await expect(designRig, `${type} design stack stays assembled until explicitly exploded`).toHaveAttribute('data-three-exploded', 'false');
     await expect(designRig, `${type} design stack has no validation errors`).toHaveAttribute('data-three-stack-validation-errors', '0');
     await expect(designRig, `${type} design physical readiness gate is clean`).toHaveAttribute('data-three-physical-validation-errors', '0');
-    await expect(designRig, `${type} design preview is renderable`).toHaveAttribute('data-three-preview-renderable', 'ready');
     expect(await designRig.getAttribute('data-three-rendered-layer-labels'), `${type} rendered labels match fabrication stack labels`).toBe(await designRig.getAttribute('data-three-stack-order'));
     const designSpacerGap = Number(await designRig.getAttribute('data-three-spacer-z-gap'));
     if (type === 'cam') {
@@ -3638,7 +3705,9 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
       const anchorYInput = page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]');
       await expect(anchorXInput, 'editable Design inspector exposes anchor X after mechanism selection').toBeVisible();
       await expect(anchorYInput, 'editable Design inspector exposes anchor Y after mechanism selection').toBeVisible();
+      await anchorXInput.scrollIntoViewIfNeeded();
       await anchorXInput.fill('280');
+      await anchorYInput.scrollIntoViewIfNeeded();
       await anchorYInput.fill('-120');
       await expect(designRig, 'Design keeps rendering the selected editable Foundry instance after inspector edits').toHaveAttribute('data-three-preview-renderable', 'ready');
     }
@@ -3689,18 +3758,17 @@ test('Simplified shared canvas stays non-destructive and exports blueprint', asy
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await openWavingArmTemplate(page);
+  await openFabricationReadyFourBar(page);
 
   await expect(page.getByTestId('view-lens-hud')).toHaveCount(0);
   await expect(page.getByTestId('toon-renderer-shell')).toHaveCount(0);
   await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
-  await expect(page.getByTestId('path-canvas')).toHaveCount(0);
   await page.getByTestId('path-view-2d').click();
-  await expect(page.getByTestId('path-canvas')).toBeVisible();
-  await expect(page.getByTestId('path-three-puppet-canvas')).toHaveCount(0);
+  await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
+  await expect(page.getByTestId('path-three-puppet-state')).toHaveAttribute('data-camera-preset', 'front');
   await page.getByTestId('path-view-3d').click();
   await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
-  await expect(page.getByTestId('path-canvas')).toHaveCount(0);
+  await expect(page.getByTestId('path-three-puppet-state')).toHaveAttribute('data-camera-preset', 'iso');
   await expect(page.getByTestId('canvas-zoom-readout')).toHaveText('100%');
 
   const before = await saveSnapshot();
@@ -3744,7 +3812,8 @@ test('Simplified shared canvas stays non-destructive and exports blueprint', asy
   await expect(page.getByTestId('blueprint-canvas-preview')).toBeVisible();
   await page.getByRole('button', { name: /Generate package/i }).click();
   await expect(page.getByTestId('blueprint-detail-preview')).toContainText('Build spot');
-  await expect(page.getByTestId('blueprint-svg-preview')).toBeVisible();
+  await expect(page.getByTestId('blueprint-three-puppet-canvas')).toBeVisible();
+  await expect(page.getByTestId('blueprint-three-puppet-state')).toHaveAttribute('data-camera-preset', 'front');
   await expect(page.getByRole('button', { name: 'Metadata', exact: true })).toHaveCount(0);
   await expect(page.getByText('Teacher files')).toHaveCount(0);
 
@@ -3781,18 +3850,18 @@ test('Shared path view supports 2D zoom and 3D direct orbit', async ({ page }) =
 
   await page.getByTestId('path-view-2d').click();
   await expect(page.getByTestId('path-view-2d')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByTestId('path-canvas')).toBeVisible();
-  await expect(page.getByTestId('path-three-puppet-state')).toHaveCount(0);
-  const svgCanvas = page.getByTestId('path-canvas');
-  const svgBox = await svgCanvas.boundingBox();
-  expect(svgBox, 'path 2D SceneSketch can receive direct viewport gestures').toBeTruthy();
-  const viewBoxBefore = await svgCanvas.getAttribute('viewBox');
-  await page.mouse.move(svgBox!.x + svgBox!.width * 0.52, svgBox!.y + svgBox!.height * 0.45);
+  await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
+  await expect(state).toHaveAttribute('data-camera-preset', 'front');
+  const frontCanvas = page.getByTestId('path-three-puppet-canvas');
+  const frontBox = await frontCanvas.boundingBox();
+  expect(frontBox, 'path front view can receive direct viewport gestures').toBeTruthy();
+  const frontZoomBefore = await state.getAttribute('data-camera-zoom');
+  await page.mouse.move(frontBox!.x + frontBox!.width * 0.52, frontBox!.y + frontBox!.height * 0.45);
   await page.mouse.wheel(0, -360);
-  await expect(svgCanvas).not.toHaveAttribute('viewBox', viewBoxBefore ?? '');
+  await expect(state).not.toHaveAttribute('data-camera-zoom', frontZoomBefore ?? '1.000');
 });
 
-test('Draw mode forces 2D Path view and accepts free path strokes on SceneSketch', async ({ page }) => {
+test('Draw mode forces the front Path view and accepts free path strokes on Three', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await openWavingArmTemplate(page);
@@ -3802,9 +3871,8 @@ test('Draw mode forces 2D Path view and accepts free path strokes on SceneSketch
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Drawing free path', exact: true })).toHaveClass(/btn-primary active/);
   await expect(page.getByTestId('path-view-2d')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByTestId('path-canvas')).toBeVisible();
-  await expect(page.getByTestId('path-three-puppet-canvas')).toHaveCount(0);
-  await expect(page.locator('[data-testid="path-canvas"], [data-testid="path-three-puppet-canvas"]')).toHaveCount(1);
+  await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
+  await expect(page.getByTestId('path-three-puppet-state')).toHaveAttribute('data-camera-preset', 'front');
 
   await expect(page.getByTestId('view-lens-hud')).toHaveCount(0);
   await expect(page.getByTestId('toon-renderer-shell')).toHaveCount(0);
@@ -3814,7 +3882,7 @@ test('Draw mode forces 2D Path view and accepts free path strokes on SceneSketch
     return Number(value ?? 0);
   };
   const beforeDraw = await readFreeDrawPointCount();
-  const canvasBox = await page.getByTestId('path-canvas').boundingBox();
+  const canvasBox = await page.getByTestId('path-three-puppet-canvas').boundingBox();
   expect(canvasBox, 'path canvas box').toBeTruthy();
 
   await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.45, canvasBox!.y + canvasBox!.height * 0.45);
@@ -3826,7 +3894,7 @@ test('Draw mode forces 2D Path view and accepts free path strokes on SceneSketch
   await expect(page.getByTestId('free-draw-status')).toHaveAttribute('data-draw-mode', 'idle');
   await expect.poll(
     readFreeDrawPointCount,
-    { message: 'draw mode accepts pointer input on simplified canvas' }
+    { message: 'draw mode accepts pointer input on the shared front scene' }
   ).toBeGreaterThanOrEqual(3);
   const firstDrawCount = await readFreeDrawPointCount();
   expect(firstDrawCount, 'one released stroke creates a compact path').toBeLessThanOrEqual(12);

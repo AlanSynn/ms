@@ -11,19 +11,16 @@ import type {
 } from "../../../types";
 import type { MotionPreview } from "../../../utils/motion";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
-import { SceneSketch } from "./SceneSketch";
 
 interface PathCanvasPaneProps {
-  svgRef: React.RefObject<SVGSVGElement | null>;
   project: ProjectState;
   selectedPath?: ProjectMotionPath;
-  dragPoint: number | null;
   selectedPoint: number | null;
-  setDragPoint: (value: number | null) => void;
-  setSelectedPoint: (value: number | null) => void;
-  onPointMove: (e: React.MouseEvent<SVGSVGElement>) => void;
-  onPointUp: () => void;
-  onCanvasDown: (e: React.MouseEvent<SVGSVGElement>) => void;
+  onDrawPoint: (point: Point) => void;
+  onDrawEnd: () => void;
+  onPathPointPick: (pathId: string, pointIndex: number) => void;
+  onPathPointMove: (point: Point) => void;
+  onPathPointEnd: () => void;
   onJointPick: (jointId: string) => void;
   dispatch: (action: ProjectAction) => void;
   drawMode: boolean;
@@ -40,16 +37,14 @@ interface PathCanvasPaneProps {
 }
 
 export const PathCanvasPane = ({
-  svgRef,
   project,
   selectedPath,
-  dragPoint,
   selectedPoint,
-  setDragPoint,
-  setSelectedPoint,
-  onPointMove,
-  onPointUp,
-  onCanvasDown,
+  onDrawPoint,
+  onDrawEnd,
+  onPathPointPick,
+  onPathPointMove,
+  onPathPointEnd,
   onJointPick,
   dispatch,
   drawMode,
@@ -92,53 +87,38 @@ export const PathCanvasPane = ({
         3D
       </button>
     </div>
-    {pathViewMode === "2d" ? (
-      <SceneSketch
-        svgRef={svgRef}
-        project={project}
-        selectedPath={selectedPath}
-        dragPoint={dragPoint}
-        selectedPoint={selectedPoint}
-        setDragPoint={setDragPoint}
-        setSelectedPoint={setSelectedPoint}
-        onPointMove={onPointMove}
-        onPointUp={onPointUp}
-        onCanvasDown={onCanvasDown}
-        onJointPick={onJointPick}
-        dispatch={dispatch}
-        drawMode={drawMode}
-        pathLocked={pathLocked}
-        isPlaying={isPlaying}
-        angle={angle}
-        playbackClock={playbackClock}
-        playbackSample={playbackSample}
-        viewport={viewport}
-        setViewport={setViewport}
-      />
-    ) : (
-      <ThreePuppetPreview
-        project={project}
-        animatedParts={pathPreview?.parts ?? {}}
-        animatedSceneObjects={pathPreview?.sceneObjects ?? {}}
-        skeleton={pathPreview?.skeleton ?? project.skeleton}
-        mechanisms={[]}
-        paths={selectedPath ? [selectedPath] : []}
-        selectedPathId={selectedPath?.id}
-        angle={angle}
-        playback={isPlaying ? {
-          clock: playbackClock,
-          sample: playbackSample,
-        } : undefined}
-        viewport={viewport}
-        setViewport={setViewport}
-        inputMode="always"
-        testId="path-three-puppet"
-        cameraPresets={["iso"]}
-        onSelectPart={(partId) => dispatch({ type: "select_part", partId })}
-        onSelectSceneObject={(objectId) =>
-          dispatch({ type: "select_scene_object", objectId })
-        }
-      />
-    )}
+    <ThreePuppetPreview
+      project={project}
+      animatedParts={pathPreview?.parts ?? {}}
+      animatedSceneObjects={pathPreview?.sceneObjects ?? {}}
+      skeleton={pathPreview?.skeleton ?? project.skeleton}
+      mechanisms={[]}
+      paths={selectedPath ? [selectedPath] : []}
+      selectedPathId={selectedPath?.id}
+      selectedPathPointIndex={selectedPoint}
+      angle={angle}
+      playback={isPlaying ? {
+        clock: playbackClock,
+        sample: playbackSample,
+      } : undefined}
+      viewport={viewport}
+      setViewport={setViewport}
+      inputMode="always"
+      testId="path-three-puppet"
+      cameraPresets={[pathViewMode === "2d" ? "front" : "iso"]}
+      initialCameraPreset={pathViewMode === "2d" ? "front" : "iso"}
+      showCameraPresets={false}
+      drawMode={pathViewMode === "2d" && drawMode && !pathLocked}
+      onDrawPoint={onDrawPoint}
+      onDrawEnd={onDrawEnd}
+      onSelectPathPoint={pathLocked ? undefined : onPathPointPick}
+      onMovePathPoint={pathLocked ? undefined : onPathPointMove}
+      onEndPathPointEdit={onPathPointEnd}
+      onSelectPart={(partId) => dispatch({ type: "select_part", partId })}
+      onSelectSceneObject={(objectId) =>
+        dispatch({ type: "select_scene_object", objectId })
+      }
+      onSelectJoint={onJointPick}
+    />
   </div>
 );

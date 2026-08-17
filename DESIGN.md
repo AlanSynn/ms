@@ -77,7 +77,7 @@ Do not put broad galleries, recipe lists, onboarding choices, primary navigation
 ## Component rules
 
 - Keep React/Vite and the existing inline CSS utility system in `index.html`; do not introduce Tailwind/CDN/build-tool dependencies.
-- Keep `SceneSketch` for path drawing, `ThreePuppetPreview` for character/path and the current integrated Design automata preview, shared `ThreeFoundryPreview` for Foundry and Assembly mechanism scenes, and blueprint SVG renderers for output sheets. Design must consume shared mechanism/fabrication telemetry and must not invent stack, z-order, or pin rules. Do not revive `Canvas.tsx` or over-unify renderers just for style.
+- Keep `ThreePuppetPreview` as the shared Character/Path/Blueprint scene surface: Path uses its front camera for the 2D authoring view and its orbit camera for 3D inspection, while Blueprint uses the same scene for component preview. SVG renderers remain export-only. Keep shared `ThreeFoundryPreview` for Foundry and Assembly mechanism scenes. Design must consume shared mechanism/fabrication telemetry and must not invent stack, z-order, or pin rules. Do not revive `Canvas.tsx` or add an SVG editing surface.
 - Use existing components/state paths before adding abstractions.
 - Add test IDs only for persistent product contracts such as shared workbench, sidebar, workflow steps, and player dock.
 

@@ -6,7 +6,6 @@ import type {
 import { pendingRecipeForMechanism } from '../../utils/assemblyPlayback';
 import {
   createFabricationPackage,
-  makeBlueprintPreviewSvg,
   validateForFabrication,
 } from '../../utils/fabrication';
 
@@ -14,7 +13,6 @@ export type BlueprintModel = {
   validation: ReturnType<typeof validateForFabrication>;
   pkg?: FabricationPackage;
   recipes: FabricationRecipe[];
-  previewSvg: string;
 };
 
 const modelCache = new WeakMap<ProjectState, BlueprintModel>();
@@ -37,7 +35,6 @@ export const buildBlueprintModel = (project: ProjectState): BlueprintModel => {
     validation,
     pkg,
     recipes,
-    previewSvg: makeBlueprintPreviewSvg(project, recipes),
   };
   modelCache.set(project, model);
   return model;

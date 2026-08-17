@@ -137,7 +137,6 @@
       .options-preview-canvas { height: 100%; min-height: 0; }
       .settings-section { scroll-margin-top: 1rem; }
       .app-shell .path-canvas-shell { height: 100%; min-height: 0; }
-      .app-shell .path-canvas-shell > svg[data-testid="path-canvas"] { height: 100%; min-height: 0; }
       .template-gallery { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .75rem; align-content: stretch; }
       .guided-project-library { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .9rem; align-items: stretch; }
       .template-tile.guided-project-card { min-height: 19rem; gap: .7rem; padding: .82rem; overflow: hidden; }
@@ -339,8 +338,7 @@
       .blueprint-more-exports[open] summary, .blueprint-more-exports summary:hover { color: var(--ms-accent); border-color: var(--ms-accent-line); background: var(--ms-accent-soft); }
       .blueprint-document-preview, .assembly-canvas-document { position: relative; height: 100%; min-height: 0; padding: .6rem; }
       .blueprint-document-title { position: absolute; left: 1.6rem; top: 1.45rem; z-index: 2; border: 1px solid var(--ms-line); border-radius: 999px; background: rgba(255,255,255,.9); color: var(--ms-muted); padding: .38rem .65rem; font-size: .72rem; font-weight: 720; letter-spacing: .04em; box-shadow: 0 12px 32px rgba(15,23,42,.07); }
-      .blueprint-document-preview .blueprint-svg-preview { display: block; width: 100%; height: 100%; overflow: hidden; border: 1px solid var(--ms-line); border-radius: 1.35rem; background: #fff; box-shadow: 0 22px 70px rgba(8,10,18,.09); }
-      .blueprint-document-preview .blueprint-svg-preview svg { display: block; width: 100%; height: 100%; }
+      .blueprint-document-preview > .three-puppet-overlay { overflow: hidden; border: 1px solid var(--ms-line); border-radius: 1.35rem; background: #fff; box-shadow: 0 22px 70px rgba(8,10,18,.09); }
       .blueprint-empty-state { display: grid; place-items: center; height: 100%; min-height: 24rem; border: 1px dashed var(--ms-line-strong); border-radius: 1.35rem; background: rgba(255,255,255,.72); color: var(--ms-muted); padding: 2rem; text-align: center; font-weight: 720; }
       .assembly-simulation-stack { height: 100%; min-height: 0; display: grid; grid-template-rows: minmax(18rem, 1fr) auto; gap: .6rem; }
       .assembly-three-preview { position: relative; min-height: 0; overflow: hidden; border: 1px solid var(--ms-line); border-radius: 1.45rem; background: #fff; box-shadow: 0 18px 46px rgba(8,10,18,.08); }
@@ -534,7 +532,6 @@
         .import-status { margin-top: 1rem; }
         .path-panel { order: 1; }
         .stage-canvas-pane > .path-canvas-shell.canvas-workspace { order: 2; height: 58vh; min-height: 360px; }
-        .path-canvas-shell svg { height: 58vh; min-height: 360px; }
         .character-stage { height: auto; min-height: calc(100vh - var(--ms-bottom-bars-height) - 1rem); overflow: visible; }
         .character-status-dock { left: .75rem; right: .75rem; bottom: calc(var(--ms-bottom-bars-height) + 10px); width: auto; }
         .character-status-dock .import-status { max-height: 46vh; }
@@ -601,7 +598,7 @@
         <img class="boot-logo" src="resources/icons/AppIcon.png" alt="" />
         <div class="boot-word">MotionSmith</div>
         <div class="boot-version">v%APP_VERSION%</div>
-        <div class="boot-status" data-boot-status>Preparing AI model</div>
+        <div class="boot-status" data-boot-status>Opening workspace</div>
         <div class="boot-progress" aria-hidden="true"><span data-boot-progress></span></div>
       </div>
     </div>

@@ -15,7 +15,6 @@ import type {
   ProjectState,
   SceneObject,
 } from "../../../types";
-import { svgPointerToScene } from "../../../utils/coordinates";
 import {
   describeMotionChain,
   motionAnchorJointIds,
@@ -73,7 +72,6 @@ export const PathEditor = ({
   viewport: CanvasViewport;
   setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
 }) => {
-  const svgRef = useRef<SVGSVGElement>(null);
   const freeDraftRef = useRef<DrawSamplePoint[] | null>(null);
   const [dragPoint, setDragPoint] = useState<number | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
@@ -135,12 +133,14 @@ export const PathEditor = ({
       timed,
     );
   };
-  const onCanvasDown = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!drawMode || !svgRef.current || pathLocked || e.button !== 0) return;
-    const p = svgPointerToScene(svgRef.current, e.clientX, e.clientY);
-    setSelectedPoint(null);
-    setIsFreeDrawing(true);
-    appendFreePoint(p, true);
+  const onDrawPoint = (point: Point) => {
+    if (!drawMode || pathLocked) return;
+    const seed = !freeDraftRef.current?.length;
+    if (seed) {
+      setSelectedPoint(null);
+      setIsFreeDrawing(true);
+    }
+    appendFreePoint(point, seed);
   };
   const updatePath = (updates: Partial<ProjectMotionPath>) =>
     selectedPath &&
@@ -181,17 +181,23 @@ export const PathEditor = ({
       jointId: bendJoint.id,
       updates: { bendDirection },
     });
-  const movePoint = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (isFreeDrawing && svgRef.current && !pathLocked) {
-      appendFreePoint(svgPointerToScene(svgRef.current, e.clientX, e.clientY));
+  const movePoint = (point: Point) => {
+    if (isFreeDrawing && !pathLocked) {
+      appendFreePoint(point);
       return;
     }
-    if (dragPoint === null || !svgRef.current || !selectedPath || pathLocked)
+    if (dragPoint === null || !selectedPath || pathLocked)
       return;
     const points = [...selectedPath.points];
-    points[dragPoint] = svgPointerToScene(svgRef.current, e.clientX, e.clientY);
+    points[dragPoint] = point;
     setPathPoints(points, selectedPath.source);
   };
+  const pickPathPoint = (pathId: string, pointIndex: number) => {
+    if (pathLocked || selectedPath?.id !== pathId) return;
+    setSelectedPoint(pointIndex);
+    setDragPoint(pointIndex);
+  };
+  const stopPointEdit = () => setDragPoint(null);
   const stopDrawing = () => {
     const finishedFreeStroke = Boolean(freeDraftRef.current?.length);
     setDragPoint(null);
@@ -283,16 +289,14 @@ export const PathEditor = ({
         ),
         canvas: canvasPane(
           <PathCanvasPane
-            svgRef={svgRef}
             project={project}
             selectedPath={selectedPath}
-            dragPoint={dragPoint}
             selectedPoint={selectedPoint}
-            setDragPoint={setDragPoint}
-            setSelectedPoint={setSelectedPoint}
-            onPointMove={movePoint}
-            onPointUp={stopDrawing}
-            onCanvasDown={onCanvasDown}
+            onDrawPoint={onDrawPoint}
+            onDrawEnd={stopDrawing}
+            onPathPointPick={pickPathPoint}
+            onPathPointMove={movePoint}
+            onPathPointEnd={stopPointEdit}
             onJointPick={pickIkJoint}
             dispatch={dispatch}
             drawMode={drawMode}

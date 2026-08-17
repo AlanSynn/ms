@@ -43,7 +43,6 @@ assert.equal(pending.size, 0, "stopping the clock cancels its pending RAF");
 const source = (relativePath: string) =>
   readFileSync(join(process.cwd(), relativePath), "utf8");
 const playbackHook = source("hooks/useWorkspacePlaybackLoop.ts");
-const sceneSketch = source("components/stages/path/SceneSketch.tsx");
 const puppetPreview = source("components/ThreePuppetPreview.tsx");
 const foundryPreview = source("components/stages/foundry/ThreeFoundryPreview.tsx");
 const foundryOverlay = source("components/stages/foundry/FoundryOverlayLayer.tsx");
@@ -51,7 +50,6 @@ const playerDock = source("components/shell/WorkspacePlayerDock.tsx");
 
 assert(playbackHook.includes("playbackClock.start") && !playbackHook.includes("requestAnimationFrame("), "the workspace hook delegates scheduling to the external clock");
 assert(!playbackHook.includes("setAngle("), "the workspace frame driver does not enqueue React phase state");
-assert(sceneSketch.includes("playbackClock.subscribe") && sceneSketch.includes("setAttribute(\n          \"transform\""), "the 2D path preview updates its existing SVG nodes directly");
 assert(puppetPreview.includes("playback.clock.subscribe") && puppetPreview.includes("partMeshesRef.current"), "the 3D puppet preview updates retained transforms from the external clock");
 assert(foundryPreview.includes("playback.clock.subscribe") && foundryPreview.includes("renderDynamicRef"), "the shared Foundry renderer consumes sampled playback outside React");
 assert(foundryOverlay.includes("playback.clock.subscribe") && foundryOverlay.includes("foundry-velocity-vector") && foundryOverlay.includes("setAttribute"), "the Foundry SVG physics overlay updates existing nodes directly from the external clock");

@@ -13,6 +13,7 @@ import {
 } from "../stageLayout";
 import { BlueprintControlPanel } from "./BlueprintControlPanel";
 import { BlueprintDetailPanel } from "./BlueprintDetailPanel";
+import { ThreePuppetPreview } from "../../ThreePuppetPreview";
 
 export const selectBlueprintRecipe = (
   recipes: FabricationRecipe[],
@@ -32,7 +33,7 @@ export const BlueprintExport = ({
   dispatch: (action: ProjectAction) => void;
   goStage: (stage: AppStage) => void;
 }) => {
-  const { validation, pkg, recipes, previewSvg } = buildBlueprintModel(project);
+  const { validation, pkg, recipes } = buildBlueprintModel(project);
   const create = () =>
     dispatch({
       type: "set_export",
@@ -61,14 +62,19 @@ export const BlueprintExport = ({
           <div
             className="blueprint-document-preview canvas-workspace"
             data-testid="blueprint-canvas-preview"
-            data-visual-level="print-sheet-hero"
+            data-visual-level="3d-components"
           >
-            <div
-              data-testid="blueprint-svg-preview"
-              className="blueprint-svg-preview"
-              role="img"
-              aria-label="Printable character and mechanism sheets"
-              dangerouslySetInnerHTML={{ __html: previewSvg }}
+            <ThreePuppetPreview
+              project={project}
+              skeleton={project.skeleton}
+              mechanisms={project.mechanisms}
+              paths={Object.values(project.paths)}
+              selectedPathId={project.selectedPathId}
+              testId="blueprint-three-puppet"
+              cameraPresets={["front", "iso"]}
+              initialCameraPreset="front"
+              initialLayers={{ skeleton: false }}
+              onSelectMechanism={setSelectedRecipeId}
             />
             {pkg && (
               <pre hidden data-testid="blueprint-export-package-json">

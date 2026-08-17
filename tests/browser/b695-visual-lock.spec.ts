@@ -17,7 +17,7 @@ const TEST_ONNX_MODEL_BYTES = Buffer.alloc(1_000_001, 1);
 const sha256 = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 
 const waitForBoot = async (page: Page) => {
-  await expect(page.getByTestId('shared-workbench')).toBeVisible();
+  await expect(page.getByTestId('shared-workbench')).toBeVisible({ timeout: 180_000 });
   await expect(page.locator('#boot-loader')).toHaveCount(0, { timeout: 180_000 });
 };
 
@@ -97,7 +97,7 @@ const readProbe = async (page: Page) => page.evaluate(() => {
     '[data-testid$="-state"]',
     '[data-testid="foundry-camera-rig"]',
     '[data-testid="design-shared-foundry-preview"]',
-    '[data-testid="blueprint-svg-preview"]',
+    '[data-testid="blueprint-three-puppet-state"]',
   ];
   const nodes = Array.from(document.querySelectorAll(interesting.join(',')));
   const serialize = (node: Element) => ({
@@ -220,7 +220,7 @@ test.describe('b695 visual lock evidence', () => {
       viewportManifest.design = designManifest;
 
       await stage(page, 'Blueprint').click();
-      await expect(page.getByTestId('blueprint-svg-preview')).toBeVisible();
+      await expect(page.getByTestId('blueprint-three-puppet-canvas')).toBeVisible();
       const blueprintDocument = await record(page, viewport.name, 'blueprint-document');
       const generate = page.getByRole('button', { name: /Generate package/i });
       if (await generate.count()) await generate.click();

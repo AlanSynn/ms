@@ -318,7 +318,7 @@ Acceptance:
 ### M2 — Path Editor pane migration
 
 - Left: part/path workflow + draw action.
-- Center: existing `SceneSketch` only.
+- Center: shared `ThreePuppetPreview` scene; Path uses its front camera for 2D authoring and its orbit camera for 3D inspection.
 - Right: selected part/path/IK fine controls.
 
 Acceptance:

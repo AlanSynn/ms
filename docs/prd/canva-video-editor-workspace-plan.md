@@ -243,7 +243,7 @@ Recommended extraction boundaries, in order:
 2. `features/character-selection/`
    - template/import/ONNX/camera/review controls.
 3. `features/path-editor/`
-   - free-draw, `SceneSketch`, part/joint editor.
+   - free-draw, shared Three front view, part/joint editor.
 4. `features/mechanism-foundry/`
    - gallery, simulation preview, export package.
 5. `features/mechanism-design/`
@@ -377,7 +377,7 @@ Architect review:
 
 - Current app is already close: shared `ProjectState`, stage shell, shared preview adapters, and broad browser tests.
 - Safest path is extraction, not rewrite.
-- Biggest risks: coordinate drift, over-unifying `SceneSketch`, `ThreePuppetPreview`, `ThreeFoundryPreview`, and blueprint SVG too early, weakening blueprint validation.
+- Biggest risks: coordinate drift, weakening the shared Three projection boundary, and treating export-only blueprint SVG as an authoring surface.
 
 Research review:
 

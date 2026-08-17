@@ -23,7 +23,7 @@ assert.equal(
 assert(foundry.includes("const E2E_DIAGNOSTICS = __MOTIONSMITH_E2E_DIAGNOSTICS__"));
 assert(foundry.includes("if (!E2E_DIAGNOSTICS || !stateRef.current) return"));
 assert(foundry.includes("E2E_DIAGNOSTICS && <FoundryPreviewStateProbe"));
-assert(puppet.includes("const E2E_DIAGNOSTICS = __MOTIONSMITH_E2E_DIAGNOSTICS__"));
+assert(puppet.includes("const E2E_DIAGNOSTICS = typeof __MOTIONSMITH_E2E_DIAGNOSTICS__ === 'boolean'"));
 assert(puppet.includes("if (E2E_DIAGNOSTICS && stateRef.current)"));
 assert(puppet.includes("{E2E_DIAGNOSTICS && <div"));
 

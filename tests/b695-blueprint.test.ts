@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 
-import { createSampleProject } from '../utils/project';
+import { createFabricationReadyFourBarProject } from './fixtures/fabricationProject';
 import {
   buildBlueprintModel,
   createBlueprintPackage,
 } from '../runtime/blueprint/BlueprintModel';
 
-const project = createSampleProject({ includeMechanism: true });
+const project = createFabricationReadyFourBarProject();
 const firstModel = buildBlueprintModel(project);
 const secondModel = buildBlueprintModel(project);
 
@@ -14,11 +14,6 @@ assert.equal(
   firstModel,
   secondModel,
   'Blueprint reuses the exact model for an immutable ProjectState identity',
-);
-assert.equal(
-  firstModel.previewSvg,
-  secondModel.previewSvg,
-  'Blueprint preview SVG bytes remain stable across cached reads',
 );
 assert.equal(
   firstModel.recipes,
