@@ -255,6 +255,15 @@ test('Context help opens compact registry popovers', async ({ page }) => {
   await page.keyboard.press('Escape');
   await expect(popover).toHaveCount(0);
 
+  const bodySidesHelp = page
+    .locator('[data-help-id="character.bodySides"]')
+    .getByTestId('context-help-trigger');
+  await expect(bodySidesHelp).toBeVisible();
+  await bodySidesHelp.click();
+  await expect(popover).toContainText('Left and right are named from the character\'s point of view.');
+  await page.keyboard.press('Escape');
+  await expect(popover).toHaveCount(0);
+
   await page.setViewportSize({ width: 980, height: 360 });
   await page.getByRole('button', { name: /^Options$/i }).click();
   const inspector = page.getByTestId('stage-right-inspector');

@@ -27,6 +27,7 @@ import {
 import { CharacterLessonOwnership } from "./CharacterLessonOwnership";
 import { CharacterSetupPanel } from "./CharacterSetupPanel";
 import { SceneObjectInspector } from "./SceneObjectInspector";
+import { ContextHelp } from "../../ui/ContextHelp";
 
 export const CharacterSelection = ({
   project,
@@ -183,7 +184,10 @@ export const CharacterSelection = ({
                   data-testid="character-part-list"
                   aria-label="Character body part list"
                 >
-                  <div className="section-title">Body parts</div>
+                  <div className="section-title flex items-center gap-2">
+                    Body parts
+                    <ContextHelp helpId="character.bodySides" />
+                  </div>
                   <div className="mt-2 grid gap-2">
                     {editableParts.map((part) => {
                       const isActive = part.id === selectedPartId;

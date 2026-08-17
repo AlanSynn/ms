@@ -4,6 +4,7 @@ export type ContextHelpId =
   | "character.loadCharacterFile"
   | "character.loadObjectFile"
   | "character.createFromImage"
+  | "character.bodySides"
   | "path.draw"
   | "path.smoothness"
   | "path.trace"
@@ -44,6 +45,12 @@ export const CONTEXT_HELP: Record<
     en: {
       title: "Image",
       body: "Turn one picture into editable parts and joints on this device.",
+    },
+  },
+  "character.bodySides": {
+    en: {
+      title: "Character left and right",
+      body: "Left and right are named from the character's point of view.",
     },
   },
   "path.draw": {

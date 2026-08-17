@@ -817,13 +817,14 @@ assert(!contextHelpSource.includes('character.keepMechanisms') && !contextHelpSo
 assert(!contextHelpComponentSource.includes('Turn one picture') && !contextHelpComponentSource.includes('Block exports when'), 'contextual help component does not inline copy outside the central registry');
 const contextHelpConsumerSource = [
   'components/stages/character/CharacterImportControls.tsx',
+  'components/stages/character/CharacterSelection.tsx',
   'components/stages/path/PathWorkflowPanel.tsx',
   'components/stages/foundry/FoundryCanvasChrome.tsx',
   'components/stages/blueprint/BlueprintControlPanel.tsx',
   'components/stages/assembly/AssemblyControlPanel.tsx',
   'components/stages/options/Options.tsx'
 ].map(file => readFileSync(join(process.cwd(), file), 'utf8')).join('\n');
-assert(['character.createFromImage', 'path.draw', 'viewer.layers', 'blueprint.boardPreview', 'assembly.steps', 'options.fabricationExport'].every(helpId => contextHelpConsumerSource.includes(helpId)), 'high-friction UI controls attach contextual help through shared help ids');
+assert(['character.createFromImage', 'character.bodySides', 'path.draw', 'viewer.layers', 'blueprint.boardPreview', 'assembly.steps', 'options.fabricationExport'].every(helpId => contextHelpConsumerSource.includes(helpId)), 'high-friction UI controls attach contextual help through shared help ids');
 assert(agentsContract.includes('3D physics'), 'AGENTS.md codifies the 3D physics simulation direction');
 assert(agentsContract.includes('fabrication'), 'AGENTS.md codifies fabrication-oriented mechanisms');
 assert(agentsContract.includes('canonical `ProjectState`'), 'AGENTS.md requires one canonical ProjectState across workflows');
