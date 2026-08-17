@@ -1,0 +1,151 @@
+version: 1
+name: b695-visual-lock-performance-backport
+model_policy:
+  allowed: [luna-max]
+  forbidden: [sol-max, terra-max, other]
+
+baseline:
+  commit: b695b02275d03506969f2d13c98bc38107c17e0e
+  branch: perf/b695-visual-lock
+  immutable_ux_authority: true
+
+donor:
+  branch: perf/unified-three-sol
+  audited_head: 983c421348e83c07b7d5a49f4517ec8efbaca6bc
+  read_only: true
+  commits_after_baseline: 122
+
+lead:
+  id: luna-integration
+  model: luna-max
+  worktree: ../ms-wt/b695-visual-lock
+  duties:
+    - protect unknown changes
+    - create visual golden evidence
+    - enforce ownership
+    - integrate newly authored backports only
+    - never cherry-pick donor renderer or stage migrations
+
+agents:
+  - id: luna-history
+    model: luna-max
+    production_edits: false
+    owns:
+      - artifacts/b695-visual-lock/**
+      - B695_VISUAL_LOCK_COMMIT_LEDGER.tsv
+
+  - id: luna-io
+    model: luna-max
+    owns:
+      - hooks/useAppOnnxBootstrap.ts
+      - utils/webOnnx*.ts
+      - hooks/useProjectAutosave.ts
+      - runtime/persistence/**
+      - baseline-compatible autosave transaction files
+    commits:
+      - "perf(ai): remove boot model warming"
+      - "perf(persistence): coalesce and workerize autosave"
+
+  - id: luna-analysis-cache
+    model: luna-max
+    owns:
+      - components/stages/foundry/FoundryInspectorPanel.tsx
+      - components/stages/mechanism/DesignInspectorPanel.tsx
+      - components/stages/mechanism/MechanismParametricEditor.tsx
+      - utils/mechanismInspectorCache.ts
+      - diagnostic gates in existing b695 renderer files
+      - vite.config.ts
+      - vite-env.d.ts
+      - package.json
+    commits:
+      - "perf(inspector): cache edit analysis by semantic revision"
+      - "perf(diagnostics): remove E2E probes from production frames"
+
+  - id: luna-playback
+    model: luna-max
+    owns:
+      - hooks/useWorkspacePlaybackLoop.ts
+      - hooks/useMotionSmithAppController.ts
+      - existing b695 Path Foundry Design playback wiring
+      - utils/animationClock.ts
+      - utils/foundryCamera.ts
+      - baseline-specific frame scratch helpers
+    commits:
+      - "perf(playback): move phase sampling off React without changing output"
+      - "perf(frame): reuse projection and IK scratch state"
+
+  - id: luna-fit-blueprint
+    model: luna-max
+    owns:
+      - utils/mechanismRecommendations.ts
+      - baseline four-bar Fit tests
+      - components/stages/blueprint/**
+      - baseline-compatible Blueprint cache
+    commits:
+      - "perf(fit): stop after an accepted four-bar fit"
+      - "perf(blueprint): cache exact preview and package models"
+
+  - id: luna-study
+    model: luna-max
+    owns:
+      - infrastructure/study-final/**
+      - hooks/useFinalStudyArtifact.ts
+      - study build boundary
+      - final artifact analyzer and tests
+    commits:
+      - "study: emit one final semantic artifact"
+
+  - id: luna-qa
+    model: luna-max
+    production_edits: false
+    owns:
+      - artifacts/b695-visual-lock/final/**
+      - tests/browser/b695-visual-lock.spec.ts
+      - tests/browser/b695-performance-proxy.spec.ts
+
+integration_order:
+  - visual baseline evidence
+  - perf(ai)
+  - perf(persistence)
+  - perf(inspector)
+  - perf(diagnostics)
+  - full static visual lock
+  - perf(playback)
+  - perf(frame)
+  - fixed-phase motion parity
+  - perf(fit)
+  - perf(blueprint)
+  - study artifact
+  - final proxy and export parity
+
+forbidden_donor_commits:
+  - cdd7cae056ee7f031f591d4cae891c7244091211
+  - e06357d47791ee4ef3f5bc5b7b92a1575d472e18
+  - 2ec72489f90d8d897cc46155c59ba6bae35bd988
+  - 930ebd32f5a4cff6735e361e328c0240917be622
+  - 78b41790bf3d6c51642594b3e1e8dff2f0da34a0
+  - 89523a69e2d3ab864435eeaf819c7534dca7f2dc
+  - 04e259da52ed2c05bf8c381ee5e36977d5e50c39
+  - abd9e9e09f4a6050049d7f83bbf1d14814a23c9c
+  - 8280ce6daef19f528c2c1a3bb6b5324d69048045
+  - a363e5d34d9c147f1d05dd0c774dfbfc7f61d108
+
+visual_lock:
+  screenshot_static_max_diff_pixels: 0
+  fixed_phase_numeric_epsilon: 0.000001
+  camera_matrix_change_allowed: false
+  material_change_allowed: false
+  css_change_allowed: false
+  controller_change_allowed: false
+  animation_timing_change_allowed: false
+  export_byte_change_allowed: false
+
+performance_proxy:
+  actual_chromebook_tested: false
+  report_language: proxy-passed-or-failed
+  production_build_only: true
+  cpu_throttle_rates: [4, 6]
+  react_animation_commits: 0
+  production_diagnostic_writes: 0
+  playback_domain_calls: 0
+  heap_must_plateau: true

@@ -1,0 +1,13 @@
+bundle	source_commit	purpose	apply_mode	note
+P1	1716660cc24273b2723a1117c6df903871d667d2	Lazy AI	partial cherry-pick candidate	High benefit at boot; no canvas intent.
+P2	5f5e2a83f37d40bead13652ae3b702f27211c04f	Async autosave	manual backport	Removes serialization/storage from gestures and playback.
+P3	89c0abe7bbb4b513d8ab02eba35272ad22e012a9	Inspector analysis cache	manual backport	Preserve b695 DOM; donor unmounts closed advanced controls.
+P4	87b7e3066d173033d8303c744777c40680330fa0	Diagnostics build gate	manual backport	Gate existing b695 probes and datasets.
+P5	613d83e74aa0513ecad48fa3a4fad3832660e59a	React-free playback concept	intent only	Donor depends on replacement renderer.
+P5	e06357d47791ee4ef3f5bc5b7b92a1575d472e18	Prepared pose cycles concept	intent only	Interpolation/output risk; no direct cherry-pick.
+P6	none	Projection and IK scratch reuse	manual implementation	Derived from measured bottlenecks.
+P7	10a0a589e4e502f3ff7bd979fba2deb7bef65efa	Accepted four-bar early return	conditional partial cherry-pick	Require deep output parity.
+P7-X	8280ce6daef19f528c2c1a3bb6b5324d69048045	Bound Fit search	reject in visual-lock pack	May select a different Fit result.
+P8	78964d5a8b139263a63242b52c9fbaa475c350c6	Blueprint model cache	manual backport	Preserve immediate visible proof and bytes.
+T1	de88b124ab589d8f9d2aa3ed33dad275ca7609cd	Final study artifact schema	manual redesign	PreparedWorkbenchScene dependency.
+T1	29c335e4250f6a32d05036f330d28490f007a769	Accepted-scene study binding	manual redesign	Use b695 ProjectState/export boundary instead.
