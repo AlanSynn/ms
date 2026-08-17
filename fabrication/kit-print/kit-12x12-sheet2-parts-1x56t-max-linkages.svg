@@ -1,0 +1,694 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 28.2.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+	 viewBox="0 0 864 864" style="enable-background:new 0 0 864 864;" xml:space="preserve">
+<style type="text/css">
+	.st0{fill:none;stroke:#FF69B4;stroke-width:7.200000e-02;stroke-miterlimit:11.3386;}
+	.st1{fill:none;stroke:#ED1C24;stroke-width:7.200000e-02;stroke-miterlimit:28.3465;}
+	.st2{fill:#008000;}
+	.st3{font-family:'Arial-BoldMT';}
+	.st4{font-size:19.8425px;}
+	.st5{font-size:17.0079px;}
+	.st6{font-size:14.1732px;}
+	.st7{font-size:7.6535px;}
+	.st8{fill:none;}
+	.st9{font-size:10.7717px;}
+	.st10{letter-spacing:13;}
+	.st11{font-size:4.5354px;}
+</style>
+<rect x="0.7" y="0.7" class="st0" width="862.6" height="862.6"/>
+<g id="labeled-max-spacers-layout">
+	<g id="_x35_6t-gear-1" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 17.030180000 17.030180000)">
+		<g id="_x35_6t-gear-1-source-geometry" transform="translate(-7.53 -7.53)">
+			<path class="st1" d="M405.5,211.5l8.6,5.7l-0.2,5.7l-9.1,4.9l-0.5,5.4l7.9,6.6l-0.9,5.6l-9.5,3.9l-1.1,5.3l7.1,7.5l-1.5,5.5
+				l-9.9,2.8l-1.7,5.2l6.2,8.2l-2.1,5.3l-10.2,1.7l-2.3,4.9l5.3,8.9l-2.7,5l-10.3,0.5l-2.8,4.6l4.3,9.4l-3.2,4.7l-10.3-0.6l-3.3,4.3
+				l3.2,9.8l-3.7,4.3l-10.2-1.8l-3.8,3.9l2.1,10.1l-4.2,3.8l-9.9-2.9l-4.2,3.5l0.9,10.3l-4.6,3.4l-9.5-4l-4.6,3l-0.2,10.3l-4.9,2.8
+				l-9-5l-4.9,2.4l-1.4,10.2l-5.2,2.2l-8.4-6l-5.1,1.9l-2.5,10l-5.4,1.7l-7.7-6.9l-5.3,1.3l-3.6,9.6l-5.6,1l-6.8-7.7l-5.4,0.7
+				l-4.7,9.2L223,414l-5.9-8.4l-5.4,0.1l-5.7,8.6l-5.7-0.2l-4.9-9.1l-5.4-0.5l-6.6,7.9l-5.6-0.9l-3.9-9.5l-5.3-1.1l-7.5,7.1
+				l-5.5-1.5l-2.8-9.9l-5.2-1.7l-8.2,6.2l-5.3-2.1l-1.7-10.2l-4.9-2.3l-8.9,5.3l-5-2.7l-0.5-10.3l-4.6-2.8l-9.4,4.3l-4.7-3.2
+				l0.6-10.3l-4.3-3.3l-9.8,3.2l-4.3-3.7l1.8-10.2l-3.9-3.8l-10.1,2.1l-3.8-4.2l2.9-9.9l-3.5-4.2l-10.3,0.9l-3.4-4.6l4-9.5l-3-4.6
+				L37,314.5l-2.8-4.9l5-9l-2.4-4.9l-10.2-1.4l-2.2-5.2l6-8.4l-1.9-5.1l-10-2.5l-1.7-5.4l6.9-7.7l-1.3-5.3l-9.6-3.6l-1-5.6l7.7-6.8
+				l-0.7-5.4l-9.2-4.7l-0.4-5.7l8.4-5.9l-0.1-5.4l-8.6-5.7l0.2-5.7l9.1-4.9l0.5-5.4l-7.9-6.6l0.9-5.6l9.5-3.9l1.1-5.3l-7.1-7.5
+				l1.5-5.5l9.9-2.8l1.7-5.2l-6.2-8.2l2.1-5.3l10.2-1.7l2.3-4.9l-5.3-8.9l2.7-5l10.3-0.5l2.8-4.6L43,98.9l3.2-4.7l10.3,0.6l3.3-4.3
+				l-3.2-9.8l3.7-4.3l10.2,1.8l3.8-3.9l-2.1-10.1l4.2-3.8l9.9,2.9l4.2-3.5l-0.9-10.3l4.6-3.4l9.5,4l4.6-3l0.2-10.3l4.9-2.8l9,5
+				l4.9-2.4l1.4-10.2l5.2-2.2l8.4,6l5.1-1.9l2.5-10l5.4-1.7l7.7,6.9l5.3-1.3l3.6-9.6l5.6-1l6.8,7.7l5.4-0.7l4.7-9.2l5.7-0.4l5.9,8.4
+				l5.4-0.1l5.7-8.6l5.7,0.2l4.9,9.1l5.4,0.5l6.6-7.9l5.6,0.9l3.9,9.5l5.3,1.1L262,15l5.5,1.5l2.8,9.9l5.2,1.7l8.2-6.2L289,24
+				l1.7,10.2l4.9,2.3l8.9-5.3l5,2.7l0.5,10.3l4.6,2.8l9.4-4.3l4.7,3.2l-0.6,10.3l4.3,3.3l9.8-3.2l4.3,3.7l-1.8,10.2l3.9,3.8
+				l10.1-2.1l3.8,4.2l-2.9,9.9l3.5,4.2l10.3-0.9l3.4,4.6l-4,9.5l3,4.6l10.3,0.2l2.8,4.9l-5,9l2.4,4.9l10.2,1.4l2.2,5.2l-6,8.4
+				l1.9,5.1l10,2.5l1.7,5.4l-6.9,7.7l1.3,5.3l9.6,3.6l1,5.6l-7.7,6.8l0.7,5.4l9.2,4.7l0.4,5.7l-8.4,5.9L405.5,211.5z"/>
+			<circle class="st1" cx="211.5" cy="211.5" r="5.7"/>
+			<circle class="st1" cx="211.5" cy="154.8" r="5.7"/>
+			<circle class="st1" cx="154.8" cy="211.5" r="5.7"/>
+			<circle class="st1" cx="268.2" cy="211.5" r="5.7"/>
+			<circle class="st1" cx="211.5" cy="268.2" r="5.7"/>
+			<circle class="st1" cx="154.8" cy="154.8" r="5.7"/>
+			<circle class="st1" cx="268.2" cy="154.8" r="5.7"/>
+			<circle class="st1" cx="154.8" cy="268.2" r="5.7"/>
+			<circle class="st1" cx="268.2" cy="268.2" r="5.7"/>
+			<circle class="st1" cx="211.5" cy="98.2" r="5.7"/>
+			<circle class="st1" cx="98.2" cy="211.5" r="5.7"/>
+			<circle class="st1" cx="324.9" cy="211.5" r="5.7"/>
+			<circle class="st1" cx="211.5" cy="324.9" r="5.7"/>
+			<circle class="st1" cx="154.8" cy="98.2" r="5.7"/>
+			<circle class="st1" cx="268.2" cy="98.2" r="5.7"/>
+			<circle class="st1" cx="98.2" cy="154.8" r="5.7"/>
+			<circle class="st1" cx="324.9" cy="154.8" r="5.7"/>
+			<circle class="st1" cx="98.2" cy="268.2" r="5.7"/>
+			<circle class="st1" cx="324.9" cy="268.2" r="5.7"/>
+			<circle class="st1" cx="154.8" cy="324.9" r="5.7"/>
+			<circle class="st1" cx="268.2" cy="324.9" r="5.7"/>
+			<circle class="st1" cx="98.2" cy="98.2" r="5.7"/>
+			<circle class="st1" cx="324.9" cy="98.2" r="5.7"/>
+			<circle class="st1" cx="98.2" cy="324.9" r="5.7"/>
+			<circle class="st1" cx="324.9" cy="324.9" r="5.7"/>
+			<circle class="st1" cx="211.5" cy="41.5" r="5.7"/>
+			<circle class="st1" cx="41.5" cy="211.5" r="5.7"/>
+			<circle class="st1" cx="381.6" cy="211.5" r="5.7"/>
+			<circle class="st1" cx="211.5" cy="381.6" r="5.7"/>
+			<text transform="matrix(1 0 0 1 145.5681 239.8855)" class="st2 st3 st4">56 Tooth Gear</text>
+		</g>
+	</g>
+	<g id="_x34_0t-gear-1" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 48.600000000 18.250000000)">
+		<g id="_x34_0t-gear-1-source-geometry" transform="translate(-6.10 135.85)">
+			<path class="st1" d="M294.8,417.9l8.6,5.7l-0.3,5.7l-9.2,4.7l-0.7,5.3l7.6,7l-1.2,5.6l-9.8,3.2l-1.6,5.2l6.4,8.1l-2.1,5.3
+				l-10.2,1.6l-2.4,4.9l5,9l-2.9,4.9h-10.3l-3.1,4.4l3.6,9.7l-3.6,4.4l-10.2-1.6l-3.7,3.9l2,10.1l-4.3,3.8l-9.8-3.2l-4.3,3.3
+				l0.4,10.3l-4.8,3.1l-9.2-4.7l-4.8,2.5l-1.2,10.2l-5.3,2.3l-8.3-6.1l-5.1,1.8l-2.8,9.9l-5.5,1.4l-7.3-7.3l-5.3,0.9l-4.3,9.4
+				l-5.7,0.6l-6.1-8.3l-5.4,0.1l-5.7,8.6l-5.7-0.3l-4.7-9.2l-5.3-0.7l-7,7.6l-5.6-1.2l-3.2-9.8l-5.2-1.6l-8.1,6.4l-5.3-2.1
+				l-1.6-10.2l-4.9-2.4l-9,5l-4.9-2.9v-10.3l-4.4-3.1l-9.7,3.6l-4.4-3.6l1.6-10.2l-3.9-3.7l-10.1,2l-3.8-4.3l3.2-9.8l-3.3-4.3
+				L36.1,499l-3.1-4.8l4.7-9.2l-2.5-4.8L24.9,479l-2.3-5.3l6.1-8.3l-1.8-5.1l-9.9-2.8l-1.4-5.5l7.3-7.3l-0.9-5.3l-9.4-4.3l-0.6-5.7
+				l8.3-6.1l-0.1-5.4l-8.6-5.7l0.3-5.7l9.2-4.7l0.7-5.3l-7.6-7l1.2-5.6l9.8-3.2l1.6-5.2l-6.4-8.1l2.1-5.3l10.2-1.6l2.4-4.9l-5-9
+				l2.9-4.9h10.3l3.1-4.4l-3.6-9.7l3.6-4.4l10.2,1.6l3.7-3.9l-2-10.1l4.3-3.8l9.8,3.2l4.3-3.3l-0.4-10.3l4.8-3.1l9.2,4.7l4.8-2.5
+				l1.2-10.2l5.3-2.3l8.3,6.1l5.1-1.8l2.8-9.9l5.5-1.4l7.3,7.3l5.3-0.9l4.3-9.4l5.7-0.6l6.1,8.3l5.4-0.1l5.7-8.6l5.7,0.3l4.7,9.2
+				l5.3,0.7l7-7.6l5.6,1.2l3.2,9.8l5.2,1.6l8.1-6.4l5.3,2.1l1.6,10.2l4.9,2.4l9-5l4.9,2.9v10.3l4.4,3.1l9.7-3.6l4.4,3.6l-1.6,10.2
+				l3.9,3.7l10.1-2l3.8,4.3l-3.2,9.8l3.3,4.3l10.3-0.4l3.1,4.8l-4.7,9.2l2.5,4.8l10.2,1.2l2.3,5.3l-6.1,8.3l1.8,5.1l9.9,2.8l1.4,5.5
+				l-7.3,7.3l0.9,5.3l9.4,4.3l0.6,5.7l-8.3,6.1L294.8,417.9z"/>
+			<circle class="st1" cx="157.5" cy="417.9" r="5.7"/>
+			<circle class="st1" cx="157.5" cy="361.2" r="5.7"/>
+			<circle class="st1" cx="100.8" cy="417.9" r="5.7"/>
+			<circle class="st1" cx="214.2" cy="417.9" r="5.7"/>
+			<circle class="st1" cx="157.5" cy="474.6" r="5.7"/>
+			<circle class="st1" cx="100.8" cy="361.2" r="5.7"/>
+			<circle class="st1" cx="214.2" cy="361.2" r="5.7"/>
+			<circle class="st1" cx="100.8" cy="474.6" r="5.7"/>
+			<circle class="st1" cx="214.2" cy="474.6" r="5.7"/>
+			<circle class="st1" cx="157.5" cy="304.5" r="5.7"/>
+			<circle class="st1" cx="44.1" cy="417.9" r="5.7"/>
+			<circle class="st1" cx="270.9" cy="417.9" r="5.7"/>
+			<circle class="st1" cx="157.5" cy="531.3" r="5.7"/>
+			<text transform="matrix(1 0 0 1 100.9232 446.2447)" class="st2 st3 st5">40 Tooth Gear</text>
+		</g>
+	</g>
+	<g id="_x34_0t-gear-2" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 50.310000000 18.250000000)">
+		<g id="_x34_0t-gear-2-source-geometry" transform="translate(97.34 135.85)">
+			<path class="st1" d="M484.6,417.9l8.6,5.7l-0.3,5.7l-9.2,4.7l-0.7,5.3l7.6,7l-1.2,5.6l-9.8,3.2l-1.6,5.2l6.4,8.1l-2.1,5.3
+				l-10.2,1.6l-2.4,4.9l5,9l-2.9,4.9h-10.3l-3.1,4.4l3.6,9.7l-3.6,4.4l-10.2-1.6l-3.7,3.9l2,10.1l-4.3,3.8l-9.8-3.2L428,529
+				l0.4,10.3l-4.8,3.1l-9.2-4.7l-4.8,2.5l-1.2,10.2l-5.3,2.3l-8.3-6.1l-5.1,1.8l-2.8,9.9l-5.5,1.4l-7.3-7.3l-5.3,0.9l-4.3,9.4
+				l-5.7,0.6l-6.1-8.3l-5.4,0.1l-5.7,8.6l-5.7-0.3l-4.7-9.2l-5.3-0.7l-7,7.6l-5.6-1.2L310,550l-5.2-1.6l-8.1,6.4l-5.3-2.1l-1.6-10.2
+				l-4.9-2.4l-9,5l-4.9-2.9v-10.3l-4.4-3.1l-9.7,3.6l-4.4-3.6l1.6-10.2l-3.9-3.7l-10.1,2l-3.8-4.3l3.2-9.8l-3.3-4.3l-10.3,0.4
+				l-3.1-4.8l4.7-9.2l-2.5-4.8l-10.2-1.2l-2.3-5.3l6.1-8.3l-1.8-5.1l-9.9-2.8l-1.4-5.5l7.3-7.3l-0.9-5.3l-9.4-4.3l-0.6-5.7l8.3-6.1
+				l-0.1-5.4l-8.6-5.7l0.3-5.7l9.2-4.7l0.7-5.3l-7.6-7l1.2-5.6l9.8-3.2l1.6-5.2l-6.4-8.1l2.1-5.3l10.2-1.6l2.4-4.9l-5-9l2.9-4.9
+				h10.3l3.1-4.4l-3.6-9.7l3.6-4.4l10.2,1.6l3.7-3.9l-2-10.1l4.3-3.8l9.8,3.2l4.3-3.3l-0.4-10.3l4.8-3.1l9.2,4.7l4.8-2.5l1.2-10.2
+				l5.3-2.3l8.3,6.1l5.1-1.8l2.8-9.9l5.5-1.4l7.3,7.3l5.3-0.9l4.3-9.4l5.7-0.6l6.1,8.3l5.4-0.1l5.7-8.6l5.7,0.3l4.7,9.2l5.3,0.7
+				l7-7.6l5.6,1.2l3.2,9.8l5.2,1.6l8.1-6.4l5.3,2.1l1.6,10.2l4.9,2.4l9-5l4.9,2.9v10.3l4.4,3.1l9.7-3.6l4.4,3.6l-1.6,10.2l3.9,3.7
+				l10.1-2l3.8,4.3l-3.2,9.8l3.3,4.3l10.3-0.4l3.1,4.8l-4.7,9.2l2.5,4.8l10.2,1.2l2.3,5.3l-6.1,8.3l1.8,5.1l9.9,2.8l1.4,5.5
+				l-7.3,7.3l0.9,5.3l9.4,4.3l0.6,5.7l-8.3,6.1L484.6,417.9z"/>
+			<circle class="st1" cx="347.2" cy="417.9" r="5.7"/>
+			<circle class="st1" cx="347.2" cy="361.2" r="5.7"/>
+			<circle class="st1" cx="290.6" cy="417.9" r="5.7"/>
+			<circle class="st1" cx="403.9" cy="417.9" r="5.7"/>
+			<circle class="st1" cx="347.2" cy="474.6" r="5.7"/>
+			<circle class="st1" cx="290.6" cy="361.2" r="5.7"/>
+			<circle class="st1" cx="403.9" cy="361.2" r="5.7"/>
+			<circle class="st1" cx="290.6" cy="474.6" r="5.7"/>
+			<circle class="st1" cx="403.9" cy="474.6" r="5.7"/>
+			<circle class="st1" cx="347.2" cy="304.5" r="5.7"/>
+			<circle class="st1" cx="233.9" cy="417.9" r="5.7"/>
+			<circle class="st1" cx="460.6" cy="417.9" r="5.7"/>
+			<circle class="st1" cx="347.2" cy="531.3" r="5.7"/>
+			<text transform="matrix(1 0 0 1 290.6991 446.2447)" class="st2 st3 st5">40 Tooth Gear</text>
+		</g>
+	</g>
+	<g id="_x32_4t-gear-1" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 43.550000000 -2.550000000)">
+		<g id="_x32_4t-gear-1-source-geometry" transform="translate(199.85 136.35)">
+			<path class="st1" d="M559.2,362.1l8.5,5.8l-0.6,5.8l-9.5,4.1l-1.2,5.1l6.7,7.8l-2.1,5.5l-10.2,1.5l-2.5,4.7l4.4,9.3l-3.4,4.8
+				l-10.2-1.2l-3.6,3.8l1.9,10.1L533,433l-9.6-3.8l-4.5,2.8l-0.8,10.3l-5.3,2.4l-8.3-6.2l-5,1.5l-3.4,9.7l-5.8,1l-6.4-8.1l-5.3,0.2
+				l-5.8,8.5l-5.8-0.6l-4.1-9.5l-5.1-1.2l-7.8,6.7l-5.5-2.1l-1.5-10.2l-4.7-2.5l-9.3,4.4l-4.8-3.4l1.2-10.2l-3.8-3.6l-10.1,1.9
+				l-3.7-4.5l3.8-9.6l-2.8-4.5l-10.3-0.8l-2.4-5.3l6.2-8.3l-1.5-5l-9.7-3.4l-1-5.8l8.1-6.4l-0.2-5.3l-8.5-5.8l0.6-5.8l9.5-4.1
+				l1.2-5.1l-6.7-7.8l2.1-5.5l10.2-1.5l2.5-4.7l-4.4-9.3l3.4-4.8L418,309l3.6-3.8l-1.9-10.1l4.5-3.7l9.6,3.8l4.5-2.8l0.8-10.3
+				l5.3-2.4l8.3,6.2l5-1.5l3.4-9.7l5.8-1l6.4,8.1l5.3-0.2l5.8-8.5l5.8,0.6l4.1,9.5l5.1,1.2l7.8-6.7l5.5,2.1l1.5,10.2l4.7,2.5
+				l9.3-4.4l4.8,3.4l-1.2,10.2l3.8,3.6l10.1-1.9l3.7,4.5l-3.8,9.6l2.8,4.5l10.3,0.8l2.4,5.3l-6.2,8.3l1.5,5l9.7,3.4l1,5.8L559,357
+				L559.2,362.1z"/>
+			<circle class="st1" cx="478.6" cy="362.1" r="5.7"/>
+			<circle class="st1" cx="478.6" cy="305.4" r="5.7"/>
+			<circle class="st1" cx="421.9" cy="362.1" r="5.7"/>
+			<circle class="st1" cx="535.3" cy="362.1" r="5.7"/>
+			<circle class="st1" cx="478.6" cy="418.8" r="5.7"/>
+			<text transform="matrix(1 0 0 1 431.4996 390.4684)" class="st2 st3 st6">24 Tooth Gear</text>
+		</g>
+	</g>
+	<g id="_x32_4t-gear-2" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 21.550000000 -514.740000000)">
+		<g id="_x32_4t-gear-2-source-geometry" transform="translate(199.85 200.29)">
+			<path class="st1" d="M559.2,479.4l8.5,5.8l-0.6,5.8l-9.5,4.1l-1.2,5.1l6.7,7.8l-2.1,5.5l-10.2,1.5l-2.5,4.7l4.4,9.3l-3.4,4.8
+				l-10.2-1.2l-3.6,3.8l1.9,10.1l-4.5,3.7l-9.6-3.8l-4.5,2.8l-0.8,10.3l-5.3,2.4l-8.3-6.2l-5,1.5L496,567l-5.8,1l-6.4-8.1l-5.3,0.2
+				l-5.8,8.5L467,568l-4.1-9.5l-5.1-1.2L450,564l-5.5-2.1l-1.5-10.2l-4.7-2.5l-9.3,4.4l-4.8-3.4l1.2-10.2l-3.8-3.6l-10.1,1.9
+				l-3.7-4.5l3.8-9.6l-2.8-4.5l-10.3-0.8l-2.4-5.3l6.2-8.3l-1.5-5l-9.7-3.4l-1-5.8l8.1-6.4l-0.2-5.3l-8.5-5.8l0.6-5.8l9.5-4.1
+				l1.2-5.1l-6.7-7.8l2.1-5.5l10.2-1.5l2.5-4.7l-4.4-9.3l3.4-4.8l10.2,1.2l3.6-3.8l-1.9-10.1l4.5-3.7l9.6,3.8l4.5-2.8l0.8-10.3
+				l5.3-2.4l8.3,6.2l5-1.5l3.4-9.7l5.8-1l6.4,8.1l5.3-0.2l5.8-8.5l5.8,0.6l4.1,9.5l5.1,1.2l7.8-6.7l5.5,2.1l1.5,10.2l4.7,2.5
+				l9.3-4.4l4.8,3.4l-1.2,10.2l3.8,3.6l10.1-1.9l3.7,4.5l-3.8,9.6l2.8,4.5l10.3,0.8l2.4,5.3l-6.2,8.3l1.5,5l9.7,3.4l1,5.8l-8.1,6.4
+				L559.2,479.4z"/>
+			<circle class="st1" cx="478.6" cy="479.4" r="5.7"/>
+			<circle class="st1" cx="478.6" cy="422.7" r="5.7"/>
+			<circle class="st1" cx="421.9" cy="479.4" r="5.7"/>
+			<circle class="st1" cx="535.3" cy="479.4" r="5.7"/>
+			<circle class="st1" cx="478.6" cy="536.1" r="5.7"/>
+			<text transform="matrix(1 0 0 1 431.4996 507.7764)" class="st2 st3 st6">24 Tooth Gear</text>
+		</g>
+	</g>
+	<g id="_x38_t-gear-1" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 -188.600000000 -6.900000000)">
+		<g id="_x38_t-gear-1-source-geometry" transform="translate(264.00 136.40)">
+			<path class="st1" d="M563.5,305.5l8.1,6.4l-1.9,6.1l-10.2,0.8l-3,3.6l1.2,10.2l-5.6,3l-7.8-6.7l-4.7,0.5l-6.4,8.1l-6.1-1.9
+				l-0.8-10.2l-3.6-3l-10.2,1.2l-3-5.6l6.7-7.8l-0.5-4.7l-8.1-6.4l1.9-6.1l10.2-0.8l3-3.6l-1.2-10.2l5.6-3l7.8,6.7l4.7-0.5l6.4-8.1
+				l6.1,1.9l0.8,10.2l3.6,3l10.2-1.2l3,5.6l-6.7,7.8L563.5,305.5z"/>
+			<circle class="st1" cx="539.6" cy="305.5" r="5.7"/>
+			<text transform="matrix(1 0 0 1 526.4023 297.4183)" class="st2 st3 st7">8 Tooth</text>
+			<text transform="matrix(1 0 0 1 531.2666 319.5102)" class="st2 st3 st7">Gear</text>
+		</g>
+	</g>
+	<g id="_x38_t-gear-2" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 -243.600000000 -129.100000000)">
+		<g id="_x38_t-gear-2-source-geometry" transform="translate(264.00 160.10)">
+			<path class="st1" d="M563.5,349l8.1,6.4l-1.9,6.1l-10.2,0.8l-3,3.6l1.2,10.2l-5.6,3l-7.8-6.7l-4.7,0.5l-6.4,8.1l-6.1-1.9
+				l-0.8-10.2l-3.6-3l-10.2,1.2l-3-5.6l6.7-7.8l-0.5-4.7l-8.1-6.4l1.9-6.1l10.2-0.8l3-3.6l-1.2-10.2l5.6-3l7.8,6.7l4.7-0.5l6.4-8.1
+				l6.1,1.9l0.8,10.2l3.6,3l10.2-1.2l3,5.6l-6.7,7.8L563.5,349z"/>
+			<circle class="st1" cx="539.6" cy="349" r="5.7"/>
+			<text transform="matrix(1 0 0 1 524.6184 340.1332)" class="st2 st3 st7">8 Tooth</text>
+			<text transform="matrix(1 0 0 1 530.8994 362.8922)" class="st2 st3 st7">Gear</text>
+		</g>
+	</g>
+	<g id="_x39_-hole-linkage-1" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 7.600000000 16.100000000)">
+		<g id="_x39_-hole-linkage-1-source-geometry" transform="translate(-6.5 241.3)">
+			<path class="st1" d="M27.8,462.5l453.5,0c11,0,19.8,8.9,19.8,19.8c0,11-8.9,19.8-19.8,19.8l-453.5,0c-11,0-19.8-8.9-19.8-19.8
+				C7.9,471.4,16.8,462.5,27.8,462.5z"/>
+
+				<ellipse transform="matrix(0.1564 -0.9877 0.9877 0.1564 -453.0103 434.3937)" class="st1" cx="27.8" cy="482.4" rx="5.7" ry="5.7"/>
+
+				<ellipse transform="matrix(0.1564 -0.9877 0.9877 0.1564 -405.1801 490.3957)" class="st1" cx="84.5" cy="482.4" rx="5.7" ry="5.7"/>
+
+				<ellipse transform="matrix(0.1564 -0.9877 0.9877 0.1564 -357.4343 546.299)" class="st1" cx="141.1" cy="482.4" rx="5.7" ry="5.7"/>
+
+				<ellipse transform="matrix(0.1564 -0.9877 0.9877 0.1564 -309.6041 602.3009)" class="st1" cx="197.8" cy="482.4" rx="5.7" ry="5.7"/>
+			<circle class="st1" cx="254.5" cy="482.4" r="5.7"/>
+			<circle class="st1" cx="311.2" cy="482.4" r="5.7"/>
+			<circle class="st1" cx="367.9" cy="482.4" r="5.7"/>
+			<circle class="st1" cx="424.6" cy="482.4" r="5.7"/>
+			<circle class="st1" cx="481.3" cy="482.4" r="5.7"/>
+
+				<rect x="252.1" y="448.8" transform="matrix(2.136111e-06 1 -1 2.136111e-06 730.9496 213.3496)" class="st8" width="13.3" height="46.8"/>
+			<text transform="matrix(1 0 0 1 235.3974 474.7737)" class="st2 st3 st9">9</text>
+			<text transform="matrix(1 0 0 1 241.3973 474.7737)" class="st2 st3 st9 st10"> </text>
+			<text transform="matrix(1 0 0 1 258.7973 474.7737)" class="st2 st3 st9">Hole</text>
+
+				<rect x="247.5" y="472.2" transform="matrix(2.136111e-06 1 -1 2.136111e-06 749.7497 241.3495)" class="st8" width="13.3" height="46.8"/>
+			<text transform="matrix(1 0 0 1 230.766 498.1739)" class="st2 st3 st9">Linkag</text>
+			<text transform="matrix(1 0 0 1 271.566 498.174)" class="st2 st3 st9">e</text>
+		</g>
+	</g>
+	<g id="_x39_-hole-linkage-2" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 7.600000000 15.100000000)">
+		<g id="_x39_-hole-linkage-2-source-geometry" transform="translate(-6.5 256.3)">
+			<path class="st1" d="M27.8,490.1l453.5,0c11,0,19.8,8.9,19.8,19.8c0,11-8.9,19.8-19.8,19.8l-453.5,0c-11,0-19.8-8.9-19.8-19.8
+				C7.9,498.9,16.8,490.1,27.8,490.1z"/>
+
+				<ellipse transform="matrix(0.1564 -0.9877 0.9877 0.1564 -480.1717 457.5918)" class="st1" cx="27.8" cy="509.9" rx="5.7" ry="5.7"/>
+
+				<ellipse transform="matrix(0.1564 -0.9877 0.9877 0.1564 -432.3416 513.5938)" class="st1" cx="84.5" cy="509.9" rx="5.7" ry="5.7"/>
+
+				<ellipse transform="matrix(0.1564 -0.9877 0.9877 0.1564 -384.5958 569.4969)" class="st1" cx="141.1" cy="509.9" rx="5.7" ry="5.7"/>
+
+				<ellipse transform="matrix(0.1564 -0.9877 0.9877 0.1564 -336.7656 625.4989)" class="st1" cx="197.8" cy="509.9" rx="5.7" ry="5.7"/>
+
+				<ellipse transform="matrix(0.253 -0.9675 0.9675 0.253 -303.1998 627.1172)" class="st1" cx="254.5" cy="509.9" rx="5.7" ry="5.7"/>
+
+				<ellipse transform="matrix(0.1564 -0.9877 0.9877 0.1564 -241.1053 737.5029)" class="st1" cx="311.2" cy="509.9" rx="5.7" ry="5.7"/>
+
+				<ellipse transform="matrix(0.1564 -0.9877 0.9877 0.1564 -193.2751 793.5048)" class="st1" cx="367.9" cy="509.9" rx="5.7" ry="5.7"/>
+
+				<ellipse transform="matrix(0.1564 -0.9877 0.9877 0.1564 -145.4449 849.5068)" class="st1" cx="424.6" cy="509.9" rx="5.7" ry="5.7"/>
+
+				<ellipse transform="matrix(0.1564 -0.9877 0.9877 0.1564 -97.6148 905.5088)" class="st1" cx="481.3" cy="509.9" rx="5.7" ry="5.7"/>
+
+				<rect x="250.9" y="475.8" transform="matrix(2.136111e-06 1 -1 2.136111e-06 756.7497 241.5495)" class="st8" width="13.3" height="46.8"/>
+			<text transform="matrix(1 0 0 1 234.1792 501.7849)" class="st2 st3 st9">9</text>
+			<text transform="matrix(1 0 0 1 240.1792 501.7849)" class="st2 st3 st9 st10"> </text>
+			<text transform="matrix(1 0 0 1 257.5792 501.7849)" class="st2 st3 st9">Hole</text>
+
+				<rect x="247.5" y="499.8" transform="matrix(2.136111e-06 1 -1 2.136111e-06 777.3497 268.9495)" class="st8" width="13.3" height="46.8"/>
+			<text transform="matrix(1 0 0 1 230.7659 525.6935)" class="st2 st3 st9">Linkag</text>
+			<text transform="matrix(1 0 0 1 271.566 525.6935)" class="st2 st3 st9">e</text>
+		</g>
+	</g>
+	<g id="_x37_-hole-linkage-1" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 401.146701650 453.570360515)">
+		<g id="_x37_-hole-linkage-1-source-geometry" transform="translate(167.0 -6.5) rotate(90)">
+			<path class="st1" d="M27.8-286.5H368c11,0,19.8,8.9,19.8,19.8c0,11-8.9,19.8-19.8,19.8H27.8c-11,0-19.8-8.9-19.8-19.8
+				C7.9-277.7,16.8-286.5,27.8-286.5z"/>
+			<circle class="st1" cx="27.8" cy="-266.7" r="5.7"/>
+			<circle class="st1" cx="84.5" cy="-266.7" r="5.7"/>
+			<circle class="st1" cx="141.1" cy="-266.7" r="5.7"/>
+			<circle class="st1" cx="197.8" cy="-266.7" r="5.7"/>
+			<circle class="st1" cx="254.5" cy="-266.7" r="5.7"/>
+			<circle class="st1" cx="311.2" cy="-266.7" r="5.7"/>
+			<circle class="st1" cx="367.9" cy="-266.7" r="5.7"/>
+
+				<rect x="181.7" y="-284.2" transform="matrix(2.535182e-06 1 -1 2.535182e-06 -76.8505 -472.4493)" class="st8" width="32.3" height="19.2"/>
+			<text transform="matrix(1 0 0 1 181.6755 -274.9959)" class="st2 st3 st9">7 Hole</text>
+
+				<rect x="177.5" y="-260.7" transform="matrix(2.535182e-06 1 -1 2.535182e-06 -55.2005 -450.8994)" class="st8" width="40.7" height="15.3"/>
+			<text transform="matrix(1 0 0 1 177.4869 -251.4568)" class="st2 st3 st9">Linkage</text>
+		</g>
+	</g>
+	<g id="_x37_-hole-linkage-2" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 7.600000000 14.200000000)">
+		<g id="_x37_-hole-linkage-2-source-geometry" transform="translate(-6.5 271.3)">
+			<path class="st1" d="M27.8,517.6H368c11,0,19.8,8.9,19.8,19.8c0,11-8.9,19.8-19.8,19.8H27.8c-11,0-19.8-8.9-19.8-19.8
+				C7.9,526.5,16.8,517.6,27.8,517.6z"/>
+			<circle class="st1" cx="27.8" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="84.5" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="141.1" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="197.8" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="254.5" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="311.2" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="367.9" cy="537.4" r="5.7"/>
+
+				<rect x="194.2" y="504" transform="matrix(2.535182e-06 1 -1 2.535182e-06 728.3495 326.5486)" class="st8" width="13.3" height="46.8"/>
+			<text transform="matrix(1 0 0 1 177.4865 530.0816)" class="st2 st3 st9">7</text>
+			<text transform="matrix(1 0 0 1 183.4865 530.0816)" class="st2 st3 st9 st10"> </text>
+			<text transform="matrix(1 0 0 1 200.8865 530.0816)" class="st2 st3 st9">Hole</text>
+
+				<rect x="194.2" y="526.8" transform="matrix(2.535182e-06 1 -1 2.535182e-06 751.0495 349.2486)" class="st8" width="13.3" height="46.8"/>
+			<text transform="matrix(1 0 0 1 177.4868 552.775)" class="st2 st3 st9">Linkag</text>
+			<text transform="matrix(1 0 0 1 218.2868 552.775)" class="st2 st3 st9">e</text>
+		</g>
+	</g>
+	<g id="_x35_-hole-linkage-1" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 120.100000000 -69.000000000)">
+		<g id="_x35_-hole-linkage-1-source-geometry" transform="translate(128.5 271.3)">
+			<path class="st1" d="M275.4,517.6l226.8,0c11,0,19.8,8.9,19.8,19.8c0,11-8.9,19.8-19.8,19.8l-226.8,0c-11,0-19.8-8.9-19.8-19.8
+				C255.6,526.5,264.5,517.6,275.4,517.6z"/>
+			<circle class="st1" cx="275.4" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="332.1" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="388.8" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="445.5" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="502.2" cy="537.4" r="5.7"/>
+
+				<rect x="383.2" y="504.1" transform="matrix(2.064559e-06 1 -1 2.064559e-06 917.349 137.5495)" class="st8" width="13.3" height="46.8"/>
+			<text transform="matrix(1 0 0 1 366.5269 530.082)" class="st2 st3 st9">5</text>
+			<text transform="matrix(1 0 0 1 372.5269 530.082)" class="st2 st3 st9 st10"> </text>
+			<text transform="matrix(1 0 0 1 389.9269 530.082)" class="st2 st3 st9">Hole</text>
+
+				<rect x="382.1" y="526.8" transform="matrix(2.064559e-06 1 -1 2.064559e-06 938.949 161.3495)" class="st8" width="13.3" height="46.8"/>
+			<text transform="matrix(1 0 0 1 365.4364 552.7753)" class="st2 st3 st9">Linkag</text>
+			<text transform="matrix(1 0 0 1 406.2365 552.7753)" class="st2 st3 st9">e</text>
+		</g>
+	</g>
+	<g id="_x35_-hole-linkage-2" transform="matrix(0.000000000 -1.000000000 1.000000000 0.000000000 -120.400000000 819.900000000)">
+		<g id="_x35_-hole-linkage-2-source-geometry" transform="translate(293.0 184.7) rotate(90)">
+			<path class="st1" d="M378.5-517.7l226.8,0c11,0,19.8,8.9,19.8,19.8c0,11-8.9,19.8-19.8,19.8l-226.8,0c-11,0-19.8-8.9-19.8-19.8
+				C358.7-508.8,367.6-517.7,378.5-517.7z"/>
+			<circle class="st1" cx="378.5" cy="-497.9" r="5.7"/>
+			<circle class="st1" cx="435.2" cy="-497.9" r="5.7"/>
+			<circle class="st1" cx="491.9" cy="-497.9" r="5.7"/>
+			<circle class="st1" cx="548.6" cy="-497.9" r="5.7"/>
+			<circle class="st1" cx="605.3" cy="-497.9" r="5.7"/>
+
+				<rect x="475.8" y="-514.6" transform="matrix(2.724949e-06 1 -1 2.724949e-06 -13.0517 -996.8491)" class="st8" width="32.3" height="19.2"/>
+			<text transform="matrix(1 0 0 1 475.767 -505.3302)" class="st2 st3 st9">5 Hole</text>
+
+				<rect x="471.6" y="-491.9" transform="matrix(2.724949e-06 1 -1 2.724949e-06 7.6983 -976.1992)" class="st8" width="40.7" height="15.3"/>
+			<text transform="matrix(1 0 0 1 471.5786 -482.624)" class="st2 st3 st9">Linkage</text>
+		</g>
+	</g>
+	<g id="_x33_-hole-linkage-1" transform="matrix(0.000000000 -1.000000000 1.000000000 0.000000000 148.526359147 862.413218407)">
+		<g id="_x33_-hole-linkage-1-source-geometry" transform="translate(308.0 184.7) rotate(90)">
+			<path class="st1" d="M378.5-545.2h113.4c11,0,19.8,8.9,19.8,19.8c0,11-8.9,19.8-19.8,19.8l0,0H378.5c-11,0-19.8-8.9-19.8-19.8
+				S367.6-545.2,378.5-545.2z"/>
+			<circle class="st1" cx="378.5" cy="-525.4" r="5.7"/>
+			<circle class="st1" cx="435.2" cy="-525.4" r="5.7"/>
+			<circle class="st1" cx="491.9" cy="-525.4" r="5.7"/>
+			<rect x="425.9" y="-549.5" class="st8" width="19.2" height="32.3"/>
+			<text transform="matrix(1 0 0 1 419.328 -533.7606)" class="st2 st3 st9">3 Hole</text>
+			<rect x="427.6" y="-532.1" class="st8" width="15.3" height="40.7"/>
+			<text transform="matrix(1 0 0 1 414.8851 -510.1431)" class="st2 st3 st9">Linkage</text>
+		</g>
+	</g>
+		<g id="_x33_-hole-linkage-2" transform="matrix(0.000000000 -1.000000000 1.000000000 0.000000000 -276.300000000 1115.200000000)">
+		<g id="_x33_-hole-linkage-2-source-geometry" transform="translate(308.0 239.7) rotate(90)">
+			<path class="st1" d="M479.4-545.2l113.4,0c11,0,19.8,8.9,19.8,19.8c0,11-8.9,19.8-19.8,19.8l0,0l-113.4,0
+				c-11,0-19.8-8.9-19.8-19.8S468.5-545.2,479.4-545.2z"/>
+			<circle class="st1" cx="479.4" cy="-525.4" r="5.7"/>
+			<circle class="st1" cx="536.1" cy="-525.4" r="5.7"/>
+			<circle class="st1" cx="592.8" cy="-525.4" r="5.7"/>
+
+				<rect x="519.9" y="-542.6" transform="matrix(2.688093e-06 1 -1 2.688093e-06 3.0483 -1069.1479)" class="st8" width="32.3" height="19.2"/>
+			<text transform="matrix(1 0 0 1 519.9792 -533.3823)" class="st2 st3 st9">3 Hole</text>
+
+				<rect x="515.8" y="-519.4" transform="matrix(2.688093e-06 1 -1 2.688093e-06 24.3984 -1047.8979)" class="st8" width="40.7" height="15.3"/>
+			<text transform="matrix(1 0 0 1 515.7898 -510.1428)" class="st2 st3 st9">Linkage</text>
+		</g>
+	</g>
+	<g id="spacer-01" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 -479.200000000 -277.700000000)">
+		<g id="spacer-01-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3221 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-02" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 -479.200000000 -236.100000000)">
+		<g id="spacer-02-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3221 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-03" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 -479.200000000 -194.500000000)">
+		<g id="spacer-03-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3225 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-04" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 -479.200000000 -152.900000000)">
+		<g id="spacer-04-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3221 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-05" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 -479.200000000 -111.300000000)">
+		<g id="spacer-05-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3221 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-06" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 -479.200000000 -69.700000000)">
+		<g id="spacer-06-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3223 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-07" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 -479.200000000 -28.100000000)">
+		<g id="spacer-07-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3235 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-08" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 282.800000000 16.000000000)">
+		<g id="spacer-08-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3231 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-09" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 282.800000000 57.600000000)">
+		<g id="spacer-09-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3231 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-10" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 -65.200000000 -341.700000000)">
+		<g id="spacer-10-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3219 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-11" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 -20.200000000 -341.700000000)">
+		<g id="spacer-11-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3231 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-12" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 119.800000000 -341.700000000)">
+		<g id="spacer-12-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3234 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-13" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 169.800000000 -341.700000000)">
+		<g id="spacer-13-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3235 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-14" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 219.800000000 -341.700000000)">
+		<g id="spacer-14-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3227 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-15" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 269.800000000 -341.700000000)">
+		<g id="spacer-15-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3235 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-16" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 151.800000000 -117.700000000)">
+		<g id="spacer-16-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3227 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-17" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 194.800000000 -117.700000000)">
+		<g id="spacer-17-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3232 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-18" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 243.800000000 -117.700000000)">
+		<g id="spacer-18-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3225 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-19" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 151.800000000 -75.700000000)">
+		<g id="spacer-19-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3236 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-20" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 194.800000000 -75.700000000)">
+		<g id="spacer-20-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3227 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-21" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 243.800000000 -75.700000000)">
+		<g id="spacer-21-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3235 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-22" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 151.800000000 -33.700000000)">
+		<g id="spacer-22-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3224 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-23" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 194.800000000 -33.700000000)">
+		<g id="spacer-23-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3236 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-24" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 243.800000000 -33.700000000)">
+		<g id="spacer-24-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3227 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-25" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 -467.200000000 -680.700000000)">
+		<g id="spacer-25-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3227 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-26" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 -130.200000000 -680.700000000)">
+		<g id="spacer-26-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3218 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-27" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 -467.200000000 -343.700000000)">
+		<g id="spacer-27-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3234 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="spacer-28" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 -130.200000000 -343.700000000)">
+		<g id="spacer-28-source-geometry" transform="translate(171.00 246.30)">
+			<circle class="st1" cx="339.2" cy="477.4" r="19.8"/>
+			<circle class="st1" cx="339.2" cy="477.4" r="5.7"/>
+			<text transform="matrix(6.123234e-17 1 -1 6.123234e-17 346.3228 469.7733)" class="st2 st3 st11">Spacer</text>
+		</g>
+	</g>
+	<g id="_x32_4t-gear-3" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 -166.450000000 -353.550000000)">
+		<g id="_x32_4t-gear-3-source-geometry" transform="translate(199.85 136.35)">
+			<path class="st1" d="M559.2,362.1l8.5,5.8l-0.6,5.8l-9.5,4.1l-1.2,5.1l6.7,7.8l-2.1,5.5l-10.2,1.5l-2.5,4.7l4.4,9.3l-3.4,4.8
+				l-10.2-1.2l-3.6,3.8l1.9,10.1L533,433l-9.6-3.8l-4.5,2.8l-0.8,10.3l-5.3,2.4l-8.3-6.2l-5,1.5l-3.4,9.7l-5.8,1l-6.4-8.1l-5.3,0.2
+				l-5.8,8.5l-5.8-0.6l-4.1-9.5l-5.1-1.2l-7.8,6.7l-5.5-2.1l-1.5-10.2l-4.7-2.5l-9.3,4.4l-4.8-3.4l1.2-10.2l-3.8-3.6l-10.1,1.9
+				l-3.7-4.5l3.8-9.6l-2.8-4.5l-10.3-0.8l-2.4-5.3l6.2-8.3l-1.5-5l-9.7-3.4l-1-5.8l8.1-6.4l-0.2-5.3l-8.5-5.8l0.6-5.8l9.5-4.1
+				l1.2-5.1l-6.7-7.8l2.1-5.5l10.2-1.5l2.5-4.7l-4.4-9.3l3.4-4.8L418,309l3.6-3.8l-1.9-10.1l4.5-3.7l9.6,3.8l4.5-2.8l0.8-10.3
+				l5.3-2.4l8.3,6.2l5-1.5l3.4-9.7l5.8-1l6.4,8.1l5.3-0.2l5.8-8.5l5.8,0.6l4.1,9.5l5.1,1.2l7.8-6.7l5.5,2.1l1.5,10.2l4.7,2.5
+				l9.3-4.4l4.8,3.4l-1.2,10.2l3.8,3.6l10.1-1.9l3.7,4.5l-3.8,9.6l2.8,4.5l10.3,0.8l2.4,5.3l-6.2,8.3l1.5,5l9.7,3.4l1,5.8L559,357
+				L559.2,362.1z"/>
+			<circle class="st1" cx="478.6" cy="362.1" r="5.7"/>
+			<circle class="st1" cx="478.6" cy="305.4" r="5.7"/>
+			<circle class="st1" cx="421.9" cy="362.1" r="5.7"/>
+			<circle class="st1" cx="535.3" cy="362.1" r="5.7"/>
+			<circle class="st1" cx="478.6" cy="418.8" r="5.7"/>
+			<text transform="matrix(1 0 0 1 431.4996 390.4684)" class="st2 st3 st6">24 Tooth Gear</text>
+		</g>
+	</g>
+	<g id="_x38_t-gear-3" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 11.400000000 -336.900000000)">
+		<g id="_x38_t-gear-3-source-geometry" transform="translate(264.00 136.40)">
+			<path class="st1" d="M563.5,305.5l8.1,6.4l-1.9,6.1l-10.2,0.8l-3,3.6l1.2,10.2l-5.6,3l-7.8-6.7l-4.7,0.5l-6.4,8.1l-6.1-1.9
+				l-0.8-10.2l-3.6-3l-10.2,1.2l-3-5.6l6.7-7.8l-0.5-4.7l-8.1-6.4l1.9-6.1l10.2-0.8l3-3.6l-1.2-10.2l5.6-3l7.8,6.7l4.7-0.5l6.4-8.1
+				l6.1,1.9l0.8,10.2l3.6,3l10.2-1.2l3,5.6l-6.7,7.8L563.5,305.5z"/>
+			<circle class="st1" cx="539.6" cy="305.5" r="5.7"/>
+			<text transform="matrix(1 0 0 1 526.4023 297.4183)" class="st2 st3 st7">8 Tooth</text>
+			<text transform="matrix(1 0 0 1 531.2666 319.5102)" class="st2 st3 st7">Gear</text>
+		</g>
+	</g>
+	<g id="_x38_t-gear-4" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 18.400000000 -21.900000000)">
+		<g id="_x38_t-gear-4-source-geometry" transform="translate(264.00 136.40)">
+			<path class="st1" d="M563.5,305.5l8.1,6.4l-1.9,6.1l-10.2,0.8l-3,3.6l1.2,10.2l-5.6,3l-7.8-6.7l-4.7,0.5l-6.4,8.1l-6.1-1.9
+				l-0.8-10.2l-3.6-3l-10.2,1.2l-3-5.6l6.7-7.8l-0.5-4.7l-8.1-6.4l1.9-6.1l10.2-0.8l3-3.6l-1.2-10.2l5.6-3l7.8,6.7l4.7-0.5l6.4-8.1
+				l6.1,1.9l0.8,10.2l3.6,3l10.2-1.2l3,5.6l-6.7,7.8L563.5,305.5z"/>
+			<circle class="st1" cx="539.6" cy="305.5" r="5.7"/>
+			<text transform="matrix(1 0 0 1 526.4023 297.4183)" class="st2 st3 st7">8 Tooth</text>
+			<text transform="matrix(1 0 0 1 531.2666 319.5102)" class="st2 st3 st7">Gear</text>
+		</g>
+	</g>
+	<g id="_x35_-hole-linkage-3" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 193.900000000 -484.900000000)">
+		<g id="_x35_-hole-linkage-3-source-geometry" transform="translate(128.5 271.3)">
+			<path class="st1" d="M275.4,517.6l226.8,0c11,0,19.8,8.9,19.8,19.8c0,11-8.9,19.8-19.8,19.8l-226.8,0c-11,0-19.8-8.9-19.8-19.8
+				C255.6,526.5,264.5,517.6,275.4,517.6z"/>
+			<circle class="st1" cx="275.4" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="332.1" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="388.8" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="445.5" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="502.2" cy="537.4" r="5.7"/>
+
+				<rect x="383.2" y="504.1" transform="matrix(2.064559e-06 1 -1 2.064559e-06 917.349 137.5495)" class="st8" width="13.3" height="46.8"/>
+			<text transform="matrix(1 0 0 1 366.5269 530.082)" class="st2 st3 st9">5</text>
+			<text transform="matrix(1 0 0 1 372.5269 530.082)" class="st2 st3 st9 st10"> </text>
+			<text transform="matrix(1 0 0 1 389.9269 530.082)" class="st2 st3 st9">Hole</text>
+
+				<rect x="382.1" y="526.8" transform="matrix(2.064559e-06 1 -1 2.064559e-06 938.949 161.3495)" class="st8" width="13.3" height="46.8"/>
+			<text transform="matrix(1 0 0 1 365.4364 552.7753)" class="st2 st3 st9">Linkag</text>
+			<text transform="matrix(1 0 0 1 406.2365 552.7753)" class="st2 st3 st9">e</text>
+		</g>
+	</g>
+	<g id="_x35_-hole-linkage-4" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 120.100000000 -27.400000000)">
+		<g id="_x35_-hole-linkage-4-source-geometry" transform="translate(128.5 271.3)">
+			<path class="st1" d="M275.4,517.6l226.8,0c11,0,19.8,8.9,19.8,19.8c0,11-8.9,19.8-19.8,19.8l-226.8,0c-11,0-19.8-8.9-19.8-19.8
+				C255.6,526.5,264.5,517.6,275.4,517.6z"/>
+			<circle class="st1" cx="275.4" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="332.1" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="388.8" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="445.5" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="502.2" cy="537.4" r="5.7"/>
+
+				<rect x="383.2" y="504.1" transform="matrix(2.064559e-06 1 -1 2.064559e-06 917.349 137.5495)" class="st8" width="13.3" height="46.8"/>
+			<text transform="matrix(1 0 0 1 366.5269 530.082)" class="st2 st3 st9">5</text>
+			<text transform="matrix(1 0 0 1 372.5269 530.082)" class="st2 st3 st9 st10"> </text>
+			<text transform="matrix(1 0 0 1 389.9269 530.082)" class="st2 st3 st9">Hole</text>
+
+				<rect x="382.1" y="526.8" transform="matrix(2.064559e-06 1 -1 2.064559e-06 938.949 161.3495)" class="st8" width="13.3" height="46.8"/>
+			<text transform="matrix(1 0 0 1 365.4364 552.7753)" class="st2 st3 st9">Linkag</text>
+			<text transform="matrix(1 0 0 1 406.2365 552.7753)" class="st2 st3 st9">e</text>
+		</g>
+	</g>
+	<g id="_x35_-hole-linkage-5" transform="matrix(1.000000000 0.000000000 0.000000000 1.000000000 6.800000000 14.200000000)">
+		<g id="_x35_-hole-linkage-5-source-geometry" transform="translate(128.5 271.3)">
+			<path class="st1" d="M275.4,517.6l226.8,0c11,0,19.8,8.9,19.8,19.8c0,11-8.9,19.8-19.8,19.8l-226.8,0c-11,0-19.8-8.9-19.8-19.8
+				C255.6,526.5,264.5,517.6,275.4,517.6z"/>
+			<circle class="st1" cx="275.4" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="332.1" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="388.8" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="445.5" cy="537.4" r="5.7"/>
+			<circle class="st1" cx="502.2" cy="537.4" r="5.7"/>
+
+				<rect x="383.2" y="504.1" transform="matrix(2.064559e-06 1 -1 2.064559e-06 917.349 137.5495)" class="st8" width="13.3" height="46.8"/>
+			<text transform="matrix(1 0 0 1 366.5269 530.082)" class="st2 st3 st9">5</text>
+			<text transform="matrix(1 0 0 1 372.5269 530.082)" class="st2 st3 st9 st10"> </text>
+			<text transform="matrix(1 0 0 1 389.9269 530.082)" class="st2 st3 st9">Hole</text>
+
+				<rect x="382.1" y="526.8" transform="matrix(2.064559e-06 1 -1 2.064559e-06 938.949 161.3495)" class="st8" width="13.3" height="46.8"/>
+			<text transform="matrix(1 0 0 1 365.4364 552.7753)" class="st2 st3 st9">Linkag</text>
+			<text transform="matrix(1 0 0 1 406.2365 552.7753)" class="st2 st3 st9">e</text>
+		</g>
+	</g>
+		<g id="_x33_-hole-linkage-3" transform="matrix(0.000000000 -1.000000000 1.000000000 0.000000000 -121.300000000 1115.200000000)">
+		<g id="_x33_-hole-linkage-3-source-geometry" transform="translate(308.0 239.7) rotate(90)">
+			<path class="st1" d="M479.4-545.2l113.4,0c11,0,19.8,8.9,19.8,19.8c0,11-8.9,19.8-19.8,19.8l0,0l-113.4,0
+				c-11,0-19.8-8.9-19.8-19.8S468.5-545.2,479.4-545.2z"/>
+			<circle class="st1" cx="479.4" cy="-525.4" r="5.7"/>
+			<circle class="st1" cx="536.1" cy="-525.4" r="5.7"/>
+			<circle class="st1" cx="592.8" cy="-525.4" r="5.7"/>
+
+				<rect x="519.9" y="-542.6" transform="matrix(2.688093e-06 1 -1 2.688093e-06 3.0483 -1069.1479)" class="st8" width="32.3" height="19.2"/>
+			<text transform="matrix(1 0 0 1 519.9792 -533.3823)" class="st2 st3 st9">3 Hole</text>
+
+				<rect x="515.8" y="-519.4" transform="matrix(2.688093e-06 1 -1 2.688093e-06 24.3984 -1047.8979)" class="st8" width="40.7" height="15.3"/>
+			<text transform="matrix(1 0 0 1 515.7898 -510.1428)" class="st2 st3 st9">Linkage</text>
+		</g>
+	</g>
+		<g id="_x33_-hole-linkage-4" transform="matrix(0.000000000 -1.000000000 1.000000000 0.000000000 -276.300000000 1157.200000000)">
+		<g id="_x33_-hole-linkage-4-source-geometry" transform="translate(308.0 239.7) rotate(90)">
+			<path class="st1" d="M479.4-545.2l113.4,0c11,0,19.8,8.9,19.8,19.8c0,11-8.9,19.8-19.8,19.8l0,0l-113.4,0
+				c-11,0-19.8-8.9-19.8-19.8S468.5-545.2,479.4-545.2z"/>
+			<circle class="st1" cx="479.4" cy="-525.4" r="5.7"/>
+			<circle class="st1" cx="536.1" cy="-525.4" r="5.7"/>
+			<circle class="st1" cx="592.8" cy="-525.4" r="5.7"/>
+
+				<rect x="519.9" y="-542.6" transform="matrix(2.688093e-06 1 -1 2.688093e-06 3.0483 -1069.1479)" class="st8" width="32.3" height="19.2"/>
+			<text transform="matrix(1 0 0 1 519.9792 -533.3823)" class="st2 st3 st9">3 Hole</text>
+
+				<rect x="515.8" y="-519.4" transform="matrix(2.688093e-06 1 -1 2.688093e-06 24.3984 -1047.8979)" class="st8" width="40.7" height="15.3"/>
+			<text transform="matrix(1 0 0 1 515.7898 -510.1428)" class="st2 st3 st9">Linkage</text>
+		</g>
+	</g>
+		<g id="_x33_-hole-linkage-5" transform="matrix(0.000000000 -1.000000000 1.000000000 0.000000000 -40.000000000 1656.300000000)">
+		<g id="_x33_-hole-linkage-5-source-geometry" transform="translate(308.0 239.7) rotate(90)">
+			<path class="st1" d="M479.4-545.2l113.4,0c11,0,19.8,8.9,19.8,19.8c0,11-8.9,19.8-19.8,19.8l0,0l-113.4,0
+				c-11,0-19.8-8.9-19.8-19.8S468.5-545.2,479.4-545.2z"/>
+			<circle class="st1" cx="479.4" cy="-525.4" r="5.7"/>
+			<circle class="st1" cx="536.1" cy="-525.4" r="5.7"/>
+			<circle class="st1" cx="592.8" cy="-525.4" r="5.7"/>
+
+				<rect x="519.9" y="-542.6" transform="matrix(2.688093e-06 1 -1 2.688093e-06 3.0483 -1069.1479)" class="st8" width="32.3" height="19.2"/>
+			<text transform="matrix(1 0 0 1 519.9792 -533.3823)" class="st2 st3 st9">3 Hole</text>
+
+				<rect x="515.8" y="-519.4" transform="matrix(2.688093e-06 1 -1 2.688093e-06 24.3984 -1047.8979)" class="st8" width="40.7" height="15.3"/>
+			<text transform="matrix(1 0 0 1 515.7898 -510.1428)" class="st2 st3 st9">Linkage</text>
+		</g>
+	</g>
+</g>
+</svg>
