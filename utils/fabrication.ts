@@ -1,14 +1,15 @@
 import { FabricationIssue, FabricationPackage, FabricationRecipe, MechanismConfig, ProjectState } from '../types';
 import { gearTrainPitchCenterDistance, gearTrainResolvedCenterDistance, gearTrainPitchRadii, generateCurvePoints } from './kinematics';
 import { boardToScene, sceneToBoardRaw, sceneBoundsForSheet } from './coordinates';
-import { isBoardFixedCoordRole, referenceRecipeForType } from './mechanismReference';
+import { referenceRecipeForType } from './mechanismReference';
 import { mechanismBindingWarnings } from './motion';
 import { mechanismMatchesPathOwner } from './pathTargets';
 import { makeAssemblyGuideHtml, makeAssemblyGuidePdf } from './fabricationAssemblyGuide';
 import { makeBlueprintPreviewSvg, makeBlueprintSvg } from './fabricationBlueprintSvg';
 import { makeCutSheetPdf } from './fabricationCutSheetPdf';
 import { makeCustomPartsPdf, makeCustomPartsStl, makeCustomPartsSvg } from './fabricationCustomParts';
-import { createFabricationRecipe, prefabAssemblySteps } from './fabricationRecipes';
+import { createFabricationRecipe } from './fabricationRecipes';
+import { boardFixedAssemblyCoordinatesForMechanism, isBoardCoordinateWithin, offBoardFixedAssemblyCoordinatesForMechanism } from './boardHoleConstraints';
 import { primaryFoundryPlaybackPath } from './foundryPlayback';
 import { FABRICATION_LINKAGE_ROLE_MIN_HOLES, planetaryRingPitchRadius } from './fabricationSizing';
 import {
@@ -88,7 +89,11 @@ export {
 } from './fabricationRenderPlan';
 
 export { makeBlueprintPreviewSvg, makeBlueprintSvg } from './fabricationBlueprintSvg';
-export { createFabricationRecipe, prefabAssemblySteps } from './fabricationRecipes';
+export {
+    createFabricationRecipe,
+    prefabAssemblySteps
+} from './fabricationRecipes';
+export { boardFixedAssemblyCoordinatesForMechanism, isBoardCoordinateWithin, offBoardFixedAssemblyCoordinatesForMechanism } from './boardHoleConstraints';
 
 export type { FabricationLinkageRoleLengths } from './fabricationSizing';
 export {
@@ -184,13 +189,6 @@ export const validateForFabrication = (project: ProjectState) => {
     const snapTolerance = project.settings.physicsSnapMode === 'fast' ? 4 : project.settings.physicsSnapMode === 'high' ? 0.25 : 0.5;
     const fabricationSeverity: FabricationIssue['severity'] = project.settings.fabricationReadyMode ? 'error' : 'warning';
     const insideSheet = (p: { x: number; y: number }) => p.x >= sheet.x && p.x <= sheet.x + sheet.width && p.y >= sheet.y && p.y <= sheet.y + sheet.height;
-    const isValidBoardCoordinate = (coord: string | undefined) => {
-        const match = /^([A-Z]+)(\d+)$/.exec(coord ?? '');
-        if (!match) return false;
-        const column = match[1].split('').reduce((value, letter) => value * 26 + letter.charCodeAt(0) - 64, 0) - 1;
-        const row = Number(match[2]) - 1;
-        return column >= 0 && column < project.settings.physicalKit.boardCells && row >= 0 && row < project.settings.physicalKit.boardCells;
-    };
     if (!project.partOrder.length) add('error', 'No character in scene.', { recoveryStage: 'character', recoveryAction: 'Load a character package' });
     const activeMechanisms = project.mechanisms.filter(m => m.visible && m.enabled !== false);
     if (!activeMechanisms.length) add('error', 'No enabled mechanism to export.', { recoveryStage: 'design', recoveryAction: 'Enable or add a mechanism' });
@@ -273,11 +271,14 @@ export const validateForFabrication = (project: ProjectState) => {
             add('warning', `${m.id}: near board edge ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move inward' });
         }
         if (board.valid) {
-            const offBoardStep = prefabAssemblySteps(m, board.label, project.settings.physicalKit.boardCells).find(step => (step.coords ?? []).some((coord, index) =>
-                isBoardFixedCoordRole(step.coordRoles?.[index] ?? '') && !isValidBoardCoordinate(coord)
-            ));
-            if (offBoardStep) {
-                add('error', `${m.id}: assembly holes off board near ${offBoardStep.boardCoordinate}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move inward' });
+            const offBoardHoles = offBoardFixedAssemblyCoordinatesForMechanism(
+                m,
+                board.label,
+                project.settings.physicalKit.boardCells,
+            );
+            if (offBoardHoles.length) {
+                const coordinates = [...new Set(offBoardHoles.map(hole => hole.coordinate))].join(', ');
+                add('error', `${m.id}: assembly holes off board near ${coordinates}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move inward' });
                 placementHasIssue = true;
             }
         }

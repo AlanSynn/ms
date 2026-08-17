@@ -226,8 +226,10 @@ Rules:
 ### Coordinate validation
 
 - [ ] All board coordinates are inside `A1..O15`.
+- [ ] Validate every translated `board` / `board_axle` coordinate from every assembly step against the active physical-kit board before recommending, using, or exporting a mechanism; one valid main anchor is not sufficient.
 - [ ] `coord_roles` length equals `coords` length.
 - [ ] Non-board roles are not exported as fixed board pivots.
+- [ ] `link_end_reference`, `link_joint_reference`, `gear_handle_reference`, `carrier_reference`, and `slider_reference` remain moving/part-local holes and must not be treated as board holes.
 - [ ] Multi-hole fixed parts include all fixed board sites.
 
 ### Stack validation

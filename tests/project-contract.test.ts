@@ -9,7 +9,7 @@ import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { boardGridLines, boardToScene, bodyPartPivotScene, physicalKitPreset, placeBodyPartPivotAt, SCENE_PX_PER_MM, SCENE_VIEW, sceneToBoard, sceneToBoardRaw, sceneToSheetMm, sceneToSvg, sheetMmToScene } from '../utils/coordinates';
 import { CLASSROOM_LESSONS, classroomLessonById, createDefaultMechanism, createDefaultSceneObject, createEmptyProject, createLessonProject, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath, replaceCharacterProject, resetProjectToLessonBaseline } from '../utils/project';
-import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, PLANETARY_GEAR_PLANET_COUNT, fabricationBoardColumnLabel, fabricationBoardCoordinateCallout, fabricationBoardRowLabel, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, makeBlueprintPreviewSvg, makeBlueprintSvg, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRenderPlanForMechanism, fabricationStackForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryPlanetCenters, prefabAssemblySteps, readableFabricationStackSummary, sampleFeasibleRange, validateFabricationStack, validateForFabrication, validateMechanismPreviewReadiness } from '../utils/fabrication';
+import { boardFixedAssemblyCoordinatesForMechanism, createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, isBoardCoordinateWithin, offBoardFixedAssemblyCoordinatesForMechanism, PLANETARY_GEAR_PLANET_COUNT, fabricationBoardColumnLabel, fabricationBoardCoordinateCallout, fabricationBoardRowLabel, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, makeBlueprintPreviewSvg, makeBlueprintSvg, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRenderPlanForMechanism, fabricationStackForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryPlanetCenters, prefabAssemblySteps, readableFabricationStackSummary, sampleFeasibleRange, validateFabricationStack, validateForFabrication, validateMechanismPreviewReadiness } from '../utils/fabrication';
 import { FABRICATION_GEAR_ROOT_WEB_MM, fabricationGearEngravingLabel, fabricationLinkageEngravingLabel, fabricationRingGearEngravingLabel, fabricationSpacerEngravingLabel } from '../utils/fabricationContract';
 import { makeAssemblyGuideHtml as directMakeAssemblyGuideHtml, makeAssemblyGuidePdf as directMakeAssemblyGuidePdf } from '../utils/fabricationAssemblyGuide';
 import { makeBlueprintPreviewSvg as directMakeBlueprintPreviewSvg, makeBlueprintSvg as directMakeBlueprintSvg } from '../utils/fabricationBlueprintSvg';
@@ -36,7 +36,7 @@ import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureR
 import { buildMechanismSnapshot, buildMechanismSnapshots } from '../utils/mechanismSnapshot';
 import { createFoundryPlaybackFrame, foundryPlaybackPhaseToInputAngle, generateFoundryPlaybackPointTraces } from '../utils/foundryPlayback';
 import { createMechanismFitContext, createSceneMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext, pointsToSvgPath } from '../utils/mechanismPreview';
-import { buildMechanismRecommendations, fitMechanismToTargetPath } from '../utils/mechanismRecommendations';
+import { buildMechanismRecommendations, fitMechanismToTargetPath, fitRecommendedMechanismToSheet } from '../utils/mechanismRecommendations';
 import { buildAutomataSceneModel } from '../utils/automataSceneModel';
 import { buildDesignAutomataProjection } from '../utils/designAutomataProjection';
 import { WEBGL_PIXEL_RATIO_CAP, canvasPanOffset, canvasViewBoxForViewport, zoomCanvasViewportAtPoint } from '../utils/viewport';
@@ -1232,6 +1232,27 @@ REFERENCE_EXPORT_READY_TYPES.forEach(type => {
     );
   }
 });
+REFERENCE_EXPORT_READY_TYPES.forEach(type => {
+  const mechanism = createDefaultMechanism(type, `board-hole-contract-${type}`);
+  const referenceBoardCoordinate = referenceRecipeForType(type).assemblySteps[0]?.boardCoordinate ?? 'H8';
+  const fixedHoles = boardFixedAssemblyCoordinatesForMechanism(mechanism, referenceBoardCoordinate, 15);
+  assert(fixedHoles.length > 0, `${type} exposes at least one board-fixed assembly hole`);
+  assert(fixedHoles.every(hole => isBoardCoordinateWithin(hole.coordinate, 15)), `${type} default board-fixed holes fit the 15x15 board`);
+  assert.equal(offBoardFixedAssemblyCoordinatesForMechanism(mechanism, referenceBoardCoordinate, 15).length, 0, `${type} default board placement has no off-board fixed holes`);
+  const edgeHoles = offBoardFixedAssemblyCoordinatesForMechanism(mechanism, 'O15', 15);
+  assert(edgeHoles.length > 0, `${type} reports translated fixed holes that leave the board at O15`);
+});
+const movingHoleRecipe = prefabAssemblySteps(createDefaultMechanism('gear_linkage', 'moving-hole-role-contract'), 'H8', 15);
+assert(movingHoleRecipe.some(step => step.coordRoles?.includes('gear_handle_reference')), 'gear-linkage assembly exposes moving gear-handle holes');
+const movingHoleFixedCoordinates = boardFixedAssemblyCoordinatesForMechanism(createDefaultMechanism('gear_linkage', 'moving-hole-role-contract-fixed'), 'H8', 15);
+assert(movingHoleFixedCoordinates.every(hole => isBoardFixedCoordRole(hole.role)), 'moving gear/link holes are excluded from board-fixed hole validation');
+assert(!movingHoleFixedCoordinates.some(hole => hole.role === 'gear_handle_reference' || hole.role === 'link_end_reference'), 'moving gear/link roles never enter the board-fixed coordinate list');
+const edgeCamForRecommendation = createDefaultMechanism('cam', 'recommendation-board-hole-contract');
+const edgeCamBoardPoint = boardToScene(14, 14, sample.settings.physicalKit);
+const fittedCamForRecommendation = fitRecommendedMechanismToSheet(sample, { ...edgeCamForRecommendation, anchorX: edgeCamBoardPoint.x, anchorY: edgeCamBoardPoint.y });
+const fittedCamBoard = sceneToBoardRaw({ x: fittedCamForRecommendation.anchorX ?? Number.NaN, y: fittedCamForRecommendation.anchorY ?? Number.NaN }, sample.settings.physicalKit);
+assert(fittedCamBoard.valid, 'sheet fitting keeps a recommendation anchor on a real board hole');
+assert.equal(offBoardFixedAssemblyCoordinatesForMechanism(fittedCamForRecommendation, fittedCamBoard.label, sample.settings.physicalKit.boardCells).length, 0, 'recommendation sheet fitting keeps every fixed mechanism hole on the active board');
 const shiftedPlanetarySteps = prefabAssemblySteps(createDefaultMechanism('planetary_gear', 'prefab-planetary-shifted'), 'J9');
 assert.deepEqual(
   shiftedPlanetarySteps[1].coords,
@@ -5026,6 +5047,11 @@ const edgeCamAnchor = boardToScene(14, 14, sample.settings.physicalKit);
 const edgeCamProject = { ...sample, mechanisms: [{ ...boundMechanism('cam', 'cam-edge'), anchorX: edgeCamAnchor.x, anchorY: edgeCamAnchor.y }] };
 assert(validateForFabrication(edgeCamProject).errors.some(e => e.includes('assembly holes off board')), 'fabrication blocks cam modules whose translated guide/axle holes leave the 15x15 board');
 assert.throws(() => createFabricationPackage(edgeCamProject), /assembly holes off board/, 'fabrication package refuses cam modules with off-board translated assembly holes');
+REFERENCE_EXPORT_READY_TYPES.forEach(type => {
+  const edgeMechanism = boundMechanism(type, `edge-board-hole-${type}`);
+  const edgeProject = { ...sample, mechanisms: [{ ...edgeMechanism, anchorX: edgeCamAnchor.x, anchorY: edgeCamAnchor.y }] };
+  assert(validateForFabrication(edgeProject).errors.some(e => e.includes('assembly holes off board')), `${type} fabrication validation checks every translated board-fixed hole at the board edge`);
+});
 const recipeWithPath = createFabricationPackage(fabricationSample).recipes[0];
 assert.equal(recipeWithPath.targetPathId, 'fabrication-fit-path', 'fabrication recipe preserves target path metadata');
 const objectRecipePackage = createFabricationPackage(objectPathMechanismProject);

@@ -7,7 +7,7 @@ import {
     fabricationPartDisplayLabel
 } from './fabricationContract';
 import { buildCharacterPrintLayout } from './fabricationCharacterPrintLayout';
-import { referenceRecipeForType } from './mechanismReference';
+import { isBoardFixedCoordRole, referenceRecipeForType } from './mechanismReference';
 import { svgNumber } from './numberFormat';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlineBounds } from './partGeometry';
 import { sampledCamProfileScale } from './kinematics';
@@ -31,7 +31,7 @@ const firstCamProfileSamples = (recipes: FabricationRecipe[]) =>
     camProfileEntries(recipes)[0]?.samples;
 
 const isBoardBuildRole = (role: string | undefined) =>
-    Boolean(role && (role === 'board' || role === 'board_axle' || role.includes('board')));
+    Boolean(role && isBoardFixedCoordRole(role));
 
 const buildCoordinateEntries = (recipes: FabricationRecipe[]) => {
     const seen = new Set<string>();

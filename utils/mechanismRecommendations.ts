@@ -10,10 +10,11 @@ import { generateCurvePoints, gearTrainOutputRatio, planetaryCarrierOutputRatio,
 import { generateSmartConfig } from "./optimizer";
 import { createDefaultMechanism, mechanismWithGeneratedPath } from "./project";
 import { sampleFeasibleRange, validateMechanismPreviewReadiness, validateForFabrication } from "./fabrication";
-import { boardToScene, sceneBoundsForSheet, sceneToBoard, SCENE_PX_PER_MM } from "./coordinates";
+import { boardToScene, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, SCENE_PX_PER_MM } from "./coordinates";
 import { motionAnchorJointIds, preferredMotionJointId } from "./motion";
 import { MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY } from "./mechanismTemplates";
 import { isReferenceFoundryVisible, normalizeMechanismToFabricationSet, normalizeMechanismToReference } from "./mechanismReference";
+import { offBoardFixedAssemblyCoordinatesForMechanism } from "./boardHoleConstraints";
 import { fitPathToBox } from "./mechanismPreview";
 import {
   fitFourBarKitMechanismToPath,
@@ -189,6 +190,18 @@ export const fitRecommendedMechanismToSheet = (
   );
   const boundsForSheet = (candidate: MechanismConfig) =>
     physicalSheetFitBounds(candidate) ?? generatedBounds(candidate);
+  const boardHoleFit = (candidate: MechanismConfig) => {
+    if (!Number.isFinite(candidate.anchorX) || !Number.isFinite(candidate.anchorY)) return false;
+    const board = sceneToBoardRaw(
+      { x: candidate.anchorX!, y: candidate.anchorY! },
+      project.settings.physicalKit,
+    );
+    return board.valid && offBoardFixedAssemblyCoordinatesForMechanism(
+      candidate,
+      board.label,
+      project.settings.physicalKit.boardCells,
+    ).length === 0;
+  };
   const sheetOverflow = (candidate: MechanismConfig) => {
     const bounds = boundsForSheet(candidate);
     if (!bounds) return 0;
@@ -200,9 +213,9 @@ export const fitRecommendedMechanismToSheet = (
     );
   };
   const searchBoardFit = (seed: MechanismConfig) => {
-    let best = seed;
-    let bestOverflow = sheetOverflow(seed);
-    if (bestOverflow <= 0.01) return best;
+    let best: MechanismConfig | undefined = boardHoleFit(seed) ? seed : undefined;
+    let bestOverflow = best ? sheetOverflow(best) : Number.POSITIVE_INFINITY;
+    if (best && bestOverflow <= 0.01) return best;
     const cells = project.settings.physicalKit.boardCells;
     for (let col = 0; col < cells; col += 1) {
       for (let row = 0; row < cells; row += 1) {
@@ -216,6 +229,7 @@ export const fitRecommendedMechanismToSheet = (
           },
           project,
         );
+        if (!boardHoleFit(candidate)) continue;
         const overflow = sheetOverflow(candidate);
         if (overflow < bestOverflow) {
           best = candidate;
@@ -224,7 +238,7 @@ export const fitRecommendedMechanismToSheet = (
         }
       }
     }
-    return best;
+    return best ?? seed;
   };
   let fitted = snapMechanismAnchor(mechanism, project);
   let moved = false;
@@ -239,7 +253,7 @@ export const fitRecommendedMechanismToSheet = (
     if (bounds.minY < sheet.y + margin) dy = sheet.y + margin - bounds.minY;
     if (bounds.maxY > sheet.y + sheet.height - margin)
       dy = sheet.y + sheet.height - margin - bounds.maxY;
-    if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return fitted;
+    if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01 && boardHoleFit(fitted)) return fitted;
     moved = true;
     const previousAnchor = { x: fitted.anchorX ?? 0, y: fitted.anchorY ?? 0 };
     const adjusted = snapMechanismAnchor(
@@ -281,12 +295,14 @@ export const fitRecommendedMechanismToSheet = (
       (searched.anchorX ?? 0) - (fitted.anchorX ?? 0),
       (searched.anchorY ?? 0) - (fitted.anchorY ?? 0),
     ) > 0.01;
-  return moved || searchedMoved
+  const needsBoardWarning = !boardHoleFit(searched);
+  return moved || searchedMoved || needsBoardWarning
     ? {
         ...searched,
         warnings: [
           ...(searched.warnings ?? []),
-          "Moved onto sheet. Check anchor.",
+          ...(moved || searchedMoved ? ["Moved onto sheet. Check anchor."] : []),
+          ...(needsBoardWarning ? ["Assembly holes exceed the active board."] : []),
         ],
       }
     : searched;
@@ -961,11 +977,13 @@ export const buildMechanismRecommendations = (
         fabricationErrors,
       };
     })
-    .filter(
-      (option) =>
-        option.fabricationErrors.length === 0 ||
-        (option.type === "4bar" &&
-          option.mechanism.fabricationMetadata?.pathFit?.status === "rejected"),
-    )
+    .filter((option) => {
+      if (option.fabricationErrors.length === 0) return true;
+      const rejectedFourBarPathOnly =
+        option.type === "4bar" &&
+        option.mechanism.fabricationMetadata?.pathFit?.status === "rejected" &&
+        option.fabricationErrors.every((error) => /: No fabrication-valid path fit\.$/.test(error));
+      return rejectedFourBarPathOnly;
+    })
     .sort((a, b) => b.score - a.score);
 };

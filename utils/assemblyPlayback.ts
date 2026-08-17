@@ -2,6 +2,7 @@ import type { BodyPartLayer, FabricationRecipe, MechanismConfig, PhysicalKitSett
 import { bodyPartPivotScene, sceneToBoardRaw } from './coordinates';
 import { fabricationBoardCoordinateCallout, fabricationPartDisplayLabel } from './fabrication';
 import { createFabricationRecipe } from './fabricationRecipes';
+import { isBoardFixedCoordRole } from './mechanismReference';
 import { fabricablePartOutlinePoints, partLandmarkJointIds, partLandmarkLocalPoints } from './partGeometry';
 
 export type AssemblyLane = 'kit' | 'custom';
@@ -163,7 +164,10 @@ export const pendingRecipeForMechanism = (project: ProjectState, mechanism: Mech
 export const assemblyLaneForExportMode = (mode: PhysicalKitSettings['exportMode']): AssemblyLane => mode === 'custom-parts' ? 'custom' : 'kit';
 
 export const uniqueAssemblyCoords = (recipe: FabricationRecipe, role = 'board') => [...new Set(recipe.assemblySteps.flatMap(step =>
-    ((step.coords?.length ? step.coords : [step.boardCoordinate])).filter((_, index) => (step.coordRoles?.[index] ?? step.role) === role)
+    ((step.coords?.length ? step.coords : [step.boardCoordinate])).filter((_, index) => {
+        const coordRole = step.coordRoles?.[index] ?? step.role;
+        return role === 'board' ? isBoardFixedCoordRole(coordRole) : coordRole === role;
+    })
 ))];
 
 export const buildAssemblyPlaybackSteps = (recipe: FabricationRecipe, lane: AssemblyLane): AssemblyPlaybackStep[] => {
