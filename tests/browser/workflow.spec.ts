@@ -3261,6 +3261,77 @@ test('Workflow tabs keep left workflow, center canvas, and right inspector roles
   await expect(page.getByTestId('options-units')).toBeVisible();
 });
 
+test('Fullscreen desktop layouts keep every workflow pane inside the viewport', async ({ page }) => {
+  const viewports = [
+    { width: 1366, height: 768 },
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
+  ];
+  const stages: Array<[string, string]> = [
+    ['Character', 'Character'],
+    ['Path', 'Path Editor'],
+    ['Foundry', 'Foundry'],
+    ['Design', 'Mechanism Design'],
+    ['Blueprint', 'Blueprint'],
+  ];
+
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport);
+    await page.goto('/');
+    await openWavingArmTemplate(page);
+    await page.getByTestId('workspace-player-dock').getByRole('button', { name: 'Pause', exact: true }).click();
+
+    for (const [stageName, heading] of stages) {
+      await clickStage(page, stageName);
+      await expect(page.getByRole('heading', { name: heading })).toBeVisible();
+
+      const header = page.locator('header.app-header');
+      const rail = page.getByTestId('workspace-steps');
+      const center = page.getByTestId('stage-canvas-pane');
+      const inspector = page.getByTestId('stage-right-inspector');
+      const status = page.getByTestId('status-bar');
+      const surface = center.locator('canvas, svg, img').first();
+      await expect(header, `${stageName} header at ${viewport.width}×${viewport.height}`).toBeVisible();
+      await expect(rail, `${stageName} rail at ${viewport.width}×${viewport.height}`).toBeVisible();
+      await expect(center, `${stageName} center at ${viewport.width}×${viewport.height}`).toBeVisible();
+      await expect(surface, `${stageName} surface at ${viewport.width}×${viewport.height}`).toBeVisible();
+      await expect(inspector, `${stageName} inspector at ${viewport.width}×${viewport.height}`).toBeVisible();
+      await expect(status, `${stageName} status at ${viewport.width}×${viewport.height}`).toBeVisible();
+      await expectInsideViewport(page, header, `${stageName} header`);
+      await expectInsideViewport(page, rail, `${stageName} workflow rail`);
+      await expectInsideViewport(page, center, `${stageName} center canvas`);
+      await expectInsideViewport(page, surface, `${stageName} work surface`);
+      await expectInsideViewport(page, inspector, `${stageName} right inspector`);
+      await expectInsideViewport(page, status, `${stageName} bottom status`);
+
+      const documentMetrics = await page.evaluate(() => ({
+        clientWidth: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+      }));
+      expect(documentMetrics.scrollWidth, `${stageName} does not create horizontal page overflow at ${viewport.width}×${viewport.height}`).toBeLessThanOrEqual(documentMetrics.clientWidth + 1);
+
+      const inspectorMetrics = await inspector.evaluate(element => ({
+        clientHeight: element.clientHeight,
+        scrollHeight: element.scrollHeight,
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+      }));
+      expect(inspectorMetrics.scrollWidth, `${stageName} inspector stays horizontally contained`).toBeLessThanOrEqual(inspectorMetrics.clientWidth + 1);
+      if (inspectorMetrics.scrollHeight > inspectorMetrics.clientHeight + 2) {
+        const before = await center.boundingBox();
+        expect(before, `${stageName} center before inspector scroll has a layout box`).toBeTruthy();
+        await inspector.evaluate(element => {
+          element.scrollTop = Math.min(640, element.scrollHeight - element.clientHeight);
+        });
+        await expect.poll(() => inspector.evaluate(element => element.scrollTop), { message: `${stageName} inspector scrolls independently` }).toBeGreaterThan(0);
+        const after = await center.boundingBox();
+        expect(after, `${stageName} center after inspector scroll has a layout box`).toBeTruthy();
+        expect(Math.abs(after!.x - before!.x) + Math.abs(after!.y - before!.y), `${stageName} inspector scroll does not move the center`).toBeLessThan(1);
+      }
+    }
+  }
+});
+
 test('Workflow rail remains reachable on short desktop and mobile fallback exposes every stage', async ({ page }) => {
   await page.setViewportSize({ width: 901, height: 480 });
   await page.goto('/');
