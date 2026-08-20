@@ -31,6 +31,14 @@ const expectCleanPage = (pageErrors: string[], consoleErrors: string[]) => {
   expect(consoleErrors, 'no browser console errors').toEqual([]);
 };
 
+const clickOptionalButton = async (button: Locator, label: string) => {
+  if (!(await button.count())) return false;
+  await expect(button, `${label} is visible before its conditional click`).toBeVisible();
+  await expect(button, `${label} is enabled before its conditional click`).toBeEnabled();
+  await button.click();
+  return true;
+};
+
 const FOUNDRY_RENDER_CONTRACT_ATTRS = [
   'data-mechanism-type',
   'data-three-stack-order',
@@ -192,7 +200,10 @@ const openCharacterScreen = async (page: Page, options: { loadStarter?: boolean 
   await waitForBootLoader(page);
   let dialog = page.getByTestId('getting-started-dialog');
   if (!(await dialog.count()) && options.loadStarter !== false) {
-    await page.getByRole('button', { name: /Open Getting Started/i }).click();
+    const openGettingStarted = page.getByRole('button', { name: /Open Getting Started/i });
+    await expect(openGettingStarted).toBeVisible();
+    await expect(openGettingStarted).toBeEnabled();
+    await openGettingStarted.click();
     dialog = page.getByTestId('getting-started-dialog');
     await expect(dialog).toBeVisible();
   }
@@ -201,7 +212,7 @@ const openCharacterScreen = async (page: Page, options: { loadStarter?: boolean 
       let starterRig = dialog.getByRole('button', { name: /Open starter rig/i });
       if (!(await starterRig.count())) {
         const startersToggle = dialog.getByRole('button', { name: 'Starters', exact: true });
-        if (await startersToggle.count()) await startersToggle.click();
+        await clickOptionalButton(startersToggle, 'Getting Started Starters');
         starterRig = dialog.getByRole('button', { name: /Open starter rig/i });
       }
       await starterRig.click();
@@ -209,14 +220,17 @@ const openCharacterScreen = async (page: Page, options: { loadStarter?: boolean 
       let close = dialog.getByRole('button', { name: 'Close', exact: true });
       if (!(await close.count())) {
         const startersToggle = dialog.getByRole('button', { name: 'Starters', exact: true });
-        if (await startersToggle.count()) await startersToggle.click();
+        await clickOptionalButton(startersToggle, 'Getting Started Starters');
         close = dialog.getByRole('button', { name: 'Close', exact: true });
       }
       await close.click();
     }
   }
   if (!(await page.getByTestId('character-screen').count())) {
-    await page.getByRole('button', { name: /^Character$/i }).click();
+    const character = page.getByRole('button', { name: /^Character$/i });
+    await expect(character).toBeVisible();
+    await expect(character).toBeEnabled();
+    await character.click();
   }
   await expect(page.getByTestId('character-screen')).toBeVisible();
 };
@@ -224,7 +238,7 @@ const openCharacterScreen = async (page: Page, options: { loadStarter?: boolean 
 const switchGettingStartedToStarters = async (page: Page) => {
   const dialog = page.getByTestId('getting-started-dialog');
   const startersToggle = dialog.getByRole('button', { name: 'Starters', exact: true });
-  if (await startersToggle.count()) await startersToggle.click();
+  await clickOptionalButton(startersToggle, 'Getting Started Starters');
   await expect(dialog.getByTestId('getting-started-gallery')).toBeVisible();
 };
 
@@ -669,7 +683,10 @@ const importProjectFile = async (page: Page, projectPath: string, targetStage: '
   const gettingStarted = page.getByTestId('getting-started-dialog');
   if (await gettingStarted.count()) {
     if (await gettingStarted.getByTestId('guided-project-library').count()) {
-      await gettingStarted.getByRole('button', { name: 'Starters' }).click();
+      const starters = gettingStarted.getByRole('button', { name: 'Starters' });
+      await expect(starters).toBeVisible();
+      await expect(starters).toBeEnabled();
+      await starters.click();
     }
     await page.getByTestId('getting-started-import-input').setInputFiles(projectPath);
   } else {
@@ -784,7 +801,10 @@ test('Header and rail Home reopen Getting Started without resetting the project'
     await expect(puppet).toHaveAttribute('data-part-count', /[1-9]\d*/);
     let close = dialog.getByRole('button', { name: 'Close', exact: true });
     if (!(await close.count())) {
-      await dialog.getByRole('button', { name: 'Starters', exact: true }).click();
+      const starters = dialog.getByRole('button', { name: 'Starters', exact: true });
+      await expect(starters).toBeVisible();
+      await expect(starters).toBeEnabled();
+      await starters.click();
       close = dialog.getByRole('button', { name: 'Close', exact: true });
     }
     await close.click();
@@ -1254,7 +1274,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await sharedAssemblyPlayer.getByRole('button', { name: 'Play' }).click();
   await expect.poll(async () => Number(await assemblyWorkbench.getAttribute('data-progress')), { message: 'shared player animates the active assembly step' }).toBeGreaterThan(0);
   const pauseAssembly = sharedAssemblyPlayer.getByRole('button', { name: 'Pause' });
-  if (await pauseAssembly.count()) await pauseAssembly.click();
+  await clickOptionalButton(pauseAssembly, 'Assembly Pause');
   await sharedAssemblyPlayer.getByRole('button', { name: 'Start over' }).click();
   await expect(page.getByLabel('Assembly scrubber')).toHaveValue('0');
   await expect.poll(async () => Number(await assemblyWorkbench.getAttribute('data-progress')), { message: 'shared player start-over resets assembly progress' }).toBe(0);
@@ -1968,7 +1988,7 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
 
   await page.getByTestId('novice-path-panel').getByText('More', { exact: true }).click();
   const stopButtonBeforePreview = page.getByTestId('novice-path-panel').getByRole('button', { name: /Stop/i });
-  if (await stopButtonBeforePreview.count()) await stopButtonBeforePreview.click();
+  await clickOptionalButton(stopButtonBeforePreview, 'Path Stop');
   await page.getByLabel('Motion handle').selectOption('right_hand');
   await page.getByTestId('ik-chain-root-options').getByRole('button', { name: 'right shoulder' }).click();
   await expect(page.getByLabel('Motion start')).toHaveValue('right_shoulder');
@@ -2439,11 +2459,11 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
       const phaseControl = page.getByLabel('Foundry phase');
       const phaseBefore = Number(await phaseControl.inputValue());
       const playButton = page.getByTestId('foundry-toolbar').getByRole('button', { name: 'Play', exact: true });
-      if (await playButton.count()) await playButton.click();
+      await clickOptionalButton(playButton, 'Foundry Play');
       await expect(page.getByTestId('foundry-toolbar-state'), 'Planetary preview stays in the running animation loop').toContainText('playing');
       await expect.poll(async () => Number(await phaseControl.inputValue()), { message: 'Planetary carrier animation keeps advancing instead of stopping mid-turn' }).not.toBe(phaseBefore);
       const pauseButton = page.getByTestId('foundry-toolbar').getByRole('button', { name: 'Pause', exact: true });
-      if (await pauseButton.count()) await pauseButton.click();
+      await clickOptionalButton(pauseButton, 'Foundry Pause');
     }
   }
   await page.getByLabel('Foundry mechanism type').selectOption('gear');

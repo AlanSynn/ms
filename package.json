@@ -11,7 +11,9 @@
     "tauri": "tauri",
     "build:exe": "bun scripts/with-rustup-cargo.mjs tauri build --bundles app",
     "test": "bun run test:contracts",
-    "test:contracts": "bun tests/project-contract.test.ts",
+    "test:contracts": "bun tests/project-contract.test.ts && bun tests/chromebook-audit-contract.test.ts",
+    "test:chromebook-audit": "bun run build && env -u NO_COLOR CHROMEBOOK_AUDIT=1 PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=5174 playwright test tests/browser/chromebook-audit.spec.ts --workers=1",
+    "test:chromebook-audit:quick": "bun run build && env -u NO_COLOR CHROMEBOOK_AUDIT=1 CHROMEBOOK_AUDIT_ENFORCE=0 CHROMEBOOK_AUDIT_PLAYBACK_MS=5000 PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=5174 playwright test tests/browser/chromebook-audit.spec.ts --workers=1",
     "build:dmg": "bun scripts/with-rustup-cargo.mjs tauri build --bundles dmg",
     "test:browser": "bun run build:e2e && env -u NO_COLOR PLAYWRIGHT_SERVER=preview playwright test",
     "build:tauri-frontend": "tsc && vite build --base ./"

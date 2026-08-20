@@ -53,6 +53,7 @@ import {
 import type { MechanismPreviewSimulation } from "../../../utils/mechanismPreview";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 import { setRendererPixelRatioCap } from "../../../utils/threeResourceKit";
+import { recordFoundryTopologyBuild } from "../../../utils/performanceAudit";
 import { fittedGearTrainCenters } from "./foundryPreviewGeometry";
 import { FoundryPreviewStateProbe } from "./FoundryPreviewStateProbe";
 import {
@@ -1423,6 +1424,10 @@ export const ThreeFoundryPreview = ({
     scene.add(root);
     if (renderPlan.validationErrors.length || physicalValidationErrors.length) {
       dynamicBuildCountRef.current += 1;
+      recordFoundryTopologyBuild(
+        geometryCacheRef.current.size,
+        materialCacheRef.current.size,
+      );
       if (E2E_DIAGNOSTICS && stateRef.current) {
         stateRef.current.dataset.threeDynamicBuildCount = String(
           dynamicBuildCountRef.current,
@@ -1489,6 +1494,10 @@ export const ThreeFoundryPreview = ({
     });
 
     dynamicBuildCountRef.current += 1;
+    recordFoundryTopologyBuild(
+      geometryCacheRef.current.size,
+      materialCacheRef.current.size,
+    );
     if (E2E_DIAGNOSTICS && stateRef.current) {
       const visiblePartIds =
         activeAutomataContext?.showCharacter
