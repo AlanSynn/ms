@@ -16,6 +16,7 @@
     "test:chromebook-audit:real-ai": "bun run build && env -u NO_COLOR CHROMEBOOK_AUDIT=1 CHROMEBOOK_AUDIT_REAL_AI=1 PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=5174 playwright test tests/browser/chromebook-features-audit.spec.ts --grep 'explicit AI import' --workers=1",
     "test:chromebook-audit:full": "bun run build && env -u NO_COLOR CHROMEBOOK_AUDIT=1 PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=5174 playwright test tests/browser/chromebook-features-audit.spec.ts tests/browser/chromebook-playback-audit.spec.ts tests/browser/chromebook-audit.spec.ts --workers=1",
     "test:chromebook-audit:quick": "bun run build && env -u NO_COLOR CHROMEBOOK_AUDIT=1 CHROMEBOOK_AUDIT_ENFORCE=0 CHROMEBOOK_PLAYBACK_AUDIT_MS=5000 PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=5174 playwright test tests/browser/chromebook-features-audit.spec.ts tests/browser/chromebook-playback-audit.spec.ts --workers=1",
+    "test:bundle-budget": "bun scripts/check-browser-bundle.mjs",
     "build:dmg": "bun scripts/with-rustup-cargo.mjs tauri build --bundles dmg",
     "test:browser": "bun run build:e2e && env -u NO_COLOR PLAYWRIGHT_SERVER=preview playwright test",
     "build:tauri-frontend": "tsc && vite build --base ./"

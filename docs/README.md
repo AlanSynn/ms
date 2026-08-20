@@ -20,6 +20,7 @@ For current tab, pane, button, and tooltip UX, use `workbench-flow-ux-contract.m
 
 ## Active product evidence / remaining-risk PRDs
 
+- [`chromebook-feature-audit.md`](chromebook-feature-audit.md) — current 6× CPU emulation evidence for short interaction, memory, playback, and bundle gates; physical-device and ten-minute boundaries are explicit.
 - [`prd/toon-25d-main-3d-unlock-plan.md`](prd/toon-25d-main-3d-unlock-plan.md)
 - [`prd/toon-25d-implementation-plan.md`](prd/toon-25d-implementation-plan.md)
 - [`prd/toon-25d-test-spec.md`](prd/toon-25d-test-spec.md)

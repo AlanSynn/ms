@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-20T08:10:34.462Z",
+  "basis": "static compressed production shell",
+  "excludesOptionalAiModel": true,
+  "coreJs": {
+    "files": [
+      "assets/index--AtYm8ve.js",
+      "assets/App-BgEgDODY.js"
+    ],
+    "gzipBytes": 396784,
+    "limitBytes": 450000,
+    "passed": true
+  },
+  "initialShell": {
+    "assets": [
+      {
+        "file": "index.html",
+        "compressedBytes": 15172
+      },
+      {
+        "file": "assets/index--AtYm8ve.js",
+        "compressedBytes": 61293
+      },
+      {
+        "file": "assets/App-BgEgDODY.js",
+        "compressedBytes": 335491
+      },
+      {
+        "file": "fonts/manrope-800-latin.woff2",
+        "compressedBytes": 13744
+      },
+      {
+        "file": "assets/AppIcon-Dx9trOlC.png",
+        "compressedBytes": 474087
+      }
+    ],
+    "compressedBytes": 899787,
+    "limitBytes": 1500000,
+    "passed": true
+  }
+}
