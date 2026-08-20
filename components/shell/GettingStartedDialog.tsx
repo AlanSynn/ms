@@ -3,7 +3,7 @@ import { BrainCircuit, Sparkles, Upload } from 'lucide-react';
 import type { BodyPartLayer, MechanismConfig, Point, ProjectState } from '../../types';
 import { pathFromPoints, sceneToSvg } from '../../utils/coordinates';
 import { gearTrainCenters, gearTrainPitchRadii } from '../../utils/kinematics';
-import { type ClassroomLessonId, createLessonProject } from '../../utils/project';
+import { type ClassroomLessonId, createLessonProject, createSampleProject } from '../../utils/project';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlinePathD } from '../../utils/partGeometry';
 
 export type StarterImageTemplate = { id: string; label: string; fileName: string; url: string; thumbUrl: string };
@@ -86,6 +86,18 @@ const lessonPreviewProject = (lessonId: string): ProjectState | null => {
     } catch {
         return null;
     }
+};
+
+const starterRigPreviewProject = (): ProjectState => {
+    const project = createSampleProject();
+    return {
+        ...project,
+        paths: {},
+        mechanisms: [],
+        selectedPartId: undefined,
+        selectedPathId: undefined,
+        selectedMechanismId: undefined
+    };
 };
 
 const GuidedLessonMotionPreview = ({ lessonId, project }: { lessonId: string; project: ProjectState | null }) => {
@@ -182,8 +194,9 @@ const StarterCues = ({ items }: { items: readonly string[] }) => (
     </span>
 );
 
-export const GettingStartedDialog = ({ starterTemplates, guidedLessons, hideForSession, onLesson, onSample, onStarterImage, onProcess, onImport, onHideForSessionChange, onClose }: {
+export const GettingStartedDialog = ({ starterTemplates, showStarterImages, guidedLessons, hideForSession, onLesson, onSample, onStarterImage, onProcess, onImport, onHideForSessionChange, onClose }: {
     starterTemplates: StarterImageTemplate[];
+    showStarterImages: boolean;
     guidedLessons: readonly GuidedLessonTile[];
     hideForSession: boolean;
     onLesson: (lessonId: string) => void;
@@ -199,6 +212,7 @@ export const GettingStartedDialog = ({ starterTemplates, guidedLessons, hideForS
     const importInputRef = useRef<HTMLInputElement>(null);
     const [showGuided, setShowGuided] = useState(false);
     const previewProjects = useMemo(() => Object.fromEntries(guidedLessons.map(lesson => [lesson.id, lessonPreviewProject(lesson.id)])), [guidedLessons]);
+    const starterRigPreview = useMemo(starterRigPreviewProject, []);
     useEffect(() => { dialogRef.current?.focus(); }, []);
     const trapDialogFocus = (event: React.KeyboardEvent) => {
         if (event.key === 'Escape') {
@@ -246,9 +260,11 @@ export const GettingStartedDialog = ({ starterTemplates, guidedLessons, hideForS
                     <b><Sparkles size={16}/> Open</b>
                 </button>)}
             </div> : <>
-                <div className="template-gallery" data-testid="getting-started-gallery">
+                <div className="template-gallery" data-testid="getting-started-gallery" data-starter-images={showStarterImages ? 'visible' : 'hidden'}>
                     <button type="button" className="template-tile primary" data-testid="getting-started-card-guided" aria-label="Open Guide" onClick={() => setShowGuided(true)}>
-                        <span className="template-icon-slot"><Sparkles size={18}/></span>
+                        <span className="template-icon-slot guide-preview-slot" data-testid="getting-started-guide-preview">
+                            <GuidedLessonMotionPreview lessonId="starter-rig" project={starterRigPreview} />
+                        </span>
                         <strong>Guide</strong>
                         <small>{starterCopy.guide}</small>
                         <StarterCues items={starterCues.guide} />
@@ -261,7 +277,7 @@ export const GettingStartedDialog = ({ starterTemplates, guidedLessons, hideForS
                         <StarterCues items={starterCues.humanoid} />
                         <b><Sparkles size={16}/> Start</b>
                     </button>
-                    {starterTemplates.map(template => (
+                    {showStarterImages && starterTemplates.map(template => (
                         <button key={template.id} type="button" className="template-tile starter cursor-pointer" data-testid={`getting-started-card-${template.id}`} aria-label={`Start ${template.label} starter`} onClick={() => onStarterImage(template)}>
                             <span className="template-icon-slot"><img className="starter-thumb" src={template.thumbUrl} alt="" /></span>
                             <strong>{template.label}</strong>

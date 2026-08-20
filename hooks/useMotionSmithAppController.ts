@@ -384,6 +384,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     hideGettingStartedThisSession,
     starterTemplates: STARTER_IMAGE_TEMPLATES,
     guidedLessons: CLASSROOM_LESSONS,
+    showStarterImages: false,
     onLesson: openClassroomLesson,
     onStarterImage: startFromStarterImage,
     onSample: openSampleProject,

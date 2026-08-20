@@ -40,6 +40,7 @@ export type AppWorkspaceShellProps = {
   showGettingStarted: boolean;
   hideGettingStartedThisSession: boolean;
   starterTemplates: StarterImageTemplate[];
+  showStarterImages: boolean;
   guidedLessons: readonly GuidedLessonTile[];
   onLesson: (lessonId: string) => void;
   onStarterImage: (template: StarterImageTemplate) => void;
@@ -87,6 +88,7 @@ export const AppWorkspaceShell = ({
   showGettingStarted,
   hideGettingStartedThisSession,
   starterTemplates,
+  showStarterImages,
   guidedLessons,
   onLesson,
   onStarterImage,
@@ -203,6 +205,7 @@ export const AppWorkspaceShell = ({
       {showGettingStarted && (
         <GettingStartedDialog
           starterTemplates={starterTemplates}
+          showStarterImages={showStarterImages}
           guidedLessons={guidedLessons}
           hideForSession={hideGettingStartedThisSession}
           onLesson={onLesson}

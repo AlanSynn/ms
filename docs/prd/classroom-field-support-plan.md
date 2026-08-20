@@ -30,7 +30,7 @@ Key notes translated into product constraints:
 | --- | --- | --- |
 | Web deployment | GitHub Pages workflow, `/ms/` base path, tag-gated release, local ONNX asset checks, and release facts in `docs/deployment.md`. | Add automated test gates before deploy, or keep a mandatory manual release gate. |
 | Guided entry | Splash + compact result-first Getting Started dialog; `Guide` opens the guided project library. | Keep guided projects prominent without crowding the first modal. |
-| Templates | Humanoid, Girl/Boy tiny-thumbnail starters, image/package import, and serializable lesson baselines. | Keep expanding teacher-ready motion objectives with starter path and compatible mechanism option. |
+| Templates | Humanoid starter, image/package import, and serializable lesson baselines; bundled Boy/Girl assets stay out of first landing. | Keep expanding teacher-ready motion objectives with starter path and compatible mechanism option. |
 | Sensemaking | Foundry/Design/Assembly show sensemaking, assessment prompts, generated-loop examples, and short warnings. | Keep the right pane compact so explanation does not displace direct controls. |
 | Stable reset | `Reset Lesson` restores lesson baseline while preserving app settings; Foundry reset returns to finite preview state. | Keep every new template/mechanism resettable to a known-good range. |
 | Blueprint | Printable cut sheet, export package, board preview, metadata, and local downloads. | Keep Blueprint file-focused; route build teaching to Assembly. |

@@ -265,11 +265,14 @@ Use the existing compact modal. Do not make it full-screen.
 
 Primary tiles:
 
-1. `Humanoid` — creates editable humanoid `ProjectState`.
-2. `Girl` — tiny-thumbnail starter image that runs the same real import path.
-3. `Boy` — tiny-thumbnail starter image that runs the same real import path.
-4. `Image` — user image import.
-5. `Package` — package import.
+1. `Guide` — opens an editable guided project.
+2. `Starter rig` — creates an editable humanoid `ProjectState`.
+3. `Image` — user image import.
+4. `Open full project` — portable project import.
+
+Bundled Boy/Girl starter images are kept out of the first landing surface so the
+initial choice stays compact; their resources remain available to a later
+secondary starter surface.
 
 Secondary action:
 

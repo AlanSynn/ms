@@ -59,7 +59,7 @@ Rules:
 
 Facts verified from code and tests on 2026-07-05:
 
-- The compact Getting Started dialog exposes `Guide`, `Starter rig`, starter image tiles, `Image`, `Character file`, and secondary `Open full project` actions.
+- The compact Getting Started dialog exposes `Guide`, `Starter rig`, `Image`, and secondary `Open full project` actions; bundled Boy/Girl starter assets stay out of the first landing surface.
 - The three-pane shell is implemented through `EditorStageFrame` surfaces with `stage-left-pane`, `stage-canvas-pane`, and `stage-right-inspector` browser contracts.
 - Character owns source creation: character package load, scene object image load, ONNX image creation, starter entry, rig/body-part edits, and lesson reset.
 - Path owns motion target selection, draw/clear, open/closed topology, smoothing, trace import, path visibility/enabled state, and path point editing; it no longer owns rig creation.

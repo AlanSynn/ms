@@ -37,7 +37,7 @@ Avoid: dark CAD chrome, tiny low-contrast controls, dense ungrouped lists, fake 
 
 The startup splash is the static boot loader only: MotionSmith mark, wordmark, and version. It disappears when the editor is ready, does not teach, and must not show galleries, embedded videos, or starter choices.
 
-Getting Started is a compact modal dialog shown after the boot loader unless the student checked the session-only opt-out; it can also be reopened from the Character/Getting Started action. It is not a full-screen stage. It shows result-first starter choices: Guide, Starter rig, Girl, Boy, Image, and Character file. Girl/Boy use tiny thumbnails, Open full project is secondary, and process/explanation copy stays out. The Guide tile opens guided project cards; closing always lands on the Character tab with the editor shell still visible underneath.
+Getting Started is a compact modal dialog shown after the boot loader unless the student checked the session-only opt-out; it can also be reopened from the Character/Getting Started action. It is not a full-screen stage. It shows result-first starter choices: Guide, Starter rig, Image, and Character file. Open full project is secondary; bundled Boy/Girl starter assets stay out of the first landing surface until a secondary starter library exists. Process/explanation copy stays out. The Guide tile opens guided project cards; closing always lands on the Character tab with the editor shell still visible underneath.
 
 ### Character tab
 
