@@ -12,16 +12,52 @@ export interface MechanismOptimizerWorkerPort {
   terminate(): void;
 }
 
-type WorkerFactory = () => MechanismOptimizerWorkerPort;
+export type MechanismOptimizerWorkerFactory = () => MechanismOptimizerWorkerPort;
 
-const browserWorkerFactory: WorkerFactory = () =>
+const browserWorkerFactory: MechanismOptimizerWorkerFactory = () =>
   new Worker(
     new URL('../../workers/mechanismOptimizerWorker.ts', import.meta.url),
     { type: 'module', name: 'motionsmith-mechanism-optimizer' },
   ) as unknown as MechanismOptimizerWorkerPort;
 
+let workerBootstrap: Promise<void> | undefined;
+
+/** Prepare and release the tiny worker entry without importing the optimizer job. */
+export const prepareMechanismOptimizerWorker = (
+  workerFactory: MechanismOptimizerWorkerFactory = browserWorkerFactory,
+) => {
+  workerBootstrap ??= new Promise<void>((resolve) => {
+    let worker: MechanismOptimizerWorkerPort;
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      worker.onmessage = null;
+      worker.onerror = null;
+      worker.terminate();
+      resolve();
+    };
+    try {
+      worker = workerFactory();
+    } catch {
+      resolve();
+      return;
+    }
+    worker.onmessage = ({ data }) => {
+      if (data.type === 'ready') finish();
+    };
+    worker.onerror = finish;
+    try {
+      worker.postMessage({ type: 'warm' });
+    } catch {
+      finish();
+    }
+  });
+  return workerBootstrap;
+};
+
 export const createMechanismOptimizerWorkerClient = (
-  workerFactory: WorkerFactory = browserWorkerFactory,
+  workerFactory: MechanismOptimizerWorkerFactory = browserWorkerFactory,
 ) => {
   let generationSequence = 0;
   let active:
@@ -61,6 +97,7 @@ export const createMechanismOptimizerWorkerClient = (
     }
     active = { generationId, inputFingerprint: input.inputFingerprint, worker };
     worker.onmessage = ({ data }) => {
+      if (data.type === 'ready') return;
       if (
         !active ||
         active.worker !== worker ||

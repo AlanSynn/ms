@@ -2723,20 +2723,26 @@ test('Character tab owns body layer and skeleton edits used by design controls',
   expectCleanPage(pageErrors, consoleErrors);
 });
 
-test('Recommendation worker stays idle until the sheet opens', async ({ page }) => {
+test('Recommendation job stays idle after its tiny worker bootstrap', async ({ page }) => {
   const recommendationWorkerRequests: string[] = [];
+  const recommendationJobRequests: string[] = [];
   page.on('request', request => {
     if (request.url().includes('mechanismRecommendationWorker')) {
       recommendationWorkerRequests.push(request.url());
+    }
+    if (request.url().includes('mechanismRecommendationJob')) {
+      recommendationJobRequests.push(request.url());
     }
   });
 
   await page.goto('/');
   await openFabricationReadyFourBar(page);
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
-  expect(recommendationWorkerRequests, 'closed recommendation sheet starts no fit worker').toEqual([]);
-
   const recommend = page.getByRole('button', { name: /Recommend/i });
+  await expect(recommend).toHaveAttribute('data-recommendation-worker-prepared', 'true');
+  expect(recommendationWorkerRequests.length, 'Design prepares the tiny worker entry').toBeGreaterThan(0);
+  expect(recommendationJobRequests, 'closed recommendation sheet starts no fit job').toEqual([]);
+
   const nextPaintMs = await recommend.evaluate((button: HTMLButtonElement) =>
     new Promise<number>((resolve) => {
       const started = performance.now();
@@ -2750,8 +2756,8 @@ test('Recommendation worker stays idle until the sheet opens', async ({ page }) 
   const sheet = page.getByTestId('recommendation-sheet');
   await expect(sheet).toBeVisible();
   await expect.poll(
-    () => recommendationWorkerRequests.length,
-    { message: 'opening recommendations starts the dedicated fit worker' },
+    () => recommendationJobRequests.length,
+    { message: 'opening recommendations loads the heavy fit job in its dedicated worker' },
   ).toBeGreaterThan(0);
   await expect(page.getByTestId('recommendation-card-4bar')).toBeVisible({ timeout: 60_000 });
   await sheet.getByRole('button', { name: 'Close', exact: true }).click();
@@ -2760,18 +2766,23 @@ test('Recommendation worker stays idle until the sheet opens', async ({ page }) 
 
 test('Design Fit runs in a disposable worker without blocking its next paint', async ({ page }) => {
   const optimizerWorkerRequests: string[] = [];
+  const optimizerJobRequests: string[] = [];
   page.on('request', request => {
     if (request.url().includes('mechanismOptimizerWorker')) {
       optimizerWorkerRequests.push(request.url());
+    }
+    if (request.url().includes('mechanismOptimizerJob')) {
+      optimizerJobRequests.push(request.url());
     }
   });
 
   await page.goto('/');
   await openFabricationReadyFourBar(page);
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
-  expect(optimizerWorkerRequests, 'Design stays idle before explicit Fit').toEqual([]);
   const fit = page.getByRole('button', { name: 'Fit', exact: true });
-  await expect(fit).toBeVisible();
+  await expect(fit).toHaveAttribute('data-optimizer-worker-prepared', 'true');
+  expect(optimizerWorkerRequests.length, 'Design prepares the tiny optimizer worker entry').toBeGreaterThan(0);
+  expect(optimizerJobRequests, 'Design starts no optimizer job before explicit Fit').toEqual([]);
   const nextPaintMs = await fit.evaluate((button: HTMLButtonElement) =>
     new Promise<number>((resolve) => {
       const started = performance.now();
@@ -2783,8 +2794,8 @@ test('Design Fit runs in a disposable worker without blocking its next paint', a
   );
   expect(nextPaintMs, 'Fit click yields a painted busy state promptly').toBeLessThan(100);
   await expect(fit).toBeDisabled();
-  await expect.poll(() => optimizerWorkerRequests.length, {
-    message: 'explicit Fit starts the optimizer worker',
+  await expect.poll(() => optimizerJobRequests.length, {
+    message: 'explicit Fit loads the heavy optimizer job in its dedicated worker',
   }).toBeGreaterThan(0);
   await expect(fit).toBeEnabled({ timeout: 120_000 });
   await expect.poll(() => page.evaluate(() => {

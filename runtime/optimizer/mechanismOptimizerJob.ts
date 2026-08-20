@@ -36,9 +36,12 @@ export type MechanismOptimizerWorkerRequest = {
   type: 'optimize';
   generationId: number;
   input: MechanismOptimizerJobInput;
+} | {
+  type: 'warm';
 };
 
 export type MechanismOptimizerWorkerResponse =
+  | { type: 'ready' }
   | {
       type: 'progress';
       generationId: number;

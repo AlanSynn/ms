@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from "react";
+import { startTransition, type Dispatch, type SetStateAction } from "react";
 import type {
   AppStage,
   CanvasViewport,
@@ -145,12 +145,14 @@ export const useAppProjectCommands = ({
       setCommandStatus("Cancelled");
       return;
     }
-    setPendingCharacter(null);
-    setProject(createEmptyProject(), { resetHistory: true });
-    setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
     setCommandStatus("New project");
-    setShowGettingStarted(false);
-    setStage("character");
+    startTransition(() => {
+      setPendingCharacter(null);
+      setProject(createEmptyProject(), { resetHistory: true });
+      setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
+      setShowGettingStarted(false);
+      setStage("character");
+    });
   };
 
   const openClassroomLesson = (lessonId: string) => {

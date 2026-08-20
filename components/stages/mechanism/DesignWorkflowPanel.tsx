@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { ClassroomExampleVideo } from "../../ui/ClassroomExampleVideo";
 import { StageLeftSummary } from "../stageLayout";
@@ -31,6 +31,7 @@ import {
   uid,
 } from "../../../utils/project";
 import { MechanismRecommendationSheet } from "../path/MechanismRecommendationSheet";
+import { prepareMechanismRecommendationWorker } from "../../../runtime/recommendations/mechanismRecommendationWorkerClient";
 
 const DesignRecommendationControl = ({
   project,
@@ -44,10 +45,27 @@ const DesignRecommendationControl = ({
   onApply: (mechanism: MechanismConfig) => void;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [workerPrepared, setWorkerPrepared] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    void prepareMechanismRecommendationWorker().then(() => {
+      if (mounted) setWorkerPrepared(true);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <>
-      <button className="btn-primary" onClick={() => setIsOpen(true)}>
+      <button
+        className="btn-primary"
+        data-recommendation-worker-prepared={workerPrepared ? "true" : "false"}
+        disabled={!workerPrepared}
+        aria-busy={!workerPrepared}
+        onClick={() => setIsOpen(true)}
+      >
         <Sparkles size={16} /> Recommend
       </button>
       <MechanismRecommendationSheet

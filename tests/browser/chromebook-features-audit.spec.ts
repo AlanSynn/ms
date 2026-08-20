@@ -104,6 +104,12 @@ const goToStage = async (
       ? page.getByRole("heading", { name: "Path Editor" })
       : page.getByRole("heading", { name: "Mechanism Design" });
   await expect(ready).toBeVisible();
+  if (name === "Design") {
+    await expect(page.getByRole("button", { name: /Recommend/i }))
+      .toHaveAttribute("data-recommendation-worker-prepared", "true");
+    await expect(page.getByRole("button", { name: "Fit", exact: true }))
+      .toHaveAttribute("data-optimizer-worker-prepared", "true");
+  }
 };
 
 const workerActive = async (page: Page) =>

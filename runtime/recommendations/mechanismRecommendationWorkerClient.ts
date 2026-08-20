@@ -28,6 +28,45 @@ const browserWorkerFactory: MechanismRecommendationWorkerFactory = () =>
     { type: "module", name: "motionsmith-mechanism-recommendations" },
   ) as unknown as MechanismRecommendationWorkerPort;
 
+let workerBootstrap: Promise<void> | undefined;
+
+/**
+ * Start and release only the tiny worker entry. The expensive recommendation
+ * job remains behind its first explicit build message.
+ */
+export const prepareMechanismRecommendationWorker = (
+  workerFactory: MechanismRecommendationWorkerFactory = browserWorkerFactory,
+) => {
+  workerBootstrap ??= new Promise<void>((resolve) => {
+    let worker: MechanismRecommendationWorkerPort;
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      worker.onmessage = null;
+      worker.onerror = null;
+      worker.terminate();
+      resolve();
+    };
+    try {
+      worker = workerFactory();
+    } catch {
+      resolve();
+      return;
+    }
+    worker.onmessage = ({ data }) => {
+      if (data.type === "ready") finish();
+    };
+    worker.onerror = finish;
+    try {
+      worker.postMessage({ type: "warm" });
+    } catch {
+      finish();
+    }
+  });
+  return workerBootstrap;
+};
+
 /** One active worker means superseding a synchronous fit can cancel immediately. */
 export const createMechanismRecommendationWorkerClient = (
   workerFactory: MechanismRecommendationWorkerFactory = browserWorkerFactory,
@@ -72,6 +111,7 @@ export const createMechanismRecommendationWorkerClient = (
       worker,
     };
     worker.onmessage = ({ data }) => {
+      if (data.type === "ready") return;
       if (
         !active ||
         active.worker !== worker ||

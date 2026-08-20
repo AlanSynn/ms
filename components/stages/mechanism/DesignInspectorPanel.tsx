@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Loader2, Sparkles, Trash2 } from "lucide-react";
 import { MechanismParametricEditor } from "./MechanismParametricEditor";
 import { MiniNumber, Toggle } from "../../ui/InspectorControls";
@@ -24,6 +24,7 @@ import {
   shouldShowMechanismParam,
 } from "./mechanismParamPolicy";
 import { MechanismFeasibilityStatus } from "./MechanismFeasibilityStatus";
+import { prepareMechanismOptimizerWorker } from "../../../runtime/optimizer/mechanismOptimizerWorkerClient";
 
 type DesignInspectorPanelProps = {
   project: ProjectState;
@@ -48,6 +49,16 @@ export const DesignInspectorPanel = ({
   exportDxf,
   onBlueprint,
 }: DesignInspectorPanelProps) => {
+  const [workerPrepared, setWorkerPrepared] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    void prepareMechanismOptimizerWorker().then(() => {
+      if (mounted) setWorkerPrepared(true);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
   const selectedRange = selectedMechanism
     ? getInspectorFeasibleRange(selectedMechanism)
     : undefined;
@@ -261,7 +272,9 @@ export const DesignInspectorPanel = ({
           <div className="flex flex-wrap gap-2">
             <button
               className="btn-primary"
-              disabled={optimizerBusy}
+              data-optimizer-worker-prepared={workerPrepared ? "true" : "false"}
+              disabled={optimizerBusy || !workerPrepared}
+              aria-busy={optimizerBusy || !workerPrepared}
               onClick={onOptimize}
             >
               {optimizerBusy ? (

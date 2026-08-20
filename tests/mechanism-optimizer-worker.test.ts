@@ -9,6 +9,7 @@ import {
 } from '../runtime/optimizer/mechanismOptimizerJob';
 import {
   createMechanismOptimizerWorkerClient,
+  prepareMechanismOptimizerWorker,
   type MechanismOptimizerWorkerPort,
 } from '../runtime/optimizer/mechanismOptimizerWorkerClient';
 import { createDefaultMechanism, createSampleProject } from '../utils/project';
@@ -72,6 +73,14 @@ class FakeWorker implements MechanismOptimizerWorkerPort {
   }
 }
 
+const warmWorker = new FakeWorker();
+const warmComplete = prepareMechanismOptimizerWorker(() => warmWorker);
+assert.deepEqual(warmWorker.posted, [{ type: 'warm' }]);
+assert.equal(warmWorker.terminated, false);
+warmWorker.respond({ type: 'ready' });
+await warmComplete;
+assert.equal(warmWorker.terminated, true, 'optimizer bootstrap releases before any job');
+
 const workers: FakeWorker[] = [];
 const completed: string[] = [];
 const client = createMechanismOptimizerWorkerClient(() => {
@@ -112,6 +121,8 @@ const workerSource = readFileSync(
 assert(hookSource.includes('createMechanismOptimizerWorkerClient'));
 assert(!hookSource.includes('for (let i = 0; i < iterations; i++)'));
 assert(workerSource.includes('runMechanismOptimizerJob(data.input'));
+assert(workerSource.includes("data?.type === 'warm'"));
+assert(workerSource.includes("postMessage({ type: 'ready' })"));
 assert(
   workerSource.includes('await import('),
   'the worker entry stays small and loads the optimizer job after it owns the request',
