@@ -33,7 +33,10 @@ MotionSmith applies that as `viser-style-transform-tree-batched-updates-instanci
 1. Keep one renderer per viewport.
 2. Reuse geometries/materials; update transforms before rebuilding objects.
 3. Use object pools and `InstancedMesh` for repeated pins, spacers, holes, board marks, and hardware.
-4. Keep Rapier lazy-loaded behind `utils/physicsKernel.ts`.
+4. Keep Rapier lazy-loaded behind `utils/physicsKernel.ts`, and request it only
+   after the user explicitly enables the Foundry `Push` physics diagnostic.
+   Startup, ordinary stage traversal, Foundry entry, Design entry, and playback
+   remain on MotionSmith kinematics without fetching or initializing Rapier.
 5. Keep the browser build on `tsc && vite build`; do **not** use `bun build` for the Rapier browser runtime until an ADR replaces this guard.
 6. Use a literal `import('@dimforge/rapier3d-compat')` in the kernel seam so Vite emits a real lazy Rapier chunk instead of leaving a browser-unresolvable variable bare specifier.
 7. Keep physics outputs serializable so they can move to a Worker later without changing UI contracts.
@@ -43,5 +46,5 @@ MotionSmith applies that as `viser-style-transform-tree-batched-updates-instanci
 
 - `bun run test` runs a real Rapier friction/contact probe.
 - Contract tests lock the Vite build path and the literal Rapier dynamic import.
-- Foundry and Design browser tests assert `data-physics-kernel="rapier3d-compat"` and the high-throughput scene policy.
+- Foundry and Design browser tests assert `data-physics-kernel="rapier3d-compat"` and the high-throughput scene policy. A production-preview network test proves Foundry entry has zero Rapier requests and the explicit physics diagnostic performs one request.
 - `PhysicsSession.summary` reports the selected render stack, physics kernel, and update policy.

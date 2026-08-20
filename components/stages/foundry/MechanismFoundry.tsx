@@ -141,8 +141,8 @@ export const MechanismFoundry = ({
   const [foundryPhase, setFoundryPhase] = useState(0);
   const [isPickingAnchor, setIsPickingAnchor] = useState(false);
   const [manualAnchor, setManualAnchor] = useState<Point | null>(null);
-  const [showForces, setShowForces] = useState(true);
-  const [showVelocity, setShowVelocity] = useState(true);
+  const [showForces, setShowForces] = useState(false);
+  const [showVelocity, setShowVelocity] = useState(false);
   const [showTrail, setShowTrail] = useState(false);
   const [showUserPathPreview, setShowUserPathPreview] = useState(true);
   const [showPathPreview, setShowPathPreview] = useState(false);
@@ -986,8 +986,8 @@ export const MechanismFoundry = ({
     setManualAnchor(null);
     setSelectedOutputTraceId(null);
     setIsPickingAnchor(false);
-    setShowForces(true);
-    setShowVelocity(true);
+    setShowForces(false);
+    setShowVelocity(false);
     setShowTrail(false);
     setShowUserPathPreview(true);
     setShowPathPreview(false);

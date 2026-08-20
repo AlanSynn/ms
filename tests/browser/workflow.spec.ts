@@ -1482,8 +1482,8 @@ test('animation performance: Foundry playback stays responsive without runaway T
   await expect(foundryRig).toHaveAttribute('data-three-renderer', 'webgl');
   await expect(foundryRig).toHaveAttribute('data-three-engine-stack', 'three-webgl2-imperative');
   await expect(foundryRig).toHaveAttribute('data-physics-kernel', 'rapier3d-compat');
-  await expect(foundryRig).toHaveAttribute('data-physics-kernel-runtime', 'ready', { timeout: 60_000 });
-  await expect(foundryRig).toHaveAttribute('data-physics-kernel-version', /\d+\.\d+\.\d+/);
+  await expect(foundryRig).toHaveAttribute('data-physics-kernel-runtime', 'idle');
+  await expect(foundryRig).toHaveAttribute('data-physics-kernel-version', 'not-loaded');
   await expect(foundryRig).toHaveAttribute('data-physics-kernel-error', 'none');
   await expect(foundryRig).toHaveAttribute('data-physics-update-policy', 'kinematic-authority-rapier-contact-validation');
   await expect(foundryRig).toHaveAttribute('data-high-throughput-scene-policy', 'viser-style-transform-tree-batched-updates-instancing');
@@ -2979,13 +2979,9 @@ test('Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking'
   await expect(threeScene).toHaveAttribute('data-path-preview', 'hidden');
   await page.getByTestId('foundry-toggle-trail').click();
   await expect(threeScene).toHaveAttribute('data-trail', 'shown');
-  await expect(page.getByTestId('foundry-forces-overlay')).toBeVisible();
-  await page.getByTestId('foundry-toggle-forces').click();
   await expect(page.getByTestId('foundry-forces-overlay')).toHaveCount(0);
   await page.getByTestId('foundry-toggle-forces').click();
   await expect(page.getByTestId('foundry-forces-overlay')).toBeVisible();
-  await expect(page.getByTestId('foundry-velocity-overlay')).toBeVisible();
-  await page.getByTestId('foundry-toggle-velocity').click();
   await expect(page.getByTestId('foundry-velocity-overlay')).toHaveCount(0);
   await page.getByTestId('foundry-toggle-velocity').click();
   await expect(page.getByTestId('foundry-velocity-overlay')).toBeVisible();
@@ -3006,12 +3002,36 @@ test('Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking'
   await expect(foundryCanvasPane).toHaveAttribute('data-user-path-preview', 'shown');
   await expect(page.getByTestId('foundry-user-path-overlay')).toBeVisible();
   await expect(threeScene).toHaveAttribute('data-trail', 'hidden');
-  await expect(threeScene).toHaveAttribute('data-layer-forces', 'shown');
-  await expect(threeScene).toHaveAttribute('data-layer-velocity', 'shown');
+  await expect(threeScene).toHaveAttribute('data-layer-forces', 'hidden');
+  await expect(threeScene).toHaveAttribute('data-layer-velocity', 'hidden');
   await expect(threeScene).toHaveAttribute('data-camera-preset', 'iso');
   await expect(page.getByTestId('foundry-camera-readout')).toContainText('3D Isometric');
-  await expect(page.getByTestId('foundry-forces-overlay')).toBeVisible();
-  await expect(page.getByTestId('foundry-velocity-overlay')).toBeVisible();
+  await expect(page.getByTestId('foundry-forces-overlay')).toHaveCount(0);
+  await expect(page.getByTestId('foundry-velocity-overlay')).toHaveCount(0);
+});
+
+test('Foundry defers Rapier until physics diagnostics are requested', async ({ page }) => {
+  const rapierRequests: string[] = [];
+  page.on('request', (request) => {
+    if (/\/assets\/rapier-[^/]+\.js(?:\?|$)/.test(request.url())) {
+      rapierRequests.push(request.url());
+    }
+  });
+
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByRole('button', { name: /Foundry/i }).click();
+
+  const rig = page.getByTestId('foundry-camera-rig');
+  await expect(rig).toHaveAttribute('data-physics-kernel-runtime', 'idle');
+  expect(rapierRequests).toEqual([]);
+
+  await page.getByTestId('foundry-toggle-forces').click();
+  await expect(rig).toHaveAttribute('data-physics-kernel-runtime', 'ready', {
+    timeout: 60_000,
+  });
+  await expect(rig).toHaveAttribute('data-physics-kernel-version', /\d+\.\d+\.\d+/);
+  expect(rapierRequests).toHaveLength(1);
 });
 
 test('Foundry supports CAD-style 3D camera presets and drag orbit', async ({ page }) => {

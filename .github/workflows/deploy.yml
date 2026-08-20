@@ -52,7 +52,7 @@ jobs:
           tests/browser/webgl-recovery.spec.ts
           tests/browser/workflow.spec.ts
           --grep
-          'WebGL unavailable|Foundry restores the same scene|Getting Started guided project|Load package review|Legacy storage namespace|Recommendation job stays idle|Design Fit runs|Trace lazily streams|School build has no image-recognition'
+          'WebGL unavailable|Foundry restores the same scene|Foundry defers Rapier|Getting Started guided project|Load package review|Legacy storage namespace|Recommendation job stays idle|Design Fit runs|Trace lazily streams|School build has no image-recognition'
 
       - name: Build release artifact
         env:

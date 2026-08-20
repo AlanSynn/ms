@@ -10,7 +10,7 @@ bun run build
 bun run test
 ```
 
-The build runs `scripts/check-no-image-recognition.mjs` before and after Vite. It fails if ONNX/ORT recognition source, a model, worker, dependency, or production asset returns. Rapier WASM remains a separate lazy physics dependency.
+The build runs `scripts/check-no-image-recognition.mjs` before and after Vite. It fails if ONNX/ORT recognition source, a model, worker, dependency, or production asset returns. Rapier remains a separate optional physics chunk: ordinary startup and Foundry/Design entry do not request it. It loads only after the student turns on the Foundry `Push` physics diagnostic.
 
 
 ## GitHub Pages release deploy
@@ -25,7 +25,7 @@ git push origin main
 git push origin v$VERSION
 ```
 
-The workflow verifies `v$VERSION == package.json.version`, builds with `VITE_BASE_PATH=/ms/`, rechecks the image-recognition exclusion, and publishes `dist/` with GitHub Pages Actions.
+The workflow verifies `v$VERSION == package.json.version`, runs the complete checked unit manifest, builds and exercises the focused diagnostics preview (including WebGL recovery and optional Rapier loading), then creates a fresh `/ms/` production artifact. Bundle and image-recognition gates must pass before GitHub Pages can upload `dist/`.
 
 ## Classroom release checklist
 
@@ -34,6 +34,7 @@ Before a teacher-facing web release:
 - Tag must be `v<package.json version>`; the workflow must reject mismatched tags.
 - Build must use `VITE_BASE_PATH=/ms/` for `https://alansynn.com/ms/`.
 - `bun run test:no-image-recognition` must pass; no ONNX model, ORT/WASM recognition runtime, inference worker, or cache worker may exist in `dist/`.
+- Opening Foundry must not request the optional Rapier chunk; only the explicit `Push` diagnostic may load it.
 - Runtime HTML must not load CDN scripts, import maps, or external `https://` assets.
 - Browser QA must show no `/api/` requests, server login, upload, cloud sync, roster, analytics, dashboard, or hosted storage calls.
 - About/help copy must state: no account, no upload, browser autosave, local downloads, and no image-recognition model download.

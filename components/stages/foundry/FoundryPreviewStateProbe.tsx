@@ -57,7 +57,7 @@ type FoundryPreviewStateProbeProps = {
   showVelocity: boolean;
   showTrail: boolean;
   rigOpacity: number;
-  physicsKernelRuntime: "loading" | "ready" | "unavailable";
+  physicsKernelRuntime: "idle" | "loading" | "ready" | "unavailable";
   physicsKernelVersion: string;
   physicsKernelError: string;
   mechanism: MechanismConfig;

@@ -53,10 +53,13 @@ claim. See the [`playback artifact`](../artifacts/chromebook-audit/playback/chro
 
 ## Production bundle and network exclusion
 
-The static compressed production-shell gate reports 396,005 bytes of core JS
-against a 450,000-byte limit and 457,044 bytes of initial shell assets against
-a 1,500,000-byte limit. Rapier remains a lazy physics chunk; recommendation,
-optimizer, and GIF workers remain lazy feature chunks.
+The static compressed production-shell gate reports 396,023 bytes of core JS
+against a 450,000-byte limit and 457,064 bytes of initial shell assets against
+a 1,500,000-byte limit. Rapier remains an optional physics chunk; ordinary
+startup and Foundry/Design entry do not request it. The production-preview gate
+requires zero Rapier requests before the student enables the Foundry `Push`
+diagnostic and exactly one chunk request afterward. Recommendation, optimizer,
+and GIF workers remain lazy feature chunks.
 
 `scripts/check-no-image-recognition.mjs` verifies both source and `dist/`. The
 production output contains no `.onnx` model, `onnxruntime-web`, ORT recognition
@@ -71,7 +74,10 @@ recovery, ordinary scene-object image import, GIF/video Trace, legacy autosave
 migration, WebGL-unavailable fallback, and restoration of the retained Foundry
 scene after context loss. Pull requests run contracts, production and
 diagnostics builds, the bundle/exclusion gates, and focused browser recovery
-tests with bounded Playwright workers.
+tests with bounded Playwright workers. The tag-only deployment job now repeats
+the complete checked unit manifest, diagnostics build, focused production
+preview, production bundle budget, and image-recognition exclusion before it
+can upload an artifact.
 
 The nightly/manual performance workflow keeps two scopes:
 

@@ -688,9 +688,9 @@ export const ThreeFoundryPreview = ({
   const materialCacheRef = useRef<Map<string, THREE.Material>>(new Map());
   const [rendererStatus, setRendererStatus] = useState<FoundryRendererStatus>("pending");
   const [physicsKernelRuntime, setPhysicsKernelRuntime] = useState<
-    "loading" | "ready" | "unavailable"
-  >("loading");
-  const [physicsKernelVersion, setPhysicsKernelVersion] = useState("pending");
+    "idle" | "loading" | "ready" | "unavailable"
+  >("idle");
+  const [physicsKernelVersion, setPhysicsKernelVersion] = useState("not-loaded");
   const [physicsKernelError, setPhysicsKernelError] = useState("none");
   const isGearTrain =
     mechanism.type === "gear" || mechanism.type === "gear_linkage";
@@ -1162,7 +1162,9 @@ export const ThreeFoundryPreview = ({
     [assemblySceneFrame, renderPlan.layers],
   );
   useEffect(() => {
+    if (!showForces) return;
     let active = true;
+    setPhysicsKernelRuntime("loading");
     loadRapierPhysicsKernel()
       .then((kernel) => {
         if (!active) return;
@@ -1179,7 +1181,7 @@ export const ThreeFoundryPreview = ({
     return () => {
       active = false;
     };
-  }, []);
+  }, [showForces]);
 
   const renderCamera = (view: FoundryCamera) => {
     const scene = sceneRef.current;
