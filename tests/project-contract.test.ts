@@ -35,7 +35,7 @@ import { contourPathD, fabricablePartOutlinePoints, partLandmarkJointIds, partLa
 import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureRegistry, type MechanismDragHandle } from '../utils/mechanismFeatureRegistry';
 import { buildMechanismSnapshot, buildMechanismSnapshots } from '../utils/mechanismSnapshot';
 import { createFoundryPlaybackFrame, foundryPlaybackPhaseToInputAngle, generateFoundryPlaybackPointTraces } from '../utils/foundryPlayback';
-import { createMechanismFitContext, createSceneMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext, pointsToSvgPath } from '../utils/mechanismPreview';
+import { createMechanismFitContext, createSceneMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext } from '../utils/mechanismPreview';
 import { buildMechanismRecommendations, fitMechanismToTargetPath, fitRecommendedMechanismToSheet } from '../utils/mechanismRecommendations';
 import { buildAutomataSceneModel } from '../utils/automataSceneModel';
 import { buildDesignAutomataProjection } from '../utils/designAutomataProjection';
@@ -55,7 +55,7 @@ import { useAppMechanismActions } from '../hooks/useAppMechanismActions';
 import { createStageNavigator, navigateAppStage } from '../utils/appStageNavigation';
 import { assemblyCoordToSvg, characterBoardProjector, characterCanvasProjector, smoothAssemblyProgress, svgPathFromPoints } from '../components/stages/assembly/assemblyGeometry';
 import { smoothTrackingPoints, trackingPointsToWorldPath } from '../utils/trackingPath';
-import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, FOUNDRY_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, mechanismTemplateLabel } from '../utils/mechanismTemplates';
+import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, ENABLED_AUTHORABLE_MECHANISM_TYPES, ENABLED_FOUNDRY_MECHANISM_TYPES, ENABLED_MECHANISM_TYPES, FOUNDRY_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, isMechanismTypeEnabled, mechanismTemplateLabel } from '../utils/mechanismTemplates';
 import { createFabricationReadyFourBarProject } from './fixtures/fabricationProject';
 import { CLASSROOM_ASSESSMENT_KEYS, CLASSROOM_COPY, classroomAssessmentFor, classroomAssessmentKeyFromSearch, classroomAssessmentKeyHint, classroomAssessmentStatusText, classroomCueTitleFor, classroomUseExampleFor, DEFAULT_CLASSROOM_ASSESSMENT_KEY, formatClassroomAssessmentPrompt, formatClassroomUseExampleLabel, normalizeClassroomAssessmentKey, resolveClassroomAssessmentBundle, youtubeNoCookieEmbedUrl } from '../utils/classroomContent';
 import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES, sanitizeMechanismRuntime } from '../utils/sanitize';
@@ -1013,6 +1013,8 @@ assert.equal(rejectedFitPathEdit.mechanisms[0].fabricationMetadata?.pathFit?.sta
 const recommendationAuditProject: ProjectState = { ...classroomLesson, mechanisms: [], selectedMechanismId: undefined };
 const wavingPathForRecommendations = recommendationAuditProject.paths['path-right-arm'];
 const wavingRecommendations = buildMechanismRecommendations(recommendationAuditProject, recommendationAuditProject.parts[wavingPathForRecommendations.partId], wavingPathForRecommendations);
+assert(wavingRecommendations.every(option => isMechanismTypeEnabled(option.type)), 'recommendations contain only currently enabled linkage and gear mechanisms');
+assert(!wavingRecommendations.some(option => ['piston', 'cam', 'planetary_gear'].includes(option.type)), 'recommendations do not surface disabled mechanism combinations');
 const wavingFourBarRecommendation = wavingRecommendations.find(option => option.type === '4bar');
 assert(wavingFourBarRecommendation, 'recommendation audit keeps a four-bar card with an explicit fit blocker for the classroom hand-wave path');
 assert(wavingFourBarRecommendation!.fabricationErrors.some(error => error.includes('No fabrication-valid path fit.')), 'four-bar recommendation surfaces the hard path-fit blocker instead of hiding it');
@@ -1186,12 +1188,18 @@ assert(Math.abs(scaledReplacement.paths['legacy-wave'].points[0].x - (coarsePrev
 assert.deepEqual(SANITIZE_MECHANISM_TYPES, [...ALL_MECHANISM_TYPES], 'import sanitizer accepts every low-level mechanism template including crank');
 const expectedReferenceAuthorableTypes: MechanismType[] = ['4bar', 'piston', 'cam', 'gear', 'gear_linkage', 'planetary_gear'];
 const expectedReferenceFoundryTypes: MechanismType[] = ['4bar', 'cam', 'gear', 'gear_linkage', 'planetary_gear'];
+const expectedEnabledMechanismTypes: MechanismType[] = ['4bar', 'gear', 'gear_linkage'];
 const unsupportedLegacyMechanismTypes: MechanismType[] = ['yoke', 'quick-return', 'rack-pinion', '5bar', '6bar'];
 assert.deepEqual(AUTHORABLE_MECHANISM_TYPES, expectedReferenceAuthorableTypes, 'authorable mechanism types are exactly export-ready mechanism-reference recipes');
 assert.deepEqual(REFERENCE_EXPORT_READY_TYPES, expectedReferenceAuthorableTypes, 'mechanism-reference export-ready types match the authoring contract');
 assert.deepEqual(OPTIMIZER_MECHANISM_TYPES, expectedReferenceAuthorableTypes, 'optimizer searches export-ready mechanism-reference templates only');
-assert.deepEqual(FOUNDRY_MECHANISM_TYPES, expectedReferenceFoundryTypes, 'Foundry exposes only visible mechanism-reference recipes');
-assert.deepEqual(REFERENCE_FOUNDRY_TYPES, expectedReferenceFoundryTypes, 'mechanism-reference Foundry-visible types match the gallery contract');
+assert.deepEqual(FOUNDRY_MECHANISM_TYPES, expectedReferenceFoundryTypes, 'Foundry-capable types preserve every fabrication-ready reference recipe');
+assert.deepEqual(REFERENCE_FOUNDRY_TYPES, expectedReferenceFoundryTypes, 'mechanism-reference Foundry-capable types preserve imported-project compatibility');
+assert.deepEqual(ENABLED_MECHANISM_TYPES, expectedEnabledMechanismTypes, 'new mechanism work is temporarily limited to linkage and gear families');
+assert.deepEqual(ENABLED_AUTHORABLE_MECHANISM_TYPES, expectedEnabledMechanismTypes, 'Design exposes only enabled linkage and gear templates');
+assert.deepEqual(ENABLED_FOUNDRY_MECHANISM_TYPES, expectedEnabledMechanismTypes, 'Foundry exposes only enabled linkage and gear templates');
+assert(expectedEnabledMechanismTypes.every(isMechanismTypeEnabled), 'the mechanism availability predicate accepts every enabled type');
+assert(['piston', 'cam', 'planetary_gear'].every(type => !isMechanismTypeEnabled(type as MechanismType)), 'disabled mechanism types stay out of new-work UI paths');
 assert(!AUTHORABLE_MECHANISM_TYPES.includes('crank'), 'bare crank stays a low-level driver, not a novice authoring template');
 assert.equal(REFERENCE_MECHANISM_RECIPES.piston.canonicalKey, 'slider_crank', 'piston maps to the mechanism-reference slider_crank recipe');
 unsupportedLegacyMechanismTypes.forEach(type => {
@@ -3076,6 +3084,7 @@ assert(appText.includes('useAppDerivedState(project)') && !appText.includes('con
 assert(mechanismFoundryText.includes('<FoundryWorkflowPanel') && foundryWorkflowPanelText.includes('data-testid="foundry-pick-anchor"') && !foundryWorkflowPanelText.includes('data-testid="foundry-target-summary"') && !foundryWorkflowPanelText.includes('Board hole') && !foundryWorkflowPanelText.includes('Range') && !foundryWorkflowPanelText.includes('Status'), 'Foundry left pane keeps action controls while hiding raw target, board-hole, range, and status readouts from the default student UI');
 assert(mechanismFoundryText.includes('fitMechanismToTargetPath') && mechanismFoundryText.includes('onFitPath={() => applyPathFit()}') && !mechanismFoundryText.includes('lastPathFitSignatureRef') && !mechanismFoundryText.includes('applyPathFit(next)') && foundryWorkflowPanelText.includes('data-testid="foundry-fit-path"') && foundryWorkflowPanelText.includes('foundry.fitPath') && foundryCanvasPaneText.includes('data-fit-board-cells') && foundryCanvasPaneText.includes('data-fit-target-path'), 'Foundry exposes a prominent Fit path action while preserving the default mechanism until the user clicks Fit');
 assert(foundryWorkflowPanelText.includes('No valid fabrication fit. Try a shorter path or another mechanism.') && foundryWorkflowPanelText.includes('fitError?: number') && foundryWorkflowPanelText.includes('fitMaxError?: number') && !foundryWorkflowPanelText.includes('Math.round(fitError)') && !foundryWorkflowPanelText.includes('Math.round(fitMaxError)'), 'Foundry keeps fit diagnostics in the data contract while showing only an actionable student warning');
+assert(foundryWorkflowPanelText.includes('ENABLED_FOUNDRY_MECHANISM_TYPES.map') && foundryInspectorPanelText.includes('ENABLED_FOUNDRY_MECHANISM_TYPES.map') && designWorkflowPanelText.includes('ENABLED_AUTHORABLE_MECHANISM_TYPES.map') && mechanismFoundryText.includes('if (!isMechanismTypeEnabled(type)) return') && mechanismRecommendationsText.includes('.filter((candidate) => isMechanismTypeEnabled(candidate.type))') && appControllerSource.includes('const ENABLED_GUIDED_LESSONS = CLASSROOM_LESSONS.filter') && appProjectCommandsHookText.includes('!isMechanismTypeEnabled(lesson.mechanismType)'), 'all new-work mechanism entry points share the central linkage-and-gear availability gate');
 const foundryFitContractSeed = createDefaultMechanism('4bar', 'foundry-fit-contract');
 const foundryFitContract = fitMechanismToTargetPath(sample, foundryFitContractSeed, 'path-right-arm');
 assert.equal(foundryFitContract.id, foundryFitContractSeed.id, 'Fit path preserves the active Foundry preview instance id');
@@ -4787,8 +4796,7 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
     onUseMechanism: () => undefined,
     onSelectMechanismType: () => undefined
   }));
-  const expectedMiniCardPathD = pointsToSvgPath(mappedOffsetCarrierTrace);
-  assert(offsetFoundryWorkflow.includes(`d="${expectedMiniCardPathD}"`), 'Foundry planetary template card path silhouette uses the same playback-mapped carrier trace as the main preview');
+  assert(!offsetFoundryWorkflow.includes('foundry-mini-simulation-planetary_gear'), 'Foundry hides the disabled planetary template card while retaining its renderer and imported-project contracts');
   Array.from({ length: 8 }, () => generateSmartConfig(undefined, 'planetary_gear')).forEach(config => {
     assert(Math.abs(config.groundLength - (config.crankLength + config.rockerLength)) < 1e-6, 'optimizer keeps generated planetary pitch circles tangent');
   });

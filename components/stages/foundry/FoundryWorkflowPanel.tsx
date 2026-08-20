@@ -7,7 +7,7 @@ import type {
   ProjectState,
 } from "../../../types";
 import {
-  FOUNDRY_MECHANISM_TYPES,
+  ENABLED_FOUNDRY_MECHANISM_TYPES,
   MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY,
 } from "../../../utils/mechanismTemplates";
 import {
@@ -107,7 +107,7 @@ export const FoundryWorkflowPanel = ({
         className="mechanism-choice-grid"
         data-testid="foundry-mechanism-gallery"
       >
-        {FOUNDRY_MECHANISM_TYPES.map((type) => {
+        {ENABLED_FOUNDRY_MECHANISM_TYPES.map((type) => {
           const item = MECHANISM_LIBRARY[type];
           const cardMechanism = {
             ...(foundry.type === type

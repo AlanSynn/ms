@@ -4,6 +4,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CLASSROOM_LESSONS, createLessonProject, serializeProject } from '../../utils/project';
+import { ENABLED_MECHANISM_TYPES, isMechanismTypeEnabled } from '../../utils/mechanismTemplates';
 import { createFabricationReadyFourBarProject } from '../fixtures/fabricationProject';
 import { FABRICATION_RENDER_LAYER_Z_STEP } from '../../utils/fabrication';
 import { APP_COMMANDS, APP_MENU_GROUPS, commandById, type AppCommandId } from '../../utils/appCommands';
@@ -11,6 +12,7 @@ import { APP_COMMANDS, APP_MENU_GROUPS, commandById, type AppCommandId } from '.
 
 const TEST_ONNX_MODEL_BYTES = Buffer.alloc(1_000_001, 1);
 const ONNX_MODEL_ROUTE = '**/onnx/pose_model.onnx';
+const ENABLED_CLASSROOM_LESSONS = CLASSROOM_LESSONS.filter(lesson => isMechanismTypeEnabled(lesson.mechanismType));
 
 test.beforeEach(async ({ page }, testInfo) => {
   if (testInfo.title.includes('Create from image upload')) return;
@@ -645,6 +647,13 @@ const writeWavingArmLessonProject = async () => {
   return path;
 };
 
+const writeHeadBobLessonProject = async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'motionsmith-hidden-lesson-'));
+  const path = join(dir, 'head-bob.motionsmith.json');
+  await writeFile(path, serializeProject(createLessonProject('head-bob')), 'utf8');
+  return path;
+};
+
 const writeFabricationReadyFourBarProject = async () => {
   const dir = await mkdtemp(join(tmpdir(), 'motionsmith-fit-'));
   const path = join(dir, 'fabrication-fit.motionsmith.json');
@@ -845,19 +854,18 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(guidedLibrary).toBeVisible();
   await expect(gettingStarted.getByTestId('getting-started-gallery')).toHaveCount(0);
   await expect(guidedLibrary).toContainText('Make a hand wave');
-  await expect(guidedLibrary).toContainText('Make a head bob');
+  await expect(guidedLibrary).not.toContainText('Make a head bob');
   await expect(guidedLibrary).toContainText('Make a foot step');
   await expect(guidedLibrary).toContainText('Make gears spin');
   await expect(guidedLibrary.getByTestId('guided-project-card-waving-arm')).toContainText('Change hand path');
   await expect(guidedLibrary.getByTestId('guided-project-card-waving-arm')).toContainText('Build four-bar');
-  await expect(guidedLibrary.getByTestId('guided-project-card-head-bob')).toContainText('Change head path');
-  await expect(guidedLibrary.getByTestId('guided-project-card-head-bob')).toContainText('Build cam');
+  await expect(guidedLibrary.getByTestId('guided-project-card-head-bob')).toHaveCount(0);
   await expect(guidedLibrary.getByTestId('guided-project-card-walking-leg')).toContainText('Change foot path');
   await expect(guidedLibrary.getByTestId('guided-project-card-walking-leg')).toContainText('Build four-bar');
   await expect(guidedLibrary.getByTestId('guided-project-card-spin-gears')).toContainText('Change gear size');
   await expect(guidedLibrary.getByTestId('guided-project-card-spin-gears')).toContainText('Build gear pair');
-  await expect(guidedLibrary.locator('[data-testid^="guided-project-card-"]')).toHaveCount(4);
-  for (const lesson of CLASSROOM_LESSONS) {
+  await expect(guidedLibrary.locator('[data-testid^="guided-project-card-"]')).toHaveCount(3);
+  for (const lesson of ENABLED_CLASSROOM_LESSONS) {
     const preview = guidedLibrary.getByTestId(`guided-project-preview-${lesson.id}`);
     await expect(preview, `${lesson.id} rendered preview is visible`).toBeVisible();
     await expect(preview).toHaveAttribute('data-preview-mode', 'rendered-character-motion');
@@ -2140,9 +2148,11 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
   await expect(page.getByTestId('stage-right-inspector').getByTestId('foundry-visible-sensemaking')).toContainText('Crank turns');
   await expect(page.getByTestId('foundry-mechanism-gallery')).not.toContainText('Crank turns -> rocker swings');
-  await expect(page.locator('[data-testid^="foundry-mini-simulation-"]')).toHaveCount(5);
-  await expect(page.locator('[data-testid^="foundry-mini-linkage-"]')).toHaveCount(5);
-  await expect(page.locator('[data-testid^="foundry-mini-ghost-"]')).toHaveCount(10);
+  await expect(page.locator('[data-testid^="foundry-mini-simulation-"]')).toHaveCount(3);
+  await expect(page.locator('[data-testid^="foundry-mini-linkage-"]')).toHaveCount(3);
+  await expect(page.locator('[data-testid^="foundry-mini-ghost-"]')).toHaveCount(6);
+  await expect(page.getByTestId('foundry-mini-simulation-cam')).toHaveCount(0);
+  await expect(page.getByTestId('foundry-mini-simulation-planetary_gear')).toHaveCount(0);
   await expect(page.getByTestId('foundry-three-canvas')).toBeVisible();
   const threeScene = page.getByTestId('foundry-camera-rig');
   await expect(threeScene).toHaveAttribute('data-three-renderer', 'webgl');
@@ -2258,6 +2268,8 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(page.getByTestId('foundry-anchor-marker'), 'Default sandbox keeps non-mechanism markers hidden').toHaveCount(0);
   await expect(page.getByLabel('Foundry mechanism type')).toBeHidden();
   await page.getByText('Mechanism options').click();
+  await expect(page.getByLabel('Foundry mechanism type').locator('option')).toHaveCount(3);
+  expect(await page.getByLabel('Foundry mechanism type').locator('option').evaluateAll(options => options.map(option => (option as HTMLOptionElement).value))).toEqual([...ENABLED_MECHANISM_TYPES]);
   await expect(page.getByTestId('foundry-param-handles'), '4bar exposes direct A/B/C/D joint handles in the WebGL overlay').toHaveAttribute('data-handle-contract', 'move-anchor-plus-shape-handles');
   await expect(page.getByTestId('foundry-param-handles'), '4bar overlay handles keep board pivots on the low board-side stack and floating joints on top').toHaveAttribute('data-handle-z-contract', 'board-pivots-bottom-floating-top');
   await expect(page.getByTestId('foundry-param-handles'), '4bar exposes move plus A/B/C/D handles in the WebGL overlay').toHaveAttribute('data-handle-ids', 'M,A,B,C,D');
@@ -2333,7 +2345,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
     planetary_gear: [['data-three-gear-count', 3], ['data-three-hole-count', 13]]
   };
 
-  for (const type of ['4bar', 'cam', 'gear', 'gear_linkage', 'planetary_gear']) {
+  for (const type of [...ENABLED_MECHANISM_TYPES] as string[]) {
     await page.getByLabel('Foundry mechanism type').selectOption(type);
     await expect(threeScene, `${type} has its own physical 3D preview template`).toHaveAttribute('data-mechanism-type', type);
     await expect(threeScene, `${type} uses the fabrication stack as the 3D render source`).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
@@ -2489,9 +2501,6 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   expect(gearLinkagePinOrder, 'output crank pin stacks gear, two S10 spacers, then upper output linkage').toContain('C:gear<S10<S10<linkage');
   expect(gearLinkagePinOrder, 'shared R connector stacks the two links with spacer clearance and no bracket').toContain('R:linkage<S10<linkage');
   expect(gearLinkagePinOrder, 'gear-linkage moving pin z-order has no invalid floating stack').not.toContain('invalid');
-  await page.getByLabel('Foundry mechanism type').selectOption('cam');
-  expect(Number(await threeScene.getAttribute('data-three-cam-count')), 'Cam follower uses a cam profile, not a generic gear').toBeGreaterThanOrEqual(1);
-  expect(Number(await threeScene.getAttribute('data-three-follower-count')), 'Cam follower shows its follower block').toBeGreaterThanOrEqual(1);
   await page.getByLabel('Foundry mechanism type').selectOption('4bar');
   await page.getByLabel('Foundry preset').selectOption('compact');
   await expect(page.getByLabel('ground number')).toHaveValue('120');
@@ -2518,6 +2527,11 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(page.getByTestId('stage-left-pane')).not.toContainText(/Motion may jam|No full motion/);
   await expect(page.getByTestId('stage-left-pane')).not.toContainText(/Motion [0-9]+%/);
   await expect(page.getByTestId('stage-left-pane')).not.toContainText(/Range|Status/i);
+  await page.getByLabel('Input link length').selectOption('4');
+  await page.getByLabel('Coupler link length').selectOption('6');
+  await page.getByLabel('Output link length').selectOption('4');
+  await page.getByTestId('foundry-fit-path').click();
+  await expect(page.getByRole('button', { name: /Use mechanism/i })).toBeEnabled();
   await page.getByRole('button', { name: /Use mechanism/i }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
   await expect(page.getByTestId('design-mechanism-library')).toContainText('Four-bar linkage');
@@ -2530,8 +2544,8 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   const foundryMechanism = metadata.sceneSnapshot.mechanisms.find((mechanism: { source?: string }) => mechanism.source === 'foundry');
   expect(foundryMechanism.presetId).toBe('compact');
   expect(foundryMechanism.targetAnchorJointId).toBe('right_hand');
-  expect(foundryMechanism.recommendation).toContain('Compact');
-  expect(foundryMechanism.foundryExport.simulationSummary).toContain('Motion');
+  expect(foundryMechanism.recommendation).toContain('Fit path');
+  expect(foundryMechanism.foundryExport.simulationSummary).toBe('360°');
 
   expectCleanPage(pageErrors, consoleErrors);
 });
@@ -2987,38 +3001,39 @@ test('Foundry supports CAD-style 3D camera presets and drag orbit', async ({ pag
   expect(Math.abs(Number(orbitPickedCoords![2]) - orbitPickedCenter.y), 'orbit-picked marker remains visually centered after custom Three camera projection').toBeLessThan(6);
 });
 
-test('Cam foundry profile points edit the shared cam simulation profile', async ({ page }) => {
-  await page.setViewportSize({ width: 901, height: 720 });
+test('Foundry and Design hide every disabled mechanism creation choice', async ({ page }) => {
   await page.goto('/');
   await openWavingArmTemplate(page);
   await page.getByRole('button', { name: /Foundry/i }).click();
   await page.getByText('Mechanism options').click();
-  await page.getByLabel('Foundry mechanism type').selectOption('cam');
 
-  const rig = page.getByTestId('foundry-camera-rig');
-  await expect(rig).toHaveAttribute('data-mechanism-type', 'cam');
-  const editor = page.getByTestId('cam-profile-editor');
-  await editor.scrollIntoViewIfNeeded();
-  await expect(editor).toBeVisible();
-  const before = await rig.getAttribute('data-cam-profile');
-  const point = page.getByTestId('cam-profile-point-1');
-  const box = await point.boundingBox();
-  expect(box, 'cam profile point is draggable').toBeTruthy();
-  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(box!.x + box!.width / 2, box!.y - 24);
-  await page.mouse.up();
-  await expect.poll(async () => rig.getAttribute('data-cam-profile'), { message: 'dragged cam profile is reflected in Three/fabrication shared data' }).not.toBe(before);
+  const foundryTypeOptions = page.getByLabel('Foundry mechanism type').locator('option');
+  await expect(foundryTypeOptions).toHaveCount(3);
+  expect(await foundryTypeOptions.evaluateAll(options => options.map(option => (option as HTMLOptionElement).value))).toEqual([...ENABLED_MECHANISM_TYPES]);
+  await expect(page.getByTestId('foundry-mechanism-gallery')).not.toContainText(/Cam follower|Planetary gear|Slider piston/);
+
+  await page.getByRole('button', { name: /Mechanism Design/i }).click();
+  const designPane = page.getByTestId('stage-left-pane');
+  for (const label of ['Four-bar linkage', 'Gear train', 'Gear linkage']) {
+    await expect(designPane.getByRole('button', { name: label, exact: true })).toBeVisible();
+  }
+  for (const label of ['Slider piston', 'Cam follower', 'Planetary gear']) {
+    await expect(designPane.getByRole('button', { name: label, exact: true })).toHaveCount(0);
+  }
+
+  await designPane.getByRole('button', { name: /Recommend/i }).click();
+  const recommendationSheet = page.getByTestId('recommendation-sheet');
+  await expect(recommendationSheet).toBeVisible();
+  for (const type of ['piston', 'cam', 'planetary_gear']) {
+    await expect(recommendationSheet.getByTestId(`recommendation-card-${type}`)).toHaveCount(0);
+  }
 });
 
 test('Mechanism Design cam profile edits update the integrated automata preview', async ({ page }) => {
   await page.setViewportSize({ width: 901, height: 720 });
   await page.goto('/');
-  await openWavingArmTemplate(page);
-  await page.getByRole('button', { name: /Foundry/i }).click();
-  await page.getByText('Mechanism options').click();
-  await page.getByLabel('Foundry mechanism type').selectOption('cam');
-  await page.getByRole('button', { name: /Use mechanism/i }).click();
+  await importProjectFile(page, await writeHeadBobLessonProject());
+  await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
 
   const designRig = page.getByTestId('design-shared-foundry-preview').getByTestId('foundry-camera-rig');

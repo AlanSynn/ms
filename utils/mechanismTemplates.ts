@@ -38,6 +38,26 @@ export const ALL_MECHANISM_TYPES: readonly MechanismType[] = [
 export const AUTHORABLE_MECHANISM_TYPES: readonly MechanismType[] = REFERENCE_AUTHORABLE_TYPES;
 export const FOUNDRY_MECHANISM_TYPES: readonly MechanismType[] = REFERENCE_FOUNDRY_TYPES;
 
+// Temporary product availability gate. Keep the complete authoring/reference
+// registries above intact so imported projects using a hidden mechanism remain
+// readable and editable without exposing that mechanism for new work.
+export const ENABLED_MECHANISM_TYPES = [
+    '4bar',
+    'gear',
+    'gear_linkage'
+] as const satisfies readonly MechanismType[];
+
+const ENABLED_MECHANISM_TYPE_SET: ReadonlySet<MechanismType> = new Set(ENABLED_MECHANISM_TYPES);
+
+export const isMechanismTypeEnabled = (type: MechanismType): boolean =>
+    ENABLED_MECHANISM_TYPE_SET.has(type);
+
+export const ENABLED_AUTHORABLE_MECHANISM_TYPES: readonly MechanismType[] =
+    AUTHORABLE_MECHANISM_TYPES.filter(isMechanismTypeEnabled);
+
+export const ENABLED_FOUNDRY_MECHANISM_TYPES: readonly MechanismType[] =
+    FOUNDRY_MECHANISM_TYPES.filter(isMechanismTypeEnabled);
+
 export const MECHANISM_TEMPLATE_LIBRARY: Record<MechanismType, MechanismTemplateMetadata> = {
     crank: {
         label: 'Crank driver',

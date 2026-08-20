@@ -19,6 +19,7 @@ import {
   resetProjectToLessonBaseline,
   serializeProject,
 } from "../utils/project";
+import { isMechanismTypeEnabled } from "../utils/mechanismTemplates";
 import {
   projectSnapshotFileName,
   readAutosaveProject,
@@ -154,7 +155,7 @@ export const useAppProjectCommands = ({
 
   const openClassroomLesson = (lessonId: string) => {
     const lesson = classroomLessonById(lessonId);
-    if (!lesson) {
+    if (!lesson || !isMechanismTypeEnabled(lesson.mechanismType)) {
       setCommandStatus("Lesson unavailable");
       return;
     }

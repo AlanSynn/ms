@@ -17,8 +17,9 @@ import {
   formatClassroomAssessmentPrompt,
 } from "../../../utils/classroomContent";
 import {
-  AUTHORABLE_MECHANISM_TYPES,
+  ENABLED_AUTHORABLE_MECHANISM_TYPES,
   MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY,
+  isMechanismTypeEnabled,
   mechanismTemplateLabel,
 } from "../../../utils/mechanismTemplates";
 import {
@@ -63,6 +64,7 @@ export const DesignWorkflowPanel = ({
     : undefined;
   const bindingWarnings = mechanismBindingWarnings(project);
   const addLibraryMechanism = (type: MechanismType) => {
+    if (!isMechanismTypeEnabled(type)) return;
     const base = createDefaultMechanism(type, uid("mech"));
     const path = project.selectedPathId
       ? project.paths[project.selectedPathId]
@@ -123,7 +125,7 @@ export const DesignWorkflowPanel = ({
           ))}
         </select>
         <div className="mt-3 flex flex-wrap gap-2">
-          {AUTHORABLE_MECHANISM_TYPES.map((type) => (
+          {ENABLED_AUTHORABLE_MECHANISM_TYPES.map((type) => (
             <button
               key={type}
               className="chip"

@@ -70,9 +70,9 @@ import {
   type FoundryViewPreset,
 } from "../../../utils/foundryCamera";
 import {
-  FOUNDRY_MECHANISM_TYPES,
   FOUNDRY_PRESETS,
   MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY,
+  isMechanismTypeEnabled,
 } from "../../../utils/mechanismTemplates";
 import {
   createMechanismFitContext,
@@ -1043,6 +1043,7 @@ export const MechanismFoundry = ({
   };
   const useFoundryMechanism = () => onExport(makePackage());
   const selectFoundryMechanismType = (type: MechanismType) => {
+    if (!isMechanismTypeEnabled(type)) return;
     setSelectedOutputTraceId(null);
     const next = {
       ...createDefaultMechanism(type, "foundry-preview"),

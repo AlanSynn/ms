@@ -7,7 +7,7 @@ import {
 } from "../../../utils/classroomContent";
 import { getInspectorStackSummary } from "../../../utils/mechanismInspectorAnalysis";
 import {
-  FOUNDRY_MECHANISM_TYPES,
+  ENABLED_FOUNDRY_MECHANISM_TYPES,
   FOUNDRY_PRESETS,
   MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY,
   mechanismTemplateLabel,
@@ -206,7 +206,7 @@ export const FoundryInspectorPanel = ({
             onSetMechanismType(event.target.value as MechanismType)
           }
         >
-          {FOUNDRY_MECHANISM_TYPES.map((type) => (
+          {ENABLED_FOUNDRY_MECHANISM_TYPES.map((type) => (
             <option key={type} value={type}>
               {mechanismTemplateLabel(type)}
             </option>

@@ -12,7 +12,10 @@ import { createDefaultMechanism, mechanismWithGeneratedPath } from "./project";
 import { sampleFeasibleRange, validateMechanismPreviewReadiness, validateForFabrication } from "./fabrication";
 import { boardToScene, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, SCENE_PX_PER_MM } from "./coordinates";
 import { motionAnchorJointIds, preferredMotionJointId } from "./motion";
-import { MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY } from "./mechanismTemplates";
+import {
+  MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY,
+  isMechanismTypeEnabled,
+} from "./mechanismTemplates";
 import { isReferenceFoundryVisible, normalizeMechanismToFabricationSet, normalizeMechanismToReference } from "./mechanismReference";
 import { offBoardFixedAssemblyCoordinatesForMechanism } from "./boardHoleConstraints";
 import { fitPathToBox } from "./mechanismPreview";
@@ -924,6 +927,7 @@ export const buildMechanismRecommendations = (
     },
   ];
   return candidates
+    .filter((candidate) => isMechanismTypeEnabled(candidate.type))
     .map((candidate) => {
       const initialMechanism = createRecommendedMechanism(
         project,

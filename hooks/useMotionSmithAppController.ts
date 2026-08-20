@@ -11,6 +11,7 @@ import {
   createDefaultMechanism,
   createEmptyProject,
 } from "../utils/project";
+import { isMechanismTypeEnabled } from "../utils/mechanismTemplates";
 import { DEFAULT_CANVAS_VIEWPORT } from "../utils/viewport";
 import { classroomAssessmentKeyFromSearch } from "../utils/classroomContent";
 import { readAutosaveProject } from "../utils/projectPersistence";
@@ -33,6 +34,10 @@ import {
   createPlaybackClock,
   type PlaybackClock,
 } from "../runtime/playback/externalPlaybackClock";
+
+const ENABLED_GUIDED_LESSONS = CLASSROOM_LESSONS.filter((lesson) =>
+  isMechanismTypeEnabled(lesson.mechanismType),
+);
 
 type FoundryState = MechanismConfig;
 
@@ -383,8 +388,8 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     showGettingStarted,
     hideGettingStartedThisSession,
     starterTemplates: STARTER_IMAGE_TEMPLATES,
-    guidedLessons: CLASSROOM_LESSONS,
     showStarterImages: false,
+    guidedLessons: ENABLED_GUIDED_LESSONS,
     onLesson: openClassroomLesson,
     onStarterImage: startFromStarterImage,
     onSample: openSampleProject,
