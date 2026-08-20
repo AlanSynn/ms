@@ -12,6 +12,11 @@ import { REFERENCE_AUTHORABLE_TYPES, referenceRequiredPartsHoleCount } from '../
 import { mechanismRequiredParts } from '../utils/project';
 import type { MotionPreview } from '../utils/motion';
 import type { PlaybackClock } from '../runtime/playback/externalPlaybackClock';
+import type { PathGestureDraft } from '../runtime/path/pathGestureDraft';
+import {
+  createThreePathGestureDraftVisual,
+  type ThreePathGestureDraftVisual,
+} from './stages/path/threePathGestureDraftVisual';
 import { subscribeCadencedPlaybackSampler } from '../runtime/playback/cadencedPlaybackSampler';
 import { scheduleIncrementalTopologyBuild } from '../runtime/render/incrementalTopologyBuild';
 import { createPartArtMaterial, disposePartArtMaterial } from '../runtime/render/partArtMaterial';
@@ -98,7 +103,7 @@ type MechanismInventory = {
   endStops: number;
 };
 
-type ViewerPickKind = 'object' | 'part' | 'mechanism';
+type ViewerPickKind = 'object' | 'part' | 'mechanism' | 'path-point';
 type ViewerScreenTarget = {
   kind: ViewerPickKind;
   id: string;
@@ -716,7 +721,7 @@ const mechanismGeometrySignature = (mechanisms: MechanismConfig[]) => mechanisms
   mechanism.showOutputGear
 ].join(':')).join('|');
 
-export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneObjects = {}, skeleton, mechanisms, paths, selectedPathId, selectedPathPointIndex, angle = 0, playback, viewport, setViewport, inputMode = 'always', testId = 'three-puppet', cameraPresets = PUPPET_CAMERA_PRESETS, showToolbar = true, showCameraPresets = true, initialCameraPreset, initialLayers, assemblyOverlay, drawMode = false, onDrawPoint, onDrawEnd, onSelectPathPoint, onMovePathPoint, onEndPathPointEdit, onSelectPart, onSelectSceneObject, onSelectMechanism, onSelectJoint, onSelectOnlyPointerDown, onSelectOnlyPointerMove, onSelectOnlyPointerUp, onSelectOnlyPointerCancel, onSelectOnlyWheel }: {
+export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneObjects = {}, skeleton, mechanisms, paths, selectedPathId, selectedPathPointIndex, angle = 0, playback, viewport, setViewport, inputMode = 'always', testId = 'three-puppet', cameraPresets = PUPPET_CAMERA_PRESETS, showToolbar = true, showCameraPresets = true, initialCameraPreset, initialLayers, assemblyOverlay, drawMode = false, onDrawPoint, onDrawEnd, onSelectPathPoint, onMovePathPoint, onEndPathPointEdit, pathGestureDraft, onSelectPart, onSelectSceneObject, onSelectMechanism, onSelectJoint, onSelectOnlyPointerDown, onSelectOnlyPointerMove, onSelectOnlyPointerUp, onSelectOnlyPointerCancel, onSelectOnlyWheel }: {
   project?: ProjectState;
   animatedParts?: Record<string, BodyPartLayer>;
   animatedSceneObjects?: Record<string, SceneObject>;
@@ -743,6 +748,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   onSelectPathPoint?: (pathId: string, pointIndex: number) => void;
   onMovePathPoint?: (point: Point) => void;
   onEndPathPointEdit?: () => void;
+  pathGestureDraft?: PathGestureDraft;
   onSelectPart?: (partId: string) => void;
   onSelectSceneObject?: (objectId: string) => void;
   onSelectMechanism?: (mechanismId: string) => void;
@@ -769,6 +775,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   const jointRefs = useRef<Map<string, JointVisual>>(new Map());
   const boneRefs = useRef<Map<string, THREE.Mesh>>(new Map());
   const mechanismRefs = useRef<Map<string, MechanismVisual>>(new Map());
+  const pathGestureDraftVisualRef = useRef<ThreePathGestureDraftVisual | null>(null);
   const prunedGeometryRevisionRef = useRef(-1);
   const renderFrameRef = useRef<number | undefined>(undefined);
   const [rendererStatus, setRendererStatus] = useState<RendererStatus>('pending');
@@ -933,7 +940,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   );
   const estimatedObjectCount = boardGridLines(kit).length + 1 + geometryParts.length * 4 + sceneObjects.length * 4 + holeCount + joints.length * 2 + bones.length + pathsToRender.length * 4 + mechanismLinkCount * 2 + mechanismsToRender.length * 8 + mechanismInventory.holes + mechanismInventory.gears * 2;
 
-  const collectViewerScreenTargets = () => {
+  const collectViewerScreenTargets = (includePathPoints = false) => {
     const renderer = rendererRef.current;
     const camera = cameraRef.current;
     const roots = rootsRef.current;
@@ -1001,7 +1008,48 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
         return mechanismId ? targetForObject('mechanism', mechanismId, object) : null;
       })
       .filter((target): target is ViewerScreenTarget => Boolean(target));
-    return [...objectTargets, ...partTargets, ...mechanismTargets];
+    const pathPointTargets: ViewerScreenTarget[] = [];
+    if (includePathPoints && roots.pathsLayer.visible) {
+      const instanceMatrix = new THREE.Matrix4();
+      const worldPoint = new THREE.Vector3();
+      roots.pathsLayer.traverse((object) => {
+        if (!(object instanceof THREE.InstancedMesh) || !object.visible) return;
+        let ancestor: THREE.Object3D | null = object.parent;
+        while (ancestor) {
+          if (!ancestor.visible) return;
+          ancestor = ancestor.parent;
+        }
+        const pathId = typeof object.userData.pathId === 'string'
+          ? object.userData.pathId
+          : '';
+        const pointIndexes = Array.isArray(object.userData.pathPointIndices)
+          ? object.userData.pathPointIndices
+          : [];
+        if (!pathId || pointIndexes.length === 0) return;
+        object.updateWorldMatrix(true, false);
+        for (let instanceIndex = 0; instanceIndex < object.count; instanceIndex += 1) {
+          const pointIndex = pointIndexes[instanceIndex];
+          if (typeof pointIndex !== 'number') continue;
+          object.getMatrixAt(instanceIndex, instanceMatrix);
+          worldPoint.setFromMatrixPosition(instanceMatrix).applyMatrix4(object.matrixWorld);
+          const screen = projectWorld(worldPoint);
+          const radius = 12;
+          pathPointTargets.push({
+            kind: 'path-point',
+            id: `${pathId}:${pointIndex}`,
+            x: screen.x,
+            y: screen.y,
+            left: screen.x - radius,
+            top: screen.y - radius,
+            right: screen.x + radius,
+            bottom: screen.y + radius,
+            radius,
+            visible: screen.z >= -1 && screen.z <= 1,
+          });
+        }
+      });
+    }
+    return [...objectTargets, ...partTargets, ...mechanismTargets, ...pathPointTargets];
   };
 
   const roundedScreenTargets = (targets: ViewerScreenTarget[]) => targets.map(target => ({
@@ -1031,13 +1079,14 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
         }
         renderer.render(scene, camera);
         if (E2E_DIAGNOSTICS && stateRef.current) {
-          const screenTargets = roundedScreenTargets(collectViewerScreenTargets());
+          const screenTargets = roundedScreenTargets(collectViewerScreenTargets(true));
           stateRef.current.dataset.threeSceneVisibleObjectCount = String(estimatedObjectCount);
           stateRef.current.dataset.threeSceneObjectCount = String(estimatedObjectCount);
           stateRef.current.dataset.threeRenderTriangles = String(renderer.info.render.triangles);
           stateRef.current.dataset.threeSceneObjectScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'object'));
           stateRef.current.dataset.threePartScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'part'));
           stateRef.current.dataset.threeMechanismScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'mechanism'));
+          stateRef.current.dataset.threePathPointScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'path-point'));
         }
       }
     });
@@ -1138,6 +1187,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       jointRefs.current.clear();
       boneRefs.current.clear();
       mechanismRefs.current.clear();
+      pathGestureDraftVisualRef.current = null;
     };
   }, [renderPolicy, testId]);
 
@@ -1390,7 +1440,14 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     const roots = rootsRef.current;
     const materials = materialsRef.current;
     if (!roots || !materials || rendererStatus !== 'webgl') return;
-    clearGroup(roots.pathsLayer);
+    const draftGroup = pathGestureDraftVisualRef.current?.group;
+    roots.pathsLayer.children
+      .filter(child => child !== draftGroup)
+      .forEach(child => {
+        roots.pathsLayer.remove(child);
+        disposeObject(child, false);
+      });
+    const activeDraftPathId = pathGestureDraft?.getSnapshot()?.pathId;
     pathsToRender.forEach(path => {
       const z = path.id === selectedPathId ? 0.88 : 0.82;
       const lineSamples = pathLineSamples.get(path.id) ?? [];
@@ -1400,6 +1457,8 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       const geometry = new THREE.BufferGeometry().setFromPoints(linePoints);
       const line = new THREE.Line(geometry, path.id === selectedPathId ? materials.pathSelected : materials.path);
       line.name = `path-line-${path.id}`;
+      line.userData.pathId = path.id;
+      line.visible = path.id !== activeDraftPathId;
       line.renderOrder = 90;
       roots.pathsLayer.add(line);
       const markers = new THREE.InstancedMesh(
@@ -1410,6 +1469,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       markers.name = `path-points-${path.id}-instanced`;
       markers.userData.pathId = path.id;
       markers.userData.pathPointIndices = handleSamples.map(({ index }) => index);
+      markers.visible = path.id !== activeDraftPathId;
       markers.instanceMatrix.setUsage(THREE.StaticDrawUsage);
       markers.renderOrder = 91;
       const markerTransform = new THREE.Object3D();
@@ -1427,7 +1487,66 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       roots.pathsLayer.add(markers);
     });
     render();
-  }, [pathHandleSamples, pathLineSamples, pathSignature, rendererStatus, selectedPathId, selectedPathPointIndex]);
+  }, [pathGestureDraft, pathHandleSamples, pathLineSamples, pathSignature, rendererStatus, selectedPathId, selectedPathPointIndex]);
+
+  useEffect(() => {
+    const roots = rootsRef.current;
+    const materials = materialsRef.current;
+    if (!pathGestureDraft || !roots || !materials || rendererStatus !== 'webgl') return;
+    let visual = pathGestureDraftVisualRef.current;
+    if (!visual) {
+      visual = createThreePathGestureDraftVisual({
+        parent: roots.pathsLayer,
+        lineMaterial: materials.pathSelected,
+        markerGeometry: cachedGeometry(
+          'path-point:node',
+          () => new THREE.SphereGeometry(0.075, 12, 6),
+        ),
+        markerMaterial: materials.pathPoint,
+        maxLinePoints: renderPolicy.interactiveDetail.maxPathLinePoints,
+        maxHandles: renderPolicy.interactiveDetail.maxPathHandles,
+        viewScale: VIEW_SCALE,
+      });
+      pathGestureDraftVisualRef.current = visual;
+    }
+
+    let activePathId: string | null = null;
+    const setCanonicalPathVisibility = (pathId: string | null, visible: boolean) => {
+      if (!pathId) return;
+      roots.pathsLayer.children.forEach((child) => {
+        if (child === visual?.group) return;
+        if (child.userData.pathId === pathId) child.visible = visible;
+      });
+    };
+    return pathGestureDraft.subscribe((snapshot) => {
+      roots.pathsLayer.visible = Boolean(snapshot) || pathsToRender.length > 0;
+      if (activePathId && activePathId !== snapshot?.pathId) {
+        setCanonicalPathVisibility(activePathId, true);
+      }
+      activePathId = snapshot?.pathId ?? null;
+      if (!snapshot || !visual) {
+        visual?.apply(null);
+        setCanonicalPathVisibility(activePathId, true);
+        if (stateRef.current) {
+          stateRef.current.dataset.pathGestureDraft = 'idle';
+          stateRef.current.dataset.pathGestureDraftPoints = '0';
+        }
+        render();
+        return;
+      }
+
+      setCanonicalPathVisibility(snapshot.pathId, false);
+      visual.apply(snapshot);
+      if (stateRef.current) {
+        stateRef.current.dataset.pathGestureDraft = 'active';
+        stateRef.current.dataset.pathGestureDraftPoints = String(snapshot.points.length);
+        stateRef.current.dataset.pathGestureDraftEmissions = String(
+          pathGestureDraft.getEmissionCount(),
+        );
+      }
+      render();
+    });
+  }, [pathGestureDraft, pathsToRender.length, renderPolicy.interactiveDetail.maxPathHandles, renderPolicy.interactiveDetail.maxPathLinePoints, rendererStatus]);
 
   const mechanismSignature = useMemo(() => mechanismGeometrySignature(renderedMechanisms), [renderedMechanisms]);
   useEffect(() => {
@@ -2402,6 +2521,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       data-three-scene-object-screen-targets="[]"
       data-three-part-screen-targets="[]"
       data-three-mechanism-screen-targets="[]"
+      data-three-path-point-screen-targets="[]"
       data-three-joint-count={joints.length}
       data-three-joint-ids={joints.map(joint => joint.id).join(',')}
       data-three-bone-count={bones.length}

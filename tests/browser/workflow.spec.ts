@@ -4366,6 +4366,7 @@ test('Draw mode forces the front Path view and accepts free path strokes on Thre
   await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.45, canvasBox!.y + canvasBox!.height * 0.45);
   await page.mouse.down();
   await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.45 + 34, canvasBox!.y + canvasBox!.height * 0.45 + 22, { steps: 4 });
+  await expect(page.getByTestId('path-three-puppet-state')).toHaveAttribute('data-path-gesture-draft', 'active');
   await page.mouse.up();
 
   await expect(page.getByRole('button', { name: 'Draw free path', exact: true })).toHaveClass(/btn-secondary/);
@@ -4383,6 +4384,7 @@ test('Draw mode forces the front Path view and accepts free path strokes on Thre
   await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.62, canvasBox!.y + canvasBox!.height * 0.36);
   await page.mouse.down();
   await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.62 + 28, canvasBox!.y + canvasBox!.height * 0.36 + 18, { steps: 4 });
+  await expect(page.getByTestId('path-three-puppet-state')).toHaveAttribute('data-path-gesture-draft', 'active');
   await page.mouse.up();
 
   await expect(page.getByRole('button', { name: 'Draw free path', exact: true })).toHaveClass(/btn-secondary/);
@@ -4391,4 +4393,51 @@ test('Draw mode forces the front Path view and accepts free path strokes on Thre
   expect(secondDrawCount, 'redraw replaces previous stroke instead of appending').toBeLessThanOrEqual(firstDrawCount + 1);
   expect(secondDrawCount, 'replacement stroke still has enough points').toBeGreaterThanOrEqual(3);
   expect(beforeDraw, 'fixture starts with an existing path so replacement is a real behavior change').toBeGreaterThan(0);
+  await page.getByTestId('top-command-bar').getByText('Edit', { exact: true }).click();
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect.poll(readFreeDrawPointCount, {
+    message: 'one undo restores the entire prior stroke because the gesture commits once',
+  }).toBe(firstDrawCount);
+});
+
+test('Path point drag stays transient and commits one undo entry', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByTestId('path-view-2d').click();
+
+  const state = page.getByTestId('path-three-puppet-state');
+  type PathPointTarget = {
+    id: string;
+    x: number;
+    y: number;
+    visible: boolean;
+  };
+  const readTargets = async () => JSON.parse(
+    await state.getAttribute('data-three-path-point-screen-targets') ?? '[]',
+  ) as PathPointTarget[];
+  await expect.poll(async () => (await readTargets()).filter((target) => target.visible).length)
+    .toBeGreaterThan(0);
+  const before = (await readTargets()).find((target) => target.visible)!;
+
+  await page.mouse.move(before.x, before.y);
+  await page.mouse.down();
+  await page.mouse.move(before.x + 42, before.y + 24, { steps: 8 });
+  await expect(state).toHaveAttribute('data-path-gesture-draft', 'active');
+  await page.mouse.up();
+  await expect(state).toHaveAttribute('data-path-gesture-draft', 'idle');
+
+  await expect.poll(async () => {
+    const moved = (await readTargets()).find((target) => target.id === before.id);
+    return moved ? Math.hypot(moved.x - before.x, moved.y - before.y) : 0;
+  }).toBeGreaterThan(10);
+
+  await page.getByTestId('top-command-bar').getByText('Edit', { exact: true }).click();
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect.poll(async () => {
+    const restored = (await readTargets()).find((target) => target.id === before.id);
+    return restored ? Math.hypot(restored.x - before.x, restored.y - before.y) : 999;
+  }, {
+    message: 'one undo restores the pre-gesture handle position',
+  }).toBeLessThan(2);
 });

@@ -20,6 +20,7 @@ const UNIT_TEST_FILES = [
   'mechanism-optimizer-worker.test.ts',
   'mechanism-recommendation-worker.test.ts',
   'no-image-recognition-runtime.test.ts',
+  'path-gesture-draft.test.ts',
   'project-contract.test.ts',
   'render-performance-policy.test.ts',
   'three-resource-retention.test.ts',

@@ -11,6 +11,7 @@ import type {
 } from "../../../types";
 import type { MotionPreview } from "../../../utils/motion";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
+import type { PathGestureDraft } from "../../../runtime/path/pathGestureDraft";
 
 interface PathCanvasPaneProps {
   project: ProjectState;
@@ -34,6 +35,7 @@ interface PathCanvasPaneProps {
   pathViewMode: "2d" | "3d";
   switchPathView: (mode: "2d" | "3d") => void;
   pathPreview?: MotionPreview;
+  pathGestureDraft: PathGestureDraft;
 }
 
 export const PathCanvasPane = ({
@@ -58,6 +60,7 @@ export const PathCanvasPane = ({
   pathViewMode,
   switchPathView,
   pathPreview,
+  pathGestureDraft,
 }: PathCanvasPaneProps) => (
   <div className="path-canvas-shell canvas-workspace overflow-hidden p-0">
     <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
@@ -114,6 +117,7 @@ export const PathCanvasPane = ({
       onSelectPathPoint={pathLocked ? undefined : onPathPointPick}
       onMovePathPoint={pathLocked ? undefined : onPathPointMove}
       onEndPathPointEdit={onPathPointEnd}
+      pathGestureDraft={pathGestureDraft}
       onSelectPart={(partId) => dispatch({ type: "select_part", partId })}
       onSelectSceneObject={(objectId) =>
         dispatch({ type: "select_scene_object", objectId })
