@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { ClassroomExampleVideo } from "../../ui/ClassroomExampleVideo";
 import { StageLeftSummary } from "../stageLayout";
 import type {
   AppStage,
+  BodyPartLayer,
   MechanismConfig,
   MechanismType,
   ProjectAction,
+  ProjectMotionPath,
   ProjectState,
 } from "../../../types";
 import { mechanismBindingWarnings } from "../../../utils/motion";
@@ -27,13 +30,49 @@ import {
   mechanismWithGeneratedPath,
   uid,
 } from "../../../utils/project";
+import { MechanismRecommendationSheet } from "../path/MechanismRecommendationSheet";
+
+const DesignRecommendationControl = ({
+  project,
+  selectedPart,
+  selectedPath,
+  onApply,
+}: {
+  project: ProjectState;
+  selectedPart?: BodyPartLayer;
+  selectedPath?: ProjectMotionPath;
+  onApply: (mechanism: MechanismConfig) => void;
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <>
+      <button className="btn-primary" onClick={() => setIsOpen(true)}>
+        <Sparkles size={16} /> Recommend
+      </button>
+      <MechanismRecommendationSheet
+        isOpen={isOpen}
+        project={project}
+        selectedPart={selectedPart}
+        selectedPath={selectedPath}
+        onClose={() => setIsOpen(false)}
+        onApply={(mechanism) => {
+          onApply(mechanism);
+          setIsOpen(false);
+        }}
+      />
+    </>
+  );
+};
 
 type DesignWorkflowPanelProps = {
   project: ProjectState;
+  selectedPart?: BodyPartLayer;
+  selectedPath?: ProjectMotionPath;
   selectedMechanism?: MechanismConfig;
   showTrace: boolean;
   setShowTrace: (v: boolean) => void;
-  onRecommendations: () => void;
+  onApplyRecommendation: (mechanism: MechanismConfig) => void;
   onBlueprint: () => void;
   goStage: (stage: AppStage) => void;
   dispatch: (action: ProjectAction) => void;
@@ -41,10 +80,12 @@ type DesignWorkflowPanelProps = {
 
 export const DesignWorkflowPanel = ({
   project,
+  selectedPart,
+  selectedPath,
   selectedMechanism,
   showTrace,
   setShowTrace,
-  onRecommendations,
+  onApplyRecommendation,
   onBlueprint,
   goStage,
   dispatch,
@@ -101,9 +142,12 @@ export const DesignWorkflowPanel = ({
           >
             Trace
           </button>
-          <button className="btn-primary" onClick={onRecommendations}>
-            <Sparkles size={16} /> Recommend
-          </button>
+          <DesignRecommendationControl
+            project={project}
+            selectedPart={selectedPart}
+            selectedPath={selectedPath}
+            onApply={onApplyRecommendation}
+          />
         </div>
         <h4 className="section-title mt-4">Mechanisms</h4>
         <select

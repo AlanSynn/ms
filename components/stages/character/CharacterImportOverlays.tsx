@@ -1,12 +1,11 @@
+import { useSyncExternalStore } from "react";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
-import type { AppStage, ProjectState } from "../../../types";
+import type { ProjectState } from "../../../types";
+import type { CharacterImportProgressStore } from "../../../runtime/ai/characterImportProgressStore";
+import type { PendingCharacterReview } from "../../../runtime/ai/characterImportProgressStore";
 import { ProgressBlock } from "./ProgressBlock";
 
-export type PendingCharacterReview = {
-  project: ProjectState;
-  summary: string;
-  returnStage: AppStage;
-};
+export type { PendingCharacterReview } from "../../../runtime/ai/characterImportProgressStore";
 
 const activeImportStages = new Set([
   "downloading-model",
@@ -22,15 +21,28 @@ const compactPackageSummary = (summary: string) =>
 
 export const CharacterImportStatusDock = ({
   project,
-  reviewedProject,
+  progressStore,
 }: {
   project: ProjectState;
-  reviewedProject: ProjectState;
+  progressStore: CharacterImportProgressStore;
 }) => {
+  const transientProgress = useSyncExternalStore(
+    progressStore.subscribeProgress,
+    progressStore.getProgress,
+    progressStore.getProgress,
+  );
+  const pendingCharacter = useSyncExternalStore(
+    progressStore.subscribePending,
+    progressStore.getPending,
+    progressStore.getPending,
+  );
+  const reviewedProject = pendingCharacter?.project ?? project;
+  const processing = transientProgress ?? project.processing;
   const artifact = reviewedProject.characterPackage;
   const showImportProgress = Boolean(
     project.settings.detailedProcessingSteps ||
-      activeImportStages.has(project.processing.stage),
+      activeImportStages.has(processing.stage) ||
+      processing.stage === "ready",
   );
   if (!showImportProgress) return null;
 
@@ -91,7 +103,7 @@ export const CharacterImportStatusDock = ({
       <details className="advanced-panel import-status" open>
         <summary>Import</summary>
         <div className="mt-3">
-          <ProgressBlock project={project} />
+          <ProgressBlock project={project} processing={processing} />
         </div>
         {showImportChecks && (
           <details className="advanced-panel mt-6">
@@ -161,5 +173,28 @@ export const CharacterImportReviewDialog = ({
         </div>
       </div>
     </section>
+  );
+};
+
+export const CharacterImportReviewBoundary = ({
+  progressStore,
+  onAccept,
+  onDiscard,
+}: {
+  progressStore: CharacterImportProgressStore;
+  onAccept: () => void;
+  onDiscard: () => void;
+}) => {
+  const pendingCharacter = useSyncExternalStore(
+    progressStore.subscribePending,
+    progressStore.getPending,
+    progressStore.getPending,
+  );
+  return (
+    <CharacterImportReviewDialog
+      pendingCharacter={pendingCharacter}
+      onAccept={onAccept}
+      onDiscard={onDiscard}
+    />
   );
 };

@@ -3,7 +3,6 @@ import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { AssemblyGuide } from "./stages/assembly/AssemblyGuide";
 import { BlueprintExport } from "./stages/blueprint/BlueprintExport";
 import { CharacterSelection } from "./stages/character/CharacterSelection";
-import type { PendingCharacterReview } from "./stages/character/CharacterImportOverlays";
 import { MechanismFoundry } from "./stages/foundry/MechanismFoundry";
 import { MechanismDesign } from "./stages/mechanism/MechanismDesign";
 import { Options } from "./stages/options/Options";
@@ -22,6 +21,7 @@ import type {
 } from "../types";
 import type { ClassroomLessonTemplate } from "../utils/project";
 import type { PlaybackClock } from "../runtime/playback/externalPlaybackClock";
+import type { CharacterImportProgressStore } from "../runtime/ai/characterImportProgressStore";
 
 export type AppStageRouterProps = {
   editorStage: AppStage;
@@ -31,7 +31,7 @@ export type AppStageRouterProps = {
   playerDock: ReactNode;
   playbackClock: PlaybackClock;
 
-  pendingCharacter: PendingCharacterReview | null;
+  characterImportProgress: CharacterImportProgressStore;
   onOpenGettingStarted: () => void;
   onAcceptPendingCharacter: () => void;
   onDiscardPendingCharacter: () => void;
@@ -72,7 +72,7 @@ export type AppStageRouterProps = {
   showTrace: boolean;
   setShowTrace: (v: boolean) => void;
   onOptimize: () => void | Promise<void>;
-  onRecommendations: () => void;
+  onApplyRecommendation: (mechanism: MechanismConfig) => void;
   optimizerBusy: boolean;
   exportSvg: () => void;
   exportDxf: () => void;
@@ -93,7 +93,7 @@ export const AppStageRouter = ({
   goStage,
   playerDock,
   playbackClock,
-  pendingCharacter,
+  characterImportProgress,
   onOpenGettingStarted,
   onAcceptPendingCharacter,
   onDiscardPendingCharacter,
@@ -127,7 +127,7 @@ export const AppStageRouter = ({
   showTrace,
   setShowTrace,
   onOptimize,
-  onRecommendations,
+  onApplyRecommendation,
   optimizerBusy,
   exportSvg,
   exportDxf,
@@ -147,7 +147,7 @@ export const AppStageRouter = ({
       <CharacterSelection
         project={project}
         dispatch={dispatch}
-        pendingCharacter={pendingCharacter}
+        characterImportProgress={characterImportProgress}
         onOpenGettingStarted={onOpenGettingStarted}
         onAccept={onAcceptPendingCharacter}
         onDiscard={onDiscardPendingCharacter}
@@ -202,6 +202,8 @@ export const AppStageRouter = ({
     {editorStage === "design" && (
       <MechanismDesign
         project={project}
+        selectedPart={selectedPart}
+        selectedPath={selectedPath}
         selectedMechanism={selectedMechanism}
         updateMechanism={updateMechanism}
         dispatch={dispatch}
@@ -211,7 +213,7 @@ export const AppStageRouter = ({
         angle={angle}
         playbackClock={playbackClock}
         onOptimize={onOptimize}
-        onRecommendations={onRecommendations}
+        onApplyRecommendation={onApplyRecommendation}
         optimizerBusy={optimizerBusy}
         exportSvg={exportSvg}
         exportDxf={exportDxf}

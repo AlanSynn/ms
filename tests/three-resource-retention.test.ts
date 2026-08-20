@@ -7,6 +7,13 @@ import {
   collectThreeObjectResourceUsage,
   pruneUnusedThreeResourceCache,
 } from '../utils/threeResourceKit';
+import { scheduleIncrementalTopologyBuild } from '../runtime/render/incrementalTopologyBuild';
+import {
+  createPartArtMaterial,
+  disposePartArtMaterial,
+} from '../runtime/render/partArtMaterial';
+import { warmPartTopologyPipeline } from '../runtime/render/warmPartTopology';
+import { resolveRenderPerformancePolicy } from '../utils/renderPerformancePolicy';
 
 const root = new THREE.Group();
 const disposed: string[] = [];
@@ -110,5 +117,113 @@ assert.equal(staleMaterialDisposals, 1, 'evicted material is disposed exactly on
 
 usedGeometry.dispose();
 usedMaterial.dispose();
+
+const scheduledFrames = new Map<number, () => void>();
+let nextFrameHandle = 1;
+const cancelledFrames: number[] = [];
+const scheduler = {
+  request(callback: () => void) {
+    const handle = nextFrameHandle;
+    nextFrameHandle += 1;
+    scheduledFrames.set(handle, callback);
+    return handle;
+  },
+  cancel(handle: number) {
+    cancelledFrames.push(handle);
+    scheduledFrames.delete(handle);
+  },
+};
+const builtItems: string[] = [];
+let completionCount = 0;
+const cancelBuild = scheduleIncrementalTopologyBuild(
+  ['head', 'body', 'arm'],
+  (item) => builtItems.push(item),
+  { scheduler, onComplete: () => { completionCount += 1; } },
+);
+const runNextFrame = () => {
+  const next = scheduledFrames.entries().next().value as [number, () => void] | undefined;
+  assert(next, 'an incremental topology frame is scheduled');
+  scheduledFrames.delete(next[0]);
+  next[1]();
+};
+runNextFrame();
+assert.deepEqual(builtItems, ['head'], 'topology construction builds at most one part per frame');
+runNextFrame();
+assert.deepEqual(builtItems, ['head', 'body'], 'the next part waits for the next frame');
+cancelBuild();
+assert.equal(scheduledFrames.size, 0, 'cancellation removes the pending topology frame');
+assert.equal(cancelledFrames.length, 1, 'cancellation releases the scheduler handle once');
+assert.equal(completionCount, 0, 'cancelled topology work never reports completion');
+
+scheduleIncrementalTopologyBuild(
+  ['leg'],
+  (item) => builtItems.push(item),
+  { scheduler, onComplete: () => { completionCount += 1; } },
+);
+runNextFrame();
+assert.deepEqual(builtItems, ['head', 'body', 'leg']);
+assert.equal(completionCount, 1, 'the final topology frame completes without an extra frame');
+
+scheduleIncrementalTopologyBuild(
+  ['delayed'],
+  (item) => builtItems.push(item),
+  { scheduler, initialDelayFrames: 1 },
+);
+runNextFrame();
+assert(!builtItems.includes('delayed'), 'an initial delay frame separates topology from the React commit and first render');
+runNextFrame();
+assert(builtItems.includes('delayed'), 'topology starts after its declared initial frame delay');
+
+let bitmapLoad: ((bitmap: ImageBitmap) => void) | undefined;
+let bitmapLoaderAborts = 0;
+let artLoads = 0;
+const artMaterial = createPartArtMaterial(
+  {
+    textureUrl: 'data:image/png;base64,audit',
+    fillColor: '#ffffff',
+    opacity: 1,
+  } as never,
+  () => { artLoads += 1; },
+  {
+    bitmapSupported: true,
+    createBitmapLoader: () => ({
+      load: (_url, onLoad) => { bitmapLoad = onLoad; },
+      abort: () => { bitmapLoaderAborts += 1; },
+    }),
+    scheduleInstall: (install) => {
+      install();
+      return () => {};
+    },
+  },
+);
+let bitmapCloses = 0;
+bitmapLoad?.({ close: () => { bitmapCloses += 1; } } as ImageBitmap);
+assert.equal(artLoads, 1, 'part artwork reports readiness after asynchronous bitmap decode');
+assert(artMaterial.map, 'part artwork installs the decoded bitmap as a Three texture');
+disposePartArtMaterial(artMaterial);
+assert.equal(bitmapLoaderAborts, 1, 'part artwork disposal aborts its loader');
+assert.equal(bitmapCloses, 1, 'part artwork disposal closes its owned ImageBitmap');
+assert.equal(artMaterial.map, null, 'part artwork disposal releases its texture reference');
+
+let lateBitmapLoad: ((bitmap: ImageBitmap) => void) | undefined;
+const disposedBeforeLoad = createPartArtMaterial(
+  { textureUrl: 'data:image/png;base64,late', fillColor: '#ffffff' } as never,
+  () => { artLoads += 1; },
+  {
+    bitmapSupported: true,
+    createBitmapLoader: () => ({
+      load: (_url, onLoad) => { lateBitmapLoad = onLoad; },
+      abort: () => { bitmapLoaderAborts += 1; },
+    }),
+  },
+);
+disposePartArtMaterial(disposedBeforeLoad);
+lateBitmapLoad?.({ close: () => { bitmapCloses += 1; } } as ImageBitmap);
+assert.equal(artLoads, 1, 'a disposed material ignores a late bitmap result');
+assert.equal(bitmapCloses, 2, 'a late bitmap is closed instead of being retained');
+
+const balancedTopology = resolveRenderPerformancePolicy('balanced').partTopology;
+assert.equal(warmPartTopologyPipeline(balancedTopology), true, 'part topology warms once before an interactive import');
+assert.equal(warmPartTopologyPipeline(balancedTopology), false, 'the same topology policy does not repeat warm-up allocations');
 
 console.log('three resource retention contract ok');

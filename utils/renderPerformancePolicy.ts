@@ -12,6 +12,12 @@ export interface RepeatedGeometryPolicy {
   readonly maxMaterialCacheEntries: number;
 }
 
+export interface PartTopologyPolicy {
+  readonly bevelEnabled: boolean;
+  readonly edgeGeometryEnabled: boolean;
+  readonly curveSegments: number;
+}
+
 export interface RenderPerformancePolicy {
   readonly preset: RenderPerformancePreset;
   readonly pixelRatioCap: number;
@@ -20,6 +26,7 @@ export interface RenderPerformancePolicy {
   readonly minRenderIntervalMs: number;
   readonly overlayQuality: RenderOverlayQuality;
   readonly minOverlayIntervalMs: number;
+  readonly partTopology: PartTopologyPolicy;
   readonly repeatedGeometry: RepeatedGeometryPolicy;
 }
 
@@ -28,6 +35,7 @@ const definePolicy = (
 ): RenderPerformancePolicy => Object.freeze({
   ...policy,
   minRenderIntervalMs: 1000 / policy.targetFramesPerSecond,
+  partTopology: Object.freeze(policy.partTopology),
   repeatedGeometry: Object.freeze(policy.repeatedGeometry),
 });
 
@@ -39,6 +47,11 @@ const RENDER_PERFORMANCE_POLICIES: Readonly<Record<RenderPerformancePreset, Rend
     targetFramesPerSecond: 20,
     overlayQuality: 'reduced',
     minOverlayIntervalMs: 1000 / 12,
+    partTopology: {
+      bevelEnabled: false,
+      edgeGeometryEnabled: false,
+      curveSegments: 2,
+    },
     repeatedGeometry: {
       strategy: 'pool-and-instance',
       instancingThreshold: 2,
@@ -54,6 +67,11 @@ const RENDER_PERFORMANCE_POLICIES: Readonly<Record<RenderPerformancePreset, Rend
     targetFramesPerSecond: 30,
     overlayQuality: 'balanced',
     minOverlayIntervalMs: 1000 / 20,
+    partTopology: {
+      bevelEnabled: false,
+      edgeGeometryEnabled: false,
+      curveSegments: 3,
+    },
     repeatedGeometry: {
       strategy: 'pool-and-instance',
       instancingThreshold: 2,
@@ -69,6 +87,11 @@ const RENDER_PERFORMANCE_POLICIES: Readonly<Record<RenderPerformancePreset, Rend
     targetFramesPerSecond: 60,
     overlayQuality: 'full',
     minOverlayIntervalMs: 1000 / 30,
+    partTopology: {
+      bevelEnabled: true,
+      edgeGeometryEnabled: true,
+      curveSegments: 6,
+    },
     repeatedGeometry: {
       strategy: 'pool-and-instance',
       instancingThreshold: 2,

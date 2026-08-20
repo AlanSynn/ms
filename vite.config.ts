@@ -41,6 +41,11 @@ export default defineConfig(() => {
       },
       react(),
     ],
+    worker: {
+      // Keep worker entrypoints small: expensive recommendation/optimizer
+      // modules are imported only after the worker owns the request.
+      format: 'es' as const,
+    },
     publicDir: 'public',
     resolve: {
       alias: {

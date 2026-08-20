@@ -66,7 +66,7 @@ type UseAppProjectCommandsOptions = {
   setAngle: Dispatch<SetStateAction<number>>;
   setIsPlaying: Dispatch<SetStateAction<boolean>>;
   setCanvasViewport: Dispatch<SetStateAction<CanvasViewport>>;
-  setPendingCharacter: Dispatch<SetStateAction<PendingCharacterReview | null>>;
+  setPendingCharacter: (pending: PendingCharacterReview | null) => void;
   setShowGettingStarted: Dispatch<SetStateAction<boolean>>;
   setShowAbout: Dispatch<SetStateAction<boolean>>;
   setShowShortcuts: Dispatch<SetStateAction<boolean>>;

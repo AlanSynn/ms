@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AppStage,
   BodyPartLayer,
@@ -11,11 +11,8 @@ import type {
   ProjectState,
 } from "../types";
 import { generateDXF, generateSVG } from "../utils/exporter";
-import {
-  evaluateFitness,
-  generateSmartConfig,
-  mutateConfig,
-} from "../utils/optimizer";
+import { createMechanismOptimizerJobInput } from "../runtime/optimizer/mechanismOptimizerJob";
+import { createMechanismOptimizerWorkerClient } from "../runtime/optimizer/mechanismOptimizerWorkerClient";
 import { mechanismPathFitIsUsable, preferredMotionJointId } from "../utils/motion";
 import {
   downloadText,
@@ -79,7 +76,6 @@ export const useAppMechanismActions = ({
   angle,
   setStage,
   setCommandStatus,
-  setShowRecommendations,
 }: {
   project: ProjectState;
   dispatch: (action: ProjectAction) => void;
@@ -92,9 +88,40 @@ export const useAppMechanismActions = ({
   angle: number;
   setStage: (stage: AppStage) => void;
   setCommandStatus: (status: string) => void;
-  setShowRecommendations: (show: boolean) => void;
 }) => {
   const [optimizerBusy, setOptimizerBusy] = useState(false);
+  const optimizerClient = useMemo(
+    () => createMechanismOptimizerWorkerClient(),
+    [],
+  );
+  const optimizerScheduleRef = useRef<{
+    generation: number;
+    firstFrame?: number;
+    secondFrame?: number;
+  }>({ generation: 0 });
+  const cancelScheduledOptimizer = () => {
+    const scheduled = optimizerScheduleRef.current;
+    scheduled.generation += 1;
+    if (scheduled.firstFrame !== undefined) {
+      cancelAnimationFrame(scheduled.firstFrame);
+    }
+    if (scheduled.secondFrame !== undefined) {
+      cancelAnimationFrame(scheduled.secondFrame);
+    }
+    scheduled.firstFrame = undefined;
+    scheduled.secondFrame = undefined;
+  };
+
+  useEffect(() => {
+    cancelScheduledOptimizer();
+    optimizerClient.cancel();
+    setOptimizerBusy(false);
+  }, [optimizerClient, project]);
+
+  useEffect(() => () => {
+    cancelScheduledOptimizer();
+    optimizerClient.dispose();
+  }, [optimizerClient]);
 
   const commitFoundryDraft = useCallback(
     (draft: MechanismConfig) => {
@@ -198,55 +225,53 @@ export const useAppMechanismActions = ({
     [dispatch, project],
   );
 
-  const optimizeSelectedMechanism = useCallback(async () => {
+  const optimizeSelectedMechanism = useCallback(() => {
     const fitPath = selectedMechanism?.targetPathId
       ? project.paths[selectedMechanism.targetPathId]
       : selectedPath;
     if (!selectedMechanism || !fitPath || fitPath.points.length < 3) return;
     setOptimizerBusy(true);
-    await new Promise((resolve) => setTimeout(resolve, 16));
-    let best = generateSmartConfig(fitPath.points, selectedMechanism.type);
-    let bestScore = evaluateFitness(best, fitPath.points);
     const iterations =
       project.settings.performancePreset === "fast"
         ? 120
         : project.settings.performancePreset === "high"
           ? 520
           : 260;
-    for (let i = 0; i < iterations; i++) {
-      const candidate =
-        i < 80
-          ? generateSmartConfig(fitPath.points, selectedMechanism.type)
-          : mutateConfig(best, 0.45, true);
-      const score = evaluateFitness(candidate, fitPath.points);
-      if (score < bestScore) {
-        best = candidate;
-        bestScore = score;
-      }
-    }
-    updateMechanism(selectedMechanism.id, {
-      ...best,
-      id: selectedMechanism.id,
-      color: selectedMechanism.color,
-      visible: true,
-      targetPartId: fitPath.sceneObjectId
-        ? undefined
-        : (fitPath.partId || selectedMechanism.targetPartId || selectedPart?.id),
-      targetSceneObjectId:
-        fitPath.sceneObjectId ?? selectedMechanism.targetSceneObjectId ?? selectedSceneObject?.id,
-      targetPathId: fitPath.id,
-      source: "optimized",
-      warnings:
-        bestScore > 350 ? [`Loose fit score ${Math.round(bestScore)}`] : [],
+    const input = createMechanismOptimizerJobInput(
+      project,
+      selectedMechanism,
+      fitPath.id,
+      iterations,
+    );
+    cancelScheduledOptimizer();
+    const generation = optimizerScheduleRef.current.generation;
+    optimizerScheduleRef.current.firstFrame = requestAnimationFrame(() => {
+      optimizerScheduleRef.current.firstFrame = undefined;
+      optimizerScheduleRef.current.secondFrame = requestAnimationFrame(() => {
+        optimizerScheduleRef.current.secondFrame = undefined;
+        if (generation !== optimizerScheduleRef.current.generation) return;
+        optimizerClient.request(input, {
+          complete: ({ mechanism }) => {
+            if (generation !== optimizerScheduleRef.current.generation) return;
+            setOptimizerBusy(false);
+            dispatch({ type: "upsert_mechanism", mechanism });
+            setCommandStatus("Optimized mechanism");
+          },
+          failed: (error) => {
+            if (generation !== optimizerScheduleRef.current.generation) return;
+            setOptimizerBusy(false);
+            setCommandStatus(`Optimize failed: ${error.message}`);
+          },
+        });
+      });
     });
-    setOptimizerBusy(false);
   }, [
+    dispatch,
+    optimizerClient,
     project,
     selectedMechanism,
-    selectedPart,
-    selectedSceneObject,
     selectedPath,
-    updateMechanism,
+    setCommandStatus,
   ]);
 
   const exportMechanismSvg = useCallback(() => {
@@ -367,10 +392,9 @@ export const useAppMechanismActions = ({
   const applyRecommendedMechanism = useCallback(
     (mechanism: MechanismConfig) => {
       dispatch({ type: "upsert_mechanism", mechanism });
-      setShowRecommendations(false);
       setStage("design");
     },
-    [dispatch, setShowRecommendations, setStage],
+    [dispatch, setStage],
   );
 
   return {

@@ -1,9 +1,16 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Upload, Crosshair, Play, Square, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import { Point } from '../types';
+import { createGifFrameSession, type GifFrameSession } from '../runtime/media/gifFrameSession';
+import {
+    fitTrackingMediaDimensions,
+    TRACKING_GIF_MAX_COMPRESSED_BYTES,
+    TRACKING_MEDIA_MAX_FPS,
+    TRACKING_MEDIA_MAX_SAMPLED_FRAMES,
+    type TrackingGifPlan,
+} from '../runtime/media/trackingMediaPolicy';
 import { smoothTrackingPoints, trackingPointsToWorldPath } from '../utils/trackingPath';
-
-import { parseGIF, decompressFrames } from 'gifuct-js';
 
 interface TrackingModalProps {
     isOpen: boolean;
@@ -12,9 +19,7 @@ interface TrackingModalProps {
 }
 
 interface VideoState {
-    file: File | null;
     url: string;
-    frames: string[];  // Data URLs for each frame
     currentFrame: number;
     totalFrames: number;
     fps: number;
@@ -24,156 +29,164 @@ interface VideoState {
     isGif: boolean;
 }
 
+const EMPTY_VIDEO_STATE: VideoState = {
+    url: '',
+    currentFrame: 0,
+    totalFrames: 0,
+    fps: TRACKING_MEDIA_MAX_FPS,
+    width: 640,
+    height: 480,
+    isLoading: false,
+    isGif: false,
+};
+
 export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, onTransfer }) => {
     // State
-    const [videoState, setVideoState] = useState<VideoState>({
-        file: null,
-        url: '',
-        frames: [],
-        currentFrame: 0,
-        totalFrames: 0,
-        fps: 30,
-        width: 640,
-        height: 480,
-        isLoading: false,
-        isGif: false
-    });
-
-    // Rectangle selection state (replacing single point)
-    const [trackingRect, setTrackingRect] = useState<{
-        x: number; y: number;  // Top-left corner
-        width: number; height: number;
-    } | null>(null);
-    const [isSelecting, setIsSelecting] = useState(false);
-    const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null);
+    const [videoState, setVideoState] = useState<VideoState>(EMPTY_VIDEO_STATE);
 
     const [isPlaying, setIsPlaying] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     // Manual correction state
-    const [editMode, setEditMode] = useState(false);
     const [manualPoints, setManualPoints] = useState<{ x: number; y: number }[]>([]);  // Points placed in manual mode
     const [enableSmoothing, setEnableSmoothing] = useState(true);  // Smoothing checkbox - default ON
     const [connectEndPoints, setConnectEndPoints] = useState(true);  // Connect first/last points - default ON
     const [redrawKey, setRedrawKey] = useState(0);  // Used to force canvas redraw
     const [hoveredManualPoint, setHoveredManualPoint] = useState<number | null>(null);  // Index of point under mouse
     const [draggingManualPoint, setDraggingManualPoint] = useState<number | null>(null);  // Index of point being dragged
-    const [corrections, setCorrections] = useState<Record<number, { x: number; y: number }>>({});
-    const [draggingPoint, setDraggingPoint] = useState<number | null>(null);  // Frame index being dragged
     const [isDraggingFile, setIsDraggingFile] = useState(false);  // For drag-drop file upload
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
-    const imgRef = useRef<HTMLImageElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const gifFrameImagesRef = useRef<HTMLImageElement[]>([]);
+    const gifSessionRef = useRef<GifFrameSession | null>(null);
+    const gifBitmapRef = useRef<ImageBitmap | null>(null);
+    const gifPlanRef = useRef<TrackingGifPlan | null>(null);
+    const mediaGenerationRef = useRef(0);
+    const objectUrlRef = useRef('');
+    const currentFrameRef = useRef(0);
+    const timelineInputRef = useRef<HTMLInputElement>(null);
+    const timelineLabelRef = useRef<HTMLSpanElement>(null);
+    const timelineTimeRef = useRef<HTMLSpanElement>(null);
+    const drawCanvasRef = useRef<() => void>(() => {});
 
-    // Clear selections when switching (Simplified: just clear on open if needed, or keep logic simple)
-    // removed auto mode switching effect
+    const updateTimeline = useCallback((frame: number, totalFrames: number, fps: number) => {
+        const safeFrame = Math.max(0, Math.min(Math.max(0, totalFrames - 1), frame));
+        currentFrameRef.current = safeFrame;
+        if (timelineInputRef.current) timelineInputRef.current.value = String(safeFrame);
+        if (timelineLabelRef.current) {
+            timelineLabelRef.current.textContent = `Frame ${safeFrame + 1} / ${totalFrames}`;
+        }
+        if (timelineTimeRef.current) {
+            timelineTimeRef.current.textContent = `${(safeFrame / Math.max(1, fps)).toFixed(2)}s`;
+        }
+    }, []);
 
-    // Force canvas redraw when modal opens (to show existing trace marks)
+    const releaseMedia = useCallback(() => {
+        mediaGenerationRef.current += 1;
+        setIsPlaying(false);
+        videoRef.current?.pause();
+        gifSessionRef.current?.close();
+        gifSessionRef.current = null;
+        gifBitmapRef.current?.close();
+        gifBitmapRef.current = null;
+        gifPlanRef.current = null;
+        canvasRef.current?.removeAttribute('data-gif-delivered-frame');
+        if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = '';
+        currentFrameRef.current = 0;
+    }, []);
+
     useEffect(() => {
         if (isOpen) {
-            // Increment redrawKey to force canvas redraw immediately
             setRedrawKey(prev => prev + 1);
+        } else {
+            releaseMedia();
+            setVideoState(EMPTY_VIDEO_STATE);
+            setError(null);
         }
-    }, [isOpen]);
+    }, [isOpen, releaseMedia]);
 
-    // Handle file selection - support both video and GIF
+    useEffect(() => () => releaseMedia(), [releaseMedia]);
+
     const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
 
-        setVideoState(prev => ({ ...prev, isLoading: true, file }));
-        setTrackingRect(null);
+        releaseMedia();
+        const generationId = ++mediaGenerationRef.current;
+        const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
+        const url = isGif ? `gif-worker:${generationId}` : URL.createObjectURL(file);
+        if (!isGif) objectUrlRef.current = url;
+        setVideoState(prev => ({
+            ...prev,
+            url,
+            currentFrame: 0,
+            isLoading: true,
+            isGif,
+        }));
         setError(null);
-        setIsPlaying(false);
+        setManualPoints([]);
 
         try {
-            const url = URL.createObjectURL(file);
-            const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
-
             if (isGif) {
-                // Extract GIF frames using gifuct-js
+                if (file.size > TRACKING_GIF_MAX_COMPRESSED_BYTES) {
+                    throw new Error('GIF files must be 32MB or smaller.');
+                }
                 const arrayBuffer = await file.arrayBuffer();
-                const gif = parseGIF(arrayBuffer);
-                const frames = decompressFrames(gif, true);
-
-                if (frames.length === 0) {
-                    throw new Error('No frames found in GIF');
-                }
-
-                const width = frames[0].dims.width;
-                const height = frames[0].dims.height;
-
-                // Create a canvas to render frames
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = width;
-                tempCanvas.height = height;
-                const tempCtx = tempCanvas.getContext('2d')!;
-
-                // Accumulator canvas for proper GIF rendering (handles disposal)
-                const accCanvas = document.createElement('canvas');
-                accCanvas.width = width;
-                accCanvas.height = height;
-                const accCtx = accCanvas.getContext('2d')!;
-
-                // Extract each frame as a data URL
-                const frameDataUrls: string[] = [];
-                const frameImages: HTMLImageElement[] = [];
-                let totalDelay = 0;
-
-                for (let i = 0; i < frames.length; i++) {
-                    const frame = frames[i];
-                    const { dims, patch, delay } = frame;
-
-                    totalDelay += delay || 100;
-
-                    // Create ImageData from patch
-                    const imageData = new ImageData(
-                        new Uint8ClampedArray(patch),
-                        dims.width,
-                        dims.height
-                    );
-
-                    // Draw to temp canvas
-                    tempCtx.clearRect(0, 0, width, height);
-                    tempCtx.putImageData(imageData, dims.left || 0, dims.top || 0);
-
-                    // Composite onto accumulator
-                    accCtx.drawImage(tempCanvas, 0, 0);
-
-                    // Save frame as data URL
-                    const dataUrl = accCanvas.toDataURL('image/png');
-                    frameDataUrls.push(dataUrl);
-
-                    // Pre-load image for fast rendering
-                    const img = new Image();
-                    img.src = dataUrl;
-                    frameImages.push(img);
-                }
-
-                gifFrameImagesRef.current = frameImages;
-
-                // Calculate FPS from average delay
-                const avgDelay = totalDelay / frames.length;
-                const fps = Math.round(1000 / avgDelay);
-
-                setVideoState({
-                    file,
-                    url,
-                    frames: frameDataUrls,
-                    currentFrame: 0,
-                    totalFrames: frames.length,
-                    fps: Math.max(fps, 1),
-                    width,
-                    height,
-                    isLoading: false,
-                    isGif: true
+                if (generationId !== mediaGenerationRef.current) return;
+                let session: GifFrameSession;
+                session = createGifFrameSession({
+                    generationId,
+                    buffer: arrayBuffer,
+                    onReady: plan => {
+                        if (generationId !== mediaGenerationRef.current) return;
+                        gifPlanRef.current = plan;
+                        const fps = Math.max(1, plan.fps);
+                        setVideoState({
+                            url,
+                            currentFrame: 0,
+                            totalFrames: plan.sampledFrames,
+                            fps,
+                            width: plan.width,
+                            height: plan.height,
+                            isLoading: true,
+                            isGif: true
+                        });
+                        session.requestFrame(0);
+                    },
+                    onFrame: (frame, bitmap) => {
+                        if (generationId !== mediaGenerationRef.current) {
+                            bitmap.close();
+                            return;
+                        }
+                        const activePlan = gifPlanRef.current;
+                        if (!activePlan) {
+                            bitmap.close();
+                            return;
+                        }
+                        gifBitmapRef.current?.close();
+                        gifBitmapRef.current = bitmap;
+                        if (canvasRef.current) {
+                            canvasRef.current.dataset.gifDeliveredFrame = String(frame);
+                        }
+                        drawCanvasRef.current();
+                        updateTimeline(frame, activePlan.sampledFrames, activePlan.fps);
+                        setVideoState(prev => prev.isLoading
+                            ? { ...prev, isLoading: false }
+                            : prev);
+                    },
+                    onError: message => {
+                        if (generationId !== mediaGenerationRef.current) return;
+                        releaseMedia();
+                        setVideoState(EMPTY_VIDEO_STATE);
+                        setError(`Failed to load media: ${message}`);
+                    },
                 });
+                gifSessionRef.current = session;
             } else {
-                // Load video
                 const video = document.createElement('video');
+                video.preload = 'metadata';
                 video.src = url;
 
                 await new Promise<void>((resolve, reject) => {
@@ -181,28 +194,38 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
                     video.onerror = () => reject(new Error('Failed to load video'));
                 });
 
-                const duration = video.duration;
-                const fps = 30;
-                const totalFrames = Math.floor(duration * fps);
+                if (generationId !== mediaGenerationRef.current) return;
+                const duration = Math.max(1 / TRACKING_MEDIA_MAX_FPS, video.duration);
+                const totalFrames = Math.max(1, Math.min(
+                    TRACKING_MEDIA_MAX_SAMPLED_FRAMES,
+                    Math.ceil(duration * TRACKING_MEDIA_MAX_FPS),
+                ));
+                const fps = Math.max(1, Math.min(TRACKING_MEDIA_MAX_FPS, totalFrames / duration));
+                const dimensions = fitTrackingMediaDimensions(
+                    video.videoWidth || 640,
+                    video.videoHeight || 480,
+                );
 
                 setVideoState({
-                    file,
                     url,
-                    frames: [],
                     currentFrame: 0,
-                    totalFrames: Math.max(totalFrames, 1),
+                    totalFrames,
                     fps,
-                    width: video.videoWidth || 640,
-                    height: video.videoHeight || 480,
+                    width: dimensions.width,
+                    height: dimensions.height,
                     isLoading: false,
                     isGif: false
                 });
-
+                updateTimeline(0, totalFrames, fps);
                 video.remove();
             }
         } catch (err) {
+            if (generationId !== mediaGenerationRef.current) return;
+            releaseMedia();
+            setVideoState(EMPTY_VIDEO_STATE);
             setError('Failed to load media: ' + (err instanceof Error ? err.message : 'Unknown error'));
-            setVideoState(prev => ({ ...prev, isLoading: false }));
+        } finally {
+            if (fileInputRef.current) fileInputRef.current.value = '';
         }
     };
 
@@ -248,36 +271,83 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
         }
     };
 
-    // Seek to frame and redraw canvas
     const seekToFrame = useCallback((frame: number) => {
-        setVideoState(prev => ({ ...prev, currentFrame: frame }));
-
-        // For videos, also seek the video element
+        setIsPlaying(false);
+        const targetFrame = Math.max(
+            0,
+            Math.min(Math.max(0, videoState.totalFrames - 1), frame),
+        );
+        if (videoState.isGif) {
+            gifSessionRef.current?.requestFrame(targetFrame);
+            if (timelineInputRef.current) {
+                timelineInputRef.current.value = String(currentFrameRef.current);
+            }
+            return;
+        }
+        updateTimeline(targetFrame, videoState.totalFrames, videoState.fps);
         if (videoRef.current && !videoState.isGif) {
-            const time = frame / videoState.fps;
+            const time = currentFrameRef.current / videoState.fps;
             videoRef.current.currentTime = time;
         }
-    }, [videoState.fps, videoState.isGif]);
+    }, [updateTimeline, videoState.fps, videoState.isGif, videoState.totalFrames]);
 
-    // Animation playback loop
     useEffect(() => {
-        if (!isPlaying || videoState.totalFrames <= 1) return;
+        if (!isOpen || !isPlaying || videoState.totalFrames <= 1) return;
+        let cancelled = false;
+        let animationFrame = 0;
+        let videoFrame = 0;
 
-        const interval = setInterval(() => {
-            setVideoState(prev => {
-                const nextFrame = (prev.currentFrame + 1) % prev.totalFrames;
-
-                // For videos, seek the video element
-                if (!prev.isGif && videoRef.current) {
-                    videoRef.current.currentTime = nextFrame / prev.fps;
+        if (videoState.isGif) {
+            let nextFrameAt = performance.now();
+            const tick = (time: number) => {
+                if (cancelled) return;
+                if (time >= nextFrameAt) {
+                    const nextFrame = (currentFrameRef.current + 1) % videoState.totalFrames;
+                    gifSessionRef.current?.requestFrame(nextFrame);
+                    nextFrameAt = time + 1000 / videoState.fps;
                 }
+                animationFrame = requestAnimationFrame(tick);
+            };
+            animationFrame = requestAnimationFrame(tick);
+        } else {
+            const video = videoRef.current;
+            if (!video) return;
+            video.loop = true;
+            const drawVideoFrame = (_time: number, metadata?: VideoFrameCallbackMetadata) => {
+                if (cancelled) return;
+                const mediaTime = metadata?.mediaTime ?? video.currentTime;
+                const frame = Math.min(
+                    videoState.totalFrames - 1,
+                    Math.floor(mediaTime * videoState.fps),
+                );
+                if (frame !== currentFrameRef.current) {
+                    updateTimeline(frame, videoState.totalFrames, videoState.fps);
+                    drawCanvasRef.current();
+                }
+                if ('requestVideoFrameCallback' in video) {
+                    videoFrame = video.requestVideoFrameCallback(drawVideoFrame);
+                } else {
+                    animationFrame = requestAnimationFrame((time) => drawVideoFrame(time));
+                }
+            };
+            void video.play().catch(() => setIsPlaying(false));
+            if ('requestVideoFrameCallback' in video) {
+                videoFrame = video.requestVideoFrameCallback(drawVideoFrame);
+            } else {
+                animationFrame = requestAnimationFrame((time) => drawVideoFrame(time));
+            }
+        }
 
-                return { ...prev, currentFrame: nextFrame };
-            });
-        }, 1000 / videoState.fps);
-
-        return () => clearInterval(interval);
-    }, [isPlaying, videoState.fps, videoState.totalFrames]);
+        return () => {
+            cancelled = true;
+            if (animationFrame) cancelAnimationFrame(animationFrame);
+            const video = videoRef.current;
+            if (videoFrame && video && 'cancelVideoFrameCallback' in video) {
+                video.cancelVideoFrameCallback(videoFrame);
+            }
+            video?.pause();
+        };
+    }, [isOpen, isPlaying, updateTimeline, videoState.fps, videoState.isGif, videoState.totalFrames]);
 
     // Helper to convert mouse event to canvas coordinates
     const getCanvasCoordinates = (event: React.MouseEvent<HTMLCanvasElement>) => {
@@ -388,141 +458,70 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
         }
     };
 
-    // Draw current frame and overlays
-    useEffect(() => {
+    const drawCanvas = useCallback(() => {
         const canvas = canvasRef.current;
         const video = videoRef.current;
-        const img = imgRef.current;
         if (!canvas || !videoState.url) return;
-
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-
-        let animationFrameId: number;
-
-        const draw = () => {
-            // Clear canvas
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // Draw frame from video or GIF
-            if (videoState.isGif && videoState.frames.length > 0) {
-                // Use extracted GIF frames
-                const frameImg = gifFrameImagesRef.current[videoState.currentFrame];
-                if (frameImg && frameImg.complete) {
-                    ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
-                }
-            } else if (video && !videoState.isGif) {
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (videoState.isGif) {
+            if (gifBitmapRef.current) {
+                ctx.drawImage(gifBitmapRef.current, 0, 0, canvas.width, canvas.height);
             }
+        } else if (video?.readyState && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        }
 
-            // Draw tracking rectangle selection
-            if (trackingRect) {
-                const scaleX = canvas.width / videoState.width;
-                const scaleY = canvas.height / videoState.height;
-
-                // Draw the rectangle
-                ctx.strokeStyle = isSelecting ? 'rgba(0, 255, 0, 0.6)' : 'rgba(0, 200, 0, 1)';
-                ctx.lineWidth = 2;
-                ctx.setLineDash(isSelecting ? [5, 5] : []);
-                const rx = trackingRect.x * scaleX;
-                const ry = trackingRect.y * scaleY;
-                const rw = trackingRect.width * scaleX;
-                const rh = trackingRect.height * scaleY;
-                ctx.strokeRect(rx, ry, rw, rh);
-                ctx.setLineDash([]);
-
-                // Draw center point marker
-                const px = (trackingRect.x + trackingRect.width / 2) * scaleX;
-                const py = (trackingRect.y + trackingRect.height / 2) * scaleY;
-
-                ctx.beginPath();
-                ctx.arc(px, py, 6, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(0, 255, 0, 0.8)';
-                ctx.fill();
-                ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 2;
-                ctx.stroke();
+        if (manualPoints.length === 0) return;
+        const scaleX = canvas.width / videoState.width;
+        const scaleY = canvas.height / videoState.height;
+        const displayPoints = smoothTrackingPoints(manualPoints, {
+            enabled: enableSmoothing,
+            connectEndPoints
+        });
+        if (displayPoints.length > 1) {
+            ctx.beginPath();
+            ctx.moveTo(displayPoints[0].x * scaleX, displayPoints[0].y * scaleY);
+            for (let i = 1; i < displayPoints.length; i++) {
+                ctx.lineTo(displayPoints[i].x * scaleX, displayPoints[i].y * scaleY);
             }
-
-
-
-            // Draw manual mode points with connecting lines (closed path)
-            if (manualPoints.length > 0) {
-                const scaleX = canvas.width / videoState.width;
-                const scaleY = canvas.height / videoState.height;
-
-                const displayPoints = smoothTrackingPoints(manualPoints, {
-                    enabled: enableSmoothing,
-                    connectEndPoints
-                });
-
-                // Draw the path (smoothed or straight lines)
-                if (displayPoints.length > 1) {
-                    ctx.beginPath();
-                    ctx.moveTo(displayPoints[0].x * scaleX, displayPoints[0].y * scaleY);
-
-                    for (let i = 1; i < displayPoints.length; i++) {
-                        ctx.lineTo(displayPoints[i].x * scaleX, displayPoints[i].y * scaleY);
-                    }
-
-                    // Connect last to first only if enabled
-                    if (connectEndPoints) {
-                        ctx.lineTo(displayPoints[0].x * scaleX, displayPoints[0].y * scaleY);
-                    }
-
-                    ctx.strokeStyle = enableSmoothing ? 'rgba(150, 100, 255, 0.9)' : 'rgba(100, 200, 255, 0.9)';
-                    ctx.lineWidth = 3;
-                    ctx.setLineDash([]);
-                    ctx.stroke();
-                }
-
-                // Draw individual control points (always show original points)
-                manualPoints.forEach((pt, idx) => {
-                    const isHovered = hoveredManualPoint === idx;
-                    const isDragging = draggingManualPoint === idx;
-                    const radius = (isHovered || isDragging) ? 12 : 8;  // Larger when hovered/dragging
-
-                    ctx.beginPath();
-                    ctx.arc(pt.x * scaleX, pt.y * scaleY, radius, 0, Math.PI * 2);
-
-                    // Color based on state
-                    if (isDragging) {
-                        ctx.fillStyle = '#ff6600';  // Orange when dragging
-                    } else if (isHovered) {
-                        ctx.fillStyle = '#ffff00';  // Yellow when hovered
-                    } else if (idx === 0) {
-                        ctx.fillStyle = '#00ff00';  // Green for first point
-                    } else {
-                        ctx.fillStyle = '#00aaff';  // Blue for other points
-                    }
-                    ctx.fill();
-                    ctx.strokeStyle = '#fff';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-
-                    // Draw point number
-                    ctx.fillStyle = '#000';
-                    ctx.font = 'bold 10px Arial';
-                    ctx.textAlign = 'center';
-                    ctx.fillText(`${idx + 1}`, pt.x * scaleX, pt.y * scaleY + 3);
-                });
+            if (connectEndPoints) {
+                ctx.lineTo(displayPoints[0].x * scaleX, displayPoints[0].y * scaleY);
             }
+            ctx.strokeStyle = enableSmoothing ? 'rgba(150, 100, 255, 0.9)' : 'rgba(100, 200, 255, 0.9)';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([]);
+            ctx.stroke();
+        }
+        manualPoints.forEach((pt, idx) => {
+            const isHovered = hoveredManualPoint === idx;
+            const isDragging = draggingManualPoint === idx;
+            const radius = (isHovered || isDragging) ? 12 : 8;
+            ctx.beginPath();
+            ctx.arc(pt.x * scaleX, pt.y * scaleY, radius, 0, Math.PI * 2);
+            ctx.fillStyle = isDragging
+                ? '#ff6600'
+                : isHovered
+                    ? '#ffff00'
+                    : idx === 0
+                        ? '#00ff00'
+                        : '#00aaff';
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.fillStyle = '#000';
+            ctx.font = 'bold 10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${idx + 1}`, pt.x * scaleX, pt.y * scaleY + 3);
+        });
+    }, [connectEndPoints, draggingManualPoint, enableSmoothing, hoveredManualPoint, manualPoints, videoState.height, videoState.isGif, videoState.url, videoState.width]);
+    drawCanvasRef.current = drawCanvas;
 
-            // Continue animation loop if playing GIF
-            if (isPlaying && videoState.isGif) {
-                animationFrameId = requestAnimationFrame(draw);
-            }
-        };
-
-        draw();
-
-        // Cleanup
-        return () => {
-            if (animationFrameId) {
-                cancelAnimationFrame(animationFrameId);
-            }
-        };
-    }, [videoState.currentFrame, videoState.isGif, trackingRect, videoState.width, videoState.height, videoState.url, isPlaying, isSelecting, manualPoints, enableSmoothing, connectEndPoints, isOpen, redrawKey, hoveredManualPoint, draggingManualPoint]);
+    useEffect(() => {
+        if (isOpen) drawCanvas();
+    }, [drawCanvas, isOpen, redrawKey]);
 
 
 
@@ -534,14 +533,28 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
             connectEndPoints
         });
         onTransfer(points);
+        releaseMedia();
+        onClose();
+    };
+
+    const closeModal = () => {
+        releaseMedia();
         onClose();
     };
 
     if (!isOpen) return null;
 
-    return (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-xl shadow-2xl w-[95vw] h-[95vh] overflow-hidden flex flex-col">
+    const modal = (
+        <div
+            className="fixed inset-0 bg-black/80 flex items-center justify-center p-4"
+            style={{ zIndex: 1000, background: 'rgba(0, 0, 0, 0.8)' }}
+        >
+            <div
+                className="bg-slate-800 rounded-xl shadow-2xl w-[95vw] h-[95vh] overflow-hidden flex flex-col"
+                style={{ width: '95vw', height: '95vh', background: '#1e293b' }}
+                data-testid="tracking-modal"
+                data-media-policy="max-1280px-30fps-600-samples-one-bitmap"
+            >
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
                     <div className="flex items-center gap-3">
@@ -549,7 +562,7 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
                         <h2 className="text-lg font-semibold text-white">Trace</h2>
                     </div>
 
-                    <button onClick={onClose} className="p-1 hover:bg-slate-700 rounded">
+                    <button onClick={closeModal} className="p-1 hover:bg-slate-700 rounded" aria-label="Close trace">
                         <X className="w-5 h-5 text-slate-400" />
                     </button>
                 </div>
@@ -587,77 +600,16 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
                                         ref={videoRef}
                                         src={videoState.url}
                                         className="hidden"
-                                        preload="auto"
+                                        preload="metadata"
                                         onLoadedData={() => {
                                             if (videoRef.current) {
-                                                // Seek to frame 0 to ensure first frame is ready
                                                 videoRef.current.currentTime = 0;
+                                                drawCanvasRef.current();
                                             }
                                         }}
-                                        onSeeked={() => {
-                                            if (canvasRef.current && videoRef.current) {
-                                                const ctx = canvasRef.current.getContext('2d');
-                                                if (ctx) ctx.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
-                                            }
-                                        }}
+                                        onSeeked={() => drawCanvasRef.current()}
                                     />
                                 )}
-
-                                {/* GIF img element - hidden, only used for initial loading reference */}
-                                {videoState.isGif && (
-                                    <img
-                                        ref={imgRef}
-                                        src={videoState.url}
-                                        alt="GIF preview"
-                                        className="hidden"
-                                        onClick={(e) => {
-                                            // Handle click on the img element too
-                                            if (!canvasRef.current) return;
-                                            const rect = e.currentTarget.getBoundingClientRect();
-                                            const canvas = canvasRef.current;
-                                            const canvasAspect = canvas.width / canvas.height;
-                                            const containerAspect = rect.width / rect.height;
-
-                                            let renderWidth, renderHeight, offsetX, offsetY;
-                                            if (canvasAspect > containerAspect) {
-                                                renderWidth = rect.width;
-                                                renderHeight = rect.width / canvasAspect;
-                                                offsetX = 0;
-                                                offsetY = (rect.height - renderHeight) / 2;
-                                            } else {
-                                                renderHeight = rect.height;
-                                                renderWidth = rect.height * canvasAspect;
-                                                offsetX = (rect.width - renderWidth) / 2;
-                                                offsetY = 0;
-                                            }
-
-                                            const clickX = e.clientX - rect.left - offsetX;
-                                            const clickY = e.clientY - rect.top - offsetY;
-
-                                            if (clickX < 0 || clickX > renderWidth || clickY < 0 || clickY > renderHeight) return;
-
-                                            const x = (clickX / renderWidth) * canvas.width;
-                                            const y = (clickY / renderHeight) * canvas.height;
-
-                                            // Create a small rectangle for point clicks on the GIF image
-                                            setTrackingRect({ x: x - 20, y: y - 20, width: 40, height: 40 });
-                                        }}
-                                        onContextMenu={(e) => {
-                                            e.preventDefault();
-                                            setTrackingRect(null);
-                                        }}
-                                        onLoad={() => {
-                                            if (canvasRef.current && imgRef.current) {
-                                                const ctx = canvasRef.current.getContext('2d');
-                                                if (ctx) ctx.drawImage(imgRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
-                                            }
-                                        }}
-                                    />
-                                )}
-
-
-
-                                {/* Canvas - hidden when playing GIF, visible otherwise */}
                                 <canvas
                                     ref={canvasRef}
                                     width={videoState.width}
@@ -680,7 +632,7 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
                     </div>
 
                     {/* Timeline Slider */}
-                    {videoState.url && (
+                    {videoState.url && !videoState.isLoading && (
                         <div className="flex items-center gap-3 px-2">
                             {/* Play/Stop Button */}
                             <button
@@ -694,21 +646,22 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
                                 {isPlaying ? <Square className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                             </button>
 
-                            <span className="text-xs text-slate-400 w-20">
+                            <span ref={timelineLabelRef} className="text-xs text-slate-400 w-20">
                                 Frame {videoState.currentFrame + 1} / {videoState.totalFrames}
                             </span>
                             <input
+                                ref={timelineInputRef}
+                                key={videoState.url}
                                 type="range"
                                 min={0}
                                 max={Math.max(0, videoState.totalFrames - 1)}
-                                value={videoState.currentFrame}
+                                defaultValue={videoState.currentFrame}
                                 onChange={(e) => {
-                                    setIsPlaying(false);  // Stop playback when user drags
                                     seekToFrame(parseInt(e.target.value));
                                 }}
                                 className="flex-1 accent-blue-500 cursor-pointer"
                             />
-                            <span className="text-xs text-slate-400 w-16 text-right">
+                            <span ref={timelineTimeRef} className="text-xs text-slate-400 w-16 text-right">
                                 {(videoState.currentFrame / videoState.fps).toFixed(2)}s
                             </span>
                         </div>
@@ -788,4 +741,6 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
             </div>
         </div>
     );
+
+    return typeof document === 'undefined' ? modal : createPortal(modal, document.body);
 };

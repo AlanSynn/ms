@@ -2,6 +2,14 @@ type MotionSmithPerformanceAudit = {
   foundryTopologyBuilds?: number;
   foundryGeometryCacheSize?: number;
   foundryMaterialCacheSize?: number;
+  puppetTopologyDurations?: number[];
+};
+
+export const recordPuppetTopologyBuild = (durationMs: number) => {
+  const audit = activePerformanceAudit();
+  if (!audit) return;
+  audit.puppetTopologyDurations ??= [];
+  audit.puppetTopologyDurations.push(durationMs);
 };
 
 const activePerformanceAudit = () =>

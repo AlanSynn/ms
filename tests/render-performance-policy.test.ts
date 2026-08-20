@@ -23,12 +23,18 @@ assert.deepEqual(
     antialias: balanced.antialias,
     targetFramesPerSecond: balanced.targetFramesPerSecond,
     overlayQuality: balanced.overlayQuality,
+    partTopology: balanced.partTopology,
   },
   {
     pixelRatioCap: 1,
     antialias: false,
     targetFramesPerSecond: 30,
     overlayQuality: 'balanced',
+    partTopology: {
+      bevelEnabled: false,
+      edgeGeometryEnabled: false,
+      curveSegments: 3,
+    },
   },
   'Balanced provides the Chromebook-oriented default rendering envelope',
 );
@@ -46,8 +52,16 @@ policies.forEach((policy) => {
   );
   assert(policy.repeatedGeometry.instancingThreshold >= 2, 'only repeated geometry is instanced');
   assert(Object.isFrozen(policy), `${policy.preset} policy is immutable`);
+  assert(Object.isFrozen(policy.partTopology), `${policy.preset} part-topology policy is immutable`);
   assert(Object.isFrozen(policy.repeatedGeometry), `${policy.preset} repeated-geometry policy is immutable`);
 });
+
+assert.equal(fast.partTopology.bevelEnabled, false);
+assert.equal(balanced.partTopology.edgeGeometryEnabled, false);
+assert.equal(high.partTopology.bevelEnabled, true);
+assert.equal(high.partTopology.edgeGeometryEnabled, true);
+assert(fast.partTopology.curveSegments <= balanced.partTopology.curveSegments);
+assert(balanced.partTopology.curveSegments < high.partTopology.curveSegments);
 
 assert(fast.pixelRatioCap <= balanced.pixelRatioCap && balanced.pixelRatioCap < high.pixelRatioCap);
 assert(fast.targetFramesPerSecond < balanced.targetFramesPerSecond && balanced.targetFramesPerSecond < high.targetFramesPerSecond);

@@ -20,19 +20,19 @@ import {
 } from "../stageLayout";
 import { CharacterImportControls } from "./CharacterImportControls";
 import {
-  CharacterImportReviewDialog,
+  CharacterImportReviewBoundary,
   CharacterImportStatusDock,
-  type PendingCharacterReview,
 } from "./CharacterImportOverlays";
 import { CharacterLessonOwnership } from "./CharacterLessonOwnership";
 import { CharacterSetupPanel } from "./CharacterSetupPanel";
 import { SceneObjectInspector } from "./SceneObjectInspector";
 import { ContextHelp } from "../../ui/ContextHelp";
+import type { CharacterImportProgressStore } from "../../../runtime/ai/characterImportProgressStore";
 
 export const CharacterSelection = ({
   project,
   dispatch,
-  pendingCharacter,
+  characterImportProgress,
   onOpenGettingStarted,
   onAccept,
   onDiscard,
@@ -49,7 +49,7 @@ export const CharacterSelection = ({
 }: {
   project: ProjectState;
   dispatch: (action: ProjectAction) => void;
-  pendingCharacter: PendingCharacterReview | null;
+  characterImportProgress: CharacterImportProgressStore;
   onOpenGettingStarted: () => void;
   onAccept: () => void;
   onDiscard: () => void;
@@ -64,13 +64,12 @@ export const CharacterSelection = ({
   viewport: CanvasViewport;
   setViewport: Dispatch<SetStateAction<CanvasViewport>>;
 }) => {
-  const reviewedProject = pendingCharacter?.project ?? project;
   const packageInputRef = useRef<HTMLInputElement>(null);
   const objectInputRef = useRef<HTMLInputElement>(null);
   const onnxInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
-  const partPanelProject = pendingCharacter ? reviewedProject : project;
-  const partPanelDisabled = Boolean(pendingCharacter);
+  const partPanelProject = project;
+  const partPanelDisabled = false;
   const editableParts = partPanelProject.partOrder
     .map((id) => partPanelProject.parts[id])
     .filter((part): part is BodyPartLayer => Boolean(part));
@@ -125,8 +124,8 @@ export const CharacterSelection = ({
                     {Object.keys(project.skeleton?.joints ?? {}).length} joints
                   </span>
                   <span>
-                    {reviewedProject.partOrder.some((id) =>
-                      Boolean(reviewedProject.parts[id]?.textureUrl),
+                    {project.partOrder.some((id) =>
+                      Boolean(project.parts[id]?.textureUrl),
                     )
                       ? "art on plates"
                       : "gray plates"}
@@ -280,8 +279,8 @@ export const CharacterSelection = ({
                   setViewport={setViewport}
                 />
                 <ThreePuppetPreview
-                  project={reviewedProject}
-                  skeleton={reviewedProject.skeleton}
+                  project={project}
+                  skeleton={project.skeleton}
                   mechanisms={[]}
                   angle={0}
                   viewport={viewport}
@@ -318,10 +317,10 @@ export const CharacterSelection = ({
       </section>
       <CharacterImportStatusDock
         project={project}
-        reviewedProject={reviewedProject}
+        progressStore={characterImportProgress}
       />
-      <CharacterImportReviewDialog
-        pendingCharacter={pendingCharacter}
+      <CharacterImportReviewBoundary
+        progressStore={characterImportProgress}
         onAccept={onAccept}
         onDiscard={onDiscard}
       />

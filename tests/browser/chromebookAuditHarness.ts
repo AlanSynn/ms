@@ -1,15 +1,28 @@
-import { expect, type BrowserContext, type Locator, type Page, type Request } from "@playwright/test";
+import {
+  expect,
+  type BrowserContext,
+  type CDPSession,
+  type Locator,
+  type Page,
+  type Request,
+} from "@playwright/test";
 import { performance as nodePerformance } from "node:perf_hooks";
 
 import {
   CHROMEBOOK_ACCEPTANCE_THRESHOLDS,
   CHROMEBOOK_AUDIT_ENVIRONMENT,
+  percentiles,
   type ActionLatency,
   type BootAudit,
   type NetworkRequestRecord,
   type PlaybackAudit,
   type WebGLAuditSnapshot,
 } from "./chromebookAuditReport";
+import type {
+  FeatureActionAudit,
+  FeatureRuntimeProbe,
+  RuntimeLifecycleSnapshot,
+} from "./chromebookFeatureAuditReport";
 
 type BrowserAuditState = {
   longTasks: number[];
@@ -18,6 +31,13 @@ type BrowserAuditState = {
   foundryTopologyBuilds: number;
   foundryGeometryCacheSize: number;
   foundryMaterialCacheSize: number;
+  puppetTopologyDurations: number[];
+  externalFileAction: {
+    sequence: number;
+    startedAt: number;
+    nextPaintMs?: number;
+  };
+  runtime: RuntimeLifecycleSnapshot;
   webgl: WebGLAuditSnapshot;
 };
 
@@ -31,6 +51,18 @@ export const installChromebookAuditInstrumentation = async (context: BrowserCont
       foundryTopologyBuilds: 0,
       foundryGeometryCacheSize: 0,
       foundryMaterialCacheSize: 0,
+      puppetTopologyDurations: [],
+      externalFileAction: { sequence: 0, startedAt: 0 },
+      runtime: {
+        probeSupport: {
+          workers: false,
+          imageBitmaps: false,
+          objectUrls: false,
+        },
+        workers: { acquired: 0, released: 0, active: 0, peakActive: 0 },
+        imageBitmaps: { acquired: 0, released: 0, active: 0, peakActive: 0 },
+        objectUrls: { acquired: 0, released: 0, active: 0, peakActive: 0 },
+      },
       webgl: {
         contextsCreated: 0,
         contextsLost: 0,
@@ -42,6 +74,135 @@ export const installChromebookAuditInstrumentation = async (context: BrowserCont
     (window as Window & { __MOTIONSMITH_CHROMEBOOK_AUDIT__?: BrowserAuditState })
       .__MOTIONSMITH_CHROMEBOOK_AUDIT__ = state;
     performance.setResourceTimingBufferSize(2_000);
+
+    document.addEventListener("change", (event) => {
+      const input = event.target;
+      if (!(input instanceof HTMLInputElement) || input.type !== "file") return;
+      const sequence = state.externalFileAction.sequence + 1;
+      const startedAt = performance.now();
+      state.externalFileAction = { sequence, startedAt };
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (state.externalFileAction.sequence !== sequence) return;
+        state.externalFileAction.nextPaintMs = performance.now() - startedAt;
+      }));
+    }, true);
+
+    const acquire = (
+      counter: RuntimeLifecycleSnapshot["workers"],
+    ) => {
+      counter.acquired += 1;
+      counter.active += 1;
+      counter.peakActive = Math.max(counter.peakActive, counter.active);
+    };
+    const release = (
+      counter: RuntimeLifecycleSnapshot["workers"],
+    ) => {
+      counter.released += 1;
+      counter.active = Math.max(0, counter.active - 1);
+    };
+
+    const trackedBitmaps = new WeakSet<object>();
+    const releasedBitmaps = new WeakSet<object>();
+    const trackBitmap = (value: unknown) => {
+      if (
+        typeof ImageBitmap === "undefined" ||
+        !(value instanceof ImageBitmap) ||
+        trackedBitmaps.has(value)
+      ) return;
+      trackedBitmaps.add(value);
+      acquire(state.runtime.imageBitmaps);
+    };
+    try {
+      const nativeClose = ImageBitmap.prototype.close;
+      Object.defineProperty(ImageBitmap.prototype, "close", {
+        configurable: true,
+        value: function (this: ImageBitmap) {
+          if (trackedBitmaps.has(this) && !releasedBitmaps.has(this)) {
+            releasedBitmaps.add(this);
+            release(state.runtime.imageBitmaps);
+          }
+          return Reflect.apply(nativeClose, this, []);
+        },
+      });
+      state.runtime.probeSupport.imageBitmaps = true;
+    } catch {
+      // The audit gate records unsupported ownership probes instead of guessing.
+    }
+    try {
+      const nativeCreateImageBitmap = window.createImageBitmap;
+      Object.defineProperty(window, "createImageBitmap", {
+        configurable: true,
+        value: (...args: unknown[]) => (
+          Reflect.apply(nativeCreateImageBitmap, window, args) as Promise<ImageBitmap>
+        ).then((bitmap) => {
+          trackBitmap(bitmap);
+          return bitmap;
+        }),
+      });
+    } catch {
+      // Transferred worker bitmaps remain tracked even if the factory is read-only.
+    }
+
+    try {
+      const NativeWorker = window.Worker;
+      const AuditedWorker = new Proxy(NativeWorker, {
+        construct(target, args) {
+          const instance = Reflect.construct(target, args) as Worker;
+          let terminated = false;
+          acquire(state.runtime.workers);
+          instance.addEventListener("message", (event) => {
+            const payload = event.data as { bitmap?: unknown } | undefined;
+            if (payload?.bitmap) trackBitmap(payload.bitmap);
+          });
+          const nativeTerminate = instance.terminate.bind(instance);
+          Object.defineProperty(instance, "terminate", {
+            configurable: true,
+            value: () => {
+              if (!terminated) {
+                terminated = true;
+                release(state.runtime.workers);
+              }
+              nativeTerminate();
+            },
+          });
+          return instance;
+        },
+      });
+      Object.defineProperty(window, "Worker", {
+        configurable: true,
+        value: AuditedWorker,
+      });
+      state.runtime.probeSupport.workers = true;
+    } catch {
+      // Chrome should permit wrapping Worker; a failed probe is an explicit gate.
+    }
+
+    const activeObjectUrls = new Set<string>();
+    try {
+      const nativeCreateObjectUrl = URL.createObjectURL.bind(URL);
+      const nativeRevokeObjectUrl = URL.revokeObjectURL.bind(URL);
+      Object.defineProperty(URL, "createObjectURL", {
+        configurable: true,
+        value: (object: Blob | MediaSource) => {
+          const url = nativeCreateObjectUrl(object);
+          if (!activeObjectUrls.has(url)) {
+            activeObjectUrls.add(url);
+            acquire(state.runtime.objectUrls);
+          }
+          return url;
+        },
+      });
+      Object.defineProperty(URL, "revokeObjectURL", {
+        configurable: true,
+        value: (url: string) => {
+          if (activeObjectUrls.delete(url)) release(state.runtime.objectUrls);
+          nativeRevokeObjectUrl(url);
+        },
+      });
+      state.runtime.probeSupport.objectUrls = true;
+    } catch {
+      // Chrome should permit wrapping URL ownership; unsupported is reported.
+    }
 
     try {
       new PerformanceObserver((list) => {
@@ -243,6 +404,210 @@ export const measureAction = async (
     requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.now())));
   }));
   return { label, kind, durationMs: end - start };
+};
+
+export type FeatureNextPaintTiming = {
+  startedAt: number;
+  nextPaintMs: number;
+};
+
+export const measureClickToNextPaint = async (
+  control: Locator,
+): Promise<FeatureNextPaintTiming> => {
+  await expect(control, "feature action is visible before timing").toBeVisible();
+  await expect(control, "feature action is enabled before timing").toBeEnabled();
+  return control.evaluate((element: HTMLElement) => {
+    const startedAt = performance.now();
+    element.click();
+    return new Promise<FeatureNextPaintTiming>((resolve) => {
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() =>
+          resolve({
+            startedAt,
+            nextPaintMs: performance.now() - startedAt,
+          }),
+        ),
+      );
+    });
+  });
+};
+
+export const measureExternalActionToNextPaint = async (
+  page: Page,
+  action: () => Promise<unknown>,
+): Promise<FeatureNextPaintTiming> => {
+  const sequence = await page.evaluate(() => {
+    const state = (window as Window & {
+      __MOTIONSMITH_CHROMEBOOK_AUDIT__?: BrowserAuditState;
+    }).__MOTIONSMITH_CHROMEBOOK_AUDIT__;
+    if (!state) throw new Error("Chromebook runtime probe is not installed");
+    return state.externalFileAction.sequence;
+  });
+  await action();
+  await expect.poll(() => page.evaluate((previousSequence) => {
+    const state = (window as Window & {
+      __MOTIONSMITH_CHROMEBOOK_AUDIT__?: BrowserAuditState;
+    }).__MOTIONSMITH_CHROMEBOOK_AUDIT__;
+    return (state?.externalFileAction.sequence ?? 0) > previousSequence;
+  }, sequence), { message: "file action reaches its browser change event" }).toBe(true);
+  return page.evaluate(() => new Promise<FeatureNextPaintTiming>((resolve) => {
+    const state = (window as Window & {
+      __MOTIONSMITH_CHROMEBOOK_AUDIT__?: BrowserAuditState;
+    }).__MOTIONSMITH_CHROMEBOOK_AUDIT__;
+    if (!state) throw new Error("Chromebook runtime probe is not installed");
+    const read = () => {
+      if (state.externalFileAction.nextPaintMs === undefined) {
+        requestAnimationFrame(read);
+        return;
+      }
+      resolve({
+        startedAt: state.externalFileAction.startedAt,
+        nextPaintMs: state.externalFileAction.nextPaintMs,
+      });
+    };
+    read();
+  }));
+};
+
+export const elapsedFeatureTime = (
+  page: Page,
+  timing: FeatureNextPaintTiming,
+) => page.evaluate((startedAt) => performance.now() - startedAt, timing.startedAt);
+
+export const readFeatureRuntimeProbe = (
+  page: Page,
+): Promise<FeatureRuntimeProbe> =>
+  page.evaluate(() => {
+    const state = (window as Window & {
+      __MOTIONSMITH_CHROMEBOOK_AUDIT__?: BrowserAuditState;
+    }).__MOTIONSMITH_CHROMEBOOK_AUDIT__;
+    if (!state) throw new Error("Chromebook runtime probe is not installed");
+    const memory = (
+      performance as Performance & { memory?: { usedJSHeapSize: number } }
+    ).memory;
+    return {
+      atMs: performance.now(),
+      heapBytes: memory?.usedJSHeapSize,
+      longTaskCount: state.longTasks.length,
+      puppetTopologyCount: state.puppetTopologyDurations.length,
+      lifecycle: structuredClone(state.runtime),
+    };
+  });
+
+export const collectFeatureGarbage = async (
+  page: Page,
+  client: CDPSession,
+) => {
+  try {
+    await client.send("HeapProfiler.collectGarbage");
+  } catch {
+    // Precise heap remains optional; the JSON records whether it is available.
+  }
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+};
+
+export const collectStableFeatureProbe = async (
+  page: Page,
+  client: CDPSession,
+): Promise<FeatureRuntimeProbe> => {
+  const samples: number[] = [];
+  await collectFeatureGarbage(page, client);
+  let probe: FeatureRuntimeProbe | undefined;
+  for (let index = 0; index < 3; index += 1) {
+    probe = await readFeatureRuntimeProbe(page);
+    if (probe.heapBytes !== undefined) samples.push(probe.heapBytes);
+    if (index < 2) {
+      await page.evaluate(() => new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }));
+    }
+  }
+  if (!probe) throw new Error("Could not collect a stable feature probe");
+  return { ...probe, heapSamplesBytes: samples };
+};
+
+export const waitForLifecycleBaseline = async (
+  page: Page,
+  baseline: RuntimeLifecycleSnapshot,
+) => {
+  await expect.poll(
+    async () => {
+      const current = (await readFeatureRuntimeProbe(page)).lifecycle;
+      return {
+        workers: current.workers.active,
+        imageBitmaps: current.imageBitmaps.active,
+        objectUrls: current.objectUrls.active,
+      };
+    },
+    { message: "feature resources return to their ownership baseline" },
+  ).toEqual({
+    workers: baseline.workers.active,
+    imageBitmaps: baseline.imageBitmaps.active,
+    objectUrls: baseline.objectUrls.active,
+  });
+};
+
+export const finishFeatureAction = async (
+  page: Page,
+  input: {
+    label: string;
+    cycle: number;
+    outcome: FeatureActionAudit["outcome"];
+    timing: FeatureNextPaintTiming;
+    before: FeatureRuntimeProbe;
+    jobCompletionMs?: number;
+  },
+): Promise<FeatureActionAudit> => {
+  const settleMs = await elapsedFeatureTime(page, input.timing);
+  const result = await page.evaluate(
+    ({ longTaskOffset, puppetTopologyOffset }) => {
+      const state = (window as Window & {
+        __MOTIONSMITH_CHROMEBOOK_AUDIT__?: BrowserAuditState;
+      }).__MOTIONSMITH_CHROMEBOOK_AUDIT__;
+      if (!state) throw new Error("Chromebook runtime probe is not installed");
+      const memory = (
+        performance as Performance & { memory?: { usedJSHeapSize: number } }
+      ).memory;
+      return {
+        after: {
+          atMs: performance.now(),
+          heapBytes: memory?.usedJSHeapSize,
+          longTaskCount: state.longTasks.length,
+          puppetTopologyCount: state.puppetTopologyDurations.length,
+          lifecycle: structuredClone(state.runtime),
+        } satisfies FeatureRuntimeProbe,
+        longTasks: state.longTasks.slice(longTaskOffset),
+        puppetTopologyDurations: state.puppetTopologyDurations.slice(puppetTopologyOffset),
+      };
+    },
+    {
+      longTaskOffset: input.before.longTaskCount,
+      puppetTopologyOffset: input.before.puppetTopologyCount,
+    },
+  );
+  const latencyMs = percentiles(result.longTasks);
+  return {
+    label: input.label,
+    cycle: input.cycle,
+    outcome: input.outcome,
+    nextPaintMs: input.timing.nextPaintMs,
+    settleMs,
+    jobCompletionMs: input.jobCompletionMs,
+    longTasks: {
+      durationsMs: result.longTasks,
+      latencyMs,
+      totalMs: result.longTasks.reduce((sum, duration) => sum + duration, 0),
+      maxMs: result.longTasks.length ? Math.max(...result.longTasks) : 0,
+    },
+    puppetTopologyDurationsMs: result.puppetTopologyDurations,
+    before: input.before,
+    after: result.after,
+  };
 };
 
 export const collectPlaybackAudit = async (page: Page, durationMs: number): Promise<PlaybackAudit> =>

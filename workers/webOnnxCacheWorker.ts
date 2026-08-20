@@ -1,3 +1,5 @@
+import { createDistinctIntegerProgress } from '../runtime/ai/distinctProgress';
+
 type CacheStage = 'checking' | 'downloading' | 'cached' | 'error';
 
 type WarmRequest = {
@@ -52,111 +54,122 @@ const publish = (
 
 const hasCacheApi = () => 'caches' in globalThis;
 
-const looksLikeGitLfsPointer = (buffer: ArrayBuffer) =>
+const looksLikeGitLfsPointer = (buffer: ArrayBuffer | Uint8Array) =>
   new TextDecoder()
-    .decode(new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 64)))
+    .decode(
+      buffer instanceof Uint8Array
+        ? buffer.subarray(0, 64)
+        : new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 64)),
+    )
     .startsWith(GIT_LFS_POINTER_PREFIX);
-
-const isUsableModel = (buffer: ArrayBuffer, minBytes: number) =>
-  buffer.byteLength > minBytes && !looksLikeGitLfsPointer(buffer);
 
 const readCachedModel = async (request: WarmRequest) => {
   if (!hasCacheApi()) return undefined;
   const cache = await caches.open(request.cacheName);
   const response = await cache.match(request.url);
   if (!response) return undefined;
-  const markedBytes = Number(response.headers.get(request.bytesHeader)) || undefined;
-  const buffer = await response.arrayBuffer();
+  const markedBytes = Number(response.headers.get(request.bytesHeader))
+    || Number(response.headers.get('content-length'))
+    || 0;
+  const reader = response.body?.getReader();
+  const firstChunk = reader ? await reader.read() : undefined;
+  await reader?.cancel().catch(() => undefined);
   if (
-    (markedBytes && markedBytes !== buffer.byteLength) ||
-    !isUsableModel(buffer, request.minBytes)
+    markedBytes <= request.minBytes
+    || !firstChunk?.value
+    || looksLikeGitLfsPointer(firstChunk.value)
   ) {
     await cache.delete(request.url);
     return undefined;
   }
-  return buffer;
+  return markedBytes;
 };
 
-const downloadModel = async (request: WarmRequest) => {
+const downloadAndCacheModel = async (request: WarmRequest) => {
   const response = await fetch(request.url, { cache: 'reload' });
   if (!response.ok) throw new Error(`Could not download ${request.label}: ${response.status}`);
 
   const total = Number(response.headers.get('content-length')) || undefined;
+  if (!total) {
+    throw new Error(`${request.label} download did not provide a bounded byte length.`);
+  }
   if (!response.body) {
-    const buffer = await response.arrayBuffer();
-    if (total && buffer.byteLength !== total) {
-      throw new Error(`${request.label} download disconnected after ${buffer.byteLength}/${total} bytes.`);
-    }
-    publish(request, 'downloading', 100, {
-      bytesLoaded: buffer.byteLength,
-      bytesTotal: total,
-    });
-    return buffer;
+    throw new Error(`${request.label} download did not provide a streaming body.`);
   }
-
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
   let loaded = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (!value) continue;
-    chunks.push(value);
-    loaded += value.byteLength;
-    publish(request, 'downloading', total ? Math.round((loaded / total) * 100) : 50, {
-      bytesLoaded: loaded,
-      bytesTotal: total,
-    });
-  }
-
-  const buffer = new Uint8Array(loaded);
-  let offset = 0;
-  for (const chunk of chunks) {
-    buffer.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  if (total && buffer.byteLength !== total) {
-    throw new Error(`${request.label} download disconnected after ${buffer.byteLength}/${total} bytes.`);
-  }
-  return buffer.buffer;
-};
-
-const cacheModel = async (request: WarmRequest, buffer: ArrayBuffer) => {
-  if (!isUsableModel(buffer, request.minBytes)) {
-    if (looksLikeGitLfsPointer(buffer)) {
-      throw new Error(`${request.label} is a Git LFS pointer, not model bytes.`);
-    }
-    throw new Error(`${request.label} is only ${buffer.byteLength} bytes; expected real model bytes.`);
-  }
-  if (!hasCacheApi()) return;
-  const cache = await caches.open(request.cacheName);
-  await cache.put(
-    request.url,
-    new Response(buffer.slice(0), {
-      headers: {
-        'content-type': 'application/octet-stream',
-        [request.bytesHeader]: String(buffer.byteLength),
+  const prefix = new Uint8Array(64);
+  let prefixLength = 0;
+  const distinctProgress = createDistinctIntegerProgress(5);
+  const trackedBody = response.body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        loaded += chunk.byteLength;
+        if (prefixLength < prefix.length) {
+          const take = Math.min(prefix.length - prefixLength, chunk.byteLength);
+          prefix.set(chunk.subarray(0, take), prefixLength);
+          prefixLength += take;
+        }
+        const progress = distinctProgress(total ? (loaded / total) * 100 : 50);
+        if (progress !== undefined) {
+          publish(request, 'downloading', progress, {
+            bytesLoaded: loaded,
+            bytesTotal: total,
+          });
+        }
+        controller.enqueue(chunk);
       },
     }),
   );
+  const headers = new Headers(response.headers);
+  if (total) headers.set(request.bytesHeader, String(total));
+  const trackedResponse = new Response(trackedBody, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+  const cache = await caches.open(request.cacheName);
+  try {
+    await cache.put(request.url, trackedResponse);
+  } catch (error) {
+    await cache.delete(request.url).catch(() => undefined);
+    throw error;
+  }
+  if (loaded !== total) {
+    if (hasCacheApi()) {
+      await cache.delete(request.url);
+    }
+    throw new Error(`${request.label} download disconnected after ${loaded}/${total} bytes.`);
+  }
+  if (loaded <= request.minBytes || looksLikeGitLfsPointer(prefix.subarray(0, prefixLength))) {
+    if (hasCacheApi()) {
+      await cache.delete(request.url);
+    }
+    if (looksLikeGitLfsPointer(prefix.subarray(0, prefixLength))) {
+      throw new Error(`${request.label} is a Git LFS pointer, not model bytes.`);
+    }
+    throw new Error(`${request.label} is only ${loaded} bytes; expected real model bytes.`);
+  }
+  return loaded;
 };
 
 const warm = async (request: WarmRequest) => {
   publish(request, 'checking', 0);
+  if (!hasCacheApi()) {
+    throw new Error('Cache Storage is unavailable; the AI model was not retained.');
+  }
   const cached = await readCachedModel(request);
   if (cached) {
     publish(request, 'cached', 100, {
-      bytesLoaded: cached.byteLength,
-      bytesTotal: cached.byteLength,
+      bytesLoaded: cached,
+      bytesTotal: cached,
     });
     return;
   }
 
-  const buffer = await downloadModel(request);
-  await cacheModel(request, buffer);
+  const bytes = await downloadAndCacheModel(request);
   publish(request, 'cached', 100, {
-    bytesLoaded: buffer.byteLength,
-    bytesTotal: buffer.byteLength,
+    bytesLoaded: bytes,
+    bytesTotal: bytes,
   });
 };
 

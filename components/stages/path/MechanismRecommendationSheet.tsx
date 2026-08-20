@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type {
   BodyPartLayer,
   MechanismConfig,
@@ -6,10 +6,11 @@ import type {
   ProjectState,
 } from "../../../types";
 import { mechanismWithGeneratedPath, uid } from "../../../utils/project";
+import type { MechanismRecommendation } from "../../../utils/mechanismRecommendations";
 import {
-  buildMechanismRecommendations,
-  type MechanismRecommendation,
-} from "../../../utils/mechanismRecommendations";
+  createMechanismRecommendationJobInput,
+} from "../../../runtime/recommendations/mechanismRecommendationJob";
+import { createMechanismRecommendationWorkerClient } from "../../../runtime/recommendations/mechanismRecommendationWorkerClient";
 import {
   createMechanismFitContext,
   fitMechanismSimulationWithContext,
@@ -131,18 +132,88 @@ const RecommendationFitPreview = ({
   );
 };
 
-export const MechanismRecommendationSheet = ({
-  isOpen,
+type RecommendationLoadState = {
+  inputFingerprint: string;
+  status: "loading" | "ready" | "error";
+  recommendations: MechanismRecommendation[];
+  error?: string;
+};
+
+const OpenMechanismRecommendationSheet = ({
   project,
   selectedPart,
   selectedPath,
   onClose,
   onApply,
-}: MechanismRecommendationSheetProps) => {
-  const recommendations = useMemo(
-    () => buildMechanismRecommendations(project, selectedPart, selectedPath),
-    [project, selectedPart, selectedPath],
+}: Omit<MechanismRecommendationSheetProps, "isOpen">) => {
+  const input = useMemo(
+    () =>
+      createMechanismRecommendationJobInput(
+        project,
+        selectedPart,
+        selectedPath?.id,
+      ),
+    [project, selectedPart, selectedPath?.id],
   );
+  const workerClient = useMemo(
+    () => createMechanismRecommendationWorkerClient(),
+    [],
+  );
+  const [loadState, setLoadState] = useState<RecommendationLoadState>(() => ({
+    inputFingerprint: input.inputFingerprint,
+    status: "loading",
+    recommendations: [],
+  }));
+
+  useEffect(() => {
+    setLoadState({
+      inputFingerprint: input.inputFingerprint,
+      status: "loading",
+      recommendations: [],
+    });
+    let cancelled = false;
+    let secondFrame = 0;
+    let firstFrame = requestAnimationFrame(() => {
+      firstFrame = 0;
+      secondFrame = requestAnimationFrame(() => {
+        secondFrame = 0;
+        if (cancelled) return;
+        workerClient.request(input, {
+          complete: (recommendations) =>
+            setLoadState({
+              inputFingerprint: input.inputFingerprint,
+              status: "ready",
+              recommendations,
+            }),
+          failed: (error) =>
+            setLoadState({
+              inputFingerprint: input.inputFingerprint,
+              status: "error",
+              recommendations: [],
+              error: error.message,
+            }),
+        });
+      });
+    });
+    return () => {
+      cancelled = true;
+      if (firstFrame) cancelAnimationFrame(firstFrame);
+      if (secondFrame) cancelAnimationFrame(secondFrame);
+      workerClient.cancel();
+    };
+  }, [input, workerClient]);
+
+  useEffect(() => () => workerClient.dispose(), [workerClient]);
+
+  const currentState =
+    loadState.inputFingerprint === input.inputFingerprint
+      ? loadState
+      : {
+          inputFingerprint: input.inputFingerprint,
+          status: "loading" as const,
+          recommendations: [],
+        };
+  const recommendations = currentState.recommendations;
 
   const apply = (option: MechanismRecommendation) => {
     onApply(
@@ -156,8 +227,6 @@ export const MechanismRecommendationSheet = ({
     );
   };
 
-  if (!isOpen) return null;
-
   return (
     <div className="modal-backdrop" role="presentation">
       <section
@@ -166,6 +235,7 @@ export const MechanismRecommendationSheet = ({
         aria-modal="true"
         aria-labelledby="recommendation-dialog-title"
         data-testid="recommendation-sheet"
+        data-recommendation-state={currentState.status}
       >
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -176,7 +246,22 @@ export const MechanismRecommendationSheet = ({
             Close
           </button>
         </div>
-        {!recommendations.length ? (
+        {currentState.status === "loading" ? (
+          <div
+            className="recommendation-empty"
+            data-testid="recommendation-loading"
+          >
+            Finding fits…
+          </div>
+        ) : currentState.status === "error" ? (
+          <div
+            className="recommendation-empty"
+            data-testid="recommendation-error"
+            title={currentState.error}
+          >
+            Recommendations unavailable.
+          </div>
+        ) : !recommendations.length ? (
           <div
             className="recommendation-empty"
             data-testid="recommendation-empty"
@@ -227,4 +312,12 @@ export const MechanismRecommendationSheet = ({
       </section>
     </div>
   );
+};
+
+export const MechanismRecommendationSheet = ({
+  isOpen,
+  ...openProps
+}: MechanismRecommendationSheetProps) => {
+  if (!isOpen) return null;
+  return <OpenMechanismRecommendationSheet {...openProps} />;
 };

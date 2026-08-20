@@ -34,6 +34,10 @@ import {
   createPlaybackClock,
   type PlaybackClock,
 } from "../runtime/playback/externalPlaybackClock";
+import {
+  createCharacterImportProgressStore,
+  type CharacterImportProgressStore,
+} from "../runtime/ai/characterImportProgressStore";
 
 const ENABLED_GUIDED_LESSONS = CLASSROOM_LESSONS.filter((lesson) =>
   isMechanismTypeEnabled(lesson.mechanismType),
@@ -92,9 +96,11 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   const playbackClockRef = useRef<PlaybackClock | null>(null);
   if (!playbackClockRef.current) playbackClockRef.current = createPlaybackClock();
   const playbackClock = playbackClockRef.current;
+  const characterImportProgressRef = useRef<CharacterImportProgressStore | null>(null);
+  characterImportProgressRef.current ??= createCharacterImportProgressStore();
+  const characterImportProgress = characterImportProgressRef.current;
   const [isPlaying, setIsPlaying] = useState(true);
   const [showTrace, setShowTrace] = useState(true);
-  const [showRecommendations, setShowRecommendations] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const modalOpen = showGettingStarted || showShortcuts || showAbout;
@@ -166,7 +172,6 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     setStage,
   });
   const {
-    pendingCharacter,
     setPendingCharacter,
     runWebOnnx,
     importCharacterPackage,
@@ -174,6 +179,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     editCharacterParts,
     saveSkeleton,
     acceptPendingCharacter,
+    discardPendingCharacter,
     startFromStarterImage,
     startFromPackage,
     startFromImage,
@@ -187,6 +193,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     setCommandStatus,
     setShowGettingStarted,
     setOnnxCacheStatus,
+    characterImportProgress,
   });
   const activeClassroomLesson = classroomLessonById(
     project.metadata.classroomLessonId,
@@ -212,7 +219,6 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     angle,
     setStage,
     setCommandStatus,
-    setShowRecommendations,
   });
 
   useWorkspacePlaybackLoop({
@@ -310,10 +316,10 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     playerDock,
     playbackClock,
     character: {
-      pendingCharacter,
+      characterImportProgress,
       onOpenGettingStarted: () => setShowGettingStarted(true),
       onAcceptPendingCharacter: acceptPendingCharacter,
-      onDiscardPendingCharacter: () => setPendingCharacter(null),
+      onDiscardPendingCharacter: discardPendingCharacter,
       onProcessCharacter: runWebOnnx,
       onPackageCharacter: importCharacterPackage,
       onImportProject: importProject,
@@ -354,7 +360,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
       showTrace,
       setShowTrace,
       onOptimize: optimizeSelectedMechanism,
-      onRecommendations: () => setShowRecommendations(true),
+      onApplyRecommendation: applyRecommendedMechanism,
       optimizerBusy,
       exportSvg: exportMechanismSvg,
       exportDxf: exportMechanismDxf,
@@ -402,9 +408,6 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     onCloseShortcuts: () => setShowShortcuts(false),
     showAbout,
     onCloseAbout: () => setShowAbout(false),
-    showRecommendations,
-    onCloseRecommendations: () => setShowRecommendations(false),
-    onApplyRecommendation: applyRecommendedMechanism,
     showTracking,
     onCloseTracking: closeTracking,
     onTransferTracking: transferTrackedPath,

@@ -12,6 +12,8 @@ import { APP_COMMANDS, APP_MENU_GROUPS, commandById, type AppCommandId } from '.
 
 const TEST_ONNX_MODEL_BYTES = Buffer.alloc(1_000_001, 1);
 const ONNX_MODEL_ROUTE = '**/onnx/pose_model.onnx';
+const ONNX_IMAGE_FIXTURE = process.env.ONNX_IMAGE_FIXTURE
+  ?? 'tests/fixtures/stick-character.png';
 const ENABLED_CLASSROOM_LESSONS = CLASSROOM_LESSONS.filter(lesson => isMechanismTypeEnabled(lesson.mechanismType));
 
 test.beforeEach(async ({ page }, testInfo) => {
@@ -1560,6 +1562,9 @@ test('Create from image upload creates a reviewed character package in browser',
 
   await page.goto('/');
   await openCharacterScreen(page);
+  const characterPuppet = page.getByTestId('character-three-puppet');
+  const existingPartCount = await characterPuppet.getAttribute('data-part-count');
+  expect(existingPartCount, 'the current character exposes its part count before import').not.toBeNull();
   const runOnnxButton = page.getByRole('button', { name: /Create from image/i });
   await runOnnxButton.focus();
   await expect(runOnnxButton).toBeFocused();
@@ -1567,7 +1572,7 @@ test('Create from image upload creates a reviewed character package in browser',
     page.waitForEvent('filechooser'),
     page.keyboard.press('Enter')
   ]);
-  await onnxChooser.setFiles('tests/fixtures/stick-character.png');
+  await onnxChooser.setFiles(ONNX_IMAGE_FIXTURE);
 
   const review = page.getByTestId('character-import-review');
   await expect(review).toBeVisible({ timeout: 180_000 });
@@ -1577,7 +1582,7 @@ test('Create from image upload creates a reviewed character package in browser',
   const viewport = page.viewportSize();
   const reviewCenterX = (reviewBox?.x ?? 0) + (reviewBox?.width ?? 0) / 2;
   expect(Math.abs(reviewCenterX - (viewport?.width ?? 0) / 2), 'character import approval is centered on screen').toBeLessThan(8);
-  await expect(page.getByTestId('character-three-puppet-state')).toHaveAttribute('data-part-count', /[1-9]\d*/);
+  await expect(characterPuppet).toHaveAttribute('data-part-count', existingPartCount!);
   await expect(page.getByRole('button', { name: 'Use it' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Use it' }).click();
@@ -2704,6 +2709,177 @@ test('Character tab owns body layer and skeleton edits used by design controls',
   expectCleanPage(pageErrors, consoleErrors);
 });
 
+test('Recommendation worker stays idle until the sheet opens', async ({ page }) => {
+  const recommendationWorkerRequests: string[] = [];
+  page.on('request', request => {
+    if (request.url().includes('mechanismRecommendationWorker')) {
+      recommendationWorkerRequests.push(request.url());
+    }
+  });
+
+  await page.goto('/');
+  await openFabricationReadyFourBar(page);
+  await page.getByRole('button', { name: /Mechanism Design/i }).click();
+  expect(recommendationWorkerRequests, 'closed recommendation sheet starts no fit worker').toEqual([]);
+
+  const recommend = page.getByRole('button', { name: /Recommend/i });
+  const nextPaintMs = await recommend.evaluate((button: HTMLButtonElement) =>
+    new Promise<number>((resolve) => {
+      const started = performance.now();
+      button.addEventListener('click', () => {
+        requestAnimationFrame(() => resolve(performance.now() - started));
+      }, { once: true });
+      button.click();
+    }),
+  );
+  expect(nextPaintMs, 'Recommend click yields its loading sheet promptly').toBeLessThan(100);
+  const sheet = page.getByTestId('recommendation-sheet');
+  await expect(sheet).toBeVisible();
+  await expect.poll(
+    () => recommendationWorkerRequests.length,
+    { message: 'opening recommendations starts the dedicated fit worker' },
+  ).toBeGreaterThan(0);
+  await expect(page.getByTestId('recommendation-card-4bar')).toBeVisible({ timeout: 60_000 });
+  await sheet.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(sheet).toHaveCount(0);
+});
+
+test('Design Fit runs in a disposable worker without blocking its next paint', async ({ page }) => {
+  const optimizerWorkerRequests: string[] = [];
+  page.on('request', request => {
+    if (request.url().includes('mechanismOptimizerWorker')) {
+      optimizerWorkerRequests.push(request.url());
+    }
+  });
+
+  await page.goto('/');
+  await openFabricationReadyFourBar(page);
+  await page.getByRole('button', { name: /Mechanism Design/i }).click();
+  expect(optimizerWorkerRequests, 'Design stays idle before explicit Fit').toEqual([]);
+  const fit = page.getByRole('button', { name: 'Fit', exact: true });
+  await expect(fit).toBeVisible();
+  const nextPaintMs = await fit.evaluate((button: HTMLButtonElement) =>
+    new Promise<number>((resolve) => {
+      const started = performance.now();
+      button.addEventListener('click', () => {
+        requestAnimationFrame(() => resolve(performance.now() - started));
+      }, { once: true });
+      button.click();
+    }),
+  );
+  expect(nextPaintMs, 'Fit click yields a painted busy state promptly').toBeLessThan(100);
+  await expect(fit).toBeDisabled();
+  await expect.poll(() => optimizerWorkerRequests.length, {
+    message: 'explicit Fit starts the optimizer worker',
+  }).toBeGreaterThan(0);
+  await expect(fit).toBeEnabled({ timeout: 120_000 });
+  await expect.poll(() => page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('motionsmith.autosave') ?? '{}');
+    return project.mechanisms?.find(
+      (mechanism: { id?: string }) => mechanism.id === project.selectedMechanismId,
+    )?.source;
+  }), { message: 'worker result commits one optimized mechanism' }).toBe('optimized');
+});
+
+test('Trace lazily streams bounded GIF frames and releases them on close', async ({ page }) => {
+  const pageErrors: string[] = [];
+  const gifWorkerRequests: string[] = [];
+  const gifBytes: number[] = [
+    ...Array.from('GIF89a', character => character.charCodeAt(0)),
+    0xd0, 0x07, // 2000px logical width
+    0xe8, 0x03, // 1000px logical height
+    0x80, 0x00, 0x00,
+    0x00, 0x00, 0x00,
+    0xff, 0xff, 0xff,
+  ];
+  for (let frame = 0; frame < 600; frame += 1) {
+    gifBytes.push(
+      0x21, 0xf9, 0x04, 0x00, 0x05, 0x00, 0x00, 0x00,
+      0x2c,
+      0x00, 0x00, 0x00, 0x00,
+      0x01, 0x00, 0x01, 0x00,
+      0x00,
+      0x02, 0x02, 0x44, 0x01, 0x00,
+    );
+  }
+  gifBytes.push(0x3b);
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('request', request => {
+    if (request.url().includes('gifFrameWorker')) gifWorkerRequests.push(request.url());
+  });
+
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByTestId('novice-path-panel').getByText('More', { exact: true }).click();
+  await page.getByRole('button', { name: 'Trace', exact: true }).click();
+  const modal = page.getByTestId('tracking-modal');
+  await expect(modal).toBeVisible();
+  await expect(modal).toHaveAttribute(
+    'data-media-policy',
+    'max-1280px-30fps-600-samples-one-bitmap',
+  );
+  expect(gifWorkerRequests, 'opening Trace does not load the GIF decoder').toEqual([]);
+
+  const chooser = page.waitForEvent('filechooser');
+  await modal.getByRole('button', { name: 'Load Media', exact: true }).click();
+  await (await chooser).setFiles({
+    name: 'bounded-large.gif',
+    mimeType: 'image/gif',
+    buffer: Buffer.from(gifBytes),
+  });
+  await expect.poll(() => gifWorkerRequests.length, {
+    message: 'selecting a GIF lazily loads its decoder worker',
+  }).toBeGreaterThan(0);
+  const canvas = modal.locator('canvas');
+  await expect(canvas).toBeVisible();
+  await expect.poll(async () => Number(await canvas.getAttribute('width'))).toBeGreaterThan(1);
+  expect(Number(await canvas.getAttribute('width'))).toBe(1280);
+  expect(Number(await canvas.getAttribute('height'))).toBe(640);
+  const timeline = modal.locator('input[type="range"]');
+  await expect(timeline).toBeVisible();
+  expect(Number(await timeline.getAttribute('max'))).toBe(599);
+  await expect(canvas).toHaveAttribute('data-gif-delivered-frame', '0');
+  const frameLabel = modal.getByText(/^Frame \d+ \/ \d+$/).first();
+  const lastFrame = Number(await timeline.getAttribute('max'));
+  const synchronousSeek = await timeline.evaluate((input, targetFrame) => {
+    const range = input as HTMLInputElement;
+    const modalRoot = range.closest('[data-testid="tracking-modal"]');
+    const renderedCanvas = modalRoot?.querySelector('canvas');
+    const label = range.parentElement?.querySelector('span');
+    const deliveredBefore = Number(renderedCanvas?.getAttribute('data-gif-delivered-frame') ?? '-1');
+    const nativeValueSetter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      'value',
+    )?.set;
+    nativeValueSetter?.call(range, String(targetFrame));
+    range.dispatchEvent(new Event('input', { bubbles: true }));
+    return {
+      deliveredBefore,
+      rangeValue: Number(range.value),
+      label: label?.textContent ?? '',
+    };
+  }, lastFrame);
+  expect(synchronousSeek.rangeValue, 'GIF scrubber stays on the bitmap that is actually displayed').toBe(synchronousSeek.deliveredBefore);
+  expect(synchronousSeek.label, 'GIF frame label does not advance on request').toMatch(
+    new RegExp(`^Frame ${synchronousSeek.deliveredBefore + 1} /`),
+  );
+  await expect(canvas).toHaveAttribute('data-gif-delivered-frame', String(lastFrame));
+  await expect(frameLabel).toHaveText(new RegExp(`^Frame ${lastFrame + 1} /`));
+  const frameBefore = await frameLabel.textContent();
+  await modal.getByTitle('Play').click();
+  await expect.poll(() => frameLabel.textContent(), {
+    message: 'GIF playback advances the canvas/timeline without a React frame array',
+  }).not.toBe(frameBefore);
+  await modal.getByTitle('Stop').click();
+  await modal.getByRole('button', { name: 'Close trace' }).click();
+  await expect(modal).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Trace', exact: true }).click();
+  await expect(page.getByTestId('tracking-modal')).toContainText('Browse');
+  expect(gifWorkerRequests).toHaveLength(1);
+  expect(pageErrors).toEqual([]);
+});
+
 test('Recommendation sheet applies a distinct mechanism and blueprint recipe', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
@@ -2719,7 +2895,7 @@ test('Recommendation sheet applies a distinct mechanism and blueprint recipe', a
   await page.getByRole('button', { name: /Recommend/i }).click();
   await expect(page.getByTestId('recommendation-sheet')).toBeVisible();
   await expect(page.getByTestId('recommendation-sheet')).toContainText('Recommended mechanisms');
-  await expect(page.getByTestId('recommendation-card-4bar')).toBeVisible();
+  await expect(page.getByTestId('recommendation-card-4bar')).toBeVisible({ timeout: 60_000 });
   const fitPreview = page.getByTestId('recommendation-fit-preview-4bar');
   await expect(fitPreview).toHaveAttribute('data-board-cells', '15');
   await expect(fitPreview).toHaveAttribute('data-user-path-preview', 'shown');
@@ -2781,7 +2957,7 @@ test('Recommendation sheet applies a distinct mechanism and blueprint recipe', a
   await page.getByRole('button', { name: /Recommend/i }).click();
   await expect(page.getByTestId('recommendation-sheet')).toBeVisible();
   const enabledApplyButtons = page.getByTestId('recommendation-sheet').locator('button.btn-primary:not(:disabled)');
-  await expect(enabledApplyButtons.first()).toBeVisible();
+  await expect(enabledApplyButtons.first()).toBeVisible({ timeout: 60_000 });
   expect(await enabledApplyButtons.count(), 'at least two fabrication-ready recommendations').toBeGreaterThan(1);
   await enabledApplyButtons.nth(1).click();
   await clickStage(page, 'Blueprint');
@@ -3061,6 +3237,7 @@ test('Foundry and Design hide every disabled mechanism creation choice', async (
   await designPane.getByRole('button', { name: /Recommend/i }).click();
   const recommendationSheet = page.getByTestId('recommendation-sheet');
   await expect(recommendationSheet).toBeVisible();
+  await expect(recommendationSheet).toHaveAttribute('data-recommendation-state', 'ready', { timeout: 60_000 });
   for (const type of ['piston', 'cam', 'planetary_gear']) {
     await expect(recommendationSheet.getByTestId(`recommendation-card-${type}`)).toHaveCount(0);
   }

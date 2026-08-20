@@ -52,6 +52,7 @@ import { selectBlueprintRecipe } from '../components/stages/blueprint/BlueprintE
 import { MechanismLinkagePreview } from '../components/stages/foundry/MechanismLinkagePreview';
 import { FoundryWorkflowPanel } from '../components/stages/foundry/FoundryWorkflowPanel';
 import { useAppMechanismActions } from '../hooks/useAppMechanismActions';
+import { createMechanismOptimizerJobInput, runMechanismOptimizerJob } from '../runtime/optimizer/mechanismOptimizerJob';
 import { createStageNavigator, navigateAppStage } from '../utils/appStageNavigation';
 import { assemblyCoordToSvg, characterBoardProjector, characterCanvasProjector, smoothAssemblyProgress, svgPathFromPoints } from '../components/stages/assembly/assemblyGeometry';
 import { smoothTrackingPoints, trackingPointsToWorldPath } from '../utils/trackingPath';
@@ -217,7 +218,6 @@ const renderMechanismActionHarness = (overrides: {
   const dispatches: ProjectAction[] = [];
   let stage: AppStage = 'character';
   let commandStatus = '';
-  let recommendationsShown = true;
   let actions: MechanismActionHarness | undefined;
   const Harness = () => {
     actions = useAppMechanismActions({
@@ -232,7 +232,6 @@ const renderMechanismActionHarness = (overrides: {
       angle: overrides.angle ?? 0,
       setStage: (nextStage) => { stage = nextStage; },
       setCommandStatus: (status) => { commandStatus = status; },
-      setShowRecommendations: (shown) => { recommendationsShown = shown; },
     });
     return null;
   };
@@ -243,7 +242,6 @@ const renderMechanismActionHarness = (overrides: {
     dispatches,
     stage: () => stage,
     commandStatus: () => commandStatus,
-    recommendationsShown: () => recommendationsShown,
   };
 };
 
@@ -340,6 +338,7 @@ const classroomExampleVideoSource = readFileSync(join(process.cwd(), 'components
 const viteConfigText = readFileSync(join(process.cwd(), 'vite.config.ts'), 'utf8');
 assert(viteConfigText.includes("const webBase = process.env.VITE_BASE_PATH ?? '/'"), 'web deployment base can be set by VITE_BASE_PATH for project Pages');
 assert(viteConfigText.includes("base: isTauri ? './' : webBase"), 'Tauri stays relative while web builds can target /ms/');
+assert(viteConfigText.includes("format: 'es' as const"), 'module workers keep expensive jobs out of their cold entrypoint');
 assert(viteConfigText.includes('chunkSizeWarningLimit: 2400'), 'Vite chunk warning budget is explicit for intentional lazy Rapier/ONNX browser chunks');
 assert(normalizedCodebaseCleanupPlan.includes('Button and command audit lock') && normalizedCodebaseCleanupPlan.includes('utils/appCommands.ts'), 'cleanup plan records the executable button/menu audit lock');
 assert(normalizedCodebaseCleanupPlan.includes('Warning fixes locked') && normalizedCodebaseCleanupPlan.includes('Rapier warning boundary'), 'cleanup plan records scoped warning fixes instead of broad suppression');
@@ -518,7 +517,7 @@ assert(appProjectCommandsHookText.includes('setShowAbout(true)'), 'About command
 assert(!appCommandSource.includes('showDirectoryPicker'), 'browser UI omits fake output-folder selection until downloads can write there');
 assert(appEntrySource.includes('<AppWorkspaceShell {...workspaceProps} />') && appControllerSource.includes('useMotionSmithAppController') && appCommandSource.includes('workflowStatus,') && appCommandSource.includes('stageRouterProps,') && appCommandSource.includes('buildAppStageRouterProps') && appStageRouterPropsText.includes('export type AppStageRouterPropGroups') && appStageRouterPropsText.includes(': AppStageRouterProps =>') && appStageRouterPropsText.includes('foundryStage') && appStageRouterPropsText.includes('...assembly') && !appStageRouterPropsText.includes('return (') && !appStageRouterPropsText.includes('useState') && !appStageRouterPropsText.includes('React') && !appEntrySource.includes('app-header') && !appEntrySource.includes('quick-toolbar') && !appEntrySource.includes('WorkflowStatusStrip'), 'App delegates workspace shell markup and pure stage-router prop grouping while preserving status and stage-router props');
 assert(appEntrySource.includes('useMotionSmithAppController') && appEntrySource.includes('<AppWorkspaceShell {...workspaceProps} />') && !appEntrySource.includes('useState') && !appEntrySource.includes('useRef') && !appEntrySource.includes('buildAppStageRouterProps'), 'App.tsx is a tiny composition entry while useMotionSmithAppController owns app orchestration');
-assert(appWorkspaceShellCommandSource.includes('<AppStageRouter') && appWorkspaceShellCommandSource.includes('<TopCommandBar') && appWorkspaceShellCommandSource.includes('commandHandlers={commandHandlers}') && appWorkspaceShellCommandSource.includes('<WorkflowRail') && appWorkspaceShellCommandSource.includes('<WorkflowStatusStrip {...workflowStatus}') && appWorkspaceShellCommandSource.includes('<GettingStartedDialog') && appWorkspaceShellCommandSource.includes('<ShortcutHelpDialog') && appWorkspaceShellCommandSource.includes('<AboutDialog') && appWorkspaceShellCommandSource.includes('<MechanismRecommendationSheet') && appWorkspaceShellCommandSource.includes('onApply={onApplyRecommendation}') && appWorkspaceShellCommandSource.includes('<TrackingModal') && appWorkspaceShellCommandSource.includes('onTransfer={onTransferTracking}'), 'AppWorkspaceShell preserves command, status, modal, recommendation, and tracking prop wiring');
+assert(appWorkspaceShellCommandSource.includes('<AppStageRouter') && appWorkspaceShellCommandSource.includes('<TopCommandBar') && appWorkspaceShellCommandSource.includes('commandHandlers={commandHandlers}') && appWorkspaceShellCommandSource.includes('<WorkflowRail') && appWorkspaceShellCommandSource.includes('<WorkflowStatusStrip {...workflowStatus}') && appWorkspaceShellCommandSource.includes('<GettingStartedDialog') && appWorkspaceShellCommandSource.includes('<ShortcutHelpDialog') && appWorkspaceShellCommandSource.includes('<AboutDialog') && !appWorkspaceShellCommandSource.includes('<MechanismRecommendationSheet') && appWorkspaceShellCommandSource.includes('<TrackingModal') && appWorkspaceShellCommandSource.includes('onTransfer={onTransferTracking}'), 'AppWorkspaceShell preserves command, status, global modal, and tracking wiring without owning Design-local recommendation state');
 assert(appWorkspaceShellCommandSource.includes('data-testid="header-home"') && appWorkspaceShellCommandSource.includes('onClick={onHome}') && workflowRailCommandSource.includes('data-testid="rail-home"') && workflowRailCommandSource.includes('onClick={onHome}') && appControllerSource.includes('const openHome = ()') && appControllerSource.includes('setStage("character")') && appControllerSource.includes('setShowGettingStarted(true)'), 'Home controls return to Character and reopen Getting Started without replacing ProjectState');
 assert(appShellCommandSource.includes("export { GettingStartedDialog") && gettingStartedDialogCommandSource.includes('export const GettingStartedDialog') && gettingStartedDialogCommandSource.includes('data-testid="getting-started-dialog"') && appWorkspaceShellCommandSource.includes('<GettingStartedDialog'), 'Getting Started dialog is an extracted shell leaf while preserving workspace mount wiring');
 assert(!appShellCommandSource.includes('<') && !appShellCommandSource.includes('useState') && appShellCommandSource.includes("export { WorkflowRail") && appShellCommandSource.includes("export { TopCommandBar") && appShellCommandSource.includes("export { WorkspacePlayerDock") && appShellCommandSource.includes("export { SHARED_PLAYBACK_STAGES, STAGES"), 'AppShell is a compatibility re-export barrel, not a JSX/state owner');
@@ -746,7 +745,7 @@ assert.deepEqual(tauriConfig.bundle.icon, ['icons/icon.png', 'icons/icon.ico', '
 assert(cargoTomlText.includes(`version = "${packageJson.version}"`), 'Cargo.toml version stays aligned with package.json');
 assert(cargoLockText.includes('name = "motionsmith"') && cargoLockText.includes(`version = "${packageJson.version}"`), 'Cargo.lock MotionSmith package version stays aligned with package.json');
 assert.equal(packageJson.packageManager, 'bun@1.3.14', 'Bun is the canonical package manager');
-assert.equal(packageJson.scripts['test:contracts'], 'bun tests/project-contract.test.ts && bun tests/chromebook-audit-contract.test.ts && bun tests/render-performance-policy.test.ts && bun tests/automata-scene-runtime.test.ts && bun tests/three-resource-retention.test.ts && bun tests/cadenced-playback-sampler.test.ts', 'contract tests run directly through Bun without noisy temporary bundling and include Chromebook, render-policy, golden-runtime, resource-retention, and cadenced-sampling gates');
+assert.equal(packageJson.scripts['test:contracts'], 'bun tests/project-contract.test.ts && bun tests/mechanism-recommendation-worker.test.ts && bun tests/mechanism-optimizer-worker.test.ts && bun tests/web-onnx-inference-worker.test.ts && bun tests/web-onnx-image-worker.test.ts && bun tests/character-import-supersession.test.ts && bun tests/tracking-media-policy.test.ts && bun tests/chromebook-audit-contract.test.ts && bun tests/render-performance-policy.test.ts && bun tests/automata-scene-runtime.test.ts && bun tests/three-resource-retention.test.ts && bun tests/cadenced-playback-sampler.test.ts', 'contract tests run directly through Bun without noisy temporary bundling and include heavy-worker, bounded-image, import-supersession, media-memory, Chromebook, render-policy, golden-runtime, resource-retention, and cadenced-sampling gates');
 assert.equal(packageJson.dependencies[PHYSICS_KERNEL_IMPORT], '^0.19.3', 'Rapier 3D compatibility WASM kernel is installed behind the physics subsystem boundary');
 assert(!packageJson.dependencies['@react-three/fiber'] && !packageJson.dependencies['@react-three/rapier'] && !packageJson.dependencies['babylonjs'], 'renderer stack avoids extra scene frameworks while the imperative Three boundary is sufficient');
 assert.equal(packageJson.scripts.build, 'tsc && vite build', 'browser build keeps Vite as the bundler for Rapier/Vite chunk handling');
@@ -2828,6 +2827,7 @@ const blueprintControlPanelText = readFileSync(join(process.cwd(), 'components',
 const blueprintDetailPanelText = readFileSync(join(process.cwd(), 'components', 'stages', 'blueprint', 'BlueprintDetailPanel.tsx'), 'utf8');
 const assemblyPlaybackText = readFileSync(join(process.cwd(), 'utils', 'assemblyPlayback.ts'), 'utf8');
 const threePreviewText = readFileSync(join(process.cwd(), 'components', 'ThreePuppetPreview.tsx'), 'utf8');
+const partArtMaterialText = readFileSync(join(process.cwd(), 'runtime', 'render', 'partArtMaterial.ts'), 'utf8');
 const exporterText = readFileSync(join(process.cwd(), 'utils', 'exporter.ts'), 'utf8');
 const physicsSessionText = readFileSync(join(process.cwd(), 'utils', 'physicsSession.ts'), 'utf8');
 const mechanismPreviewText = readFileSync(join(process.cwd(), 'utils', 'mechanismPreview.ts'), 'utf8');
@@ -2849,6 +2849,22 @@ const sceneObjectInspectorText = readFileSync(join(process.cwd(), 'components', 
 const sceneObjectImageText = readFileSync(join(process.cwd(), 'utils', 'sceneObjectImage.ts'), 'utf8');
 const pathEditorText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'PathEditor.tsx'), 'utf8');
 const mechanismRecommendationSheetText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'MechanismRecommendationSheet.tsx'), 'utf8');
+const mechanismRecommendationJobText = readFileSync(join(process.cwd(), 'runtime', 'recommendations', 'mechanismRecommendationJob.ts'), 'utf8');
+const mechanismRecommendationWorkerClientText = readFileSync(join(process.cwd(), 'runtime', 'recommendations', 'mechanismRecommendationWorkerClient.ts'), 'utf8');
+const mechanismRecommendationWorkerText = readFileSync(join(process.cwd(), 'workers', 'mechanismRecommendationWorker.ts'), 'utf8');
+const mechanismOptimizerJobText = readFileSync(join(process.cwd(), 'runtime', 'optimizer', 'mechanismOptimizerJob.ts'), 'utf8');
+const mechanismOptimizerWorkerClientText = readFileSync(join(process.cwd(), 'runtime', 'optimizer', 'mechanismOptimizerWorkerClient.ts'), 'utf8');
+const mechanismOptimizerWorkerText = readFileSync(join(process.cwd(), 'workers', 'mechanismOptimizerWorker.ts'), 'utf8');
+const webOnnxInferenceClientText = readFileSync(join(process.cwd(), 'runtime', 'ai', 'webOnnxInference.ts'), 'utf8');
+const webOnnxInferenceWorkerText = readFileSync(join(process.cwd(), 'workers', 'webOnnxInferenceWorker.ts'), 'utf8');
+const webOnnxImageGeometryText = readFileSync(join(process.cwd(), 'runtime', 'ai', 'webOnnxImageGeometry.ts'), 'utf8');
+const webOnnxImageRasterText = readFileSync(join(process.cwd(), 'runtime', 'ai', 'webOnnxImageRaster.ts'), 'utf8');
+const webOnnxImageDecodePolicyText = readFileSync(join(process.cwd(), 'runtime', 'ai', 'webOnnxImageDecodePolicy.ts'), 'utf8');
+const webOnnxModelJobCoordinatorText = readFileSync(join(process.cwd(), 'runtime', 'ai', 'webOnnxModelJobCoordinator.ts'), 'utf8');
+const webOnnxCacheWorkerText = readFileSync(join(process.cwd(), 'workers', 'webOnnxCacheWorker.ts'), 'utf8');
+const trackingMediaPolicyText = readFileSync(join(process.cwd(), 'runtime', 'media', 'trackingMediaPolicy.ts'), 'utf8');
+const gifFrameSessionText = readFileSync(join(process.cwd(), 'runtime', 'media', 'gifFrameSession.ts'), 'utf8');
+const gifFrameWorkerText = readFileSync(join(process.cwd(), 'workers', 'gifFrameWorker.ts'), 'utf8');
 const mechanismParametricEditorText = readFileSync(join(process.cwd(), 'components', 'stages', 'mechanism', 'MechanismParametricEditor.tsx'), 'utf8');
 const mechanismInspectorAnalysisText = readFileSync(join(process.cwd(), 'utils', 'mechanismInspectorAnalysis.ts'), 'utf8');
 const mechanismParamPolicyText = readFileSync(join(process.cwd(), 'components', 'stages', 'mechanism', 'mechanismParamPolicy.ts'), 'utf8');
@@ -3575,7 +3591,8 @@ assert(!threePreviewText.includes('loadRapierPhysicsKernel') && threePreviewText
 assert(threePreviewText.includes("const PUPPET_CAMERA_PRESETS: Viewer3DCameraPreset[] = ['front', 'iso']"), 'puppet viewer toolbar exposes only the fixed 2D and orbitable 3D modes');
 assert(threePreviewText.includes('onWheel={handleViewerWheel}') && threePreviewText.includes('data-camera-yaw'), 'puppet 3D canvas exposes direct wheel zoom and orbit state for browser verification');
 assert(appStageRouterText.includes('<PathEditor') && !appText.includes('<PathEditor'), 'AppStageRouter delegates Path Editor stage to the extracted PathEditor seam');
-assert(appWorkspaceShellText.includes('<MechanismRecommendationSheet') && mechanismRecommendationSheetText.includes('buildMechanismRecommendations') && mechanismRecommendationSheetText.includes('mechanismWithGeneratedPath'), 'AppWorkspaceShell mounts the Path recommendation modal while recommendation scoring and generated-path wrapping stay outside the app shell');
+assert(designWorkflowPanelText.includes('const DesignRecommendationControl') && designWorkflowPanelText.includes('useState(false)') && designWorkflowPanelText.includes('<MechanismRecommendationSheet') && designWorkflowPanelText.includes('onApply(mechanism)') && !mechanismDesignText.includes('useState(false)') && !appWorkspaceShellText.includes('<MechanismRecommendationSheet') && mechanismRecommendationSheetText.includes('createMechanismRecommendationWorkerClient') && mechanismRecommendationSheetText.includes('mechanismWithGeneratedPath') && mechanismRecommendationJobText.includes('buildMechanismRecommendations') && mechanismRecommendationWorkerClientText.includes('generationId') && mechanismRecommendationWorkerText.includes('runMechanismRecommendationJob'), 'the Design recommendation control owns modal visibility so opening its generation-checked worker does not rerender the stage or workspace shell');
+assert(appMechanismActionsHookText.includes('createMechanismOptimizerWorkerClient') && mechanismOptimizerJobText.includes('runMechanismOptimizerSearch') && mechanismOptimizerJobText.includes('fitMechanismToTargetPath') && mechanismOptimizerWorkerClientText.includes('generationId') && mechanismOptimizerWorkerText.includes('runMechanismOptimizerJob(data.input') && !appMechanismActionsHookText.includes('for (let i = 0; i < iterations; i++)'), 'Design fitting runs deterministic search and final path fitting in a cancellable generation-checked worker instead of blocking the React action hook');
 assert(mechanismRecommendationSheetText.includes('RecommendationFitPreview') && mechanismRecommendationSheetText.includes('<MechanismLinkagePreview') && mechanismRecommendationSheetText.includes('data-board-cells') && mechanismRecommendationSheetText.includes('data-user-path-preview') && mechanismRecommendationSheetText.includes('data-mechanism-path-preview'), 'recommendation modal previews board fit with user path, fitted mechanism path, and the actual front-view mechanism');
 assert(pathCanvasPaneText.includes('path-view-2d') && pathCanvasPaneText.includes('path-view-3d'), 'Path Editor exposes a persistent 2D/3D Path view switch');
 assert(pathCanvasPaneText.includes('<ThreePuppetPreview') && pathCanvasPaneText.includes('testId="path-three-puppet"') && pathCanvasPaneText.includes('initialCameraPreset={pathViewMode === "2d" ? "front" : "iso"}'), 'Path Editor uses the shared Three scene for both front 2D and orbitable 3D views');
@@ -3605,15 +3622,19 @@ assert.deepEqual(cachedFit.pathPoints, directFit.pathPoints, 'cached Foundry fit
 assert(Math.hypot(cachedFit.state.effector.x - directFit.state.effector.x, cachedFit.state.effector.y - directFit.state.effector.y) < 1e-9, 'cached Foundry fit maps the live effector exactly like direct fit');
 assert(!threePreviewText.includes('teeth * 2'), '3D preview no longer carries a separate saw-tooth gear implementation');
 assert(threePreviewText.includes('fabricablePartOutlinePoints'), '3D puppet preview uses shared model/user contour outlines instead of raw image crop rectangles');
-assert(webOnnxText.includes('contourFromCropMask') && webOnnxText.includes("contourSource: crop.contourPoints.length >= 3 ? 'onnx-mask'"), 'browser ONNX preserves mask-derived part contours for fabrication plates');
+assert(webOnnxImageGeometryText.includes('contourFromPartMask') && webOnnxImageGeometryText.includes("contourSource: plan.contourPoints.length >= 3 ? 'onnx-mask'"), 'worker-side browser ONNX preserves mask-derived part contours for fabrication plates');
 assert(webOnnxText.includes('MODEL_CACHE_NAME') && webOnnxText.includes('caches.open') && webOnnxText.includes('warmWebOnnxCache'), 'browser ONNX model can be separately downloaded and cached');
-assert(webOnnxText.includes('GIT_LFS_POINTER_PREFIX') && webOnnxText.includes('deleteCachedModel') && webOnnxText.includes("cache: 'reload'"), 'browser ONNX rejects stale Git LFS pointer caches and refetches model bytes');
-assert(webOnnxText.includes('MODEL_BYTES_HEADER') && webOnnxText.includes('x-motionsmith-model-bytes'), 'browser ONNX marks valid cached model bytes to avoid treating pointer files as ready');
-assert(webOnnxText.includes('assertCompleteModelDownload') && webOnnxText.includes('download disconnected after'), 'browser ONNX rejects interrupted model downloads before they can be cached');
-assert(webOnnxText.includes('markedBytes && markedBytes !== buffer.byteLength'), 'browser ONNX evicts cache entries whose recorded bytes do not match the cached body');
-assert(webOnnxText.includes("runtimeStage === 'loading-model'") && webOnnxText.includes('Cached model bytes were cleared') && webOnnxText.includes('URL.revokeObjectURL(imageUrl)'), 'browser ONNX clears bad session-load caches and releases per-image blob URLs for repeated imports');
-assert(webOnnxText.includes('InferenceSession.create(new Uint8Array(modelBuffer)'), 'browser ONNX creates sessions from cached model bytes');
-assert(webOnnxText.includes("import('onnxruntime-web')") && !webOnnxText.includes("import * as ort from 'onnxruntime-web'"), 'ONNX Runtime JS is lazy-loaded outside the initial editor shell bundle');
+assert(webOnnxInferenceWorkerText.includes('GIT_LFS_POINTER_PREFIX') && webOnnxInferenceWorkerText.includes("cache: 'reload'") && webOnnxCacheWorkerText.includes('GIT_LFS_POINTER_PREFIX'), 'worker-owned browser ONNX rejects stale Git LFS pointers and refetches model bytes');
+assert(webOnnxText.includes('MODEL_BYTES_HEADER') && webOnnxText.includes('x-motionsmith-model-bytes') && webOnnxInferenceWorkerText.includes('model.bytesHeader'), 'browser ONNX marks valid cached model bytes to avoid treating pointer files as ready');
+assert(webOnnxInferenceWorkerText.includes('download disconnected after') && webOnnxCacheWorkerText.includes('download disconnected after'), 'AI workers reject interrupted model downloads before reporting them ready');
+assert(webOnnxInferenceWorkerText.includes('markedBytes && markedBytes !== buffer.byteLength') && webOnnxCacheWorkerText.includes('markedBytes <= request.minBytes') && webOnnxCacheWorkerText.includes('firstChunk?.value'), 'inference validates cached model length before use while cache warm validates retained size and prefix without materializing the full model');
+assert(!webOnnxText.includes('URL.createObjectURL(') && !webOnnxText.includes('getImageData('), 'repeated AI imports keep image decoding and pixel extraction out of the UI thread and avoid per-image object URLs');
+assert(webOnnxText.includes('runWebOnnxInferenceInWorker') && webOnnxInferenceWorkerText.includes('InferenceSession.create(') && webOnnxInferenceWorkerText.includes('prepareWebOnnxImage(request.file)') && webOnnxInferenceWorkerText.includes('finishWebOnnxImage(prepared, skeleton)') && !webOnnxText.includes('InferenceSession.create('), 'browser ONNX session, raster preparation, inference, and editable-part extraction are owned by the dedicated worker');
+assert(webOnnxImageGeometryText.includes('WEB_ONNX_IMAGE_MAX_EDGE = 1280') && webOnnxImageDecodePolicyText.includes('WEB_ONNX_IMAGE_MAX_COMPRESSED_BYTES = 32 * 1024 * 1024') && webOnnxImageRasterText.includes('readWebOnnxImageMetadata(header)') && webOnnxImageRasterText.includes('data: file.stream()') && webOnnxImageRasterText.includes('desiredWidth: dimensions.width') && webOnnxImageRasterText.includes('cannot safely decode images above 1280px') && webOnnxImageRasterText.includes('decoded.close()'), 'AI image decode requests a <=1280px output from metadata before allocating masks, queues, canvases, and output rasters; unsupported decoders reject large inputs rather than full-decoding them');
+assert(webOnnxInferenceWorkerText.includes("import('onnxruntime-web')") && webOnnxInferenceClientText.includes('worker.terminate()') && webOnnxInferenceWorkerText.includes('releaseWithoutThrowing(outputTensor)') && webOnnxInferenceWorkerText.includes('releaseWithoutThrowing(session)') && !webOnnxText.includes("import('onnxruntime-web')"), 'ONNX Runtime loads only inside explicit inference and releases worker, tensors, and session even when cleanup fails');
+assert(webOnnxInferenceWorkerText.includes('new TransformStream<Uint8Array, Uint8Array>') && webOnnxCacheWorkerText.includes('new TransformStream<Uint8Array, Uint8Array>') && !webOnnxInferenceWorkerText.includes('const chunks:') && !webOnnxCacheWorkerText.includes('const chunks:') && !webOnnxCacheWorkerText.includes('buffer.slice(0)'), 'AI model downloads stream inside workers without retaining chunk arrays or making a second JavaScript model copy');
+assert(webOnnxText.includes('webOnnxModelJobCoordinator.runWarm') && webOnnxText.includes('webOnnxModelJobCoordinator.runInference') && webOnnxModelJobCoordinatorText.includes('activeWarm') && webOnnxModelJobCoordinatorText.includes('activeInferences') && webOnnxModelJobCoordinatorText.includes("new DOMException('ONNX inference cancelled'") && !webOnnxCacheWorkerText.includes('cachePromise.catch'), 'cache warm and inference jobs wait bidirectionally instead of buffering the 130MB model twice, waiting imports remain abortable, and warm reports success only after Cache Storage accepts the model');
+assert(webOnnxInferenceWorkerText.includes('const cacheResponse =') && !webOnnxCacheWorkerText.includes('trackedResponse.clone()') && !webOnnxCacheWorkerText.includes('.arrayBuffer()') && !webOnnxInferenceWorkerText.includes('creatingSession'), 'inference tees model bytes only when ORT needs them, cache warm uses one streaming Cache Storage sink, and valid-length caches survive unrelated WASM or memory failures');
 assert(appUiText.includes('data-testid="onnx-cache-status"') && appOnnxBootstrapText.includes('warmWebOnnxCache'), 'status bar exposes ONNX cache/download status');
 assert(indexText.includes('id="boot-loader"') && indexText.includes('Loading MotionSmith') && indexText.includes('boot-version') && indexText.includes('data-boot-status') && indexText.includes('data-boot-progress'), 'static boot loader covers slow startup with logo, wordmark, version, and AI model progress');
 assert(viewer3dText.includes('VIEWER3D_CAMERA_PRESETS') && threePreviewText.includes('three-puppet-view-toolbar') && foundryCameraText.includes('foundryPreset'), '3D puppet and foundry previews share one viewer camera preset contract');
@@ -3630,7 +3651,7 @@ ${mechanismDesignStageText}
 ${designFoundryPreviewText}`.includes('hideSceneUnderlay/>'), 'Mechanism Design no longer depends on the legacy 2D design canvas underlay toggle');
 assert(threePreviewText.includes('data-three-part-surface="solid-cut-plates"'), '3D puppet preview exposes the solid cut-plate surface contract');
 assert(threePreviewText.includes('data-three-part-art="top-texture-decal"'), '3D puppet preview exposes that artwork is rendered on top of plates');
-assert(threePreviewText.includes('TextureLoader'), '3D puppet preview loads character part images as surface decals');
+assert(threePreviewText.includes('createPartArtMaterial') && partArtMaterialText.includes('ImageBitmapLoader') && partArtMaterialText.includes('bitmap.close()'), '3D puppet preview decodes surface decals asynchronously and closes owned ImageBitmaps');
 assert(threePreviewText.includes('new THREE.ShapeGeometry(shape)'), '3D puppet artwork decals are clipped to fabrication part outlines');
 assert(threePreviewText.includes('part-art-decal'), '3D puppet preview names surface decal meshes for browser inspection');
 assert(threePreviewText.includes('cut-hole-ring'), '3D puppet preview draws raised joint-hole rings on part surfaces');
@@ -3671,7 +3692,7 @@ assert(appText.includes('useProjectHistory(createInitialProject)') && appProject
 assert(appProjectCommandsHookText.includes('setProject(createEmptyProject(), { resetHistory: true })'), 'New Project resets to an empty project instead of a starter character');
 assert(appProjectCommandsHookText.includes('project.sceneObjectOrder.length > 0') && appProjectCommandsHookText.includes('Object.keys(project.sceneObjects).length > 0'), 'New Project discard confirmation treats Character-created scene objects as user work');
 assert(appCharacterImportActionsHookText.includes('returnStage: "character"') && appCharacterImportActionsHookText.includes('AI could not load on this network. Use a starter character or load a character file.'), 'Accepted character loads stay in Character and failed AI imports provide a local fallback action');
-assert(characterImportOverlaysText.includes('character-import-review') && characterSelectionText.includes('<CharacterImportStatusDock') && characterSelectionText.includes('reviewedProject={reviewedProject}') && characterSelectionText.includes('<CharacterImportReviewDialog') && characterImportOverlaysText.includes('showImportChecks = project.settings.debugVisuals'), 'Character imports preview the pending character and put approval in a centered overlay while checks stay dev-only');
+assert(characterImportOverlaysText.includes('character-import-review') && characterSelectionText.includes('<CharacterImportStatusDock') && characterSelectionText.includes('<CharacterImportReviewBoundary') && characterSelectionText.includes('project={project}') && !characterSelectionText.includes('reviewedProject={reviewedProject}') && characterImportOverlaysText.includes('showImportChecks = project.settings.debugVisuals'), 'Character imports keep the current workbench stable until centered approval, then build the accepted character while checks stay dev-only');
 assert(appUiText.includes('Dev mode') && !appUiText.includes('Debug visuals'), 'Options expose debug overlays as Dev mode instead of novice-facing debug copy');
 assert(!appText.includes('<WelcomeDialog') && !appUiText.includes('WelcomeDialog') && !appText.includes('setShowWelcome') && !appText.includes('setShowGettingStarted(!hideNextTime)') && appText.includes('const [showGettingStarted, setShowGettingStarted] = useState(') && appText.includes('readGettingStartedHiddenForSession'), 'Startup uses the static boot loader only, then opens Getting Started unless the session opt-out is set');
 assert(characterImportControlsText.includes('onOpenGettingStarted') && characterImportControlsText.includes('Open Getting Started') && characterSelectionText.includes('<CharacterImportControls'), 'Character tab can reopen Getting Started through extracted import controls without owning its starter gallery');
@@ -3809,6 +3830,8 @@ assert.equal(smoothAssemblyProgress(0.5), 0.5, 'assembly progress easing preserv
 assert.equal(smoothAssemblyProgress(2), 1, 'assembly progress easing clamps above one');
 assert.equal(svgPathFromPoints([{ x: 0, y: 0 }, { x: 1, y: 2 }], point => ({ x: point.x + 10, y: point.y + 20 })), 'M 10.0 20.0 L 11.0 22.0 Z', 'assembly path helper is deterministic and projection-driven');
 assert(trackingModalSource.includes("from '../utils/trackingPath'") && !trackingModalSource.includes('segmentsPerEdge = 20'), 'Tracking modal delegates path smoothing/normalization to a DOM-free helper seam');
+assert(trackingModalSource.includes('createGifFrameSession') && trackingModalSource.includes('requestVideoFrameCallback') && trackingModalSource.includes('gifBitmapRef.current?.close()') && trackingModalSource.includes('URL.revokeObjectURL') && trackingModalSource.includes('updateTimeline(frame, activePlan.sampledFrames') && !trackingModalSource.includes('updateTimeline(nextFrame') && !trackingModalSource.includes("from 'gifuct-js'") && !trackingModalSource.includes('toDataURL(') && !trackingModalSource.includes('setInterval('), 'Trace playback lazily decodes GIFs, advances the GIF timeline only after bitmap delivery, drives video outside React frame state, and releases bitmap/blob resources');
+assert(trackingMediaPolicyText.includes('TRACKING_MEDIA_MAX_EDGE_PX = 1280') && trackingMediaPolicyText.includes('TRACKING_MEDIA_MAX_FPS = 30') && trackingMediaPolicyText.includes('TRACKING_MEDIA_MAX_SAMPLED_FRAMES = 600') && trackingMediaPolicyText.includes('scanTrackingGifMetadata') && trackingMediaPolicyText.includes('assertTrackingGifDecodeInput') && trackingMediaPolicyText.includes('trackingGifFallbackReplayWindow') && gifFrameSessionText.includes('queuedIndex') && gifFrameWorkerText.includes('assertTrackingGifDecodeInput(metadata)') && gifFrameWorkerText.includes('new ImageDecoder({') && gifFrameWorkerText.includes('desiredWidth: initialPlan.width') && gifFrameWorkerText.includes('sourceCanvas = new OffscreenCanvas(plan.width, plan.height)') && gifFrameWorkerText.includes('TRACKING_GIF_FALLBACK_MAX_RAW_FRAMES') && gifFrameWorkerText.includes("await import('gifuct-js')") && gifFrameWorkerText.includes('transferToImageBitmap()'), 'Trace GIF decoding rejects raw timelines above 600 before decode, scans metadata without retaining raw frame objects, scales native decode inputs, bounds fallback replay/canvases, and streams one in-flight coalesced ImageBitmap');
 assert.deepEqual(smoothTrackingPoints([{ x: 0, y: 0 }, { x: 10, y: 0 }], { enabled: true }), [{ x: 0, y: 0 }, { x: 10, y: 0 }], 'tracking smoothing leaves short manual paths unchanged');
 assert.equal(smoothTrackingPoints([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], { connectEndPoints: true, segmentsPerEdge: 2 }).length, 6, 'closed tracking smoothing samples every wrapped segment');
 assert.equal(smoothTrackingPoints([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], { connectEndPoints: false, segmentsPerEdge: 2 }).length, 5, 'open tracking smoothing samples edge segments and preserves the final point');
@@ -5516,18 +5539,15 @@ const objectToggleHarness = renderMechanismActionHarness({
 objectToggleHarness.actions.updateMechanism('object-path-driver', { enabled: false });
 const objectToggleDispatch = objectToggleHarness.dispatches.at(-1) as { type: string; mechanism: MechanismConfig };
 assert.deepEqual(objectToggleDispatch.mechanism.generatedPath, objectGeneratedPathSentinel, 'metadata-only Design edits preserve fitted generatedPath samples');
-const objectOptimizeHarness = renderMechanismActionHarness({
-  project: { ...objectPathMechanismProject, settings: { ...objectPathMechanismProject.settings, performancePreset: 'fast' } },
-  selectedPart: objectPathMechanismProject.parts.head,
-  selectedPath: objectPathMechanismProject.paths['path-right-arm'],
-  selectedMechanism: objectPathMechanism,
-  selectedSceneObject: objectPathMechanismProject.sceneObjects['object-piggy']
-});
-await objectOptimizeHarness.actions.optimizeSelectedMechanism();
-const optimizedObjectDispatch = objectOptimizeHarness.dispatches.at(-1) as { type: string; mechanism: MechanismConfig };
-assert.equal(optimizedObjectDispatch.mechanism.targetSceneObjectId, 'object-piggy', 'Design Fit optimizes against the selected mechanism object target instead of the ambient selected part');
-assert.equal(optimizedObjectDispatch.mechanism.targetPartId, undefined, 'Design Fit keeps object-target mechanisms free of body-part retargeting');
-assert.equal(optimizedObjectDispatch.mechanism.targetPathId, 'path-object-piggy', 'Design Fit keeps the selected mechanism target path');
+const optimizedObjectResult = runMechanismOptimizerJob(createMechanismOptimizerJobInput(
+  { ...objectPathMechanismProject, settings: { ...objectPathMechanismProject.settings, performancePreset: 'fast' } },
+  objectPathMechanism,
+  'path-object-piggy',
+  1,
+));
+assert.equal(optimizedObjectResult.mechanism.targetSceneObjectId, 'object-piggy', 'Design Fit optimizes against the selected mechanism object target instead of the ambient selected part');
+assert.equal(optimizedObjectResult.mechanism.targetPartId, undefined, 'Design Fit keeps object-target mechanisms free of body-part retargeting');
+assert.equal(optimizedObjectResult.mechanism.targetPathId, 'path-object-piggy', 'Design Fit keeps the selected mechanism target path');
 const sampleMechanism = fabricationSample.mechanisms[0];
 assert(sampleMechanism, 'fabrication sample has a mechanism for driven-target checks');
 for (const phase of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {

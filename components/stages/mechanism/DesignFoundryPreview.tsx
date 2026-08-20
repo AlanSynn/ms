@@ -38,7 +38,7 @@ const cameraLabel = (camera: FoundryCamera) =>
     ? "Custom view"
     : FOUNDRY_VIEW_PRESETS[camera.preset].label;
 
-export const DesignFoundryPreview = ({
+export const DesignFoundryPreview = React.memo(({
   project,
   mechanism,
   angle,
@@ -387,4 +387,6 @@ export const DesignFoundryPreview = ({
       </ThreeFoundryPreview>
     </section>
   );
-};
+});
+
+DesignFoundryPreview.displayName = "DesignFoundryPreview";

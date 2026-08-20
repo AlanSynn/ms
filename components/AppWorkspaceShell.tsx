@@ -14,10 +14,9 @@ import {
   type GuidedLessonTile,
   type StarterImageTemplate,
 } from "./AppShell";
-import { MechanismRecommendationSheet } from "./stages/path/MechanismRecommendationSheet";
 import { TrackingModal } from "./TrackingModal";
 import motionSmithIconUrl from "../resources/icons/AppIcon.png?url";
-import type { AppStage, MechanismConfig, Point, ProjectState } from "../types";
+import type { AppStage, Point, ProjectState } from "../types";
 import type { AppCommandHandlerMap } from "../utils/appCommands";
 import type { WebOnnxCacheStatus } from "../utils/webOnnx";
 import type { WorkflowStatus } from "../utils/workflowStatus";
@@ -54,9 +53,6 @@ export type AppWorkspaceShellProps = {
   onCloseShortcuts: () => void;
   showAbout: boolean;
   onCloseAbout: () => void;
-  showRecommendations: boolean;
-  onCloseRecommendations: () => void;
-  onApplyRecommendation: (mechanism: MechanismConfig) => void;
   showTracking: boolean;
   onCloseTracking: () => void;
   onTransferTracking: (path: Point[]) => void;
@@ -102,9 +98,6 @@ export const AppWorkspaceShell = ({
   onCloseShortcuts,
   showAbout,
   onCloseAbout,
-  showRecommendations,
-  onCloseRecommendations,
-  onApplyRecommendation,
   showTracking,
   onCloseTracking,
   onTransferTracking,
@@ -219,14 +212,6 @@ export const AppWorkspaceShell = ({
       )}
       {showShortcuts && <ShortcutHelpDialog onClose={onCloseShortcuts} />}
       {showAbout && <AboutDialog onClose={onCloseAbout} />}
-      <MechanismRecommendationSheet
-        isOpen={showRecommendations}
-        project={project}
-        selectedPart={stageRouterProps.selectedPart}
-        selectedPath={stageRouterProps.selectedPath}
-        onClose={onCloseRecommendations}
-        onApply={onApplyRecommendation}
-      />
       <TrackingModal
         isOpen={showTracking}
         onClose={onCloseTracking}

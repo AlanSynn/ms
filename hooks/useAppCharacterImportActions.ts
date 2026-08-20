@@ -1,7 +1,12 @@
-import { useState, type Dispatch, type SetStateAction } from "react";
+import {
+  startTransition,
+  useEffect,
+  useRef,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import type { StarterImageTemplate } from "../components/AppShell";
 import { processingLabel } from "../components/stages/character/ProgressBlock";
-import type { PendingCharacterReview } from "../components/stages/character/CharacterImportOverlays";
 import type { AppStage, ProjectAction, ProjectState } from "../types";
 import {
   createProjectFromProcessed,
@@ -9,10 +14,15 @@ import {
   loadProjectSnapshot,
 } from "../utils/project";
 import {
+  checkWebOnnxCache,
   processImageWithWebOnnx,
   type WebOnnxCacheStatus,
 } from "../utils/webOnnx";
 import { loadCharacterPackage } from "../utils/packageLoader";
+import {
+  createCharacterImportProgressStore,
+  type CharacterImportProgressStore,
+} from "../runtime/ai/characterImportProgressStore";
 
 type SetProjectOptions = {
   history?: boolean;
@@ -28,6 +38,15 @@ type UseAppCharacterImportActionsParams = {
   setCommandStatus: (status: string) => void;
   setShowGettingStarted: (show: boolean) => void;
   setOnnxCacheStatus: Dispatch<SetStateAction<WebOnnxCacheStatus>>;
+  characterImportProgress?: CharacterImportProgressStore;
+  processCharacterImage?: typeof processImageWithWebOnnx;
+  fetchStarterImage?: typeof fetch;
+  yieldBeforeInference?: () => void | Promise<void>;
+};
+
+type OnnxImportOperation = {
+  generationId: number;
+  abortController: AbortController;
 };
 
 export const useAppCharacterImportActions = ({
@@ -39,63 +58,94 @@ export const useAppCharacterImportActions = ({
   setCommandStatus,
   setShowGettingStarted,
   setOnnxCacheStatus,
+  characterImportProgress,
+  processCharacterImage = processImageWithWebOnnx,
+  fetchStarterImage = fetch,
+  yieldBeforeInference = () => {
+    if (typeof requestAnimationFrame === "undefined") return;
+    return new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+  },
 }: UseAppCharacterImportActionsParams) => {
-  const [pendingCharacter, setPendingCharacter] =
-    useState<PendingCharacterReview | null>(null);
+  const onnxGenerationRef = useRef(0);
+  const onnxAbortRef = useRef<AbortController | null>(null);
+  const fallbackProgressRef = useRef<CharacterImportProgressStore | null>(null);
+  fallbackProgressRef.current ??= createCharacterImportProgressStore();
+  const progressStore = characterImportProgress ?? fallbackProgressRef.current;
 
-  const queueCharacterReview = (next: ProjectState, summary: string) => {
-    setPendingCharacter({
-      project: next,
-      summary,
-      returnStage: "character",
-    });
-    dispatch({
-      type: "set_processing",
-      processing: {
-        stage: "ready",
-        message: "Check character",
-        progress: 100,
-      },
-    });
-    setStage("character");
+  useEffect(() => () => {
+    onnxAbortRef.current?.abort();
+    progressStore.publishProgress(null);
+    progressStore.publishPending(null);
+  }, [progressStore]);
+
+  const beginOnnxImport = (): OnnxImportOperation => {
+    onnxAbortRef.current?.abort();
+    const operation = {
+      generationId: ++onnxGenerationRef.current,
+      abortController: new AbortController(),
+    };
+    onnxAbortRef.current = operation.abortController;
+    return operation;
   };
 
-  const runWebOnnx = async (file: File) => {
-    dispatch({
-      type: "set_processing",
-      processing: {
-        stage: "loading-model",
-        message: "Reading picture…",
-        progress: 10,
-      },
+  const isCurrentOnnxImport = ({
+    generationId,
+    abortController,
+  }: OnnxImportOperation) =>
+    generationId === onnxGenerationRef.current &&
+    abortController === onnxAbortRef.current &&
+    !abortController.signal.aborted;
+
+  const queueCharacterReview = (next: ProjectState, summary: string) => {
+    progressStore.publishProgress({
+      stage: "ready",
+      message: "Check character",
+      progress: 100,
+    });
+    startTransition(() => {
+      progressStore.publishPending({
+        project: next,
+        summary,
+        returnStage: "character",
+      });
+      setStage("character");
+    });
+  };
+
+  const runWebOnnxForOperation = async (
+    file: File,
+    operation: OnnxImportOperation,
+  ) => {
+    if (!isCurrentOnnxImport(operation)) return;
+    const { generationId, abortController } = operation;
+    progressStore.publishProgress({
+      stage: "loading-model",
+      message: "Reading picture…",
+      progress: 10,
     });
     try {
-      const result = await processImageWithWebOnnx(
+      const paint = yieldBeforeInference();
+      if (paint) await paint;
+      if (!isCurrentOnnxImport(operation)) return;
+      const result = await processCharacterImage(
         file,
         (stageName, progress) => {
-          if (stageName === "downloading-model")
-            setOnnxCacheStatus((prev) => ({
-              ...prev,
-              stage: "downloading",
-              progress,
-            }));
-          if (stageName === "loading-model")
-            setOnnxCacheStatus((prev) => ({
-              ...prev,
-              stage: "cached",
-              progress: 100,
-            }));
+          if (!isCurrentOnnxImport(operation)) return;
           const stageId = stageName as ProjectState["processing"]["stage"];
-          dispatch({
-            type: "set_processing",
-            processing: {
-              stage: stageId,
-              message: processingLabel(stageId, ""),
-              progress,
-            },
+          progressStore.publishProgress({
+            stage: stageId,
+            message: processingLabel(stageId, ""),
+            progress,
           });
         },
+        { generationId, signal: abortController.signal },
       );
+      if (!isCurrentOnnxImport(operation)) return;
+      const cacheStatus = await checkWebOnnxCache();
+      if (!isCurrentOnnxImport(operation)) return;
+      setOnnxCacheStatus(cacheStatus);
       const next = createProjectFromProcessed({
         name: file.name.replace(/\.[^.]+$/, "") || "Processed character",
         sourceImageName: file.name,
@@ -115,19 +165,26 @@ export const useAppCharacterImportActions = ({
         `${next.partOrder.length} parts · ${Object.keys(next.skeleton?.joints ?? {}).length} joints · ready`,
       );
     } catch (error) {
-      dispatch({
-        type: "set_processing",
-        processing: {
-          stage: "error",
-          message: "AI could not load on this network. Use a starter character or load a character file.",
-          progress: 0,
-          error: error instanceof Error ? error.message : String(error),
-        },
+      if (
+        !isCurrentOnnxImport(operation) ||
+        (error instanceof DOMException && error.name === "AbortError")
+      ) return;
+      progressStore.publishProgress({
+        stage: "error",
+        message: "AI could not load on this network. Use a starter character or load a character file.",
+        progress: 0,
+        error: error instanceof Error ? error.message : String(error),
       });
+    } finally {
+      if (onnxAbortRef.current === abortController) onnxAbortRef.current = null;
     }
   };
 
+  const runWebOnnx = (file: File) =>
+    runWebOnnxForOperation(file, beginOnnxImport());
+
   const loadStarterImage = async (template: StarterImageTemplate) => {
+    const operation = beginOnnxImport();
     setCommandStatus(`Opening ${template.label}`);
     dispatch({
       type: "set_processing",
@@ -138,13 +195,22 @@ export const useAppCharacterImportActions = ({
       },
     });
     try {
-      const response = await fetch(template.url);
+      const response = await fetchStarterImage(template.url, {
+        signal: operation.abortController.signal,
+      });
+      if (!isCurrentOnnxImport(operation)) return;
       if (!response.ok) throw new Error(`Could not load ${template.fileName}`);
       const blob = await response.blob();
-      await runWebOnnx(
+      if (!isCurrentOnnxImport(operation)) return;
+      await runWebOnnxForOperation(
         new File([blob], template.fileName, { type: blob.type || "image/png" }),
+        operation,
       );
     } catch (error) {
+      if (
+        !isCurrentOnnxImport(operation) ||
+        (error instanceof DOMException && error.name === "AbortError")
+      ) return;
       const message = error instanceof Error ? error.message : String(error);
       dispatch({
         type: "set_processing",
@@ -156,6 +222,9 @@ export const useAppCharacterImportActions = ({
         },
       });
       setCommandStatus(`Starter failed: ${message}`);
+    } finally {
+      if (onnxAbortRef.current === operation.abortController)
+        onnxAbortRef.current = null;
     }
   };
 
@@ -230,11 +299,22 @@ export const useAppCharacterImportActions = ({
   };
 
   const acceptPendingCharacter = () => {
+    const pendingCharacter = progressStore.getPending();
     if (!pendingCharacter) return;
-    setProject(pendingCharacter.project, { resetHistory: true });
-    setPendingCharacter(null);
-    setShowGettingStarted(false);
-    setStage(pendingCharacter.returnStage);
+    startTransition(() => {
+      setProject(pendingCharacter.project, { resetHistory: true });
+      progressStore.publishPending(null);
+      progressStore.publishProgress(null);
+      setShowGettingStarted(false);
+      setStage(pendingCharacter.returnStage);
+    });
+  };
+
+  const discardPendingCharacter = () => {
+    startTransition(() => {
+      progressStore.publishPending(null);
+      progressStore.publishProgress(null);
+    });
   };
 
   const startFromStarterImage = (template: StarterImageTemplate) => {
@@ -248,7 +328,7 @@ export const useAppCharacterImportActions = ({
   };
 
   const startFromImage = (file: File) => {
-    setShowGettingStarted(false);
+    startTransition(() => setShowGettingStarted(false));
     runWebOnnx(file);
   };
 
@@ -258,8 +338,7 @@ export const useAppCharacterImportActions = ({
   };
 
   return {
-    pendingCharacter,
-    setPendingCharacter,
+    setPendingCharacter: progressStore.publishPending,
     runWebOnnx,
     loadStarterImage,
     importCharacterPackage,
@@ -267,6 +346,7 @@ export const useAppCharacterImportActions = ({
     editCharacterParts,
     saveSkeleton,
     acceptPendingCharacter,
+    discardPendingCharacter,
     startFromStarterImage,
     startFromPackage,
     startFromImage,

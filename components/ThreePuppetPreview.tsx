@@ -13,6 +13,9 @@ import { mechanismRequiredParts } from '../utils/project';
 import type { MotionPreview } from '../utils/motion';
 import type { PlaybackClock } from '../runtime/playback/externalPlaybackClock';
 import { subscribeCadencedPlaybackSampler } from '../runtime/playback/cadencedPlaybackSampler';
+import { scheduleIncrementalTopologyBuild } from '../runtime/render/incrementalTopologyBuild';
+import { createPartArtMaterial, disposePartArtMaterial } from '../runtime/render/partArtMaterial';
+import { warmPartTopologyPipeline } from '../runtime/render/warmPartTopology';
 import {
   cachedThreeResource,
   clearThreeGroup,
@@ -23,6 +26,7 @@ import {
   setRendererPixelRatioCap,
 } from '../utils/threeResourceKit';
 import { resolveRenderPerformancePolicy } from '../utils/renderPerformancePolicy';
+import { recordPuppetTopologyBuild } from '../utils/performanceAudit';
 
 const VIEW_SCALE = 35;
 const FABRICATION_LINKAGE_WIDTH_3D = Math.max(0.16, (FABRICATION_LINKAGE_WIDTH_MM * SCENE_PX_PER_MM) / VIEW_SCALE);
@@ -187,7 +191,10 @@ const disposeOwnedMaterials = (object: THREE.Object3D) =>
   disposeMarkedThreeMaterials(
     object,
     material => Boolean(material.userData?.ownedByPartArt || material.userData?.ownedBySceneObject),
-    material => (material as THREE.MeshBasicMaterial).map?.dispose()
+    material => {
+      if (material.userData?.ownedByPartArt) disposePartArtMaterial(material);
+      else (material as THREE.MeshBasicMaterial).map?.dispose();
+    }
   );
 
 const clearGroup = (group: THREE.Group) =>
@@ -195,26 +202,6 @@ const clearGroup = (group: THREE.Group) =>
     disposeOwnedMaterials(child);
     disposeObject(child, false);
   });
-
-const createPartArtMaterial = (part: BodyPartLayer, onLoaded: () => void) => {
-  const material = new THREE.MeshBasicMaterial({
-    color: part.textureUrl ? '#ffffff' : part.fillColor,
-    transparent: true,
-    opacity: part.textureUrl ? Math.max(0.35, Math.min(1, part.opacity ?? 1)) : 0.6,
-    depthWrite: false,
-    polygonOffset: true,
-    polygonOffsetFactor: -1
-  });
-  material.userData.ownedByPartArt = true;
-  if (part.textureUrl) {
-    const texture = new THREE.TextureLoader().load(part.textureUrl, () => onLoaded());
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.anisotropy = 4;
-    material.map = texture;
-    material.needsUpdate = true;
-  }
-  return material;
-};
 
 const viewerTabFromTestId = (testId: string): Viewer3DTabKey => {
   if (testId.startsWith('character')) return 'character';
@@ -672,18 +659,6 @@ const gearShape = (pitchRadius: number, physicalPitchRadiusMm: number) => {
   return shape;
 };
 
-const partGeometrySignature = (parts: BodyPartLayer[], project?: ProjectState, skeleton?: StandardSkeleton | null) => [
-  parts.map(part => {
-    const base = project?.parts[part.id] ?? part;
-    const contour = base.contourPoints?.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(';') ?? '';
-    return `${base.id}:${base.bounds.width}:${base.bounds.height}:${base.bounds.x}:${base.bounds.y}:${base.transform.x}:${base.transform.y}:${base.transform.rotation}:${base.transform.scale}:${base.visible}:${base.textureUrl ?? ''}:${base.contourSource ?? ''}:${contour}:${base.fillColor}:${base.opacity}`;
-  }).join('|'),
-  Object.values((project?.skeleton ?? skeleton)?.joints ?? {})
-    .map(joint => `${joint.id}:${joint.position.x.toFixed(2)}:${joint.position.y.toFixed(2)}`)
-    .join('|')
-].join('::');
-
-
 const planetaryLayerIndexesForPlan = (layers: FabricationRenderLayer[]) => {
   const ring = layers.findIndex(layer => layer.renderKind === 'gear' && /ring/i.test(layer.label));
   const sun = layers.findIndex(layer => layer.renderKind === 'gear' && /G1|sun/i.test(layer.label));
@@ -786,11 +761,15 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   const rootsRef = useRef<SceneRoots | null>(null);
   const materialsRef = useRef<MaterialKit | null>(null);
   const partMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
+  const renderedPartsRef = useRef<BodyPartLayer[]>([]);
+  const selectedPartIdRef = useRef<string | undefined>(undefined);
+  const assemblyExplodeAmountRef = useRef(0);
   const sceneObjectRefs = useRef<Map<string, THREE.Group>>(new Map());
   const jointRefs = useRef<Map<string, JointVisual>>(new Map());
   const boneRefs = useRef<Map<string, THREE.Mesh>>(new Map());
   const mechanismRefs = useRef<Map<string, MechanismVisual>>(new Map());
   const prunedGeometryRevisionRef = useRef(-1);
+  const renderFrameRef = useRef<number | undefined>(undefined);
   const [rendererStatus, setRendererStatus] = useState<RendererStatus>('pending');
   const physicsKernelRuntime = 'deferred-to-foundry';
   const physicsKernelVersion = 'pending';
@@ -834,6 +813,9 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   const assemblyPhase = assemblyOverlay?.phase;
   const assemblyProgress = Math.max(0, Math.min(1, assemblyOverlay?.progress ?? 0));
   const assemblyExplodeAmount = assemblyExplodeAmountForPhase(assemblyPhase, assemblyProgress);
+  renderedPartsRef.current = parts;
+  selectedPartIdRef.current = project?.selectedPartId;
+  assemblyExplodeAmountRef.current = assemblyExplodeAmount;
   const selectedMechanism = useMemo(
     () => mechanismsToRender.find(mechanism => mechanism.id === project?.selectedMechanismId) ?? mechanismsToRender[0],
     [mechanismsToRender, project?.selectedMechanismId]
@@ -991,25 +973,29 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   }));
 
   const render = () => {
-    const scene = sceneRef.current;
-    const camera = cameraRef.current;
-    const renderer = rendererRef.current;
-    if (scene && camera && renderer) {
-      if (prunedGeometryRevisionRef.current !== sharedGeometryCacheRevision) {
-        pruneSharedGeometryCache();
-        prunedGeometryRevisionRef.current = sharedGeometryCacheRevision;
+    if (renderFrameRef.current !== undefined) return;
+    renderFrameRef.current = window.requestAnimationFrame(() => {
+      renderFrameRef.current = undefined;
+      const scene = sceneRef.current;
+      const camera = cameraRef.current;
+      const renderer = rendererRef.current;
+      if (scene && camera && renderer) {
+        if (prunedGeometryRevisionRef.current !== sharedGeometryCacheRevision) {
+          pruneSharedGeometryCache();
+          prunedGeometryRevisionRef.current = sharedGeometryCacheRevision;
+        }
+        renderer.render(scene, camera);
+        if (E2E_DIAGNOSTICS && stateRef.current) {
+          const screenTargets = roundedScreenTargets(collectViewerScreenTargets());
+          stateRef.current.dataset.threeSceneVisibleObjectCount = String(estimatedObjectCount);
+          stateRef.current.dataset.threeSceneObjectCount = String(estimatedObjectCount);
+          stateRef.current.dataset.threeRenderTriangles = String(renderer.info.render.triangles);
+          stateRef.current.dataset.threeSceneObjectScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'object'));
+          stateRef.current.dataset.threePartScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'part'));
+          stateRef.current.dataset.threeMechanismScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'mechanism'));
+        }
       }
-      renderer.render(scene, camera);
-      if (E2E_DIAGNOSTICS && stateRef.current) {
-        const screenTargets = roundedScreenTargets(collectViewerScreenTargets());
-        stateRef.current.dataset.threeSceneVisibleObjectCount = String(estimatedObjectCount);
-        stateRef.current.dataset.threeSceneObjectCount = String(estimatedObjectCount);
-        stateRef.current.dataset.threeRenderTriangles = String(renderer.info.render.triangles);
-        stateRef.current.dataset.threeSceneObjectScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'object'));
-        stateRef.current.dataset.threePartScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'part'));
-        stateRef.current.dataset.threeMechanismScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'mechanism'));
-      }
-    }
+    });
   };
 
   useEffect(() => {
@@ -1026,6 +1012,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     }
 
     setRendererPixelRatioCap(renderer, renderPolicy.pixelRatioCap);
+    warmPartTopologyPipeline(renderPolicy.partTopology);
     if (E2E_DIAGNOSTICS) renderer.domElement.dataset.testid = `${testId}-canvas`;
     renderer.domElement.className = 'three-puppet-canvas';
     host.appendChild(renderer.domElement);
@@ -1073,6 +1060,10 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
 
     return () => {
       ro.disconnect();
+      if (renderFrameRef.current !== undefined) {
+        window.cancelAnimationFrame(renderFrameRef.current);
+        renderFrameRef.current = undefined;
+      }
       disposeOwnedMaterials(scene);
       disposeObject(scene, false);
       activePuppetScenes.delete(scene);
@@ -1110,14 +1101,20 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     render();
   }, [kitSignature, rendererStatus]);
 
-  const partSignature = useMemo(() => partGeometrySignature(geometryParts, project, canonicalSkeleton), [canonicalSkeleton, geometryParts, project?.parts]);
   useEffect(() => {
     const roots = rootsRef.current;
     const materials = materialsRef.current;
     if (!roots || !materials || rendererStatus !== 'webgl') return;
-    clearGroup(roots.partsLayer);
+    const staleParts = [...roots.partsLayer.children];
+    staleParts.forEach(part => roots.partsLayer.remove(part));
+    scheduleIncrementalTopologyBuild(staleParts, part => {
+      disposeOwnedMaterials(part);
+      disposeObject(part, false);
+    });
     partMeshesRef.current.clear();
-    geometryParts.forEach(part => {
+    let topologyComplete = false;
+    return scheduleIncrementalTopologyBuild(geometryParts, part => {
+      const topologyStartedAt = performance.now();
       const base = project?.parts[part.id] ?? part;
       const landmarks = partLandmarkLocalPoints(base, canonicalSkeleton);
       const outline = fabricablePartOutlinePoints(base, landmarks);
@@ -1126,12 +1123,22 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       localHoles.forEach(local => {
         shape.holes.push(holePath(local.x / VIEW_SCALE, local.y / VIEW_SCALE));
       });
-      const geometry = new THREE.ExtrudeGeometry(shape, { depth: THICKNESS, bevelEnabled: true, bevelSize: 0.018, bevelThickness: 0.012 });
+      const geometry = new THREE.ExtrudeGeometry(shape, {
+        depth: THICKNESS,
+        bevelEnabled: renderPolicy.partTopology.bevelEnabled,
+        bevelSize: 0.018,
+        bevelThickness: 0.012,
+        bevelSegments: 1,
+        curveSegments: renderPolicy.partTopology.curveSegments,
+        steps: 1,
+      });
       const mesh = new THREE.Mesh(geometry, materials.part);
       mesh.userData.partId = part.id;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), materials.edge));
+      if (renderPolicy.partTopology.edgeGeometryEnabled) {
+        mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), materials.edge));
+      }
       const artGeometry = new THREE.ShapeGeometry(shape);
       const artPositions = artGeometry.getAttribute('position');
       const uvs: number[] = [];
@@ -1143,7 +1150,9 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
         uvs.push((x - base.bounds.x) / artWidth, (y - base.bounds.y) / artHeight);
       }
       artGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-      const art = new THREE.Mesh(artGeometry, createPartArtMaterial(base, render));
+      const art = new THREE.Mesh(artGeometry, createPartArtMaterial(base, () => {
+        if (topologyComplete) render();
+      }));
       art.name = `part-art-decal-${part.id}`;
       art.position.set(0, 0, THICKNESS + 0.018);
       mesh.add(art);
@@ -1165,9 +1174,32 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       });
       roots.partsLayer.add(mesh);
       partMeshesRef.current.set(part.id, mesh);
+      const renderedParts = renderedPartsRef.current;
+      const renderedIndex = renderedParts.findIndex(candidate => candidate.id === part.id);
+      const renderedPart = renderedIndex >= 0 ? renderedParts[renderedIndex] : base;
+      const assemblyOffset = assemblyOffsetForPart(
+        Math.max(0, renderedIndex),
+        Math.max(1, renderedParts.length),
+        assemblyExplodeAmountRef.current,
+      );
+      mesh.visible = renderedPart.visible;
+      mesh.position.set(
+        (renderedPart.transform.x + assemblyOffset.x) / VIEW_SCALE,
+        (renderedPart.transform.y + assemblyOffset.y) / VIEW_SCALE,
+        renderedPart.zIndex * 0.035 + assemblyOffset.z,
+      );
+      mesh.rotation.z = (renderedPart.transform.rotation * Math.PI) / 180;
+      mesh.scale.set(renderedPart.transform.scale, renderedPart.transform.scale, 1);
+      mesh.material = selectedPartIdRef.current === part.id ? materials.selected : materials.part;
+      recordPuppetTopologyBuild(performance.now() - topologyStartedAt);
+    }, {
+      initialDelayFrames: 1,
+      onComplete: () => {
+        topologyComplete = true;
+        render();
+      },
     });
-    render();
-  }, [partSignature, rendererStatus]);
+  }, [canonicalSkeleton, geometryParts, rendererStatus, renderPolicy.partTopology]);
 
   useEffect(() => {
     const materials = materialsRef.current;

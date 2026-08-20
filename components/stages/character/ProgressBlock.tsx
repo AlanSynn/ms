@@ -1,5 +1,5 @@
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
-import type { ProjectState } from "../../../types";
+import type { ProcessingStatus, ProjectState } from "../../../types";
 
 export const processingLabel = (
   stage: ProjectState["processing"]["stage"],
@@ -15,8 +15,14 @@ export const processingLabel = (
   return message || "Pick file";
 };
 
-export const ProgressBlock = ({ project }: { project: ProjectState }) => {
-  const p = project.processing;
+export const ProgressBlock = ({
+  project,
+  processing = project.processing,
+}: {
+  project: ProjectState;
+  processing?: ProcessingStatus;
+}) => {
+  const p = processing;
   const steps: Array<{
     stage: ProjectState["processing"]["stage"];
     label: string;

@@ -36,6 +36,10 @@ export type MechanismRecommendation = {
   fabricationErrors: string[];
 };
 
+export type MechanismRecommendationBuildOptions = {
+  random?: () => number;
+};
+
 const pathMetrics = (path: ProjectMotionPath) => {
   const xs = path.points.map((p) => p.x);
   const ys = path.points.map((p) => p.y);
@@ -503,6 +507,7 @@ const createRecommendedMechanism = (
   type: MechanismType,
   reason: string,
   score: number,
+  random: () => number = Math.random,
 ): MechanismConfig => {
   const metrics = pathMetrics(selectedPath);
   const targetPart = recommendationTargetPart(project, selectedPart, selectedPath);
@@ -521,7 +526,7 @@ const createRecommendedMechanism = (
     (Math.atan2(last.y - first.y, last.x - first.x) * 180) / Math.PI;
   const span = Math.max(metrics.width, metrics.height, 40);
   const base = createDefaultMechanism(type, `recommend-${type}`);
-  const smart = generateSmartConfig(selectedPath.points, type);
+  const smart = generateSmartConfig(selectedPath.points, type, undefined, random);
   const tunedCrankLength = Math.max(20, Math.min(90, span * 0.24));
   const tunedRockerLength =
     type === "cam"
@@ -878,6 +883,7 @@ export const buildMechanismRecommendations = (
   project: ProjectState,
   selectedPart?: BodyPartLayer,
   selectedPath?: ProjectMotionPath,
+  options: MechanismRecommendationBuildOptions = {},
 ): MechanismRecommendation[] => {
   if (!selectedPath || (!selectedPart && !selectedPath.sceneObjectId) || selectedPath.points.length < 3)
     return [];
@@ -936,6 +942,7 @@ export const buildMechanismRecommendations = (
         candidate.type,
         candidate.reason,
         candidate.score,
+        options.random,
       );
       const initialErrors = fabricationErrorsForCandidate(
         project,
