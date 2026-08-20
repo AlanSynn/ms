@@ -9,6 +9,17 @@ import { boardToScene, SCENE_VIEW } from "../../../utils/coordinates";
 import type { FabricationRenderPlan } from "../../../utils/fabrication";
 import type { MechanismPreviewSimulation } from "../../../utils/mechanismPreview";
 import type { AssemblySceneFrame } from "../../../utils/assemblySceneFrame";
+import {
+  cachedThreeResource,
+  collectThreeObjectResourceUsage,
+  pruneUnusedThreeResourceCache,
+} from "../../../utils/threeResourceKit";
+import type { RepeatedGeometryPolicy } from "../../../utils/renderPerformancePolicy";
+import {
+  FOUNDRY_CACHE_MARKER,
+  disposeFoundryThreeObject,
+} from "./foundryThreePrimitives";
+import { FoundryThreeObjectPool } from "./foundryThreeObjectPool";
 
 export type FoundryAssemblySceneFrame = AssemblySceneFrame;
 
@@ -30,6 +41,7 @@ type FoundryAssemblySceneOverlayOptions = {
   pinTopZ: number;
   pathLayerZ: number;
   pathPoints: Point[];
+  resourcePolicy: RepeatedGeometryPolicy;
 };
 
 const ACTIVE_COLOR = "#8b5cf6";
@@ -157,17 +169,6 @@ const scenePointToPreviewPoint = (point: Point): Point => ({
 const previewPointToThree = (point: Point, z = 0) =>
   new THREE.Vector3((point.x - 180) / 18, (120 - point.y) / 18, z);
 
-const makeMaterial = (color: string, opacity = 0.92) =>
-  new THREE.MeshStandardMaterial({
-    color,
-    roughness: 0.54,
-    metalness: 0.04,
-    transparent: opacity < 1,
-    opacity,
-    depthWrite: opacity > 0.5,
-  });
-
-
 const boardPreviewPoints = (kit: PhysicalKitSettings) => {
   const points: Point[] = [];
   for (let row = 0; row < kit.boardCells; row += 1) {
@@ -178,102 +179,265 @@ const boardPreviewPoints = (kit: PhysicalKitSettings) => {
   return points;
 };
 
+type FoundryAssemblyOverlayRuntime = {
+  overlay: THREE.Group;
+  pool: FoundryThreeObjectPool;
+  geometryCache: Map<string, THREE.BufferGeometry>;
+  materialCache: Map<string, THREE.Material>;
+  resourcePolicy: RepeatedGeometryPolicy;
+};
+
+const overlayRuntimes = new WeakMap<THREE.Group, FoundryAssemblyOverlayRuntime>();
+
+const overlayRuntime = (
+  root: THREE.Group,
+  resourcePolicy: RepeatedGeometryPolicy,
+) => {
+  const existing = overlayRuntimes.get(root);
+  if (existing) return existing;
+  const overlay = new THREE.Group();
+  overlay.name = "assembly-scene-contract-overlay";
+  root.add(overlay);
+  const runtime: FoundryAssemblyOverlayRuntime = {
+    overlay,
+    pool: new FoundryThreeObjectPool(
+      overlay,
+      disposeFoundryThreeObject,
+      resourcePolicy.maxPoolEntries,
+    ),
+    geometryCache: new Map(),
+    materialCache: new Map(),
+    resourcePolicy,
+  };
+  overlayRuntimes.set(root, runtime);
+  return runtime;
+};
+
+const pruneOverlayResourceCaches = (
+  runtime: FoundryAssemblyOverlayRuntime,
+) => {
+  if (
+    runtime.geometryCache.size <=
+      runtime.resourcePolicy.maxGeometryCacheEntries &&
+    runtime.materialCache.size <=
+      runtime.resourcePolicy.maxMaterialCacheEntries
+  )
+    return;
+  const usage = collectThreeObjectResourceUsage(runtime.overlay);
+  pruneUnusedThreeResourceCache(
+    runtime.geometryCache,
+    usage.geometries,
+    runtime.resourcePolicy.maxGeometryCacheEntries,
+  );
+  pruneUnusedThreeResourceCache(
+    runtime.materialCache,
+    usage.materials,
+    runtime.resourcePolicy.maxMaterialCacheEntries,
+  );
+};
+
+const cachedGeometry = <T extends THREE.BufferGeometry>(
+  runtime: FoundryAssemblyOverlayRuntime,
+  key: string,
+  create: () => T,
+) =>
+  cachedThreeResource(
+    runtime.geometryCache,
+    key,
+    create,
+    FOUNDRY_CACHE_MARKER,
+  );
+
+const cachedMaterial = <T extends THREE.Material>(
+  runtime: FoundryAssemblyOverlayRuntime,
+  key: string,
+  create: () => T,
+) =>
+  cachedThreeResource(
+    runtime.materialCache,
+    key,
+    create,
+    FOUNDRY_CACHE_MARKER,
+  );
+
+const standardMaterial = (
+  runtime: FoundryAssemblyOverlayRuntime,
+  color: string,
+  opacity = 0.92,
+) =>
+  cachedMaterial(runtime, `standard:${color}:${opacity.toFixed(2)}`, () =>
+    new THREE.MeshStandardMaterial({
+      color,
+      roughness: 0.54,
+      metalness: 0.04,
+      transparent: opacity < 1,
+      opacity,
+      depthWrite: opacity > 0.5,
+    }),
+  );
+
+const lineMaterial = (
+  runtime: FoundryAssemblyOverlayRuntime,
+  opacity: number,
+) =>
+  cachedMaterial(runtime, `line:${ACTIVE_COLOR}:${opacity.toFixed(2)}`, () =>
+    new THREE.LineBasicMaterial({
+      color: ACTIVE_COLOR,
+      transparent: true,
+      opacity,
+    }),
+  );
+
 const addAssemblyBoardSurface = (
-  group: THREE.Group,
+  runtime: FoundryAssemblyOverlayRuntime,
   kit: PhysicalKitSettings,
   z: number,
 ) => {
-  const points = boardPreviewPoints(kit);
-  if (!points.length) return;
-  const xs = points.map((point) => point.x);
-  const ys = points.map((point) => point.y);
-  const pitch =
-    kit.boardCells > 1
-      ? Math.abs(
-          scenePointToPreviewPoint(boardToScene(1, 0, kit)).x -
-            scenePointToPreviewPoint(boardToScene(0, 0, kit)).x,
-        )
-      : 0;
-  const minX = Math.min(...xs) - pitch / 2;
-  const maxX = Math.max(...xs) + pitch / 2;
-  const minY = Math.min(...ys) - pitch / 2;
-  const maxY = Math.max(...ys) + pitch / 2;
-  const center = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
-  const board = new THREE.Group();
-  board.name = "assembly-15x15-board-surface";
-  board.userData.assemblyBoardSurface = "15x15-hole-board";
-  board.userData.assemblyBoardHoleCount = kit.boardCells * kit.boardCells;
-  board.userData.assemblyBoardZ = z;
-
-  const plate = new THREE.Mesh(
-    new THREE.BoxGeometry((maxX - minX) / 18, (maxY - minY) / 18, 0.04),
-    makeMaterial(BOARD_SURFACE_COLOR, 0.36),
-  );
-  plate.name = "assembly-board-z0-plate";
-  plate.position.copy(previewPointToThree(center, z - 0.03));
-  board.add(plate);
-
-  const holeMaterial = makeMaterial(BOARD_COLOR, 0.54);
-  points.forEach((point) => {
-    const hole = new THREE.Mesh(
-      new THREE.TorusGeometry(0.08, 0.012, 6, 18),
-      holeMaterial,
+  const topologyKey = `${kit.boardCells}:${kit.gridPitchMm}:${kit.sheetWidthMm}:${kit.sheetHeightMm}:${z}`;
+  runtime.pool.acquire("board", topologyKey, () => {
+    const points = boardPreviewPoints(kit);
+    const xs = points.map((point) => point.x);
+    const ys = points.map((point) => point.y);
+    const pitch =
+      kit.boardCells > 1
+        ? Math.abs(
+            scenePointToPreviewPoint(boardToScene(1, 0, kit)).x -
+              scenePointToPreviewPoint(boardToScene(0, 0, kit)).x,
+          )
+        : 0;
+    const minX = Math.min(...xs) - pitch / 2;
+    const maxX = Math.max(...xs) + pitch / 2;
+    const minY = Math.min(...ys) - pitch / 2;
+    const maxY = Math.max(...ys) + pitch / 2;
+    const center = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+    const board = new THREE.Group();
+    board.name = "assembly-15x15-board-surface";
+    board.userData.assemblyBoardSurface = "15x15-hole-board";
+    board.userData.assemblyBoardHoleCount = kit.boardCells * kit.boardCells;
+    board.userData.assemblyBoardZ = z;
+    const plateKey = `board-plate:${((maxX - minX) / 18).toFixed(3)}:${((maxY - minY) / 18).toFixed(3)}`;
+    const plate = new THREE.Mesh(
+      cachedGeometry(
+        runtime,
+        plateKey,
+        () => new THREE.BoxGeometry((maxX - minX) / 18, (maxY - minY) / 18, 0.04),
+      ),
+      standardMaterial(runtime, BOARD_SURFACE_COLOR, 0.36),
     );
-    hole.name = "assembly-board-z0-hole";
-    hole.position.copy(previewPointToThree(point, z + 0.02));
-    board.add(hole);
+    plate.name = "assembly-board-z0-plate";
+    plate.position.copy(previewPointToThree(center, z - 0.03));
+    board.add(plate);
+    const holeGeometry = cachedGeometry(
+      runtime,
+      "board-hole:0.08:0.012:6:18",
+      () => new THREE.TorusGeometry(0.08, 0.012, 6, 18),
+    );
+    const holeMaterial = standardMaterial(runtime, BOARD_COLOR, 0.54);
+    if (points.length >= runtime.resourcePolicy.instancingThreshold) {
+      const holes = new THREE.InstancedMesh(
+        holeGeometry,
+        holeMaterial,
+        points.length,
+      );
+      holes.name = "assembly-board-z0-holes-instanced";
+      holes.userData.assemblyBoardHoleCount = points.length;
+      holes.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+      const transform = new THREE.Object3D();
+      points.forEach((point, index) => {
+        transform.position.copy(previewPointToThree(point, z + 0.02));
+        transform.updateMatrix();
+        holes.setMatrixAt(index, transform.matrix);
+      });
+      holes.instanceMatrix.needsUpdate = true;
+      board.add(holes);
+    } else {
+      points.forEach((point) => {
+        const hole = new THREE.Mesh(holeGeometry, holeMaterial);
+        hole.name = "assembly-board-z0-hole";
+        hole.position.copy(previewPointToThree(point, z + 0.02));
+        board.add(hole);
+      });
+    }
+    return board;
   });
-  group.add(board);
 };
 
 const addMarkerRing = (
-  group: THREE.Group,
+  runtime: FoundryAssemblyOverlayRuntime,
   point: Point,
   z: number,
   material: THREE.Material,
   radius = 0.28,
 ) => {
-  const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(radius, 0.035, 8, 32),
-    material,
+  const geometryKey = `marker:${radius.toFixed(3)}`;
+  const { object: ring } = runtime.pool.acquire("marker", geometryKey, () =>
+    new THREE.Mesh(
+      cachedGeometry(runtime, geometryKey, () =>
+        new THREE.TorusGeometry(radius, 0.035, 8, 32),
+      ),
+      material,
+    ),
   );
   ring.name = "assembly-board-ring";
+  ring.material = material;
   ring.position.copy(previewPointToThree(point, z));
-  group.add(ring);
 };
 
 const addVerticalGuide = (
-  group: THREE.Group,
+  runtime: FoundryAssemblyOverlayRuntime,
   point: Point,
   bottomZ: number,
   topZ: number,
   material: THREE.Material,
 ) => {
   const height = Math.max(0.24, topZ - bottomZ);
-  const guide = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.035, 0.035, height, 16),
-    material,
+  const { object: guide } = runtime.pool.acquire("guide", "guide:unit", () =>
+    new THREE.Mesh(
+      cachedGeometry(runtime, "guide:unit", () =>
+        new THREE.CylinderGeometry(0.035, 0.035, 1, 16),
+      ),
+      material,
+    ),
   );
   guide.name = "assembly-z-guide";
+  guide.material = material;
   guide.rotation.x = Math.PI / 2;
+  guide.scale.set(1, height, 1);
   guide.position.copy(previewPointToThree(point, bottomZ + height / 2));
-  group.add(guide);
 };
 
 const addTravelLine = (
-  group: THREE.Group,
+  runtime: FoundryAssemblyOverlayRuntime,
   start: Point,
   end: Point,
   z: number,
   material: THREE.Material,
 ) => {
-  const geometry = new THREE.BufferGeometry().setFromPoints([
+  const points = [
     previewPointToThree(start, z + 0.72),
     previewPointToThree(end, z + 0.08),
-  ]);
-  const line = new THREE.Line(geometry, material);
+  ];
+  const { object: line } = runtime.pool.acquire("travel-line", "line:2", () =>
+    new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), material),
+  );
+  const position = line.geometry.getAttribute("position");
+  points.forEach((point, index) => position.setXYZ(index, point.x, point.y, point.z));
+  position.needsUpdate = true;
+  line.geometry.computeBoundingSphere();
+  line.material = material;
   line.name = "assembly-travel-line";
-  group.add(line);
+};
+
+export const disposeFoundryAssemblyOverlayRuntime = (root: THREE.Group) => {
+  const runtime = overlayRuntimes.get(root);
+  if (!runtime) return;
+  runtime.overlay.removeFromParent();
+  disposeFoundryThreeObject(runtime.overlay);
+  runtime.geometryCache.forEach((geometry) => geometry.dispose());
+  runtime.materialCache.forEach((material) => material.dispose());
+  runtime.geometryCache.clear();
+  runtime.materialCache.clear();
+  overlayRuntimes.delete(root);
 };
 
 export const renderFoundryAssemblySceneOverlay = ({
@@ -286,28 +450,32 @@ export const renderFoundryAssemblySceneOverlay = ({
   pinTopZ,
   pathLayerZ,
   pathPoints,
-}: FoundryAssemblySceneOverlayOptions) => {
-  if (!frame) return;
+  resourcePolicy,
+}: FoundryAssemblySceneOverlayOptions): boolean => {
+  const existing = overlayRuntimes.get(root);
+  if (!frame && !existing) return false;
+  const runtime = existing ?? overlayRuntime(root, resourcePolicy);
+  runtime.pool.beginFrame();
+  const topologyRevisionBefore = runtime.pool.topologyRevision;
+  runtime.overlay.visible = Boolean(frame);
+  if (!frame) {
+    runtime.pool.endFrame();
+    pruneOverlayResourceCaches(runtime);
+    return runtime.pool.topologyRevision !== topologyRevisionBefore;
+  }
+  runtime.overlay.userData.assemblyFrameVersion = frame.version;
+  runtime.overlay.userData.assemblyMotion = frame.motion;
+  runtime.overlay.userData.assemblyBoardMode = frame.boardMode;
 
-  const overlay = new THREE.Group();
-  overlay.name = "assembly-scene-contract-overlay";
-  overlay.userData.assemblyFrameVersion = frame.version;
-  overlay.userData.assemblyMotion = frame.motion;
-  overlay.userData.assemblyBoardMode = frame.boardMode;
-
-  const boardMaterial = makeMaterial(BOARD_COLOR, 0.9);
-  const floatingMaterial = makeMaterial(FLOATING_COLOR, 0.45);
-  const travelMaterial = new THREE.LineBasicMaterial({
-    color: ACTIVE_COLOR,
-    transparent: true,
-    opacity: 0.72,
-  });
+  const boardMaterial = standardMaterial(runtime, BOARD_COLOR, 0.9);
+  const floatingMaterial = standardMaterial(runtime, FLOATING_COLOR, 0.45);
+  const travelMaterial = lineMaterial(runtime, 0.72);
 
   const zTop = Math.max(pinTopZ + 0.2, pathLayerZ + 0.1);
   const zBottom = Math.min(pinBottomZ - 0.08, 0);
   const boardSurfaceZ = 0;
   if (frame.boardMode !== "hidden") {
-    addAssemblyBoardSurface(overlay, kit, boardSurfaceZ);
+    addAssemblyBoardSurface(runtime, kit, boardSurfaceZ);
   }
   const activePoints =
     frame.kind === "character"
@@ -323,11 +491,11 @@ export const renderFoundryAssemblySceneOverlay = ({
           .filter((point): point is Point => Boolean(point));
 
   activePoints.forEach((point) => {
-    addMarkerRing(overlay, point, zTop, boardMaterial, 0.34);
-    addVerticalGuide(overlay, point, zBottom, zTop, boardMaterial);
+    addMarkerRing(runtime, point, zTop, boardMaterial, 0.34);
+    addVerticalGuide(runtime, point, zBottom, zTop, boardMaterial);
   });
   floatingPoints.forEach((point) =>
-    addMarkerRing(overlay, point, zTop + 0.06, floatingMaterial, 0.24),
+    addMarkerRing(runtime, point, zTop + 0.06, floatingMaterial, 0.24),
   );
 
   const travelTargets = activePoints.length
@@ -336,7 +504,7 @@ export const renderFoundryAssemblySceneOverlay = ({
   if (frame.motion === "explode_z") {
     travelTargets.forEach((point) =>
       addVerticalGuide(
-        overlay,
+        runtime,
         point,
         zBottom,
         zTop + 0.5 * frame.progress,
@@ -349,7 +517,7 @@ export const renderFoundryAssemblySceneOverlay = ({
   ) {
     travelTargets.forEach((point) =>
       addTravelLine(
-        overlay,
+        runtime,
         {
           x: point.x - 42 * (1 - frame.progress),
           y: point.y - 26 * (1 - frame.progress),
@@ -360,20 +528,28 @@ export const renderFoundryAssemblySceneOverlay = ({
       ),
     );
   } else if (frame.motion === "scrub_time" && pathPoints.length >= 2) {
-    const geometry = new THREE.BufferGeometry().setFromPoints(
-      pathPoints.map((point) => previewPointToThree(point, zTop + 0.22)),
+    const points = pathPoints.map((point) =>
+      previewPointToThree(point, zTop + 0.22),
     );
-    const path = new THREE.Line(
-      geometry,
-      new THREE.LineBasicMaterial({
-        color: ACTIVE_COLOR,
-        transparent: true,
-        opacity: 0.58,
-      }),
+    const { object: path } = runtime.pool.acquire(
+      "scrub-path",
+      `path:${points.length}`,
+      () =>
+        new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(points),
+          lineMaterial(runtime, 0.58),
+        ),
     );
+    const position = path.geometry.getAttribute("position");
+    points.forEach((point, index) =>
+      position.setXYZ(index, point.x, point.y, point.z),
+    );
+    position.needsUpdate = true;
+    path.geometry.computeBoundingSphere();
+    path.material = lineMaterial(runtime, 0.58);
     path.name = "assembly-scrub-path";
-    overlay.add(path);
   }
-
-  root.add(overlay);
+  runtime.pool.endFrame();
+  pruneOverlayResourceCaches(runtime);
+  return runtime.pool.topologyRevision !== topologyRevisionBefore;
 };

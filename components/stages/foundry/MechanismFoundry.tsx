@@ -58,7 +58,6 @@ import {
   SCENE_VIEW,
 } from "../../../utils/coordinates";
 import {
-  FOUNDRY_ANIMATION_COMMIT_MS,
   FOUNDRY_OVERLAY_SIZE,
   FOUNDRY_VIEW_PRESETS,
   clampFoundryPitch,
@@ -279,7 +278,6 @@ export const MechanismFoundry = ({
       ),
     [landedFoundry, selectedPath?.points],
   );
-  const foundryPhaseRemainderRef = useRef(0);
   useWorkspacePlaybackLoop({
     stage: "foundry",
     isPlaying: foundryPlaying,
@@ -290,24 +288,13 @@ export const MechanismFoundry = ({
     animationSpeed: project.settings.animationSpeed,
     timingProfile: "linear",
     playbackClock,
-    phaseAdvance: (elapsedMs, previousPhase) => {
-      foundryPhaseRemainderRef.current += elapsedMs;
-      if (foundryPhaseRemainderRef.current < FOUNDRY_ANIMATION_COMMIT_MS)
-        return previousPhase;
-      const committedElapsed = foundryPhaseRemainderRef.current;
-      foundryPhaseRemainderRef.current %= FOUNDRY_ANIMATION_COMMIT_MS;
-      return (
-        previousPhase +
-        Math.min(96, committedElapsed) *
-          0.0025 *
-          project.settings.animationSpeed
-      );
-    },
+    phaseAdvance: (elapsedMs, previousPhase) =>
+      previousPhase +
+      Math.min(96, elapsedMs) *
+        0.0025 *
+        project.settings.animationSpeed,
     driverStage: "foundry",
   });
-  useEffect(() => {
-    if (!foundryPlaying) foundryPhaseRemainderRef.current = 0;
-  }, [foundryPlaying]);
   const foundryPlaybackFrame = useMemo(
     () =>
       createFoundryPlaybackFrame(
@@ -1112,7 +1099,6 @@ export const MechanismFoundry = ({
             playbackOverlay={{
               clock: playbackClock,
               sample: playbackOverlaySample,
-              minFrameIntervalMs: 1000 / 30,
             }}
             foundryCamera={foundryCamera}
             foundryCameraLabel={foundryCameraLabel}
@@ -1125,6 +1111,7 @@ export const MechanismFoundry = ({
             userPathPoints={foundryUserPathPoints}
             targetPathId={selectedPath?.id}
             kit={project.settings.physicalKit}
+            performancePreset={project.settings.performancePreset}
             showFoundryGrid={showFoundryGrid}
             showUserPathPreview={showUserPathPreview}
             showPathPreview={showPathPreview}

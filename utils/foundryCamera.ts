@@ -46,7 +46,6 @@ export const FOUNDRY_OVERLAY_SIZE: FoundryOverlaySize = {
   height: 240,
 };
 
-export const FOUNDRY_ANIMATION_COMMIT_MS = 1000 / 30;
 
 export const clampFoundryPitch = (value: number) =>
   Math.max(-64, Math.min(68, value));

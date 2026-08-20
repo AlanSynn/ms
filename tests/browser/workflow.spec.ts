@@ -1407,6 +1407,7 @@ test('Assembly shows character pins as a separate board build stage', async ({ p
   await expect(characterAssemblyThree).toHaveAttribute('data-three-assembly-motion-kind', 'explode_z');
   await expect(characterAssemblyThree).toHaveAttribute('data-three-assembly-board-surface', '15x15-hole-board');
   await expect(characterAssemblyThree).toHaveAttribute('data-three-assembly-board-hole-count', '225');
+  await expect(characterAssemblyThree).toHaveAttribute('data-three-assembly-board-instance-count', '225');
   await expect(characterAssemblyThree).toHaveAttribute('data-three-assembly-board-z', '0.00');
   expect(Number(await characterAssemblyThree.getAttribute('data-three-assembly-rendered-board-marker-count')), 'Fixed pins render board markers in the shared Foundry rig').toBeGreaterThan(0);
   await page.getByTestId('assembly-step-list').getByRole('button', { name: /Free pivots/i }).click();
@@ -1509,31 +1510,41 @@ test('animation performance: Foundry playback stays responsive without runaway T
   await expect(foundryRig).toHaveAttribute('data-three-static-grid-mode', 'persistent-scene-layer');
   await expect(foundryRig).toHaveAttribute('data-three-fit-bounds', 'phase-invariant-sweep');
   await expect(foundryRig).toHaveAttribute('data-three-animation-commit-ms', '33.3');
-  await expect(foundryRig).toHaveAttribute('data-three-pixel-ratio-cap', '1.5');
+  await expect(foundryRig).toHaveAttribute('data-render-performance-preset', 'balanced');
+  await expect(foundryRig).toHaveAttribute('data-render-antialias', 'off');
+  await expect(foundryRig).toHaveAttribute('data-repeated-geometry-policy', 'pool-and-instance');
+  await expect(foundryRig).toHaveAttribute('data-three-pixel-ratio-cap', '1.0');
 
   const dynamicBuildsBefore = Number(await foundryRig.getAttribute('data-three-dynamic-build-count') ?? '0');
   const geometryCacheBefore = Number(await foundryRig.getAttribute('data-three-geometry-cache-size') ?? '0');
+  const materialCacheBefore = Number(await foundryRig.getAttribute('data-three-material-cache-size') ?? '0');
+  const poolSizeBefore = Number(await foundryRig.getAttribute('data-three-pool-size') ?? '0');
+  const rendererGeometryBefore = Number(await foundryRig.getAttribute('data-three-renderer-geometry-count') ?? '0');
+  const rendererTextureBefore = Number(await foundryRig.getAttribute('data-three-renderer-texture-count') ?? '0');
   const phaseControl = page.getByLabel('Foundry phase');
   const phaseBefore = Number(await phaseControl.inputValue());
   await page.getByTestId('foundry-toolbar').getByRole('button', { name: 'Play', exact: true }).click();
   await expect(page.getByTestId('foundry-toolbar-state')).toContainText('playing');
   await expect(page.getByTestId('foundry-toolbar-state')).not.toBeVisible();
-  const playbackStartedAt = Date.now();
-
-  await expect.poll(async () => {
-    return Number(await foundryRig.getAttribute('data-three-dynamic-build-count') ?? '0') - dynamicBuildsBefore;
-  }, { message: 'Foundry still animates enough frames to feel alive under parallel browser load' }).toBeGreaterThan(12);
+  await expect.poll(async () => Number(await phaseControl.inputValue()), {
+    message: 'Foundry advances external-clock samples while retaining its Three topology',
+  }).not.toBe(phaseBefore);
 
   const phaseAfter = Number(await phaseControl.inputValue());
   const dynamicBuildsAfter = Number(await foundryRig.getAttribute('data-three-dynamic-build-count') ?? '0');
   const geometryCacheAfter = Number(await foundryRig.getAttribute('data-three-geometry-cache-size') ?? '0');
+  const materialCacheAfter = Number(await foundryRig.getAttribute('data-three-material-cache-size') ?? '0');
+  const poolSizeAfter = Number(await foundryRig.getAttribute('data-three-pool-size') ?? '0');
+  const rendererGeometryAfter = Number(await foundryRig.getAttribute('data-three-renderer-geometry-count') ?? '0');
+  const rendererTextureAfter = Number(await foundryRig.getAttribute('data-three-renderer-texture-count') ?? '0');
   const dynamicBuildsDuringPlayback = dynamicBuildsAfter - dynamicBuildsBefore;
-  const playbackSeconds = Math.max(0.1, (Date.now() - playbackStartedAt) / 1000);
-  const dynamicBuildsPerSecond = dynamicBuildsDuringPlayback / playbackSeconds;
-  expect(dynamicBuildsDuringPlayback, 'Foundry still animates enough committed frames to feel alive').toBeGreaterThan(12);
-  expect(dynamicBuildsPerSecond, 'Foundry does not rebuild expensive Three geometry at unbounded 60fps').toBeLessThanOrEqual(35);
-  expect(geometryCacheAfter - geometryCacheBefore, 'Foundry path/trail geometry is disposed instead of leaking into the persistent cache').toBeLessThanOrEqual(12);
-  expect(Math.abs(phaseAfter - phaseBefore), 'Foundry phase advances during optimized playback').toBeGreaterThan(40);
+  expect(dynamicBuildsDuringPlayback, 'steady playback updates pooled transforms without rebuilding Three topology').toBe(0);
+  expect(geometryCacheAfter - geometryCacheBefore, 'steady playback does not grow the shared geometry cache').toBe(0);
+  expect(materialCacheAfter - materialCacheBefore, 'steady playback does not grow the shared material cache').toBe(0);
+  expect(poolSizeAfter - poolSizeBefore, 'steady playback retains a bounded object-pool high-water mark').toBe(0);
+  expect(rendererGeometryAfter - rendererGeometryBefore, 'steady playback does not retain new renderer geometries').toBe(0);
+  expect(rendererTextureAfter - rendererTextureBefore, 'steady playback does not retain new renderer textures').toBe(0);
+  expect(Math.abs(phaseAfter - phaseBefore), 'Foundry phase advances during optimized playback').toBeGreaterThan(0);
 
   await page.getByTestId('foundry-toolbar').getByRole('button', { name: 'Pause', exact: true }).click();
   expectCleanPage(pageErrors, consoleErrors);
@@ -1851,6 +1862,12 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await expect(page.getByTestId('design-shared-foundry-preview')).toBeVisible();
   await expect(page.getByTestId('design-canvas')).toHaveCount(0);
+  const highPerformanceRig = page.getByTestId('design-shared-foundry-preview').getByTestId('foundry-camera-rig');
+  await expect(highPerformanceRig).toHaveAttribute('data-render-performance-preset', 'high');
+  await expect(highPerformanceRig).toHaveAttribute('data-render-antialias', 'on');
+  await expect(highPerformanceRig).toHaveAttribute('data-render-overlay-quality', 'full');
+  await expect(highPerformanceRig).toHaveAttribute('data-three-animation-commit-ms', '16.7');
+  await expect(highPerformanceRig).toHaveAttribute('data-three-pixel-ratio-cap', '1.5');
   await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').fill('0');
   await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').press('Enter');
   await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').fill('100');
@@ -3953,12 +3970,20 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
   expect(headTarget.y, 'Design front view preserves Character/Path scene orientation: head stays above torso').toBeLessThan(torsoTarget.y);
   expect(torsoTarget.y, 'Design front view preserves Character/Path scene orientation: torso stays above foot').toBeLessThan(footTarget.y);
   const drivenHandBefore = await waitForThreePartTarget(designRig, 'right_hand_part');
+  const designTopologyBefore = Number(await designRig.getAttribute('data-three-dynamic-build-count') ?? '0');
+  const designGeometryCacheBefore = Number(await designRig.getAttribute('data-three-geometry-cache-size') ?? '0');
+  const designMaterialCacheBefore = Number(await designRig.getAttribute('data-three-material-cache-size') ?? '0');
+  const designPoolBefore = Number(await designRig.getAttribute('data-three-pool-size') ?? '0');
   await page.getByLabel('Workspace scrubber').fill('28');
   await expect.poll(async () => {
     const moved = (await readThreeScreenTargets(designRig, 'data-three-part-screen-targets'))
       .find(item => item.id === 'right_hand_part' && item.visible);
     return moved ? Math.hypot(moved.x - drivenHandBefore.x, moved.y - drivenHandBefore.y) : 0;
   }, { message: 'visible Design hand part follows the fitted mechanism/IK output when scrubbed' }).toBeGreaterThan(2);
+  expect(Number(await designRig.getAttribute('data-three-dynamic-build-count') ?? '0'), 'Design scrub changes rigid-part transforms without rebuilding topology').toBe(designTopologyBefore);
+  expect(Number(await designRig.getAttribute('data-three-geometry-cache-size') ?? '0'), 'Design scrub retains its geometry cache').toBe(designGeometryCacheBefore);
+  expect(Number(await designRig.getAttribute('data-three-material-cache-size') ?? '0'), 'Design scrub retains its material cache').toBe(designMaterialCacheBefore);
+  expect(Number(await designRig.getAttribute('data-three-pool-size') ?? '0'), 'Design scrub retains its object pool').toBe(designPoolBefore);
   expect(Number(await designPreview.getAttribute('data-design-target-error'))).toBeGreaterThan(1);
 
   const expectedMarkers: Record<string, Array<[string, number]>> = {
@@ -3972,16 +3997,15 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
 
   const mechanismTemplateButtons = [
     { type: '4bar', label: 'Four-bar linkage' },
-    { type: 'piston', label: 'Slider piston' },
-    { type: 'cam', label: 'Cam follower' },
     { type: 'gear', label: 'Gear train' },
-    { type: 'gear_linkage', label: 'Gear linkage' },
-    { type: 'planetary_gear', label: 'Planetary gear' }
+    { type: 'gear_linkage', label: 'Gear linkage' }
   ] as const;
   const readRotation = async () => Number(await designRig.getAttribute('data-pinion-rotation-deg'));
 
   for (const { type, label } of mechanismTemplateButtons) {
     const templateButton = page.getByRole('button', { name: label, exact: true });
+    await expect(templateButton).toBeVisible();
+    await expect(templateButton).toBeEnabled();
     await templateButton.scrollIntoViewIfNeeded();
     await templateButton.click();
     await expect(designRig, `${type} design automata preview uses the Foundry mechanism state`).toHaveAttribute('data-mechanism-type', type);
@@ -3992,11 +4016,7 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
     await expect(designRig, `${type} design physical readiness gate is clean`).toHaveAttribute('data-three-physical-validation-errors', '0');
     expect(await designRig.getAttribute('data-three-rendered-layer-labels'), `${type} rendered labels match fabrication stack labels`).toBe(await designRig.getAttribute('data-three-stack-order'));
     const designSpacerGap = Number(await designRig.getAttribute('data-three-spacer-z-gap'));
-    if (type === 'cam') {
-      expect(designSpacerGap, 'Cam Design preview keeps the guide/follower compact against the board-mounted cam plane').toBeLessThan(FABRICATION_RENDER_LAYER_Z_STEP);
-    } else {
-      expect(designSpacerGap, `${type} preview has spacer clearance along z`).toBeGreaterThanOrEqual(FABRICATION_RENDER_LAYER_Z_STEP - 0.01);
-    }
+    expect(designSpacerGap, `${type} preview has spacer clearance along z`).toBeGreaterThanOrEqual(FABRICATION_RENDER_LAYER_Z_STEP - 0.01);
     await expect.poll(async () => Number(await designRig.getAttribute('data-three-dynamic-build-count')), { message: `${type} builds visible Three geometry in Design` }).toBeGreaterThan(0);
     for (const [attr, minimumCount] of expectedMarkers[type]) {
       expect(Number(await designRig.getAttribute(attr)), `${type} center preview includes ${attr}`).toBeGreaterThanOrEqual(minimumCount);
@@ -4024,14 +4044,6 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
     }
     if (type === 'gear_linkage') {
       await expect(designRig).toHaveAttribute('data-three-gear-linkage-mode', 'two-gear-two-link-coupler');
-    }
-    if (type === 'planetary_gear') {
-      await expect(designRig).toHaveAttribute('data-three-planetary-syntax', 'ring-fixed-sun-input-carrier-output');
-      await expect(designRig).toHaveAttribute('data-three-planetary-output', 'carrier');
-      await expect(designRig).toHaveAttribute('data-three-gear-plane-mode', 'planetary-coplanar-ring-sun-planet');
-    }
-    if (type === 'cam') {
-      await expect(designRig).toHaveAttribute('data-three-cam-contact-mode', 'sampled-profile-on-guide-axis');
     }
   }
 

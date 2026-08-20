@@ -52,11 +52,18 @@ import {
 } from "../../../utils/foundryCamera";
 import type { MechanismPreviewSimulation } from "../../../utils/mechanismPreview";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
-import { setRendererPixelRatioCap } from "../../../utils/threeResourceKit";
+import { subscribeCadencedPlaybackSampler } from "../../../runtime/playback/cadencedPlaybackSampler";
+import {
+  collectThreeObjectResourceUsage,
+  pruneUnusedThreeResourceCache,
+  setRendererPixelRatioCap,
+} from "../../../utils/threeResourceKit";
 import { recordFoundryTopologyBuild } from "../../../utils/performanceAudit";
+import { resolveRenderPerformancePolicy } from "../../../utils/renderPerformancePolicy";
 import { fittedGearTrainCenters } from "./foundryPreviewGeometry";
 import { FoundryPreviewStateProbe } from "./FoundryPreviewStateProbe";
 import {
+  disposeFoundryAssemblyOverlayRuntime,
   foundryAssemblyLayerFocusSummary,
   renderFoundryAssemblySceneOverlay,
   type FoundryAssemblySceneFrame,
@@ -66,6 +73,7 @@ import {
   createFoundryThreePrimitiveFactory,
   disposeFoundryThreeObject,
 } from "./foundryThreePrimitives";
+import { FoundryThreeObjectPool } from "./foundryThreeObjectPool";
 import { renderFoundryDynamicLayers } from "./foundryThreeRenderLayers";
 import { foundryRenderedInventory } from "./foundryRenderInventory";
 import {
@@ -85,6 +93,7 @@ const E2E_DIAGNOSTICS = __MOTIONSMITH_E2E_DIAGNOSTICS__;
 
 type ThreeFoundryPreviewProps = {
   mechanism: MechanismConfig;
+  performancePreset: ProjectState["settings"]["performancePreset"];
   simulation: MechanismPreviewSimulation;
   playback?: {
     clock: PlaybackClock;
@@ -138,6 +147,7 @@ type FoundryAutomataContext = {
   project: ProjectState;
   animatedParts?: Record<string, BodyPartLayer>;
   animatedSceneObjects?: Record<string, SceneObject>;
+  geometrySkeleton?: StandardSkeleton | null;
   skeleton?: StandardSkeleton | null;
   paths?: ProjectMotionPath[];
   selectedPathId?: string;
@@ -322,20 +332,218 @@ const renderFoundryAutomataContext = ({
   materialCache: Map<string, THREE.Material>;
   onLoaded: () => void;
   baseZ: number;
-}) => {
-  if (!context?.showCharacter) return;
+}): boolean => {
+  let automataRoot = root.getObjectByName(
+    "foundry-automata-context",
+  ) as THREE.Group | undefined;
+  if (!context?.showCharacter) {
+    if (!automataRoot) return false;
+    automataRoot.removeFromParent();
+    disposeFoundryThreeObject(automataRoot);
+    return true;
+  }
   const project = context.project;
-  const skeleton = context.skeleton ?? project.skeleton;
+  const skeleton =
+    context.geometrySkeleton ?? project.skeleton ?? context.skeleton;
   const animatedParts = context.animatedParts ?? {};
   const animatedSceneObjects = context.animatedSceneObjects ?? {};
-  const parts = project.partOrder
-    .map((id) => animatedParts[id] ?? project.parts[id])
-    .filter((part): part is BodyPartLayer => Boolean(part?.visible));
-  const sceneObjects = project.sceneObjectOrder
-    .map((id) => animatedSceneObjects[id] ?? project.sceneObjects[id])
-    .filter((object): object is SceneObject => Boolean(object?.visible));
+  const paths = context.paths ?? [];
+  const pathTopologyKey = paths
+    .map(
+      (path) =>
+        `${path.id}:${path.closed ? 1 : 0}:${path.points
+          .map((point) => `${point.x.toFixed(3)},${point.y.toFixed(3)}`)
+          .join(";")}`,
+    )
+    .join("|");
+  const topologyRefs = automataRoot?.userData.topologyRefs as
+    | {
+        parts: ProjectState["parts"];
+        partOrder: ProjectState["partOrder"];
+        sceneObjects: ProjectState["sceneObjects"];
+        sceneObjectOrder: ProjectState["sceneObjectOrder"];
+        skeleton: StandardSkeleton | null | undefined;
+        pathTopologyKey: string;
+      }
+    | undefined;
+  const topologyMatches = Boolean(
+    automataRoot &&
+      topologyRefs?.parts === project.parts &&
+      topologyRefs.partOrder === project.partOrder &&
+      topologyRefs.sceneObjects === project.sceneObjects &&
+      topologyRefs.sceneObjectOrder === project.sceneObjectOrder &&
+      topologyRefs.skeleton === skeleton &&
+      topologyRefs.pathTopologyKey === pathTopologyKey,
+  );
   const edge = foundryAutomataMaterial("#334155", 0.58, materialCache);
   const selected = foundryAutomataMaterial("#a78bfa", 0.56, materialCache);
+  const holeRadius = Math.max(
+    1,
+    FABRICATION_HOLE_RADIUS_MM * SCENE_PX_PER_MM,
+  );
+  let topologyChanged = false;
+  if (!topologyMatches) {
+    if (automataRoot) {
+      automataRoot.removeFromParent();
+      disposeFoundryThreeObject(automataRoot);
+    }
+    automataRoot = new THREE.Group();
+    automataRoot.name = "foundry-automata-context";
+    automataRoot.userData.topologyRefs = {
+      parts: project.parts,
+      partOrder: project.partOrder,
+      sceneObjects: project.sceneObjects,
+      sceneObjectOrder: project.sceneObjectOrder,
+      skeleton,
+      pathTopologyKey,
+    };
+    root.add(automataRoot);
+    topologyChanged = true;
+
+    project.partOrder.forEach((partId) => {
+      const base = project.parts[partId];
+      if (!base) return;
+      const landmarks = partLandmarkLocalPoints(base, skeleton);
+      const outline = fabricablePartOutlinePoints(base, landmarks);
+      if (outline.length < 3) return;
+      const shape = foundrySceneLocalShape(outline);
+      landmarks
+        .filter((local) => pointInsideOutline(local, outline, 0.5))
+        .forEach((local) =>
+          shape.holes.push(foundrySceneLocalHole(local, holeRadius)),
+        );
+      const geometry = new THREE.ExtrudeGeometry(shape, {
+        depth: 0.16,
+        bevelEnabled: true,
+        bevelSize: 0.018,
+        bevelThickness: 0.012,
+      });
+      const group = new THREE.Group();
+      group.name = `foundry-automata-part-${partId}`;
+      group.userData.partId = partId;
+      const mesh = new THREE.Mesh(
+        geometry,
+        foundryAutomataMaterial(
+          base.fillColor,
+          Math.min(0.72, base.opacity),
+          materialCache,
+        ),
+      );
+      mesh.position.z = -0.08;
+      mesh.userData.partId = partId;
+      mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), edge));
+      group.add(mesh);
+      if (base.textureUrl) {
+        const artGeometry = new THREE.ShapeGeometry(shape);
+        const positions = artGeometry.getAttribute("position");
+        const uvs: number[] = [];
+        const width = Math.max(1, base.bounds.width);
+        const height = Math.max(1, base.bounds.height);
+        for (let index = 0; index < positions.count; index += 1) {
+          const local = sceneLocalFromFoundryGeometry(
+            positions.getX(index),
+            positions.getY(index),
+          );
+          uvs.push(
+            (local.x - base.bounds.x) / width,
+            (local.y - base.bounds.y) / height,
+          );
+        }
+        artGeometry.setAttribute(
+          "uv",
+          new THREE.Float32BufferAttribute(uvs, 2),
+        );
+        const art = new THREE.Mesh(
+          artGeometry,
+          foundryAutomataTextureMaterial(
+            base.textureUrl,
+            Math.min(0.82, base.opacity),
+            onLoaded,
+          ),
+        );
+        art.name = `foundry-automata-art-${partId}`;
+        art.position.z = 0.09;
+        art.userData.partId = partId;
+        group.add(art);
+      }
+      automataRoot?.add(group);
+    });
+
+    project.sceneObjectOrder.forEach((objectId) => {
+      const base = project.sceneObjects[objectId];
+      if (!base) return;
+      const shape = foundrySceneObjectShape(base);
+      const geometry = new THREE.ExtrudeGeometry(shape, {
+        depth: 0.14,
+        bevelEnabled: true,
+        bevelSize: 0.014,
+        bevelThickness: 0.01,
+      });
+      const group = new THREE.Group();
+      group.name = `foundry-automata-object-${objectId}`;
+      group.userData.sceneObjectId = objectId;
+      const mesh = new THREE.Mesh(
+        geometry,
+        foundryAutomataMaterial(
+          base.fillColor,
+          Math.min(0.76, base.opacity),
+          materialCache,
+        ),
+      );
+      mesh.position.z = -0.07;
+      mesh.userData.sceneObjectId = objectId;
+      mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), edge));
+      group.add(mesh);
+      if (base.textureUrl) {
+        const artGeometry = new THREE.ShapeGeometry(shape);
+        const positions = artGeometry.getAttribute("position");
+        const uvs: number[] = [];
+        const width = Math.max(1, base.bounds.width);
+        const height = Math.max(1, base.bounds.height);
+        for (let index = 0; index < positions.count; index += 1) {
+          const local = sceneLocalFromFoundryGeometry(
+            positions.getX(index),
+            positions.getY(index),
+          );
+          uvs.push(local.x / width + 0.5, 0.5 - local.y / height);
+        }
+        artGeometry.setAttribute(
+          "uv",
+          new THREE.Float32BufferAttribute(uvs, 2),
+        );
+        const art = new THREE.Mesh(
+          artGeometry,
+          foundryAutomataTextureMaterial(
+            base.textureUrl,
+            Math.min(0.86, base.opacity),
+            onLoaded,
+          ),
+        );
+        art.name = `foundry-automata-art-${objectId}`;
+        art.position.z = 0.08;
+        art.userData.sceneObjectId = objectId;
+        group.add(art);
+      }
+      automataRoot?.add(group);
+    });
+
+    paths
+      .filter((path) => path.points.length > 1)
+      .forEach((path) => {
+        const points = path.points.map((point) => sceneTo3(point, 0));
+        const linePoints =
+          path.closed && points.length > 2
+            ? [...points, points[0].clone()]
+            : points;
+        const line = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(linePoints),
+          foundryAutomataMaterial("#8b5cf6", 0.62, materialCache),
+        );
+        line.name = `foundry-automata-path-${path.id}`;
+        automataRoot?.add(line);
+      });
+  }
+
   const activeAssemblyPartIds = new Set(
     assemblySceneFrame?.kind === "character"
       ? assemblySceneFrame.activePartIds
@@ -345,143 +553,79 @@ const renderFoundryAutomataContext = ({
     assemblySceneFrame?.kind === "character" && assemblySceneFrame.explodeAxis === "z"
       ? 0.3 + assemblySceneFrame.progress * 0.8
       : 0;
-  const holeRadius = Math.max(
-    1,
-    FABRICATION_HOLE_RADIUS_MM * SCENE_PX_PER_MM,
-  );
-  const automataRoot = new THREE.Group();
-  automataRoot.name = "foundry-automata-context";
-  root.add(automataRoot);
-
-  parts.forEach((part) => {
-    const base = project.parts[part.id] ?? part;
-    const landmarks = partLandmarkLocalPoints(base, skeleton);
-    const outline = fabricablePartOutlinePoints(base, landmarks);
-    if (outline.length < 3) return;
-    const shape = foundrySceneLocalShape(outline);
-    landmarks
-      .filter((local) => pointInsideOutline(local, outline, 0.5))
-      .forEach((local) =>
-        shape.holes.push(foundrySceneLocalHole(local, holeRadius)),
-      );
-    const geometry = new THREE.ExtrudeGeometry(shape, {
-      depth: 0.16,
-      bevelEnabled: true,
-      bevelSize: 0.018,
-      bevelThickness: 0.012,
-    });
-    const material =
-      part.id === project.selectedPartId
-        ? selected
-        : foundryAutomataMaterial(
-            base.fillColor,
-            activeAssemblyPartIds.size && !activeAssemblyPartIds.has(part.id)
-              ? 0.24
-              : Math.min(0.72, base.opacity),
-            materialCache,
-          );
-    const group = new THREE.Group();
-    group.name = `foundry-automata-part-${part.id}`;
-    group.userData.partId = part.id;
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.z = -0.08;
-    mesh.userData.partId = part.id;
-    mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), edge));
-    group.add(mesh);
-    if (base.textureUrl) {
-      const artGeometry = new THREE.ShapeGeometry(shape);
-      const positions = artGeometry.getAttribute("position");
-      const uvs: number[] = [];
-      const width = Math.max(1, base.bounds.width);
-      const height = Math.max(1, base.bounds.height);
-      for (let i = 0; i < positions.count; i += 1) {
-        const local = sceneLocalFromFoundryGeometry(positions.getX(i), positions.getY(i));
-        uvs.push((local.x - base.bounds.x) / width, (local.y - base.bounds.y) / height);
-      }
-      artGeometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
-      const art = new THREE.Mesh(
-        artGeometry,
-        foundryAutomataTextureMaterial(base.textureUrl, Math.min(0.82, base.opacity), onLoaded),
-      );
-      art.name = `foundry-automata-art-${part.id}`;
-      art.position.z = 0.09;
-      art.userData.partId = part.id;
-      group.add(art);
+  project.partOrder.forEach((partId) => {
+    const base = project.parts[partId];
+    const part = animatedParts[partId] ?? base;
+    const group = automataRoot?.getObjectByName(
+      `foundry-automata-part-${partId}`,
+    ) as THREE.Group | undefined;
+    if (!base || !part || !group) return;
+    group.visible = part.visible;
+    const mesh = group.children[0] as THREE.Mesh | undefined;
+    if (mesh) {
+      mesh.material =
+        partId === project.selectedPartId
+          ? selected
+          : foundryAutomataMaterial(
+              base.fillColor,
+              activeAssemblyPartIds.size &&
+                !activeAssemblyPartIds.has(partId)
+                ? 0.24
+                : Math.min(0.72, base.opacity),
+              materialCache,
+            );
     }
     placeSceneLocalGroup(
       group,
       part.transform,
       baseZ +
         part.zIndex * 0.045 +
-        (activeAssemblyPartIds.has(part.id) ? assemblyLift : 0),
+        (activeAssemblyPartIds.has(partId) ? assemblyLift : 0),
     );
-    automataRoot.add(group);
   });
 
-  sceneObjects.forEach((object) => {
-    const shape = foundrySceneObjectShape(object);
-    const geometry = new THREE.ExtrudeGeometry(shape, {
-      depth: 0.14,
-      bevelEnabled: true,
-      bevelSize: 0.014,
-      bevelThickness: 0.01,
-    });
-    const group = new THREE.Group();
-    group.name = `foundry-automata-object-${object.id}`;
-    group.userData.sceneObjectId = object.id;
-    const material =
-      object.id === project.selectedSceneObjectId
-        ? selected
-        : foundryAutomataMaterial(object.fillColor, Math.min(0.76, object.opacity), materialCache);
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.z = -0.07;
-    mesh.userData.sceneObjectId = object.id;
-    mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), edge));
-    group.add(mesh);
-    if (object.textureUrl) {
-      const artGeometry = new THREE.ShapeGeometry(shape);
-      const positions = artGeometry.getAttribute("position");
-      const uvs: number[] = [];
-      const width = Math.max(1, object.bounds.width);
-      const height = Math.max(1, object.bounds.height);
-      for (let i = 0; i < positions.count; i += 1) {
-        const local = sceneLocalFromFoundryGeometry(positions.getX(i), positions.getY(i));
-        uvs.push(local.x / width + 0.5, 0.5 - local.y / height);
-      }
-      artGeometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
-      const art = new THREE.Mesh(
-        artGeometry,
-        foundryAutomataTextureMaterial(object.textureUrl, Math.min(0.86, object.opacity), onLoaded),
-      );
-      art.position.z = 0.08;
-      art.userData.sceneObjectId = object.id;
-      group.add(art);
+  project.sceneObjectOrder.forEach((objectId) => {
+    const base = project.sceneObjects[objectId];
+    const object = animatedSceneObjects[objectId] ?? base;
+    const group = automataRoot?.getObjectByName(
+      `foundry-automata-object-${objectId}`,
+    ) as THREE.Group | undefined;
+    if (!base || !object || !group) return;
+    group.visible = object.visible;
+    const mesh = group.children[0] as THREE.Mesh | undefined;
+    if (mesh) {
+      mesh.material =
+        objectId === project.selectedSceneObjectId
+          ? selected
+          : foundryAutomataMaterial(
+              base.fillColor,
+              Math.min(0.76, base.opacity),
+              materialCache,
+            );
     }
     placeSceneLocalGroup(group, object.transform, baseZ + 0.12 + object.zIndex * 0.045);
-    automataRoot.add(group);
   });
 
-  (context.paths ?? [])
-    .filter((path) => path.visible !== false && path.enabled !== false && path.points.length > 1)
-    .forEach((path) => {
-      const material = foundryAutomataMaterial(
+  paths.forEach((path) => {
+    const line = automataRoot?.getObjectByName(
+      `foundry-automata-path-${path.id}`,
+    ) as THREE.Line | undefined;
+    if (!line) return;
+    line.visible = path.visible !== false && path.enabled !== false;
+    line.position.z = baseZ + 0.36;
+    line.material = foundryAutomataMaterial(
         path.id === context.selectedPathId ? "#7c3aed" : "#8b5cf6",
         path.id === context.selectedPathId ? 0.94 : 0.62,
-        materialCache,
-      );
-      const points = path.points.map((point) => sceneTo3(point, baseZ + 0.36));
-      const linePoints = path.closed && points.length > 2 ? [...points, points[0].clone()] : points;
-      const line = new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints(linePoints),
-        material,
-      );
-      line.name = `foundry-automata-path-${path.id}`;
-      automataRoot.add(line);
-    });
+      materialCache,
+    );
+  });
+  if (automataRoot) automataRoot.visible = true;
+  return topologyChanged;
 };
 
 export const ThreeFoundryPreview = ({
   mechanism,
+  performancePreset,
   simulation,
   playback,
   kit,
@@ -521,6 +665,7 @@ export const ThreeFoundryPreview = ({
   automataContext,
   children,
 }: ThreeFoundryPreviewProps) => {
+  const renderPolicy = resolveRenderPerformancePolicy(performancePreset);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -528,10 +673,10 @@ export const ThreeFoundryPreview = ({
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const cameraStateRef = useRef(camera);
   const dynamicBuildCountRef = useRef(0);
+  const primitivePoolRef = useRef<FoundryThreeObjectPool | null>(null);
   const automataContextRef = useRef<FoundryAutomataContext | undefined>(automataContext);
   const assemblySceneFrameRef = useRef<FoundryAssemblySceneFrame | undefined>(assemblySceneFrame);
   const renderDynamicRef = useRef<((frame: FoundryPlaybackFrame) => void) | null>(null);
-  const lastPlaybackRenderTimeRef = useRef(-Infinity);
   automataContextRef.current = automataContext;
   assemblySceneFrameRef.current = assemblySceneFrame;
   const geometryCacheRef = useRef<Map<string, THREE.BufferGeometry>>(new Map());
@@ -954,8 +1099,8 @@ export const ThreeFoundryPreview = ({
     pinStacks.filter((pin) => pin.topZ <= pin.bottomZ || pin.lengthZ <= 0)
       .length + localSpacerViolationCount;
   const visiblePathTraces = useMemo(
-    () =>
-      pathTraces.length
+    () => {
+      const traces = pathTraces.length
         ? pathTraces
         : [
             {
@@ -964,8 +1109,17 @@ export const ThreeFoundryPreview = ({
               points: pathPoints,
               primary: true,
             },
-          ],
-    [pathPoints, pathTraces],
+          ];
+      if (renderPolicy.overlayQuality !== "reduced") return traces;
+      return traces.map((trace) => ({
+        ...trace,
+        points: trace.points.filter(
+          (_point, index) =>
+            index % 2 === 0 || index === trace.points.length - 1,
+        ),
+      }));
+    },
+    [pathPoints, pathTraces, renderPolicy.overlayQuality],
   );
   const primaryPathId =
     visiblePathTraces.find((trace) => trace.primary)?.id ??
@@ -1108,12 +1262,26 @@ export const ThreeFoundryPreview = ({
       roundedFoundryScreenTargets([...partTargets.values()]),
     );
     stateRef.current.dataset.threeMechanismScreenTargets = "[]";
-    const assemblyBoard = scene.getObjectByName("assembly-15x15-board-surface");
+    const assemblyBoardObject = scene.getObjectByName(
+      "assembly-15x15-board-surface",
+    );
+    const assemblyBoard =
+      assemblyBoardObject?.visible && assemblyBoardObject.parent?.visible
+        ? assemblyBoardObject
+        : undefined;
     stateRef.current.dataset.threeAssemblyBoardSurface = assemblyBoard
       ? String(assemblyBoard.userData.assemblyBoardSurface ?? "15x15-hole-board")
       : "hidden";
     stateRef.current.dataset.threeAssemblyBoardHoleCount = String(
       assemblyBoard?.userData.assemblyBoardHoleCount ?? 0,
+    );
+    const assemblyBoardHoles = assemblyBoard?.getObjectByName(
+      "assembly-board-z0-holes-instanced",
+    );
+    stateRef.current.dataset.threeAssemblyBoardInstanceCount = String(
+      assemblyBoardHoles instanceof THREE.InstancedMesh
+        ? assemblyBoardHoles.count
+        : 0,
     );
     stateRef.current.dataset.threeAssemblyBoardZ = assemblyBoard
       ? Number(assemblyBoard.userData.assemblyBoardZ ?? 0).toFixed(2)
@@ -1250,8 +1418,11 @@ export const ThreeFoundryPreview = ({
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    setRendererPixelRatioCap(renderer);
+    const renderer = new THREE.WebGLRenderer({
+      antialias: renderPolicy.antialias,
+      alpha: true,
+    });
+    setRendererPixelRatioCap(renderer, renderPolicy.pixelRatioCap);
     renderer.shadowMap.enabled = false;
     renderer.domElement.className = "foundry-three-canvas";
     if (E2E_DIAGNOSTICS) renderer.domElement.dataset.testid = "foundry-three-canvas";
@@ -1301,16 +1472,24 @@ export const ThreeFoundryPreview = ({
     renderCamera(cameraStateRef.current);
     return () => {
       ro.disconnect();
-      renderer.dispose();
-      if (renderer.domElement.parentElement === host)
-        host.removeChild(renderer.domElement);
+      sceneRef.current = null;
+      rendererRef.current = null;
+      cameraRef.current = null;
+      renderDynamicRef.current = null;
+      const dynamicRoot = scene.getObjectByName("foundry-dynamic");
+      if (dynamicRoot instanceof THREE.Group)
+        disposeFoundryAssemblyOverlayRuntime(dynamicRoot);
       disposeFoundryThreeObject(scene);
       geometryCacheRef.current.forEach((geometry) => geometry.dispose());
       materialCacheRef.current.forEach((material) => material.dispose());
       geometryCacheRef.current.clear();
       materialCacheRef.current.clear();
+      primitivePoolRef.current = null;
+      renderer.dispose();
+      if (renderer.domElement.parentElement === host)
+        host.removeChild(renderer.domElement);
     };
-  }, []);
+  }, [renderPolicy]);
 
   useEffect(() => {
     cameraStateRef.current = camera;
@@ -1324,6 +1503,27 @@ export const ThreeFoundryPreview = ({
     staticRoot.visible = showGrid;
     renderCamera(cameraStateRef.current);
   }, [showGrid]);
+
+  const pruneFoundryResourceCaches = (root: THREE.Object3D) => {
+    if (
+      geometryCacheRef.current.size <=
+        renderPolicy.repeatedGeometry.maxGeometryCacheEntries &&
+      materialCacheRef.current.size <=
+        renderPolicy.repeatedGeometry.maxMaterialCacheEntries
+    )
+      return;
+    const usage = collectThreeObjectResourceUsage(root);
+    pruneUnusedThreeResourceCache(
+      geometryCacheRef.current,
+      usage.geometries,
+      renderPolicy.repeatedGeometry.maxGeometryCacheEntries,
+    );
+    pruneUnusedThreeResourceCache(
+      materialCacheRef.current,
+      usage.materials,
+      renderPolicy.repeatedGeometry.maxMaterialCacheEntries,
+    );
+  };
 
   const renderDynamicScene = (frame: FoundryPlaybackFrame) => {
     const { simulation } = frame;
@@ -1414,20 +1614,42 @@ export const ThreeFoundryPreview = ({
     const cam = cameraRef.current;
     if (!scene || !renderer || !cam) return;
 
-    const old = scene.getObjectByName("foundry-dynamic");
-    if (old) {
-      scene.remove(old);
-      disposeFoundryThreeObject(old);
+    let root = scene.getObjectByName("foundry-dynamic") as THREE.Group | undefined;
+    if (!root) {
+      root = new THREE.Group();
+      root.name = "foundry-dynamic";
+      scene.add(root);
     }
-    const root = new THREE.Group();
-    root.name = "foundry-dynamic";
-    scene.add(root);
-    if (renderPlan.validationErrors.length || physicalValidationErrors.length) {
-      dynamicBuildCountRef.current += 1;
-      recordFoundryTopologyBuild(
-        geometryCacheRef.current.size,
-        materialCacheRef.current.size,
+    let mechanismRoot = root.getObjectByName(
+      "foundry-mechanism-runtime",
+    ) as THREE.Group | undefined;
+    if (!mechanismRoot) {
+      mechanismRoot = new THREE.Group();
+      mechanismRoot.name = "foundry-mechanism-runtime";
+      root.add(mechanismRoot);
+    }
+    if (
+      !primitivePoolRef.current ||
+      primitivePoolRef.current.root !== mechanismRoot
+    ) {
+      primitivePoolRef.current = new FoundryThreeObjectPool(
+        mechanismRoot,
+        disposeFoundryThreeObject,
+        renderPolicy.repeatedGeometry.maxPoolEntries,
       );
+    }
+    const objectPool = primitivePoolRef.current;
+    objectPool.beginFrame();
+    const topologyRevisionBefore = objectPool.topologyRevision;
+    if (renderPlan.validationErrors.length || physicalValidationErrors.length) {
+      objectPool.endFrame();
+      const assemblyLayer = root.getObjectByName(
+        "assembly-scene-contract-overlay",
+      );
+      if (assemblyLayer) assemblyLayer.visible = false;
+      const automataLayer = root.getObjectByName("foundry-automata-context");
+      if (automataLayer) automataLayer.visible = false;
+      pruneFoundryResourceCaches(root);
       if (E2E_DIAGNOSTICS && stateRef.current) {
         stateRef.current.dataset.threeDynamicBuildCount = String(
           dynamicBuildCountRef.current,
@@ -1443,7 +1665,6 @@ export const ThreeFoundryPreview = ({
       return;
     }
     const primitives = createFoundryThreePrimitiveFactory({
-      root,
       geometryCache: geometryCacheRef.current,
       materialCache: materialCacheRef.current,
       mechanism,
@@ -1452,6 +1673,7 @@ export const ThreeFoundryPreview = ({
       rigOpacity,
       baseColor: renderPlan.base.color,
       simulationScale: simulation.scale,
+      objectPool,
     });
     renderFoundryDynamicLayers({
       mechanism,
@@ -1473,7 +1695,8 @@ export const ThreeFoundryPreview = ({
       gearOutputRatioForDisplay,
       assemblySceneFrame: activeAssemblySceneFrame,
     });
-    renderFoundryAssemblySceneOverlay({
+    objectPool.endFrame();
+    const assemblyTopologyChanged = renderFoundryAssemblySceneOverlay({
       root,
       frame: activeAssemblySceneFrame,
       mechanism,
@@ -1483,8 +1706,9 @@ export const ThreeFoundryPreview = ({
       pinTopZ: framePinTopZ,
       pathLayerZ: framePathLayerZ,
       pathPoints,
+      resourcePolicy: renderPolicy.repeatedGeometry,
     });
-    renderFoundryAutomataContext({
+    const automataTopologyChanged = renderFoundryAutomataContext({
       root,
       context: activeAutomataContext,
       assemblySceneFrame: activeAssemblySceneFrame,
@@ -1492,12 +1716,19 @@ export const ThreeFoundryPreview = ({
       onLoaded: () => renderCamera(cameraStateRef.current),
       baseZ: framePinTopZ + 0.16,
     });
+    pruneFoundryResourceCaches(root);
 
-    dynamicBuildCountRef.current += 1;
-    recordFoundryTopologyBuild(
-      geometryCacheRef.current.size,
-      materialCacheRef.current.size,
-    );
+    if (
+      objectPool.topologyRevision !== topologyRevisionBefore ||
+      assemblyTopologyChanged ||
+      automataTopologyChanged
+    ) {
+      dynamicBuildCountRef.current += 1;
+      recordFoundryTopologyBuild(
+        geometryCacheRef.current.size,
+        materialCacheRef.current.size,
+      );
+    }
     if (E2E_DIAGNOSTICS && stateRef.current) {
       const visiblePartIds =
         activeAutomataContext?.showCharacter
@@ -1520,6 +1751,15 @@ export const ThreeFoundryPreview = ({
       );
       stateRef.current.dataset.threeDynamicBuildCount = String(
         dynamicBuildCountRef.current,
+      );
+      stateRef.current.dataset.threePoolSize = String(
+        objectPool.retainedObjectCount,
+      );
+      stateRef.current.dataset.threeRendererGeometryCount = String(
+        renderer.info.memory.geometries,
+      );
+      stateRef.current.dataset.threeRendererTextureCount = String(
+        renderer.info.memory.textures,
       );
       stateRef.current.dataset.threeGeometryCacheSize = String(
         geometryCacheRef.current.size,
@@ -1606,12 +1846,26 @@ export const ThreeFoundryPreview = ({
         ),
       );
       stateRef.current.dataset.threeMechanismScreenTargets = "[]";
-      const assemblyBoard = scene.getObjectByName("assembly-15x15-board-surface");
+      const assemblyBoardObject = scene.getObjectByName(
+        "assembly-15x15-board-surface",
+      );
+      const assemblyBoard =
+        assemblyBoardObject?.visible && assemblyBoardObject.parent?.visible
+          ? assemblyBoardObject
+          : undefined;
       stateRef.current.dataset.threeAssemblyBoardSurface = assemblyBoard
         ? String(assemblyBoard.userData.assemblyBoardSurface ?? "15x15-hole-board")
         : "hidden";
       stateRef.current.dataset.threeAssemblyBoardHoleCount = String(
         assemblyBoard?.userData.assemblyBoardHoleCount ?? 0,
+      );
+      const assemblyBoardHoles = assemblyBoard?.getObjectByName(
+        "assembly-board-z0-holes-instanced",
+      );
+      stateRef.current.dataset.threeAssemblyBoardInstanceCount = String(
+        assemblyBoardHoles instanceof THREE.InstancedMesh
+          ? assemblyBoardHoles.count
+          : 0,
       );
       stateRef.current.dataset.threeAssemblyBoardZ = assemblyBoard
         ? Number(assemblyBoard.userData.assemblyBoardZ ?? 0).toFixed(2)
@@ -1650,25 +1904,14 @@ export const ThreeFoundryPreview = ({
 
   useEffect(() => {
     if (!playback) return;
-    lastPlaybackRenderTimeRef.current = -Infinity;
-    const apply = (phase: number, time: number, force = false) => {
-      const minFrameInterval = playback.minFrameIntervalMs ?? 0;
-      if (
-        !force &&
-        time !== 0 &&
-        time - lastPlaybackRenderTimeRef.current < minFrameInterval
-      )
-        return;
-      lastPlaybackRenderTimeRef.current = time;
-      const frame = playback.sample(phase);
-      if (frame) renderDynamicRef.current?.(frame);
-    };
-    apply(playback.clock.getPhase(), 0, true);
-    return playback.clock.subscribe((frame) => {
-      if (frame.phaseChanged || frame.elapsedMs === 0)
-        apply(frame.phase, frame.time, frame.elapsedMs === 0);
+    return subscribeCadencedPlaybackSampler({
+      clock: playback.clock,
+      sample: playback.sample,
+      minFrameIntervalMs:
+        playback.minFrameIntervalMs ?? renderPolicy.minRenderIntervalMs,
+      apply: (frame) => renderDynamicRef.current?.(frame),
     });
-  }, [playback]);
+  }, [playback, renderPolicy.minRenderIntervalMs]);
 
   return (
     <div
@@ -1754,6 +1997,7 @@ export const ThreeFoundryPreview = ({
         dynamicBuildCount={dynamicBuildCountRef.current}
         geometryCacheSize={geometryCacheRef.current.size}
         materialCacheSize={materialCacheRef.current.size}
+        renderPolicy={renderPolicy}
         explode={explode}
         pinBottomZ={pinBottomZ}
         pinTopZ={pinTopZ}

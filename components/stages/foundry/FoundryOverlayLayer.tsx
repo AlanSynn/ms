@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import type { Point } from "../../../types";
 import type { FoundryOverlaySize } from "../../../utils/foundryCamera";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
+import { subscribeCadencedPlaybackSampler } from "../../../runtime/playback/cadencedPlaybackSampler";
 
 export type FoundryParamHandleId = "M" | "A" | "B" | "C" | "D";
 
@@ -100,7 +101,6 @@ export const FoundryOverlayLayer = ({
 
   useEffect(() => {
     if (!playback) return;
-    let lastFrameTime = -Infinity;
     const setAttribute = (node: Element | null, name: string, value: string) => {
       node?.setAttribute(name, value);
     };
@@ -114,14 +114,7 @@ export const FoundryOverlayLayer = ({
       setAttribute(node, xName, String(point.x));
       setAttribute(node, yName, String(point.y));
     };
-    const apply = (
-      frame: FoundryOverlayPlaybackFrame,
-      time: number,
-      force = false,
-    ) => {
-      const minFrameInterval = playback.minFrameIntervalMs ?? 0;
-      if (!force && time !== 0 && time - lastFrameTime < minFrameInterval) return;
-      lastFrameTime = time;
+    const apply = (frame: FoundryOverlayPlaybackFrame) => {
       const svg = overlayRef.current;
       if (!svg) return;
       const playhead = svg.querySelector('[data-testid="foundry-playhead"]');
@@ -206,12 +199,11 @@ export const FoundryOverlayLayer = ({
         velocityText.setAttribute("y", String((frame.projectedVelocityTip?.y ?? 0) - 3));
       }
     };
-    const initial = playback.sample(playback.clock.getPhase());
-    if (initial) apply(initial, 0, true);
-    return playback.clock.subscribe((clockFrame) => {
-      if (!clockFrame.phaseChanged && clockFrame.elapsedMs !== 0) return;
-      const frame = playback.sample(clockFrame.phase);
-      if (frame) apply(frame, clockFrame.time, clockFrame.elapsedMs === 0);
+    return subscribeCadencedPlaybackSampler({
+      clock: playback.clock,
+      sample: playback.sample,
+      minFrameIntervalMs: playback.minFrameIntervalMs ?? 0,
+      apply,
     });
   }, [playback]);
 

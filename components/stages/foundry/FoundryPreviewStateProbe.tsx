@@ -16,17 +16,13 @@ import {
   PHYSICS_RENDER_STACK,
   PHYSICS_UPDATE_POLICY,
 } from "../../../utils/physicsKernel";
-import { WEBGL_PIXEL_RATIO_CAP } from "../../../utils/viewport";
+import type { RenderPerformancePolicy } from "../../../utils/renderPerformancePolicy";
 import {
   VIEWER3D_CONTRACT_VERSION,
   viewer3DLayerDataValue,
   type Viewer3DContract,
 } from "../../../utils/viewer3d";
-import {
-  FOUNDRY_ANIMATION_COMMIT_MS,
-  foundryCameraDistance,
-  type FoundryCamera,
-} from "../../../utils/foundryCamera";
+import { foundryCameraDistance, type FoundryCamera } from "../../../utils/foundryCamera";
 import {
   foundryLayerGeometryContract,
   type FoundryPinStackPoint,
@@ -112,6 +108,7 @@ type FoundryPreviewStateProbeProps = {
   dynamicBuildCount: number;
   geometryCacheSize: number;
   materialCacheSize: number;
+  renderPolicy: RenderPerformancePolicy;
   explode: number;
   pinBottomZ: number;
   pinTopZ: number;
@@ -184,6 +181,7 @@ export const FoundryPreviewStateProbe = ({
   dynamicBuildCount,
   geometryCacheSize,
   materialCacheSize,
+  renderPolicy,
   explode,
   pinBottomZ,
   pinTopZ,
@@ -443,8 +441,12 @@ export const FoundryPreviewStateProbe = ({
       data-anchor-pick-mode="three-raycaster-plane"
       data-three-hole-mode="extruded-cut-through"
       data-three-render-loop="camera-only-orbit"
-      data-three-pixel-ratio-cap={WEBGL_PIXEL_RATIO_CAP.toFixed(1)}
-      data-three-animation-commit-ms={FOUNDRY_ANIMATION_COMMIT_MS.toFixed(1)}
+      data-render-performance-preset={renderPolicy.preset}
+      data-render-antialias={renderPolicy.antialias ? "on" : "off"}
+      data-render-overlay-quality={renderPolicy.overlayQuality}
+      data-repeated-geometry-policy={renderPolicy.repeatedGeometry.strategy}
+      data-three-pixel-ratio-cap={renderPolicy.pixelRatioCap.toFixed(1)}
+      data-three-animation-commit-ms={renderPolicy.minRenderIntervalMs.toFixed(1)}
       data-three-dynamic-build-count={dynamicBuildCount}
       data-three-geometry-cache-size={geometryCacheSize}
       data-three-material-cache-size={materialCacheSize}

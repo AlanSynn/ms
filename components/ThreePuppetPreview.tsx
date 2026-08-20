@@ -5,14 +5,24 @@ import { boardGridLines, defaultPhysicalKit, SCENE_PX_PER_MM, sceneBoundsForShee
 import { calculateLinkage, normalizeCamProfileSamples, sampledCamProfileScale, gearPairOutputRatio, gearTrainCenters, gearTrainMeshPhaseRadAt, gearTrainOutputRatio, gearTrainPitchRadii, gearTrainRotationRatioAt, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
 import { FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRenderPlanForMechanism, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, validateMechanismPreviewReadiness, type FabricationLinkageRoleLengths, type FabricationRenderLayer, type FabricationRenderPlan } from '../utils/fabrication';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, pointInsideOutline } from '../utils/partGeometry';
-import { clampCanvasZoom, WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
-import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, loadRapierPhysicsKernel, physicsKernelErrorMessage } from '../utils/physicsKernel';
+import { clampCanvasZoom } from '../utils/viewport';
+import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY } from '../utils/physicsKernel';
 import { DEFAULT_PUPPET_VIEWER_LAYERS, VIEWER3D_CAMERA_PRESETS, VIEWER3D_CONTRACT_VERSION, createViewer3DContract, viewer3DLayerDataValue, type Viewer3DCameraPreset, type Viewer3DTabKey } from '../utils/viewer3d';
 import { REFERENCE_AUTHORABLE_TYPES, referenceRequiredPartsHoleCount } from '../utils/mechanismReference';
 import { mechanismRequiredParts } from '../utils/project';
 import type { MotionPreview } from '../utils/motion';
 import type { PlaybackClock } from '../runtime/playback/externalPlaybackClock';
-import { cachedThreeResource, clearThreeGroup, disposeMarkedThreeMaterials, disposeThreeObjectGraph, setRendererPixelRatioCap } from '../utils/threeResourceKit';
+import { subscribeCadencedPlaybackSampler } from '../runtime/playback/cadencedPlaybackSampler';
+import {
+  cachedThreeResource,
+  clearThreeGroup,
+  collectThreeObjectResourceUsage,
+  disposeMarkedThreeMaterials,
+  disposeThreeObjectGraph,
+  pruneUnusedThreeResourceCache,
+  setRendererPixelRatioCap,
+} from '../utils/threeResourceKit';
+import { resolveRenderPerformancePolicy } from '../utils/renderPerformancePolicy';
 
 const VIEW_SCALE = 35;
 const FABRICATION_LINKAGE_WIDTH_3D = Math.max(0.16, (FABRICATION_LINKAGE_WIDTH_MM * SCENE_PX_PER_MM) / VIEW_SCALE);
@@ -126,9 +136,39 @@ const orbitPosition = (yaw: number, pitch: number): [number, number, number] => 
 const clampOrbitPitch = (pitch: number) => Math.max(-68, Math.min(78, pitch));
 
 const sharedGeometryCache = new Map<string, THREE.BufferGeometry>();
+const activePuppetScenes = new Map<THREE.Scene, number>();
+let sharedGeometryCacheRevision = 0;
 
-const cachedGeometry = <T extends THREE.BufferGeometry>(key: string, factory: () => T): T =>
-  cachedThreeResource(sharedGeometryCache, key, factory, 'sharedFabricationGeometry');
+const pruneSharedGeometryCache = (removeEveryUnused = false) => {
+  const used = new Set<THREE.BufferGeometry>();
+  activePuppetScenes.forEach((_limit, scene) => {
+    collectThreeObjectResourceUsage(scene).geometries.forEach((geometry) =>
+      used.add(geometry),
+    );
+  });
+  const configuredLimit = Math.max(
+    0,
+    ...activePuppetScenes.values(),
+  );
+  pruneUnusedThreeResourceCache(
+    sharedGeometryCache,
+    used,
+    removeEveryUnused ? 0 : configuredLimit,
+  );
+};
+
+const cachedGeometry = <T extends THREE.BufferGeometry>(key: string, factory: () => T): T => {
+  const existing = sharedGeometryCache.get(key);
+  if (existing) return existing as T;
+  const geometry = cachedThreeResource(
+    sharedGeometryCache,
+    key,
+    factory,
+    'sharedFabricationGeometry',
+  );
+  sharedGeometryCacheRevision += 1;
+  return geometry;
+};
 
 const geometryKeyNumber = (value: number) => Number.isFinite(value) ? value.toFixed(3) : 'nan';
 
@@ -737,6 +777,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   onSelectOnlyPointerCancel?: React.PointerEventHandler<HTMLDivElement>;
   onSelectOnlyWheel?: React.WheelEventHandler<HTMLDivElement>;
 }) => {
+  const renderPolicy = resolveRenderPerformancePolicy(project?.settings.performancePreset ?? 'balanced');
   const hostRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef<HTMLDivElement | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -749,10 +790,11 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   const jointRefs = useRef<Map<string, JointVisual>>(new Map());
   const boneRefs = useRef<Map<string, THREE.Mesh>>(new Map());
   const mechanismRefs = useRef<Map<string, MechanismVisual>>(new Map());
+  const prunedGeometryRevisionRef = useRef(-1);
   const [rendererStatus, setRendererStatus] = useState<RendererStatus>('pending');
-  const [physicsKernelRuntime, setPhysicsKernelRuntime] = useState<'loading' | 'ready' | 'unavailable'>('loading');
-  const [physicsKernelVersion, setPhysicsKernelVersion] = useState('pending');
-  const [physicsKernelError, setPhysicsKernelError] = useState('none');
+  const physicsKernelRuntime = 'deferred-to-foundry';
+  const physicsKernelVersion = 'pending';
+  const physicsKernelError = 'none';
   const [cameraPreset, setCameraPreset] = useState<Viewer3DCameraPreset>(() => initialCameraPreset ?? 'iso');
   const [cameraOrbit, setCameraOrbit] = useState(() => cameraOrbitFromPreset(initialCameraPreset ?? 'iso'));
   const [isViewerDragging, setIsViewerDragging] = useState(false);
@@ -768,24 +810,6 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     setVisibleLayers(prev => ({ ...prev, ...initialLayers }));
   }, [initialLayers?.grid, initialLayers?.character, initialLayers?.skeleton, initialLayers?.mechanisms]);
   const toggleLayer = (layer: keyof typeof DEFAULT_PUPPET_VIEWER_LAYERS) => setVisibleLayers(prev => ({ ...prev, [layer]: !prev[layer] }));
-
-  useEffect(() => {
-    let active = true;
-    loadRapierPhysicsKernel()
-      .then(kernel => {
-        if (!active) return;
-        setPhysicsKernelRuntime('ready');
-        setPhysicsKernelVersion(kernel.version());
-        setPhysicsKernelError('none');
-      })
-      .catch(error => {
-        if (!active) return;
-        setPhysicsKernelRuntime('unavailable');
-        setPhysicsKernelVersion('unavailable');
-        setPhysicsKernelError(physicsKernelErrorMessage(error));
-      });
-    return () => { active = false; };
-  }, []);
 
   const activeSkeleton = skeleton ?? project?.skeleton ?? null;
   const canonicalSkeleton = project?.skeleton ?? activeSkeleton;
@@ -971,6 +995,10 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     const camera = cameraRef.current;
     const renderer = rendererRef.current;
     if (scene && camera && renderer) {
+      if (prunedGeometryRevisionRef.current !== sharedGeometryCacheRevision) {
+        pruneSharedGeometryCache();
+        prunedGeometryRevisionRef.current = sharedGeometryCacheRevision;
+      }
       renderer.render(scene, camera);
       if (E2E_DIAGNOSTICS && stateRef.current) {
         const screenTargets = roundedScreenTargets(collectViewerScreenTargets());
@@ -990,14 +1018,14 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
 
     let renderer: THREE.WebGLRenderer;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer = new THREE.WebGLRenderer({ antialias: renderPolicy.antialias, alpha: true });
     } catch (error) {
       console.warn('ThreePuppetPreview WebGL unavailable', error);
       setRendererStatus('unavailable');
       return;
     }
 
-    setRendererPixelRatioCap(renderer);
+    setRendererPixelRatioCap(renderer, renderPolicy.pixelRatioCap);
     if (E2E_DIAGNOSTICS) renderer.domElement.dataset.testid = `${testId}-canvas`;
     renderer.domElement.className = 'three-puppet-canvas';
     host.appendChild(renderer.domElement);
@@ -1025,6 +1053,10 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     sceneRef.current = scene;
     cameraRef.current = camera;
     rootsRef.current = { root, staticLayer, partsLayer, objectsLayer, skeletonLayer, pathsLayer, mechanismsLayer };
+    activePuppetScenes.set(
+      scene,
+      renderPolicy.repeatedGeometry.maxGeometryCacheEntries,
+    );
     setRendererStatus('webgl');
 
     const resize = () => {
@@ -1043,6 +1075,8 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       ro.disconnect();
       disposeOwnedMaterials(scene);
       disposeObject(scene, false);
+      activePuppetScenes.delete(scene);
+      pruneSharedGeometryCache(true);
       disposeMaterials(materialsRef.current);
       renderer.dispose();
       if (renderer.domElement.parentElement === host) host.removeChild(renderer.domElement);
@@ -1057,7 +1091,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       boneRefs.current.clear();
       mechanismRefs.current.clear();
     };
-  }, [testId]);
+  }, [renderPolicy, testId]);
 
   const kitSignature = `${kit.profileKey}:${kit.gridPitchMm}:${kit.sheetWidthMm}:${kit.sheetHeightMm}:${kit.boardCells}`;
   useEffect(() => {
@@ -1662,17 +1696,18 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       render();
     };
 
-    applyPreview(playback.sample(playback.clock.getPhase()));
-    return playback.clock.subscribe(frame => {
-      if (frame.phaseChanged || frame.elapsedMs === 0) {
-        applyPreview(playback.sample(frame.phase));
-      }
+    return subscribeCadencedPlaybackSampler({
+      clock: playback.clock,
+      sample: playback.sample,
+      minFrameIntervalMs: renderPolicy.minRenderIntervalMs,
+      apply: applyPreview,
     });
   }, [
     activeSkeleton,
     assemblyExplodeAmount,
     playback,
     project,
+    renderPolicy.minRenderIntervalMs,
     rendererStatus,
   ]);
 
@@ -2129,12 +2164,14 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       data-physics-kernel={PHYSICS_KERNEL_ENGINE}
       data-physics-update-policy={PHYSICS_UPDATE_POLICY}
       data-high-throughput-scene-policy={HIGH_THROUGHPUT_SCENE_POLICY}
-      data-physics-contact-mode="kinematic-estimate-rapier-contact-probe"
+      data-physics-contact-mode="deferred-to-foundry"
       data-physics-kernel-runtime={physicsKernelRuntime}
       data-physics-kernel-version={physicsKernelVersion}
       data-physics-kernel-error={physicsKernelError}
       data-physics-authority="motionsmith-kinematics"
-      data-three-pixel-ratio-cap={WEBGL_PIXEL_RATIO_CAP.toFixed(1)}
+      data-render-performance-preset={renderPolicy.preset}
+      data-render-antialias={renderPolicy.antialias ? 'on' : 'off'}
+      data-three-pixel-ratio-cap={renderPolicy.pixelRatioCap.toFixed(1)}
       data-puppet-mode="thick-flat-assembly"
       data-part-outline-mode="model-or-user-contour-with-fabrication-fallback"
       data-joint-placement="skeleton-anchors"

@@ -84,3 +84,45 @@ export const clearThreeGroup = (
     disposeChild(child);
   });
 };
+
+export type ThreeObjectResourceUsage = {
+  geometries: Set<THREE.BufferGeometry>;
+  materials: Set<THREE.Material>;
+};
+
+export const collectThreeObjectResourceUsage = (
+  root: THREE.Object3D,
+): ThreeObjectResourceUsage => {
+  const geometries = new Set<THREE.BufferGeometry>();
+  const materials = new Set<THREE.Material>();
+  root.traverse((object) => {
+    const geometry = (object as THREE.Mesh).geometry;
+    if (geometry) geometries.add(geometry);
+    const material = (object as THREE.Mesh).material;
+    const entries = Array.isArray(material)
+      ? material
+      : material
+        ? [material]
+        : [];
+    entries.forEach((entry) => materials.add(entry));
+  });
+  return { geometries, materials };
+};
+
+export const pruneUnusedThreeResourceCache = <Resource extends { dispose: () => void }>(
+  cache: Map<string, Resource>,
+  used: ReadonlySet<Resource>,
+  maxEntries: number,
+) => {
+  let removed = 0;
+  const limit = Math.max(0, Math.floor(maxEntries));
+  if (cache.size <= limit) return removed;
+  for (const [key, resource] of cache) {
+    if (cache.size <= limit) break;
+    if (used.has(resource)) continue;
+    resource.dispose();
+    cache.delete(key);
+    removed += 1;
+  }
+  return removed;
+};

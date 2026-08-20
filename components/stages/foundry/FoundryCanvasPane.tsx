@@ -3,7 +3,9 @@ import type {
   MechanismConfig,
   PhysicalKitSettings,
   Point,
+  ProjectState,
 } from "../../../types";
+import { resolveRenderPerformancePolicy } from "../../../utils/renderPerformancePolicy";
 import {
   projectFoundryOverlayPoint,
   type FoundryCamera,
@@ -51,6 +53,7 @@ type FoundryCanvasPaneProps = {
   userPathPoints: Point[];
   targetPathId?: string;
   kit: PhysicalKitSettings;
+  performancePreset: ProjectState["settings"]["performancePreset"];
   showFoundryGrid: boolean;
   showUserPathPreview: boolean;
   showPathPreview: boolean;
@@ -133,6 +136,7 @@ export const FoundryCanvasPane = ({
   userPathPoints,
   targetPathId,
   kit,
+  performancePreset,
   showFoundryGrid,
   showUserPathPreview,
   showPathPreview,
@@ -189,6 +193,7 @@ export const FoundryCanvasPane = ({
   onParamPointerUp,
   playbackOverlay,
 }: FoundryCanvasPaneProps) => {
+  const renderPolicy = resolveRenderPerformancePolicy(performancePreset);
   const pathFitError = useMemo(() => {
     if (!userPathPoints.length || !previewPoints.length) return undefined;
     const total = userPathPoints.reduce((sum, userPoint) => {
@@ -297,11 +302,11 @@ export const FoundryCanvasPane = ({
     />
     <ThreeFoundryPreview
       mechanism={landedFoundry}
+      performancePreset={performancePreset}
       simulation={selectedPhysicalSimulation}
       playback={{
         clock: playbackClock,
         sample: playbackSample,
-        minFrameIntervalMs: 1000 / 30,
       }}
       kit={kit}
       camera={foundryCamera}
@@ -379,7 +384,10 @@ export const FoundryCanvasPane = ({
         onParamPointerDown={onParamPointerDown}
         onParamPointerMove={onParamPointerMove}
         onParamPointerUp={onParamPointerUp}
-        playback={playbackOverlay}
+        playback={{
+          ...playbackOverlay,
+          minFrameIntervalMs: renderPolicy.minOverlayIntervalMs,
+        }}
       />
     </ThreeFoundryPreview>
     <div hidden data-testid="foundry-toolbar-state">
