@@ -211,7 +211,12 @@ export const GettingStartedDialog = ({ starterTemplates, showStarterImages, guid
     const onnxInputRef = useRef<HTMLInputElement>(null);
     const importInputRef = useRef<HTMLInputElement>(null);
     const [showGuided, setShowGuided] = useState(false);
-    const previewProjects = useMemo(() => Object.fromEntries(guidedLessons.map(lesson => [lesson.id, lessonPreviewProject(lesson.id)])), [guidedLessons]);
+    const previewProjects = useMemo(
+        () => showGuided
+            ? Object.fromEntries(guidedLessons.map(lesson => [lesson.id, lessonPreviewProject(lesson.id)]))
+            : {},
+        [guidedLessons, showGuided]
+    );
     const starterRigPreview = useMemo(starterRigPreviewProject, []);
     useEffect(() => { dialogRef.current?.focus(); }, []);
     const trapDialogFocus = (event: React.KeyboardEvent) => {

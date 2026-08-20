@@ -6,12 +6,19 @@ import {
   TRACKING_GIF_MAX_COMPRESSED_BYTES,
   TRACKING_GIF_FALLBACK_MAX_RAW_FRAMES,
   TRACKING_MEDIA_MAX_EDGE_PX,
+  DEFAULT_TRACKING_MEDIA_LIMITS,
   type TrackingGifMetadata,
   type TrackingGifPlan,
+  type TrackingMediaLimits,
 } from '../runtime/media/trackingMediaPolicy';
 
 type GifWorkerRequest =
-  | { type: 'load'; generationId: number; buffer: ArrayBuffer }
+  | {
+      type: 'load';
+      generationId: number;
+      buffer: ArrayBuffer;
+      limits?: TrackingMediaLimits;
+    }
   | { type: 'frame'; generationId: number; requestId: number; index: number }
   | { type: 'dispose'; generationId: number };
 
@@ -53,6 +60,7 @@ let outputContext: OffscreenCanvasRenderingContext2D | null = null;
 let currentRawFrame = -1;
 let previousFrame: PreviousFrameState | undefined;
 let restoreImage: ImageData | undefined;
+let activeLimits = DEFAULT_TRACKING_MEDIA_LIMITS;
 
 const resetComposite = () => {
   currentRawFrame = -1;
@@ -208,7 +216,7 @@ const tryInitializeNativeDecoder = async (
 ) => {
   if (typeof ImageDecoder === 'undefined') return false;
   if (!(await ImageDecoder.isTypeSupported('image/gif'))) return false;
-  const initialPlan = planTrackingGifFromMetadata(metadata);
+  const initialPlan = planTrackingGifFromMetadata(metadata, activeLimits);
   const decoder = new ImageDecoder({
     data: buffer,
     type: 'image/gif',
@@ -229,7 +237,7 @@ const tryInitializeNativeDecoder = async (
       rawFrames,
       durationMs:
         metadata.durationMs * (rawFrames / Math.max(1, metadata.rawFrames)),
-    });
+    }, activeLimits);
     nativeDecoder = decoder;
     initializeOutput(plan);
     return true;
@@ -243,14 +251,22 @@ const initializeBoundedFallback = async (
   buffer: ArrayBuffer,
   metadata: TrackingGifMetadata,
 ) => {
-  if (metadata.rawFrames > TRACKING_GIF_FALLBACK_MAX_RAW_FRAMES) {
+  const fallbackFrameLimit = Math.min(
+    TRACKING_GIF_FALLBACK_MAX_RAW_FRAMES,
+    activeLimits.maxFrames,
+  );
+  if (metadata.rawFrames > fallbackFrameLimit) {
     throw new Error(
-      `This browser cannot safely decode GIFs above ${TRACKING_GIF_FALLBACK_MAX_RAW_FRAMES} frames.`,
+      `This browser cannot safely decode GIFs above ${fallbackFrameLimit} frames.`,
     );
   }
-  if (Math.max(metadata.width, metadata.height) > TRACKING_MEDIA_MAX_EDGE_PX) {
+  const fallbackEdgeLimit = Math.min(
+    TRACKING_MEDIA_MAX_EDGE_PX,
+    activeLimits.maxEdgePx,
+  );
+  if (Math.max(metadata.width, metadata.height) > fallbackEdgeLimit) {
     throw new Error(
-      `This browser cannot safely scale GIFs above ${TRACKING_MEDIA_MAX_EDGE_PX}px.`,
+      `This browser cannot safely scale GIFs above ${fallbackEdgeLimit}px.`,
     );
   }
   const library = await import('gifuct-js');
@@ -259,7 +275,7 @@ const initializeBoundedFallback = async (
     (frame): frame is GifRawFrame => 'image' in frame,
   );
   if (!frames.length) throw new Error('No frames found in GIF');
-  if (frames.length > TRACKING_GIF_FALLBACK_MAX_RAW_FRAMES) {
+  if (frames.length > fallbackFrameLimit) {
     throw new Error('GIF fallback frame budget was exceeded.');
   }
   const unsafeFrame = frames.find((frame) => {
@@ -267,8 +283,8 @@ const initializeBoundedFallback = async (
     return (
       descriptor.width < 1 ||
       descriptor.height < 1 ||
-      descriptor.width > TRACKING_MEDIA_MAX_EDGE_PX ||
-      descriptor.height > TRACKING_MEDIA_MAX_EDGE_PX ||
+      descriptor.width > fallbackEdgeLimit ||
+      descriptor.height > fallbackEdgeLimit ||
       descriptor.left + descriptor.width > metadata.width ||
       descriptor.top + descriptor.height > metadata.height
     );
@@ -282,7 +298,7 @@ const initializeBoundedFallback = async (
   plan = planTrackingGifFromMetadata({
     ...metadata,
     rawFrames: frames.length,
-  });
+  }, activeLimits);
   sourceCanvas = new OffscreenCanvas(plan.width, plan.height);
   sourceContext = sourceCanvas.getContext('2d');
   if (!sourceContext) throw new Error('GIF compositor canvas unavailable');
@@ -292,6 +308,7 @@ const initializeBoundedFallback = async (
 const load = async (request: Extract<GifWorkerRequest, { type: 'load' }>) => {
   release();
   generationId = request.generationId;
+  activeLimits = request.limits ?? DEFAULT_TRACKING_MEDIA_LIMITS;
   if (request.buffer.byteLength > TRACKING_GIF_MAX_COMPRESSED_BYTES) {
     throw new Error('GIF files must be 32MB or smaller.');
   }

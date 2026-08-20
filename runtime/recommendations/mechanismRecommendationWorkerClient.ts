@@ -29,23 +29,59 @@ const browserWorkerFactory: MechanismRecommendationWorkerFactory = () =>
   ) as unknown as MechanismRecommendationWorkerPort;
 
 let workerBootstrap: Promise<void> | undefined;
+let preparedWorker: MechanismRecommendationWorkerPort | undefined;
+
+const releaseWorker = (worker: MechanismRecommendationWorkerPort) => {
+  worker.onmessage = null;
+  worker.onerror = null;
+  worker.terminate();
+};
+
+const retainPreparedWorker = (worker: MechanismRecommendationWorkerPort) => {
+  worker.onmessage = null;
+  worker.onerror = null;
+  if (preparedWorker) {
+    releaseWorker(worker);
+    return;
+  }
+  preparedWorker = worker;
+  workerBootstrap = Promise.resolve();
+};
+
+const takePreparedWorker = (
+  workerFactory: MechanismRecommendationWorkerFactory,
+) => {
+  if (workerFactory !== browserWorkerFactory || !preparedWorker) return undefined;
+  const worker = preparedWorker;
+  preparedWorker = undefined;
+  workerBootstrap = undefined;
+  return worker;
+};
+
+export const disposePreparedMechanismRecommendationWorker = () => {
+  if (preparedWorker) releaseWorker(preparedWorker);
+  preparedWorker = undefined;
+  workerBootstrap = undefined;
+};
 
 /**
- * Start and release only the tiny worker entry. The expensive recommendation
- * job remains behind its first explicit build message.
+ * Prepare one tiny worker entry for the Design surface. The expensive
+ * recommendation job remains behind its first explicit build message.
  */
 export const prepareMechanismRecommendationWorker = (
   workerFactory: MechanismRecommendationWorkerFactory = browserWorkerFactory,
 ) => {
-  workerBootstrap ??= new Promise<void>((resolve) => {
+  const warmWorker = (retain: boolean) => new Promise<void>((resolve) => {
     let worker: MechanismRecommendationWorkerPort;
     let settled = false;
-    const finish = () => {
+    const finish = (ready = false) => {
       if (settled) return;
       settled = true;
-      worker.onmessage = null;
-      worker.onerror = null;
-      worker.terminate();
+      if (ready && retain) {
+        retainPreparedWorker(worker);
+      } else {
+        releaseWorker(worker);
+      }
       resolve();
     };
     try {
@@ -55,15 +91,27 @@ export const prepareMechanismRecommendationWorker = (
       return;
     }
     worker.onmessage = ({ data }) => {
-      if (data.type === "ready") finish();
+      if (data.type === "ready") finish(true);
     };
-    worker.onerror = finish;
+    worker.onerror = () => finish();
     try {
       worker.postMessage({ type: "warm" });
     } catch {
       finish();
     }
   });
+
+  if (workerFactory !== browserWorkerFactory) return warmWorker(false);
+  if (preparedWorker) return Promise.resolve();
+  if (!workerBootstrap) {
+    const bootstrap = warmWorker(true);
+    workerBootstrap = bootstrap;
+    void bootstrap.then(() => {
+      if (!preparedWorker && workerBootstrap === bootstrap) {
+        workerBootstrap = undefined;
+      }
+    });
+  }
   return workerBootstrap;
 };
 
@@ -80,15 +128,11 @@ export const createMechanismRecommendationWorkerClient = (
       }
     | undefined;
 
-  const release = (worker: MechanismRecommendationWorkerPort) => {
-    worker.onmessage = null;
-    worker.onerror = null;
-    worker.terminate();
-  };
+  const keepsPreparedWorker = workerFactory === browserWorkerFactory;
 
   const cancel = () => {
     generationSequence += 1;
-    if (active) release(active.worker);
+    if (active) releaseWorker(active.worker);
     active = undefined;
   };
 
@@ -96,11 +140,11 @@ export const createMechanismRecommendationWorkerClient = (
     input: MechanismRecommendationJobInput,
     callbacks: MechanismRecommendationWorkerCallbacks,
   ) => {
-    if (active) release(active.worker);
+    if (active) releaseWorker(active.worker);
     const generationId = ++generationSequence;
     let worker: MechanismRecommendationWorkerPort;
     try {
-      worker = workerFactory();
+      worker = takePreparedWorker(workerFactory) ?? workerFactory();
     } catch (error) {
       callbacks.failed(error instanceof Error ? error : new Error(String(error)));
       return generationId;
@@ -119,14 +163,18 @@ export const createMechanismRecommendationWorkerClient = (
         data.inputFingerprint !== active.inputFingerprint
       ) return;
       active = undefined;
-      release(worker);
+      if (keepsPreparedWorker && data.type === "result") {
+        retainPreparedWorker(worker);
+      } else {
+        releaseWorker(worker);
+      }
       if (data.type === "result") callbacks.complete(data.recommendations);
       else callbacks.failed(new Error(data.message));
     };
     worker.onerror = (event) => {
       if (!active || active.worker !== worker) return;
       active = undefined;
-      release(worker);
+      releaseWorker(worker);
       callbacks.failed(
         new Error(event.message || "Recommendation worker failed."),
       );
@@ -135,7 +183,7 @@ export const createMechanismRecommendationWorkerClient = (
       worker.postMessage({ type: "build", generationId, input });
     } catch (error) {
       if (active?.worker === worker) active = undefined;
-      release(worker);
+      releaseWorker(worker);
       callbacks.failed(error instanceof Error ? error : new Error(String(error)));
     }
     return generationId;
@@ -144,6 +192,14 @@ export const createMechanismRecommendationWorkerClient = (
   return {
     request,
     cancel,
-    dispose: cancel,
+    dispose: () => {
+      generationSequence += 1;
+      if (active) releaseWorker(active.worker);
+      active = undefined;
+    },
   };
 };
+
+export type MechanismRecommendationWorkerClient = ReturnType<
+  typeof createMechanismRecommendationWorkerClient
+>;

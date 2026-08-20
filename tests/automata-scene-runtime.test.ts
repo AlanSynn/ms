@@ -31,7 +31,14 @@ const expectedHashes = new Map<number, string>([
   [5.9, 'ca4897f9d6e342f84c078e42c84e46d99e76c403a7ef98e173a31cc855a98c3b'],
 ]);
 
-const project = createFabricationReadyFourBarProject();
+const fixtureProject = createFabricationReadyFourBarProject();
+const project = {
+  ...fixtureProject,
+  settings: {
+    ...fixtureProject.settings,
+    performancePreset: 'high' as const,
+  },
+};
 const mechanism = project.mechanisms[0];
 assert(mechanism, 'fixture exposes a fabrication-ready four-bar mechanism');
 
@@ -71,6 +78,40 @@ assert.notDeepEqual(
   firstPreview.physicalSimulation.state,
   secondPreview.physicalSimulation.state,
   'runtime sampling still advances physical state',
+);
+
+const balancedProject = {
+  ...project,
+  settings: {
+    ...project.settings,
+    performancePreset: 'balanced' as const,
+  },
+};
+const balancedModel = sampleAutomataSceneRuntime(
+  createAutomataSceneRuntime(balancedProject, mechanism, 'design-live'),
+  1.2,
+);
+const highModel = samples.find((sample) => sample.angle === 1.2)?.model;
+assert(balancedModel.foundryPreview && highModel?.foundryPreview);
+assert(
+  balancedModel.foundryPreview.pointTraces.every((trace, index) =>
+    trace.points.length < (highModel.foundryPreview?.pointTraces[index]?.points.length ?? 0)),
+  'Balanced reduces phase-invariant preview trace density',
+);
+assert.equal(
+  hash(balancedModel.foundryPreview.physicalSimulation.state),
+  hash(highModel.foundryPreview.physicalSimulation.state),
+  'preview density does not change sampled physical state',
+);
+assert.equal(
+  hash(balancedModel.animatedParts),
+  hash(highModel.animatedParts),
+  'preview density does not change character kinematics',
+);
+assert.equal(
+  hash(balancedModel.mechanismContract),
+  hash(highModel.mechanismContract),
+  'preview density does not change the fabrication scene contract',
 );
 
 console.log('automata scene runtime golden ok');

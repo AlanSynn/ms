@@ -87,6 +87,8 @@ import {
   mechanismPathFitIsUsable,
   preferredMotionJointId,
 } from "../../../utils/motion";
+import { resolveRenderPerformancePolicy } from "../../../utils/renderPerformancePolicy";
+import { sampleIndexedValues } from "../../../utils/interactiveSampling";
 
 const traceDistanceToGeneratedPath = (
   trace: { points: Point[] },
@@ -130,6 +132,11 @@ export const MechanismFoundry = ({
   goStage: (stage: AppStage) => void;
   onExport: (pkg: FoundryExportPackage) => void;
 }) => {
+  const renderPolicy = resolveRenderPerformancePolicy(
+    project.settings.performancePreset,
+  );
+  const previewTraceSamples =
+    renderPolicy.interactiveDetail.mechanismTraceSamples;
   const [foundryPlaying, setFoundryPlaying] = useState(false);
   const [foundryPhase, setFoundryPhase] = useState(0);
   const [isPickingAnchor, setIsPickingAnchor] = useState(false);
@@ -222,7 +229,10 @@ export const MechanismFoundry = ({
     y: 120 - (landing.y / SCENE_VIEW.height) * 240,
   };
   const rawFoundryPointTraces = useMemo(() => {
-    const traces = generateFoundryPlaybackPointTraces(landedFoundry, 96).traces;
+    const traces = generateFoundryPlaybackPointTraces(
+      landedFoundry,
+      previewTraceSamples,
+    ).traces;
     const selectedTrace = selectedOutputTraceId
       ? traces.find((trace) => trace.id === selectedOutputTraceId)
       : undefined;
@@ -246,13 +256,13 @@ export const MechanismFoundry = ({
       ...trace,
       primary: trace.id === fittedTrace.id,
     }));
-  }, [landedFoundry, selectedOutputTraceId]);
+  }, [landedFoundry, previewTraceSamples, selectedOutputTraceId]);
   const preview = useMemo(
     () =>
       rawFoundryPointTraces.find((trace) => trace.primary)?.points ??
       rawFoundryPointTraces[0]?.points ??
-      generateCurvePoints(landedFoundry, 96).points,
-    [landedFoundry, rawFoundryPointTraces],
+      generateCurvePoints(landedFoundry, previewTraceSamples).points,
+    [landedFoundry, previewTraceSamples, rawFoundryPointTraces],
   );
   const range = useMemo(
     () => sampleFeasibleRange(landedFoundry),
@@ -273,10 +283,20 @@ export const MechanismFoundry = ({
         landedFoundry,
         360,
         240,
-        96,
-        selectedPath?.points ?? [],
+        previewTraceSamples,
+        selectedPath
+          ? sampleIndexedValues(
+              selectedPath.points,
+              renderPolicy.interactiveDetail.maxPathLinePoints,
+            ).map(({ value }) => value)
+          : [],
       ),
-    [landedFoundry, selectedPath?.points],
+    [
+      landedFoundry,
+      previewTraceSamples,
+      renderPolicy.interactiveDetail.maxPathLinePoints,
+      selectedPath,
+    ],
   );
   useWorkspacePlaybackLoop({
     stage: "foundry",
@@ -321,8 +341,17 @@ export const MechanismFoundry = ({
     [foundryPointTraces, preview],
   );
   const foundryUserPathPoints = useMemo(
-    () => selectedPath?.points.map(foundryFitContext.map) ?? [],
-    [foundryFitContext, selectedPath],
+    () => selectedPath
+      ? sampleIndexedValues(
+          selectedPath.points,
+          renderPolicy.interactiveDetail.maxPathLinePoints,
+        ).map(({ value }) => foundryFitContext.map(value))
+      : [],
+    [
+      foundryFitContext,
+      renderPolicy.interactiveDetail.maxPathLinePoints,
+      selectedPath,
+    ],
   );
   const selectedPhysicalSimulation = useMemo(
     () => ({
@@ -752,7 +781,10 @@ export const MechanismFoundry = ({
     const normalized = invalidatePathFit(normalizeGearMeshMechanism(mechanism));
     if (normalized.type !== "4bar" || !normalized.generatedPath?.length)
       return mechanismWithGeneratedPath(normalized);
-    const bcTraces = generateMechanismPointTraces(normalized, 96).traces.filter(
+    const bcTraces = generateMechanismPointTraces(
+      normalized,
+      previewTraceSamples,
+    ).traces.filter(
       (trace) => trace.id === "B" || trace.id === "C",
     );
     if (bcTraces.length === 0) return mechanismWithGeneratedPath(normalized);

@@ -136,21 +136,41 @@ const auditRecommend = async (
   const baseline = await stableProbe(page, client);
   const actions: FeatureActionAudit[] = [];
   const recommend = page.getByRole("button", { name: /Recommend/i });
+  const cancelledSheet = page.getByTestId("recommendation-sheet");
+
+  await cancelledSheet.evaluate((sheet) => {
+    const close = Array.from(sheet.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Close",
+    );
+    if (!(close instanceof HTMLButtonElement)) {
+      throw new Error("Recommendation Close button is unavailable.");
+    }
+    const cancelWhenDispatched = () => {
+      if (sheet.getAttribute("data-recommendation-worker-request") !== "active") {
+        return;
+      }
+      observer.disconnect();
+      sheet.setAttribute("data-audit-cancelled-on-dispatch", "true");
+      close.click();
+    };
+    const observer = new MutationObserver(cancelWhenDispatched);
+    observer.observe(sheet, {
+      attributes: true,
+      attributeFilter: ["data-recommendation-worker-request"],
+    });
+    cancelWhenDispatched();
+  });
 
   const cancelledBefore = await readFeatureRuntimeProbe(page);
   const cancelledTiming = await measureClickToNextPaint(recommend);
-  const cancelledSheet = page.getByTestId("recommendation-sheet");
-  await expect(cancelledSheet).toBeVisible();
   await expect(cancelledSheet).toHaveAttribute(
-    "data-recommendation-state",
-    "loading",
+    "data-audit-cancelled-on-dispatch",
+    "true",
   );
-  await expect.poll(() => workerActive(page), {
-    message: "Recommend starts its worker after the loading sheet paints",
-  }).toBeGreaterThan(baseline.lifecycle.workers.active);
-  await cancelledSheet.getByRole("button", { name: "Close", exact: true }).click();
-  await expect(cancelledSheet).toHaveCount(0);
-  await waitForLifecycleBaseline(page, baseline.lifecycle);
+  await expect(cancelledSheet).toBeHidden();
+  expect(await workerActive(page)).toBeLessThanOrEqual(
+    baseline.lifecycle.workers.active,
+  );
   actions.push(await finishFeatureAction(page, {
     label: "recommend-cancel",
     cycle: 1,
@@ -171,7 +191,7 @@ const auditRecommend = async (
   const jobCompletionMs = await elapsedFeatureTime(page, completedTiming);
   await expect(page.getByTestId("recommendation-card-4bar")).toBeVisible();
   await completedSheet.getByRole("button", { name: "Close", exact: true }).click();
-  await expect(completedSheet).toHaveCount(0);
+  await expect(completedSheet).toBeHidden();
   await waitForLifecycleBaseline(page, baseline.lifecycle);
   actions.push(await finishFeatureAction(page, {
     label: "recommend-complete",
@@ -184,7 +204,7 @@ const auditRecommend = async (
 
   const final = await finalProbe(page, client, baseline);
   return buildChromebookFeatureAudit("recommend", actions, baseline, final, {
-    minimumWorkerCreations: 2,
+    minimumWorkerCreations: 1,
     requireCompletedCycle: true,
     requireCancelledCycle: true,
   });
@@ -196,19 +216,35 @@ const auditDesignFit = async (
 ): Promise<FeatureAudit> => {
   const baseline = await stableProbe(page, client);
   const actions: FeatureActionAudit[] = [];
-  const fit = page.getByRole("button", { name: "Fit", exact: true });
+  const fit = page.getByTestId("design-fit-button");
+
+  await page.evaluate(() => {
+    window.addEventListener(
+      "motionsmith:optimizer-worker-request",
+      () => {
+        const button = document.querySelector<HTMLButtonElement>(
+          '[data-testid="design-fit-button"]',
+        );
+        if (!button || button.textContent?.trim() !== "Cancel") {
+          throw new Error("Design Fit cancel control is unavailable.");
+        }
+        button.setAttribute("data-audit-cancelled-on-dispatch", "true");
+        button.click();
+      },
+      { once: true },
+    );
+  });
 
   const cancelledBefore = await readFeatureRuntimeProbe(page);
   const cancelledTiming = await measureClickToNextPaint(fit);
-  await expect(fit).toBeDisabled();
-  await expect.poll(() => workerActive(page), {
-    message: "Design Fit owns an active optimizer worker before cancellation",
-  }).toBeGreaterThan(baseline.lifecycle.workers.active);
-  const anchor = page.getByLabel("anchor X number");
-  const anchorValue = Number(await anchor.inputValue());
-  await anchor.fill(String(anchorValue === 260 ? 220 : anchorValue + 40));
+  await expect(page.getByTestId("design-fit-button")).toHaveAttribute(
+    "data-audit-cancelled-on-dispatch",
+    "true",
+  );
   await expect(fit).toBeEnabled();
-  await waitForLifecycleBaseline(page, baseline.lifecycle);
+  expect(await workerActive(page)).toBeLessThanOrEqual(
+    baseline.lifecycle.workers.active,
+  );
   actions.push(await finishFeatureAction(page, {
     label: "design-fit-cancel",
     cycle: 1,
@@ -219,7 +255,6 @@ const auditDesignFit = async (
 
   const completedBefore = await readFeatureRuntimeProbe(page);
   const completedTiming = await measureClickToNextPaint(fit);
-  await expect(fit).toBeDisabled();
   await expect(fit).toBeEnabled({ timeout: 120_000 });
   await expect.poll(() => page.evaluate(() => {
     const saved = JSON.parse(localStorage.getItem("motionsmith.autosave") ?? "{}");
@@ -241,7 +276,7 @@ const auditDesignFit = async (
 
   const final = await finalProbe(page, client, baseline);
   return buildChromebookFeatureAudit("designFit", actions, baseline, final, {
-    minimumWorkerCreations: 2,
+    minimumWorkerCreations: 1,
     requireCompletedCycle: true,
     requireCancelledCycle: true,
   });

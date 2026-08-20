@@ -1,4 +1,4 @@
-import motionSmithIconUrl from '../../resources/icons/AppIcon.png?url';
+import motionSmithIconUrl from '../../src-tauri/icons/icon.png?url';
 import type { AppStage } from '../../types';
 import { STAGE_PANE_NAV_ITEMS, StagePaneNavIcon } from '../stages/stageLayout';
 import { STAGES, stageNavLabel } from './workflowStages';

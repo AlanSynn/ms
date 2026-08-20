@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   BodyPartLayer,
   MechanismConfig,
@@ -10,13 +10,15 @@ import type { MechanismRecommendation } from "../../../utils/mechanismRecommenda
 import {
   createMechanismRecommendationJobInput,
 } from "../../../runtime/recommendations/mechanismRecommendationJob";
-import { createMechanismRecommendationWorkerClient } from "../../../runtime/recommendations/mechanismRecommendationWorkerClient";
+import type { MechanismRecommendationWorkerClient } from "../../../runtime/recommendations/mechanismRecommendationWorkerClient";
 import {
   createMechanismFitContext,
   fitMechanismSimulationWithContext,
   pointsToSvgPath,
 } from "../../../utils/mechanismPreview";
 import { MechanismLinkagePreview } from "../foundry/MechanismLinkagePreview";
+import { resolveRenderPerformancePolicy } from "../../../utils/renderPerformancePolicy";
+import { sampleIndexedValues } from "../../../utils/interactiveSampling";
 
 type MechanismRecommendationSheetProps = {
   isOpen: boolean;
@@ -25,6 +27,7 @@ type MechanismRecommendationSheetProps = {
   selectedPath?: ProjectMotionPath;
   onClose: () => void;
   onApply: (mechanism: MechanismConfig) => void;
+  workerClient: MechanismRecommendationWorkerClient;
 };
 
 const RecommendationFitPreview = ({
@@ -36,16 +39,23 @@ const RecommendationFitPreview = ({
   project: ProjectState;
   selectedPath?: ProjectMotionPath;
 }) => {
+  const renderPolicy = resolveRenderPerformancePolicy(
+    project.settings.performancePreset,
+  );
   const context = useMemo(
     () =>
       createMechanismFitContext(
         option.mechanism,
         220,
         136,
-        96,
+        renderPolicy.interactiveDetail.mechanismTraceSamples,
         selectedPath?.points ?? [],
       ),
-    [option.mechanism, selectedPath?.points],
+    [
+      option.mechanism,
+      renderPolicy.interactiveDetail.mechanismTraceSamples,
+      selectedPath?.points,
+    ],
   );
   const current = useMemo(
     () => fitMechanismSimulationWithContext(option.mechanism, 0, context),
@@ -60,8 +70,13 @@ const RecommendationFitPreview = ({
   );
   const userPathD = useMemo(() => {
     if (!selectedPath || selectedPath.points.length < 2) return "";
-    return pointsToSvgPath(selectedPath.points.map(context.map));
-  }, [context, selectedPath]);
+    return pointsToSvgPath(
+      sampleIndexedValues(
+        selectedPath.points,
+        renderPolicy.interactiveDetail.maxPathLinePoints,
+      ).map(({ value }) => context.map(value)),
+    );
+  }, [context, renderPolicy.interactiveDetail.maxPathLinePoints, selectedPath]);
 
   return (
     <svg
@@ -140,12 +155,15 @@ type RecommendationLoadState = {
 };
 
 const OpenMechanismRecommendationSheet = ({
+  isOpen,
   project,
   selectedPart,
   selectedPath,
   onClose,
   onApply,
-}: Omit<MechanismRecommendationSheetProps, "isOpen">) => {
+  workerClient,
+}: MechanismRecommendationSheetProps) => {
+  const sheetRef = useRef<HTMLElement>(null);
   const input = useMemo(
     () =>
       createMechanismRecommendationJobInput(
@@ -155,10 +173,6 @@ const OpenMechanismRecommendationSheet = ({
       ),
     [project, selectedPart, selectedPath?.id],
   );
-  const workerClient = useMemo(
-    () => createMechanismRecommendationWorkerClient(),
-    [],
-  );
   const [loadState, setLoadState] = useState<RecommendationLoadState>(() => ({
     inputFingerprint: input.inputFingerprint,
     status: "loading",
@@ -166,6 +180,13 @@ const OpenMechanismRecommendationSheet = ({
   }));
 
   useEffect(() => {
+    if (!isOpen) {
+      if (sheetRef.current) {
+        sheetRef.current.dataset.recommendationWorkerRequest = "idle";
+      }
+      workerClient.cancel();
+      return;
+    }
     setLoadState({
       inputFingerprint: input.inputFingerprint,
       status: "loading",
@@ -178,20 +199,31 @@ const OpenMechanismRecommendationSheet = ({
       secondFrame = requestAnimationFrame(() => {
         secondFrame = 0;
         if (cancelled) return;
+        if (sheetRef.current) {
+          sheetRef.current.dataset.recommendationWorkerRequest = "active";
+        }
         workerClient.request(input, {
-          complete: (recommendations) =>
+          complete: (recommendations) => {
+            if (sheetRef.current) {
+              sheetRef.current.dataset.recommendationWorkerRequest = "settled";
+            }
             setLoadState({
               inputFingerprint: input.inputFingerprint,
               status: "ready",
               recommendations,
-            }),
-          failed: (error) =>
+            });
+          },
+          failed: (error) => {
+            if (sheetRef.current) {
+              sheetRef.current.dataset.recommendationWorkerRequest = "settled";
+            }
             setLoadState({
               inputFingerprint: input.inputFingerprint,
               status: "error",
               recommendations: [],
               error: error.message,
-            }),
+            });
+          },
         });
       });
     });
@@ -199,11 +231,12 @@ const OpenMechanismRecommendationSheet = ({
       cancelled = true;
       if (firstFrame) cancelAnimationFrame(firstFrame);
       if (secondFrame) cancelAnimationFrame(secondFrame);
+      if (sheetRef.current) {
+        sheetRef.current.dataset.recommendationWorkerRequest = "cancelled";
+      }
       workerClient.cancel();
     };
-  }, [input, workerClient]);
-
-  useEffect(() => () => workerClient.dispose(), [workerClient]);
+  }, [input, isOpen, workerClient]);
 
   const currentState =
     loadState.inputFingerprint === input.inputFingerprint
@@ -228,14 +261,21 @@ const OpenMechanismRecommendationSheet = ({
   };
 
   return (
-    <div className="modal-backdrop" role="presentation">
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      hidden={!isOpen}
+      style={isOpen ? undefined : { display: "none" }}
+    >
       <section
+        ref={sheetRef}
         className="modal-sheet recommendation-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="recommendation-dialog-title"
         data-testid="recommendation-sheet"
         data-recommendation-state={currentState.status}
+        data-recommendation-worker-request="idle"
       >
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -315,9 +355,7 @@ const OpenMechanismRecommendationSheet = ({
 };
 
 export const MechanismRecommendationSheet = ({
-  isOpen,
-  ...openProps
+  ...props
 }: MechanismRecommendationSheetProps) => {
-  if (!isOpen) return null;
-  return <OpenMechanismRecommendationSheet {...openProps} />;
+  return <OpenMechanismRecommendationSheet {...props} />;
 };

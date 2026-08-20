@@ -15,7 +15,7 @@ import {
   type StarterImageTemplate,
 } from "./AppShell";
 import { TrackingModal } from "./TrackingModal";
-import motionSmithIconUrl from "../resources/icons/AppIcon.png?url";
+import motionSmithIconUrl from "../src-tauri/icons/icon.png?url";
 import type { AppStage, Point, ProjectState } from "../types";
 import type { AppCommandHandlerMap } from "../utils/appCommands";
 import type { WebOnnxCacheStatus } from "../utils/webOnnx";
@@ -216,6 +216,7 @@ export const AppWorkspaceShell = ({
         isOpen={showTracking}
         onClose={onCloseTracking}
         onTransfer={onTransferTracking}
+        performancePreset={project.settings.performancePreset}
       />
     </main>
   );

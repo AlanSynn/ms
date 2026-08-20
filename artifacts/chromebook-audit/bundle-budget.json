@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-20T08:10:34.462Z",
+  "generatedAt": "2026-08-20T18:29:00.724Z",
   "basis": "static compressed production shell",
   "excludesOptionalAiModel": true,
   "coreJs": {
     "files": [
-      "assets/index--AtYm8ve.js",
-      "assets/App-BgEgDODY.js"
+      "assets/index-iwy1rBtW.js",
+      "assets/App-C08SSd-z.js"
     ],
-    "gzipBytes": 396784,
+    "gzipBytes": 406324,
     "limitBytes": 450000,
     "passed": true
   },
@@ -16,26 +16,26 @@
     "assets": [
       {
         "file": "index.html",
-        "compressedBytes": 15172
+        "compressedBytes": 15168
       },
       {
-        "file": "assets/index--AtYm8ve.js",
-        "compressedBytes": 61293
+        "file": "assets/index-iwy1rBtW.js",
+        "compressedBytes": 61292
       },
       {
-        "file": "assets/App-BgEgDODY.js",
-        "compressedBytes": 335491
+        "file": "assets/App-C08SSd-z.js",
+        "compressedBytes": 345032
       },
       {
         "file": "fonts/manrope-800-latin.woff2",
         "compressedBytes": 13744
       },
       {
-        "file": "assets/AppIcon-Dx9trOlC.png",
-        "compressedBytes": 474087
+        "file": "assets/icon-CBXw-oaZ.png",
+        "compressedBytes": 32183
       }
     ],
-    "compressedBytes": 899787,
+    "compressedBytes": 467419,
     "limitBytes": 1500000,
     "passed": true
   }

@@ -6,6 +6,18 @@ export const TRACKING_GIF_MAX_COMPRESSED_BYTES = 32 * 1024 * 1024;
 export const TRACKING_GIF_FALLBACK_MAX_RAW_FRAMES =
   TRACKING_MEDIA_MAX_SAMPLED_FRAMES;
 
+export type TrackingMediaLimits = {
+  maxEdgePx: number;
+  maxFrames: number;
+  maxFramesPerSecond: number;
+};
+
+export const DEFAULT_TRACKING_MEDIA_LIMITS: TrackingMediaLimits = Object.freeze({
+  maxEdgePx: TRACKING_MEDIA_MAX_EDGE_PX,
+  maxFrames: TRACKING_MEDIA_MAX_SAMPLED_FRAMES,
+  maxFramesPerSecond: TRACKING_MEDIA_MAX_FPS,
+});
+
 export type TrackingGifPlan = {
   width: number;
   height: number;
@@ -58,16 +70,16 @@ export const planTrackingGifFromMetadata = ({
   height,
   rawFrames: inputRawFrames,
   durationMs: inputDurationMs,
-}: TrackingGifMetadata): TrackingGifPlan => {
+}: TrackingGifMetadata, limits: TrackingMediaLimits = DEFAULT_TRACKING_MEDIA_LIMITS): TrackingGifPlan => {
   const rawFrames = Math.max(1, Math.floor(inputRawFrames));
   const durationMs = Math.max(1, inputDurationMs);
   const sourceFps = (rawFrames * 1000) / durationMs;
-  const fps = Math.max(1, Math.min(TRACKING_MEDIA_MAX_FPS, sourceFps));
+  const fps = Math.max(1, Math.min(limits.maxFramesPerSecond, sourceFps));
   const sampledFrames = Math.max(
     1,
     Math.min(
       rawFrames,
-      TRACKING_MEDIA_MAX_SAMPLED_FRAMES,
+      limits.maxFrames,
       Math.ceil((durationMs / 1000) * fps),
     ),
   );
@@ -77,7 +89,7 @@ export const planTrackingGifFromMetadata = ({
       : Math.round((index * (rawFrames - 1)) / (sampledFrames - 1)),
   );
   return {
-    ...fitTrackingMediaDimensions(width, height),
+    ...fitTrackingMediaDimensions(width, height, limits.maxEdgePx),
     fps,
     sampledFrames,
     rawFrames,
@@ -93,7 +105,7 @@ export const planTrackingGif = ({
   width: number;
   height: number;
   frameDelaysMs: number[];
-}): TrackingGifPlan =>
+}, limits: TrackingMediaLimits = DEFAULT_TRACKING_MEDIA_LIMITS): TrackingGifPlan =>
   planTrackingGifFromMetadata({
     width,
     height,
@@ -103,7 +115,7 @@ export const planTrackingGif = ({
         total + Math.max(10, Number.isFinite(delay) ? delay : 100),
       0,
     ),
-  });
+  }, limits);
 
 export const trackingGifFallbackReplayWindow = (
   currentRawFrame: number,

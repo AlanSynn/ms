@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { ClassroomExampleVideo } from "../../ui/ClassroomExampleVideo";
 import { StageLeftSummary } from "../stageLayout";
@@ -31,7 +31,11 @@ import {
   uid,
 } from "../../../utils/project";
 import { MechanismRecommendationSheet } from "../path/MechanismRecommendationSheet";
-import { prepareMechanismRecommendationWorker } from "../../../runtime/recommendations/mechanismRecommendationWorkerClient";
+import {
+  createMechanismRecommendationWorkerClient,
+  disposePreparedMechanismRecommendationWorker,
+  prepareMechanismRecommendationWorker,
+} from "../../../runtime/recommendations/mechanismRecommendationWorkerClient";
 
 const DesignRecommendationControl = ({
   project,
@@ -46,6 +50,10 @@ const DesignRecommendationControl = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [workerPrepared, setWorkerPrepared] = useState(false);
+  const workerClient = useMemo(
+    () => createMechanismRecommendationWorkerClient(),
+    [],
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -54,8 +62,10 @@ const DesignRecommendationControl = ({
     });
     return () => {
       mounted = false;
+      workerClient.dispose();
+      disposePreparedMechanismRecommendationWorker();
     };
-  }, []);
+  }, [workerClient]);
 
   return (
     <>
@@ -73,11 +83,15 @@ const DesignRecommendationControl = ({
         project={project}
         selectedPart={selectedPart}
         selectedPath={selectedPath}
-        onClose={() => setIsOpen(false)}
+        onClose={() => {
+          workerClient.cancel();
+          setIsOpen(false);
+        }}
         onApply={(mechanism) => {
           onApply(mechanism);
           setIsOpen(false);
         }}
+        workerClient={workerClient}
       />
     </>
   );

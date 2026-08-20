@@ -24,7 +24,10 @@ import {
   shouldShowMechanismParam,
 } from "./mechanismParamPolicy";
 import { MechanismFeasibilityStatus } from "./MechanismFeasibilityStatus";
-import { prepareMechanismOptimizerWorker } from "../../../runtime/optimizer/mechanismOptimizerWorkerClient";
+import {
+  disposePreparedMechanismOptimizerWorker,
+  prepareMechanismOptimizerWorker,
+} from "../../../runtime/optimizer/mechanismOptimizerWorkerClient";
 
 type DesignInspectorPanelProps = {
   project: ProjectState;
@@ -33,6 +36,7 @@ type DesignInspectorPanelProps = {
   dispatch: (action: ProjectAction) => void;
   optimizerBusy: boolean;
   onOptimize: () => void;
+  onCancelOptimize: () => void;
   exportSvg: () => void;
   exportDxf: () => void;
   onBlueprint: () => void;
@@ -45,6 +49,7 @@ export const DesignInspectorPanel = ({
   dispatch,
   optimizerBusy,
   onOptimize,
+  onCancelOptimize,
   exportSvg,
   exportDxf,
   onBlueprint,
@@ -57,6 +62,7 @@ export const DesignInspectorPanel = ({
     });
     return () => {
       mounted = false;
+      disposePreparedMechanismOptimizerWorker();
     };
   }, []);
   const selectedRange = selectedMechanism
@@ -272,17 +278,18 @@ export const DesignInspectorPanel = ({
           <div className="flex flex-wrap gap-2">
             <button
               className="btn-primary"
+              data-testid="design-fit-button"
               data-optimizer-worker-prepared={workerPrepared ? "true" : "false"}
-              disabled={optimizerBusy || !workerPrepared}
-              aria-busy={optimizerBusy || !workerPrepared}
-              onClick={onOptimize}
+              disabled={!workerPrepared}
+              aria-busy={optimizerBusy}
+              onClick={optimizerBusy ? onCancelOptimize : onOptimize}
             >
               {optimizerBusy ? (
                 <Loader2 className="animate-spin" size={16} />
               ) : (
                 <Sparkles size={16} />
               )}{" "}
-              Fit
+              {optimizerBusy ? "Cancel" : "Fit"}
             </button>
             <button
               className="btn-secondary"

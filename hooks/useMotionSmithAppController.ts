@@ -200,6 +200,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   );
   const {
     optimizerBusy,
+    cancelMechanismOptimization,
     updateMechanism,
     optimizeSelectedMechanism,
     exportMechanismSvg,
@@ -360,6 +361,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
       showTrace,
       setShowTrace,
       onOptimize: optimizeSelectedMechanism,
+      onCancelOptimize: cancelMechanismOptimization,
       onApplyRecommendation: applyRecommendedMechanism,
       optimizerBusy,
       exportSvg: exportMechanismSvg,

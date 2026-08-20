@@ -218,18 +218,26 @@ const componentSource = readFileSync(
   ),
   "utf8",
 );
-const closedGuard = componentSource.indexOf("if (!isOpen) return null;");
+const designWorkflowSource = readFileSync(
+  join(
+    process.cwd(),
+    "components/stages/mechanism/DesignWorkflowPanel.tsx",
+  ),
+  "utf8",
+);
 const openMount = componentSource.indexOf(
   "return <OpenMechanismRecommendationSheet",
 );
-assert(closedGuard >= 0 && openMount > closedGuard);
+assert(openMount >= 0 && componentSource.includes('hidden={!isOpen}'));
 assert(
   !componentSource.includes("buildMechanismRecommendations("),
   "the React sheet never invokes recommendation fitting on the main thread",
 );
 assert(
-  componentSource.includes("workerClient.dispose()"),
-  "the open sheet releases its dedicated worker on unmount",
+  componentSource.includes("workerClient.cancel()") &&
+    designWorkflowSource.includes("workerClient.dispose()") &&
+    designWorkflowSource.includes("disposePreparedMechanismRecommendationWorker()"),
+  "the sheet cancels stale work while its Design owner releases the retained worker on unmount",
 );
 
 const workerSource = readFileSync(

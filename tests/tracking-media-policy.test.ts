@@ -33,6 +33,26 @@ assert(largePlan.width <= 1280 && largePlan.height <= 1280);
 assert.equal(TRACKING_GIF_MAX_IN_FLIGHT_FRAMES, 1);
 assert.equal(TRACKING_GIF_MAX_COMPRESSED_BYTES, 32 * 1024 * 1024);
 
+const balancedPlan = planTrackingGifFromMetadata(
+  {
+    width: 2400,
+    height: 1600,
+    rawFrames: 600,
+    durationMs: 20_000,
+  },
+  { maxEdgePx: 900, maxFrames: 240, maxFramesPerSecond: 24 },
+);
+assert.deepEqual(
+  {
+    width: balancedPlan.width,
+    height: balancedPlan.height,
+    fps: balancedPlan.fps,
+    sampledFrames: balancedPlan.sampledFrames,
+  },
+  { width: 900, height: 600, fps: 24, sampledFrames: 240 },
+  'Balanced bounds decode output while retaining the full source timeline',
+);
+
 const syntheticGif = (frames: number, width = 4000, height = 2000) => {
   const bytes: number[] = [
     ...Array.from('GIF89a', character => character.charCodeAt(0)),
@@ -164,9 +184,15 @@ const session = createGifFrameSession({
     bitmap.close();
   },
   onError: (message) => assert.fail(message),
+  limits: { maxEdgePx: 900, maxFrames: 240, maxFramesPerSecond: 24 },
   createWorker: () => worker as unknown as Worker,
 });
 assert.equal(worker.posts[0].message.type, 'load');
+assert.deepEqual(worker.posts[0].message.limits, {
+  maxEdgePx: 900,
+  maxFrames: 240,
+  maxFramesPerSecond: 24,
+});
 assert.equal(worker.posts[0].transfer?.length, 1, 'compressed GIF bytes transfer to the worker');
 
 worker.emit({ type: 'ready', generationId: 12, plan: slowPlan });

@@ -23,6 +23,7 @@ import {
     pointOnGeneratedMechanismPath,
     pointOnProjectPath,
 } from './motion';
+import { resolveRenderPerformancePolicy } from './renderPerformancePolicy';
 
 export type AutomataSceneMode = 'design-live' | 'assembly-live';
 
@@ -107,6 +108,7 @@ export const createAutomataSceneRuntime = (
     const mechanisms = normalizedMechanisms.length ? normalizedMechanisms : [normalizedMechanism];
     const userPath = targetPathForMechanism(project, normalizedMechanism);
     const feature = mechanismFeature(normalizedMechanism.type);
+    const renderPolicy = resolveRenderPerformancePolicy(project.settings.performancePreset);
     return {
         mode,
         project,
@@ -118,7 +120,7 @@ export const createAutomataSceneRuntime = (
             userPath?.points ?? [],
             360,
             240,
-            96,
+            renderPolicy.interactiveDetail.mechanismTraceSamples,
             'scene'
         ),
         mechanismContract: buildMechanismSceneContract(normalizedMechanism),

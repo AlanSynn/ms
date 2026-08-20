@@ -1,21 +1,22 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Upload, Crosshair, Play, Square, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
-import { Point } from '../types';
+import type { Point, ProjectState } from '../types';
 import { createGifFrameSession, type GifFrameSession } from '../runtime/media/gifFrameSession';
 import {
     fitTrackingMediaDimensions,
     TRACKING_GIF_MAX_COMPRESSED_BYTES,
     TRACKING_MEDIA_MAX_FPS,
-    TRACKING_MEDIA_MAX_SAMPLED_FRAMES,
     type TrackingGifPlan,
 } from '../runtime/media/trackingMediaPolicy';
 import { smoothTrackingPoints, trackingPointsToWorldPath } from '../utils/trackingPath';
+import { resolveRenderPerformancePolicy } from '../utils/renderPerformancePolicy';
 
 interface TrackingModalProps {
     isOpen: boolean;
     onClose: () => void;
     onTransfer: (path: Point[]) => void;
+    performancePreset: ProjectState['settings']['performancePreset'];
 }
 
 interface VideoState {
@@ -40,7 +41,13 @@ const EMPTY_VIDEO_STATE: VideoState = {
     isGif: false,
 };
 
-export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, onTransfer }) => {
+export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, onTransfer, performancePreset }) => {
+    const mediaDetail = resolveRenderPerformancePolicy(performancePreset).interactiveDetail;
+    const mediaLimits = {
+        maxEdgePx: mediaDetail.maxMediaEdgePx,
+        maxFrames: mediaDetail.maxMediaFrames,
+        maxFramesPerSecond: mediaDetail.maxMediaFramesPerSecond,
+    };
     // State
     const [videoState, setVideoState] = useState<VideoState>(EMPTY_VIDEO_STATE);
 
@@ -182,6 +189,7 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
                         setVideoState(EMPTY_VIDEO_STATE);
                         setError(`Failed to load media: ${message}`);
                     },
+                    limits: mediaLimits,
                 });
                 gifSessionRef.current = session;
             } else {
@@ -195,15 +203,16 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
                 });
 
                 if (generationId !== mediaGenerationRef.current) return;
-                const duration = Math.max(1 / TRACKING_MEDIA_MAX_FPS, video.duration);
+                const duration = Math.max(1 / mediaLimits.maxFramesPerSecond, video.duration);
                 const totalFrames = Math.max(1, Math.min(
-                    TRACKING_MEDIA_MAX_SAMPLED_FRAMES,
-                    Math.ceil(duration * TRACKING_MEDIA_MAX_FPS),
+                    mediaLimits.maxFrames,
+                    Math.ceil(duration * mediaLimits.maxFramesPerSecond),
                 ));
-                const fps = Math.max(1, Math.min(TRACKING_MEDIA_MAX_FPS, totalFrames / duration));
+                const fps = Math.max(1, Math.min(mediaLimits.maxFramesPerSecond, totalFrames / duration));
                 const dimensions = fitTrackingMediaDimensions(
                     video.videoWidth || 640,
                     video.videoHeight || 480,
+                    mediaLimits.maxEdgePx,
                 );
 
                 setVideoState({
@@ -553,7 +562,7 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
                 className="bg-slate-800 rounded-xl shadow-2xl w-[95vw] h-[95vh] overflow-hidden flex flex-col"
                 style={{ width: '95vw', height: '95vh', background: '#1e293b' }}
                 data-testid="tracking-modal"
-                data-media-policy="max-1280px-30fps-600-samples-one-bitmap"
+                data-media-policy={`max-${mediaLimits.maxEdgePx}px-${mediaLimits.maxFramesPerSecond}fps-${mediaLimits.maxFrames}-samples-one-bitmap`}
             >
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">

@@ -1515,7 +1515,7 @@ test('animation performance: Foundry playback stays responsive without runaway T
   await expect(foundryRig).toHaveAttribute('data-render-performance-preset', 'balanced');
   await expect(foundryRig).toHaveAttribute('data-render-antialias', 'off');
   await expect(foundryRig).toHaveAttribute('data-repeated-geometry-policy', 'pool-and-instance');
-  await expect(foundryRig).toHaveAttribute('data-three-pixel-ratio-cap', '1.0');
+  await expect(foundryRig).toHaveAttribute('data-three-pixel-ratio-cap', '0.75');
 
   const dynamicBuildsBefore = Number(await foundryRig.getAttribute('data-three-dynamic-build-count') ?? '0');
   const geometryCacheBefore = Number(await foundryRig.getAttribute('data-three-geometry-cache-size') ?? '0');
@@ -1877,7 +1877,7 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await expect(highPerformanceRig).toHaveAttribute('data-render-antialias', 'on');
   await expect(highPerformanceRig).toHaveAttribute('data-render-overlay-quality', 'full');
   await expect(highPerformanceRig).toHaveAttribute('data-three-animation-commit-ms', '16.7');
-  await expect(highPerformanceRig).toHaveAttribute('data-three-pixel-ratio-cap', '1.5');
+  await expect(highPerformanceRig).toHaveAttribute('data-three-pixel-ratio-cap', '1.50');
   await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').fill('0');
   await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').press('Enter');
   await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').fill('100');
@@ -2841,7 +2841,7 @@ test('Trace lazily streams bounded GIF frames and releases them on close', async
   await expect(modal).toBeVisible();
   await expect(modal).toHaveAttribute(
     'data-media-policy',
-    'max-1280px-30fps-600-samples-one-bitmap',
+    'max-900px-24fps-240-samples-one-bitmap',
   );
   expect(gifWorkerRequests, 'opening Trace does not load the GIF decoder').toEqual([]);
 
@@ -2858,11 +2858,11 @@ test('Trace lazily streams bounded GIF frames and releases them on close', async
   const canvas = modal.locator('canvas');
   await expect(canvas).toBeVisible();
   await expect.poll(async () => Number(await canvas.getAttribute('width'))).toBeGreaterThan(1);
-  expect(Number(await canvas.getAttribute('width'))).toBe(1280);
-  expect(Number(await canvas.getAttribute('height'))).toBe(640);
+  expect(Number(await canvas.getAttribute('width'))).toBe(900);
+  expect(Number(await canvas.getAttribute('height'))).toBe(450);
   const timeline = modal.locator('input[type="range"]');
   await expect(timeline).toBeVisible();
-  expect(Number(await timeline.getAttribute('max'))).toBe(599);
+  expect(Number(await timeline.getAttribute('max'))).toBe(299);
   await expect(canvas).toHaveAttribute('data-gif-delivered-frame', '0');
   const frameLabel = modal.getByText(/^Frame \d+ \/ \d+$/).first();
   const lastFrame = Number(await timeline.getAttribute('max'));
@@ -2927,7 +2927,7 @@ test('Recommendation sheet applies a distinct mechanism and blueprint recipe', a
   await expect(fitPreview).toHaveAttribute('data-mechanism-path-preview', 'shown');
   await expect(page.getByTestId('recommendation-linkage-4bar')).toBeVisible();
   await page.getByTestId('recommendation-card-4bar').getByRole('button', { name: /^Use$/ }).click();
-  await expect(page.getByTestId('recommendation-sheet')).toHaveCount(0);
+  await expect(page.getByTestId('recommendation-sheet')).toBeHidden();
   const mechanismOptions = await page.getByLabel('Mechanism instance').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
   expect(mechanismOptions).toHaveLength(initialMechanisms + 1);
   expect(new Set(mechanismOptions).size).toBe(mechanismOptions.length);

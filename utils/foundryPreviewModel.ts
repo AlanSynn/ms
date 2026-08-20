@@ -10,6 +10,8 @@ import {
   type MechanismPreviewSimulation,
 } from './mechanismPreview';
 import { normalizeGearMeshMechanism } from './mechanismRecommendations';
+import { resolveRenderPerformancePolicy } from './renderPerformancePolicy';
+import { sampleIndexedValues } from './interactiveSampling';
 
 export type FoundryMechanismPreviewModel = {
   mechanism: MechanismConfig;
@@ -39,6 +41,11 @@ export const createFoundryMechanismPreviewRuntime = (
   frame: 'fit' | 'scene' = 'fit',
 ): FoundryMechanismPreviewRuntime => {
   const normalizedMechanism = normalizeGearMeshMechanism(mechanism);
+  const interactiveUserPathPoints = sampleIndexedValues(
+    userPathPoints,
+    resolveRenderPerformancePolicy(settings.performancePreset)
+      .interactiveDetail.maxPathLinePoints,
+  ).map(({ value }) => value);
   const context = frame === 'scene'
     ? createSceneMechanismFitContext(normalizedMechanism, width, height, resolution)
     : createMechanismFitContext(
@@ -46,7 +53,7 @@ export const createFoundryMechanismPreviewRuntime = (
         width,
         height,
         resolution,
-        userPathPoints,
+        interactiveUserPathPoints,
       );
   const rawTraces = generateFoundryPlaybackPointTraces(
     normalizedMechanism,
@@ -70,7 +77,7 @@ export const createFoundryMechanismPreviewRuntime = (
     context,
     pointTraces,
     previewPoints,
-    userPathPoints: userPathPoints.map(context.map),
+    userPathPoints: interactiveUserPathPoints.map(context.map),
   };
 };
 

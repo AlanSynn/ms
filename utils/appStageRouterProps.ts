@@ -62,6 +62,7 @@ type MechanismRouterProps = Pick<
   | "showTrace"
   | "setShowTrace"
   | "onOptimize"
+  | "onCancelOptimize"
   | "onApplyRecommendation"
   | "optimizerBusy"
   | "exportSvg"

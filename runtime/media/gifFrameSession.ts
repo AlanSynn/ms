@@ -1,4 +1,8 @@
-import type { TrackingGifPlan } from './trackingMediaPolicy';
+import {
+  DEFAULT_TRACKING_MEDIA_LIMITS,
+  type TrackingGifPlan,
+  type TrackingMediaLimits,
+} from './trackingMediaPolicy';
 
 type GifWorkerResponse =
   | { type: 'ready'; generationId: number; plan: TrackingGifPlan }
@@ -22,6 +26,7 @@ export type GifFrameSessionOptions = {
   onReady: (plan: TrackingGifPlan) => void;
   onFrame: (index: number, bitmap: ImageBitmap) => void;
   onError: (message: string) => void;
+  limits?: TrackingMediaLimits;
   createWorker?: () => WorkerLike;
 };
 
@@ -41,6 +46,7 @@ export const createGifFrameSession = ({
   onReady,
   onFrame,
   onError,
+  limits = DEFAULT_TRACKING_MEDIA_LIMITS,
   createWorker = defaultWorker,
 }: GifFrameSessionOptions): GifFrameSession => {
   if (typeof Worker === 'undefined' && createWorker === defaultWorker) {
@@ -101,7 +107,7 @@ export const createGifFrameSession = ({
   worker.addEventListener('error', handleError as EventListener);
   try {
     worker.postMessage(
-      { type: 'load', generationId, buffer },
+      { type: 'load', generationId, buffer, limits },
       [buffer],
     );
   } catch (error) {

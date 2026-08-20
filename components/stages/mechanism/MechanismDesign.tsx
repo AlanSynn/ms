@@ -25,6 +25,7 @@ export const MechanismDesign = ({
   angle,
   playbackClock,
   onOptimize,
+  onCancelOptimize,
   onApplyRecommendation,
   optimizerBusy,
   exportSvg,
@@ -44,6 +45,7 @@ export const MechanismDesign = ({
   angle: number;
   playbackClock: PlaybackClock;
   onOptimize: () => void;
+  onCancelOptimize: () => void;
   onApplyRecommendation: (mechanism: MechanismConfig) => void;
   optimizerBusy: boolean;
   exportSvg: () => void;
@@ -88,6 +90,7 @@ export const MechanismDesign = ({
           dispatch={dispatch}
           optimizerBusy={optimizerBusy}
           onOptimize={onOptimize}
+          onCancelOptimize={onCancelOptimize}
           exportSvg={exportSvg}
           exportDxf={exportDxf}
           onBlueprint={onBlueprint}

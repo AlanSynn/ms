@@ -24,16 +24,26 @@ assert.deepEqual(
     targetFramesPerSecond: balanced.targetFramesPerSecond,
     overlayQuality: balanced.overlayQuality,
     partTopology: balanced.partTopology,
+    interactiveDetail: balanced.interactiveDetail,
   },
   {
-    pixelRatioCap: 1,
+    pixelRatioCap: 0.75,
     antialias: false,
     targetFramesPerSecond: 30,
     overlayQuality: 'balanced',
     partTopology: {
       bevelEnabled: false,
       edgeGeometryEnabled: false,
-      curveSegments: 3,
+      curveSegments: 2,
+    },
+    interactiveDetail: {
+      mechanismTraceSamples: 40,
+      maxPathLinePoints: 192,
+      maxPathHandles: 64,
+      overlayPointStride: 3,
+      maxMediaEdgePx: 900,
+      maxMediaFrames: 240,
+      maxMediaFramesPerSecond: 24,
     },
   },
   'Balanced provides the Chromebook-oriented default rendering envelope',
@@ -53,6 +63,7 @@ policies.forEach((policy) => {
   assert(policy.repeatedGeometry.instancingThreshold >= 2, 'only repeated geometry is instanced');
   assert(Object.isFrozen(policy), `${policy.preset} policy is immutable`);
   assert(Object.isFrozen(policy.partTopology), `${policy.preset} part-topology policy is immutable`);
+  assert(Object.isFrozen(policy.interactiveDetail), `${policy.preset} interactive-detail policy is immutable`);
   assert(Object.isFrozen(policy.repeatedGeometry), `${policy.preset} repeated-geometry policy is immutable`);
 });
 
@@ -68,6 +79,18 @@ assert(fast.targetFramesPerSecond < balanced.targetFramesPerSecond && balanced.t
 assert(fast.minOverlayIntervalMs > balanced.minOverlayIntervalMs && balanced.minOverlayIntervalMs > high.minOverlayIntervalMs);
 assert(fast.repeatedGeometry.maxPoolEntries < balanced.repeatedGeometry.maxPoolEntries);
 assert(balanced.repeatedGeometry.maxPoolEntries < high.repeatedGeometry.maxPoolEntries);
+assert(fast.interactiveDetail.mechanismTraceSamples < balanced.interactiveDetail.mechanismTraceSamples);
+assert(balanced.interactiveDetail.mechanismTraceSamples < high.interactiveDetail.mechanismTraceSamples);
+assert(fast.interactiveDetail.maxPathLinePoints < balanced.interactiveDetail.maxPathLinePoints);
+assert(balanced.interactiveDetail.maxPathLinePoints < high.interactiveDetail.maxPathLinePoints);
+assert(fast.interactiveDetail.maxPathHandles < balanced.interactiveDetail.maxPathHandles);
+assert(balanced.interactiveDetail.maxPathHandles < high.interactiveDetail.maxPathHandles);
+assert(fast.interactiveDetail.overlayPointStride > balanced.interactiveDetail.overlayPointStride);
+assert(balanced.interactiveDetail.overlayPointStride > high.interactiveDetail.overlayPointStride);
+assert(fast.interactiveDetail.maxMediaEdgePx < balanced.interactiveDetail.maxMediaEdgePx);
+assert(balanced.interactiveDetail.maxMediaEdgePx < high.interactiveDetail.maxMediaEdgePx);
+assert(fast.interactiveDetail.maxMediaFrames < balanced.interactiveDetail.maxMediaFrames);
+assert(balanced.interactiveDetail.maxMediaFrames < high.interactiveDetail.maxMediaFrames);
 
 assert.strictEqual(
   resolveRenderPerformancePolicy('balanced'),

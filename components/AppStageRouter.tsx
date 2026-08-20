@@ -72,6 +72,7 @@ export type AppStageRouterProps = {
   showTrace: boolean;
   setShowTrace: (v: boolean) => void;
   onOptimize: () => void | Promise<void>;
+  onCancelOptimize: () => void;
   onApplyRecommendation: (mechanism: MechanismConfig) => void;
   optimizerBusy: boolean;
   exportSvg: () => void;
@@ -127,6 +128,7 @@ export const AppStageRouter = ({
   showTrace,
   setShowTrace,
   onOptimize,
+  onCancelOptimize,
   onApplyRecommendation,
   optimizerBusy,
   exportSvg,
@@ -213,6 +215,7 @@ export const AppStageRouter = ({
         angle={angle}
         playbackClock={playbackClock}
         onOptimize={onOptimize}
+        onCancelOptimize={onCancelOptimize}
         onApplyRecommendation={onApplyRecommendation}
         optimizerBusy={optimizerBusy}
         exportSvg={exportSvg}

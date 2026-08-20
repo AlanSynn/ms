@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type {
   AppStage,
   BodyPartLayer,
@@ -99,7 +106,7 @@ export const useAppMechanismActions = ({
     firstFrame?: number;
     secondFrame?: number;
   }>({ generation: 0 });
-  const cancelScheduledOptimizer = () => {
+  const cancelScheduledOptimizer = useCallback(() => {
     const scheduled = optimizerScheduleRef.current;
     scheduled.generation += 1;
     if (scheduled.firstFrame !== undefined) {
@@ -110,18 +117,25 @@ export const useAppMechanismActions = ({
     }
     scheduled.firstFrame = undefined;
     scheduled.secondFrame = undefined;
-  };
+  }, []);
 
   useEffect(() => {
     cancelScheduledOptimizer();
     optimizerClient.cancel();
     setOptimizerBusy(false);
-  }, [optimizerClient, project]);
+  }, [cancelScheduledOptimizer, optimizerClient, project]);
 
   useEffect(() => () => {
     cancelScheduledOptimizer();
     optimizerClient.dispose();
-  }, [optimizerClient]);
+  }, [cancelScheduledOptimizer, optimizerClient]);
+
+  const cancelMechanismOptimization = useCallback(() => {
+    cancelScheduledOptimizer();
+    optimizerClient.cancel();
+    setOptimizerBusy(false);
+    setCommandStatus("Fit cancelled");
+  }, [cancelScheduledOptimizer, optimizerClient, setCommandStatus]);
 
   const commitFoundryDraft = useCallback(
     (draft: MechanismConfig) => {
@@ -254,8 +268,10 @@ export const useAppMechanismActions = ({
           complete: ({ mechanism }) => {
             if (generation !== optimizerScheduleRef.current.generation) return;
             setOptimizerBusy(false);
-            dispatch({ type: "upsert_mechanism", mechanism });
-            setCommandStatus("Optimized mechanism");
+            startTransition(() => {
+              dispatch({ type: "upsert_mechanism", mechanism });
+              setCommandStatus("Optimized mechanism");
+            });
           },
           failed: (error) => {
             if (generation !== optimizerScheduleRef.current.generation) return;
@@ -263,6 +279,11 @@ export const useAppMechanismActions = ({
             setCommandStatus(`Optimize failed: ${error.message}`);
           },
         });
+        if (__MOTIONSMITH_E2E_DIAGNOSTICS__) {
+          window.dispatchEvent(
+            new Event("motionsmith:optimizer-worker-request"),
+          );
+        }
       });
     });
   }, [
@@ -399,6 +420,7 @@ export const useAppMechanismActions = ({
 
   return {
     optimizerBusy,
+    cancelMechanismOptimization,
     updateMechanism,
     optimizeSelectedMechanism,
     exportMechanismSvg,

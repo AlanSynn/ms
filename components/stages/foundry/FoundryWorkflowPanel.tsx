@@ -1,4 +1,5 @@
 import { Boxes, Sparkles } from "lucide-react";
+import { useMemo } from "react";
 import { ContextHelp } from "../../ui/ContextHelp";
 import type {
   AppStage,
@@ -21,6 +22,7 @@ import {
 import { createDefaultMechanism } from "../../../utils/project";
 import { StageLeftSummary } from "../stageLayout";
 import { MechanismLinkagePreview } from "./MechanismLinkagePreview";
+import { resolveRenderPerformancePolicy } from "../../../utils/renderPerformancePolicy";
 
 type MechanismPathFitState = NonNullable<
   NonNullable<MechanismConfig["fabricationMetadata"]>["pathFit"]
@@ -57,6 +59,40 @@ export const FoundryWorkflowPanel = ({
   onUseMechanism: () => void;
   onSelectMechanismType: (type: MechanismType) => void;
 }) => {
+  const previewResolution = resolveRenderPerformancePolicy(
+    project.settings.performancePreset,
+  ).interactiveDetail.mechanismTraceSamples;
+  const galleryCards = useMemo(
+    () => ENABLED_FOUNDRY_MECHANISM_TYPES.map((type) => {
+      const mechanism = {
+        ...(foundry.type === type
+          ? foundry
+          : createDefaultMechanism(type, `foundry-card-${type}`)),
+        id: `foundry-card-${type}`,
+        color: foundry.color,
+      };
+      const context = createMechanismFitContext(
+        mechanism,
+        180,
+        96,
+        previewResolution,
+      );
+      const traces = generateFoundryPlaybackPointTraces(
+        mechanism,
+        previewResolution,
+      ).traces;
+      const trace = traces.find((candidate) => candidate.primary) ?? traces[0];
+      return {
+        type,
+        mechanism,
+        context,
+        pathD: trace
+          ? pointsToSvgPath(trace.points.map(context.map))
+          : context.pathD,
+      };
+    }),
+    [foundry, previewResolution],
+  );
   return (
   <div className="stage-pane-stack">
     <StageLeftSummary
@@ -107,41 +143,19 @@ export const FoundryWorkflowPanel = ({
         className="mechanism-choice-grid"
         data-testid="foundry-mechanism-gallery"
       >
-        {ENABLED_FOUNDRY_MECHANISM_TYPES.map((type) => {
+        {galleryCards.map(({ type, mechanism: cardMechanism, context: cardContext, pathD: cardPathD }) => {
           const item = MECHANISM_LIBRARY[type];
-          const cardMechanism = {
-            ...(foundry.type === type
-              ? foundry
-              : createDefaultMechanism(type, `foundry-card-${type}`)),
-            id: `foundry-card-${type}`,
-            color: foundry.color,
-          };
-          const cardContext = createMechanismFitContext(
-            cardMechanism,
-            180,
-            96,
-            96,
-          );
+          const previewPhase = foundry.type === type ? foundryPhase : 0;
           const cardSimulation = createFoundryPlaybackFrame(
             cardMechanism,
-            foundryPhase,
+            previewPhase,
             cardContext,
           ).simulation;
-          const cardPlaybackTraces = generateFoundryPlaybackPointTraces(
-            cardMechanism,
-            96,
-          ).traces;
-          const cardPlaybackTrace =
-            cardPlaybackTraces.find((trace) => trace.primary) ??
-            cardPlaybackTraces[0];
-          const cardPathD = cardPlaybackTrace
-            ? pointsToSvgPath(cardPlaybackTrace.points.map(cardContext.map))
-            : cardSimulation.pathD;
           const ghostSimulations = [Math.PI * 0.65, Math.PI * 1.3].map(
             (offset) =>
               createFoundryPlaybackFrame(
                 cardMechanism,
-                foundryPhase + offset,
+                previewPhase + offset,
                 cardContext,
               ).simulation,
           );

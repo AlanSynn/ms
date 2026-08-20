@@ -60,6 +60,7 @@ import {
 } from "../../../utils/threeResourceKit";
 import { recordFoundryTopologyBuild } from "../../../utils/performanceAudit";
 import { resolveRenderPerformancePolicy } from "../../../utils/renderPerformancePolicy";
+import { sampleIndexedValues } from "../../../utils/interactiveSampling";
 import { fittedGearTrainCenters } from "./foundryPreviewGeometry";
 import { FoundryPreviewStateProbe } from "./FoundryPreviewStateProbe";
 import {
@@ -326,6 +327,7 @@ const renderFoundryAutomataContext = ({
   materialCache,
   onLoaded,
   baseZ,
+  maxPathLinePoints,
 }: {
   root: THREE.Group;
   context?: FoundryAutomataContext;
@@ -333,6 +335,7 @@ const renderFoundryAutomataContext = ({
   materialCache: Map<string, THREE.Material>;
   onLoaded: () => void;
   baseZ: number;
+  maxPathLinePoints: number;
 }): boolean => {
   let automataRoot = root.getObjectByName(
     "foundry-automata-context",
@@ -531,7 +534,8 @@ const renderFoundryAutomataContext = ({
     paths
       .filter((path) => path.points.length > 1)
       .forEach((path) => {
-        const points = path.points.map((point) => sceneTo3(point, 0));
+        const points = sampleIndexedValues(path.points, maxPathLinePoints)
+          .map(({ value }) => sceneTo3(value, 0));
         const linePoints =
           path.closed && points.length > 2
             ? [...points, points[0].clone()]
@@ -1112,16 +1116,17 @@ export const ThreeFoundryPreview = ({
               primary: true,
             },
           ];
-      if (renderPolicy.overlayQuality !== "reduced") return traces;
+      const stride = renderPolicy.interactiveDetail.overlayPointStride;
+      if (stride <= 1) return traces;
       return traces.map((trace) => ({
         ...trace,
         points: trace.points.filter(
           (_point, index) =>
-            index % 2 === 0 || index === trace.points.length - 1,
+            index % stride === 0 || index === trace.points.length - 1,
         ),
       }));
     },
-    [pathPoints, pathTraces, renderPolicy.overlayQuality],
+    [pathPoints, pathTraces, renderPolicy.interactiveDetail.overlayPointStride],
   );
   const primaryPathId =
     visiblePathTraces.find((trace) => trace.primary)?.id ??
@@ -1737,6 +1742,7 @@ export const ThreeFoundryPreview = ({
       materialCache: materialCacheRef.current,
       onLoaded: () => renderCamera(cameraStateRef.current),
       baseZ: framePinTopZ + 0.16,
+      maxPathLinePoints: renderPolicy.interactiveDetail.maxPathLinePoints,
     });
     pruneFoundryResourceCaches(root);
 
@@ -1899,7 +1905,14 @@ export const ThreeFoundryPreview = ({
 
   useEffect(() => {
     if (playback) return;
-    renderDynamicScene({ simulation, automataContext, assemblySceneFrame });
+    const frame = requestAnimationFrame(() => {
+      renderDynamicRef.current?.({
+        simulation,
+        automataContext,
+        assemblySceneFrame,
+      });
+    });
+    return () => cancelAnimationFrame(frame);
   }, [
     mechanism,
     simulation,
