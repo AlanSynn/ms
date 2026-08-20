@@ -1,7 +1,7 @@
 {
   "name": "motionsmith-character-motion-designer",
   "private": true,
-  "version": "0.0.12",
+  "version": "0.0.13",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,6 +11,7 @@
     "tauri": "tauri",
     "build:exe": "bun scripts/with-rustup-cargo.mjs tauri build --bundles app",
     "test": "bun run test:contracts",
+    "test:all": "bun scripts/run-unit-tests.mjs",
     "test:contracts": "bun tests/project-contract.test.ts && bun tests/no-image-recognition-runtime.test.ts && bun tests/b695-fit.test.ts && bun tests/four-bar-fit-retention.test.ts && bun tests/mechanism-recommendation-worker.test.ts && bun tests/mechanism-optimizer-worker.test.ts && bun tests/tracking-media-policy.test.ts && bun tests/chromebook-audit-contract.test.ts && bun tests/render-performance-policy.test.ts && bun tests/interactive-sampling.test.ts && bun tests/automata-scene-runtime.test.ts && bun tests/three-resource-retention.test.ts && bun tests/cadenced-playback-sampler.test.ts",
     "test:chromebook-audit": "bun run build && env -u NO_COLOR CHROMEBOOK_AUDIT=1 PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=5174 playwright test tests/browser/chromebook-features-audit.spec.ts tests/browser/chromebook-playback-audit.spec.ts --workers=1",
     "test:chromebook-audit:full": "bun run build && env -u NO_COLOR CHROMEBOOK_AUDIT=1 PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=5174 playwright test tests/browser/chromebook-features-audit.spec.ts tests/browser/chromebook-playback-audit.spec.ts tests/browser/chromebook-audit.spec.ts --workers=1",

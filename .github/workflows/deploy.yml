@@ -29,15 +29,38 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Install browser
+        run: bunx playwright install --with-deps chromium
+
       - name: Check release tag
         run: |
           VERSION="$(bun -p "require('./package.json').version")"
           test "v${VERSION}" = "${GITHUB_REF_NAME}"
 
-      - name: Build
+      - name: Run all unit and contract tests
+        run: bun run test:all
+
+      - name: Build browser diagnostics profile
+        run: bun run build:e2e
+
+      - name: Run focused production-preview browser checks
+        env:
+          PLAYWRIGHT_SERVER: preview
+          PLAYWRIGHT_WORKERS: 3
+        run: >-
+          env -u NO_COLOR bunx playwright test
+          tests/browser/webgl-recovery.spec.ts
+          tests/browser/workflow.spec.ts
+          --grep
+          'WebGL unavailable|Foundry restores the same scene|Getting Started guided project|Load package review|Legacy storage namespace|Recommendation job stays idle|Design Fit runs|Trace lazily streams|School build has no image-recognition'
+
+      - name: Build release artifact
         env:
           VITE_BASE_PATH: /ms/
         run: bun run build
+
+      - name: Check production bundle budget
+        run: bun run test:bundle-budget
 
       - name: Check classroom build exclusions
         run: bun run test:no-image-recognition

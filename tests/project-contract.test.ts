@@ -738,7 +738,7 @@ assert(playwrightConfigText.includes('MAX_BROWSER_WORKERS'), 'browser worker def
 assert(playwrightConfigText.includes('Number.isInteger'), 'browser worker override validates positive integer input');
 assert(playwrightConfigText.includes('PLAYWRIGHT_SERVER') && playwrightConfigText.includes('preview'), 'browser tests can run against production preview without Vite HMR noise');
 assert(playwrightConfigText.includes('delete process.env.NO_COLOR') && playwrightConfigText.includes('env -u NO_COLOR'), 'Playwright normalizes conflicting FORCE_COLOR/NO_COLOR env to avoid worker/webserver warning spam');
-assert.equal(packageJson.version, '0.0.12', 'release version is bumped for the GitHub Pages redeploy');
+assert.equal(packageJson.version, '0.0.13', 'release version advances without moving the existing v0.0.12 tag');
 assert.equal(tauriConfig.version, packageJson.version, 'Tauri config version stays aligned with package.json');
 assert(viteConfigText.includes('__APP_VERSION__') && viteConfigText.includes('packageVersion'), 'Vite exposes package.json version to the browser UI');
 assert.deepEqual(tauriConfig.bundle.icon, ['icons/icon.png', 'icons/icon.ico', 'icons/icon.icns'], 'Tauri bundle references the tracked MotionSmith png, ico, and icns icons');
@@ -746,6 +746,7 @@ assert(cargoTomlText.includes(`version = "${packageJson.version}"`), 'Cargo.toml
 assert(cargoLockText.includes('name = "motionsmith"') && cargoLockText.includes(`version = "${packageJson.version}"`), 'Cargo.lock MotionSmith package version stays aligned with package.json');
 assert.equal(packageJson.packageManager, 'bun@1.3.14', 'Bun is the canonical package manager');
 assert.equal(packageJson.scripts['test:contracts'], 'bun tests/project-contract.test.ts && bun tests/no-image-recognition-runtime.test.ts && bun tests/b695-fit.test.ts && bun tests/four-bar-fit-retention.test.ts && bun tests/mechanism-recommendation-worker.test.ts && bun tests/mechanism-optimizer-worker.test.ts && bun tests/tracking-media-policy.test.ts && bun tests/chromebook-audit-contract.test.ts && bun tests/render-performance-policy.test.ts && bun tests/interactive-sampling.test.ts && bun tests/automata-scene-runtime.test.ts && bun tests/three-resource-retention.test.ts && bun tests/cadenced-playback-sampler.test.ts', 'contract tests include the image-recognition exclusion gate plus deterministic fit, worker, media-memory, Chromebook, render-policy, sampling, and retention gates');
+assert.equal(packageJson.scripts['test:all'], 'bun scripts/run-unit-tests.mjs', 'release verification uses the checked deterministic unit-test manifest');
 assert.equal(packageJson.scripts['test:bundle-budget'], 'bun scripts/check-browser-bundle.mjs', 'bundle budget runs from the checked production dist');
 assert(bundleBudgetSource.includes('CORE_JS_GZIP_LIMIT_BYTES = 450_000'), 'core JavaScript gzip budget stays at 450 KB');
 assert(bundleBudgetSource.includes('SHELL_COMPRESSED_LIMIT_BYTES = 1_500_000'), 'initial shell compressed budget stays at 1.5 MB');
@@ -776,6 +777,9 @@ assert(physicsKernelSource.includes('RAPIER_INIT_DEPRECATION_WARNING'), 'Rapier 
 assert(physicsKernelSource.includes('args.length === 1 && args[0] === RAPIER_INIT_DEPRECATION_WARNING'), 'Rapier init filters only the exact upstream deprecation warning');
 assert(physicsKernelSource.includes('finally') && physicsKernelSource.includes('console.warn = warn'), 'Rapier init restores console.warn after the scoped compatibility filter');
 assert(deployWorkflowText.includes('oven-sh/setup-bun@v2') && deployWorkflowText.includes('bun install --frozen-lockfile') && deployWorkflowText.includes('bun run build'), 'GitHub Pages workflow uses Bun install and build');
+assert(deployWorkflowText.includes('bun run test:all'), 'GitHub Pages runs every checked unit and contract test before artifact creation');
+assert(deployWorkflowText.includes('bun run build:e2e') && deployWorkflowText.includes('tests/browser/webgl-recovery.spec.ts'), 'GitHub Pages runs focused production-preview and WebGL recovery checks before artifact creation');
+assert(deployWorkflowText.includes('bun run test:bundle-budget'), 'GitHub Pages enforces the production shell and core JavaScript budgets');
 assert(deployWorkflowText.includes('Check classroom build exclusions') && deployWorkflowText.includes('bun run test:no-image-recognition'), 'GitHub Pages verifies that image-recognition assets cannot be uploaded');
 assert(!deployWorkflowText.includes('git lfs') && !deployWorkflowText.includes('pose_model.onnx'), 'GitHub Pages no longer fetches an image-recognition model');
 assert(deployWorkflowText.includes('tags:') && deployWorkflowText.includes('v*.*.*') && !deployWorkflowText.includes('branches:'), 'GitHub Pages workflow deploys only from version tags');
