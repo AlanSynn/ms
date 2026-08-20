@@ -2858,6 +2858,7 @@ const mechanismOptimizerWorkerText = readFileSync(join(process.cwd(), 'workers',
 const webOnnxInferenceClientText = readFileSync(join(process.cwd(), 'runtime', 'ai', 'webOnnxInference.ts'), 'utf8');
 const webOnnxInferenceWorkerText = readFileSync(join(process.cwd(), 'workers', 'webOnnxInferenceWorker.ts'), 'utf8');
 const webOnnxImageGeometryText = readFileSync(join(process.cwd(), 'runtime', 'ai', 'webOnnxImageGeometry.ts'), 'utf8');
+const webOnnxPartGeometryText = readFileSync(join(process.cwd(), 'runtime', 'ai', 'webOnnxPartGeometry.ts'), 'utf8');
 const webOnnxImageRasterText = readFileSync(join(process.cwd(), 'runtime', 'ai', 'webOnnxImageRaster.ts'), 'utf8');
 const webOnnxImageDecodePolicyText = readFileSync(join(process.cwd(), 'runtime', 'ai', 'webOnnxImageDecodePolicy.ts'), 'utf8');
 const webOnnxModelJobCoordinatorText = readFileSync(join(process.cwd(), 'runtime', 'ai', 'webOnnxModelJobCoordinator.ts'), 'utf8');
@@ -3622,7 +3623,7 @@ assert.deepEqual(cachedFit.pathPoints, directFit.pathPoints, 'cached Foundry fit
 assert(Math.hypot(cachedFit.state.effector.x - directFit.state.effector.x, cachedFit.state.effector.y - directFit.state.effector.y) < 1e-9, 'cached Foundry fit maps the live effector exactly like direct fit');
 assert(!threePreviewText.includes('teeth * 2'), '3D preview no longer carries a separate saw-tooth gear implementation');
 assert(threePreviewText.includes('fabricablePartOutlinePoints'), '3D puppet preview uses shared model/user contour outlines instead of raw image crop rectangles');
-assert(webOnnxImageGeometryText.includes('contourFromPartMask') && webOnnxImageGeometryText.includes("contourSource: plan.contourPoints.length >= 3 ? 'onnx-mask'"), 'worker-side browser ONNX preserves mask-derived part contours for fabrication plates');
+assert(webOnnxPartGeometryText.includes('contourFromPartMask') && webOnnxPartGeometryText.includes("contourSource: plan.contourPoints.length >= 3 ? 'onnx-mask'"), 'worker-side browser ONNX preserves mask-derived part contours for fabrication plates');
 assert(webOnnxText.includes('MODEL_CACHE_NAME') && webOnnxText.includes('caches.open') && webOnnxText.includes('warmWebOnnxCache'), 'browser ONNX model can be separately downloaded and cached');
 assert(webOnnxInferenceWorkerText.includes('GIT_LFS_POINTER_PREFIX') && webOnnxInferenceWorkerText.includes("cache: 'reload'") && webOnnxCacheWorkerText.includes('GIT_LFS_POINTER_PREFIX'), 'worker-owned browser ONNX rejects stale Git LFS pointers and refetches model bytes');
 assert(webOnnxText.includes('MODEL_BYTES_HEADER') && webOnnxText.includes('x-motionsmith-model-bytes') && webOnnxInferenceWorkerText.includes('model.bytesHeader'), 'browser ONNX marks valid cached model bytes to avoid treating pointer files as ready');

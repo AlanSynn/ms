@@ -1,12 +1,14 @@
 import type { BodyPartLayer, StandardSkeleton } from '../../types';
 import {
-  buildWebOnnxPartPlans,
   createWebOnnxMask,
   fitWebOnnxImageDimensions,
-  partLayerFromPlan,
   webOnnxPoseBounds,
   type WebOnnxMask,
 } from './webOnnxImageGeometry';
+import {
+  buildWebOnnxPartPlans,
+  partLayerFromPlan,
+} from './webOnnxPartGeometry';
 import {
   readWebOnnxImageMetadata,
   WEB_ONNX_IMAGE_HEADER_SCAN_BYTES,

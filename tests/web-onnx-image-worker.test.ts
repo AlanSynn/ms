@@ -3,13 +3,13 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
-  buildWebOnnxPartPlans,
   buildWebOnnxSkeleton,
   createWebOnnxMask,
   fitWebOnnxImageDimensions,
   WEB_ONNX_IMAGE_MAX_EDGE,
   type WebOnnxKeypoint,
 } from '../runtime/ai/webOnnxImageGeometry';
+import { buildWebOnnxPartPlans } from '../runtime/ai/webOnnxPartGeometry';
 import {
   readWebOnnxImageMetadata,
   WEB_ONNX_IMAGE_MAX_COMPRESSED_BYTES,
