@@ -15,8 +15,31 @@ const FIT_RESOLUTION = 32;
 const FIT_SAMPLE_COUNT = 24;
 const OUTPUT_RESOLUTION = 96;
 const TOP_CANDIDATE_COUNT = 64;
+const FIT_CACHE_MAX_ENTRIES = 32;
 
 const fitCache = new Map<string, MechanismConfig | null>();
+
+const readCachedFit = (key: string) => {
+  if (!fitCache.has(key)) return undefined;
+  const value = fitCache.get(key) ?? null;
+  fitCache.delete(key);
+  fitCache.set(key, value);
+  return { value };
+};
+
+const writeCachedFit = (key: string, value: MechanismConfig | null) => {
+  fitCache.delete(key);
+  fitCache.set(key, value);
+  while (fitCache.size > FIT_CACHE_MAX_ENTRIES) {
+    const oldest = fitCache.keys().next().value;
+    if (oldest === undefined) break;
+    fitCache.delete(oldest);
+  }
+};
+
+export const fourBarFitCacheEntryCount = () => fitCache.size;
+
+export const clearFourBarFitCache = () => fitCache.clear();
 
 const fitCacheKey = (
   project: ProjectState,
@@ -190,6 +213,23 @@ const boardAnchorCandidatesForFit = (
   }
   return [...anchors.values()];
 };
+
+/**
+ * B and C are constrained to circles around their fixed pivots. The radial
+ * distance is therefore a hard lower bound on point error for every possible
+ * phase, assembly mode, and coupler length. Candidates outside the final
+ * tolerance can be discarded before any kinematic sampling without weakening
+ * the fabrication gate.
+ */
+const circleTraceCouldPassTolerance = (
+  targetPoints: Point[],
+  center: Point,
+  radius: number,
+  tolerance: number,
+) => targetPoints.every((target) =>
+  Math.abs(Math.hypot(target.x - center.x, target.y - center.y) - radius)
+    <= tolerance,
+);
 
 const pointAtCyclic = (points: Point[], index: number): Point => {
   if (!points.length) return { x: 0, y: 0 };
@@ -466,13 +506,13 @@ export const fitFourBarKitMechanismToPath = (
   path: ProjectMotionPath,
 ) => {
   const cacheKey = fitCacheKey(project, mechanism, path);
-  const cached = fitCache.get(cacheKey);
-  if (cached !== undefined) {
-    return cached ? cloneFitResult(cached, mechanism) : undefined;
+  const cached = readCachedFit(cacheKey);
+  if (cached) {
+    return cached.value ? cloneFitResult(cached.value, mechanism) : undefined;
   }
   const targetPoints = resamplePolyline(pathPointsForFit(path), FIT_SAMPLE_COUNT);
   if (targetPoints.length < 3) {
-    fitCache.set(cacheKey, null);
+    writeCachedFit(cacheKey, null);
     return undefined;
   }
   const kitLengths = FABRICATION_LINKAGE_SPECS.map(
@@ -491,6 +531,47 @@ export const fitFourBarKitMechanismToPath = (
   const angles = [0, 90, 180, 270];
   const modes: Array<MechanismConfig['assemblyMode']> = ['open', 'crossed'];
   const tolerance = fourBarPathFitTolerance(project);
+  const circleViability = new Map<string, boolean>();
+  const traceCircleCouldFit = (center: Point, radius: number) => {
+    const key = `${center.x}:${center.y}:${radius}`;
+    const cached = circleViability.get(key);
+    if (cached !== undefined) return cached;
+    const viable = circleTraceCouldPassTolerance(
+      targetPoints,
+      center,
+      radius,
+      tolerance,
+    );
+    circleViability.set(key, viable);
+    return viable;
+  };
+  const linkageSets: Array<{
+    groundLength: number;
+    crankLength: number;
+    couplerLength: number;
+    rockerLength: number;
+  }> = [];
+  for (const groundLength of kitLengths) {
+    for (const crankLength of kitLengths) {
+      for (const couplerLength of kitLengths) {
+        for (const rockerLength of kitLengths) {
+          if (isLikelyFullRotationFourBar(
+            groundLength,
+            crankLength,
+            couplerLength,
+            rockerLength,
+          )) {
+            linkageSets.push({
+              groundLength,
+              crankLength,
+              couplerLength,
+              rockerLength,
+            });
+          }
+        }
+      }
+    }
+  }
   const top: Array<{
     mechanism: MechanismConfig;
     traceId: string;
@@ -511,106 +592,103 @@ export const fitFourBarKitMechanismToPath = (
   };
 
   for (const anchor of anchors) {
-    for (const groundLength of kitLengths) {
-      for (const crankLength of kitLengths) {
-        for (const couplerLength of kitLengths) {
-          for (const rockerLength of kitLengths) {
-            if (
-              !isLikelyFullRotationFourBar(
-                groundLength,
-                crankLength,
-                couplerLength,
-                rockerLength,
-              )
-            )
-              continue;
-            const nearestTargetDistance = targetPoints.reduce(
-              (best, target) =>
-                Math.min(best, Math.hypot(target.x - anchor.x, target.y - anchor.y)),
-              Number.POSITIVE_INFINITY,
-            );
-            if (nearestTargetDistance > groundLength + rockerLength + tolerance * 2)
-              continue;
-            for (const groundAngle of angles) {
-              for (const assemblyMode of modes) {
-                const candidateInput: MechanismConfig = {
-                  ...mechanism,
-                  type: '4bar',
-                  anchorX: anchor.x,
-                  anchorY: anchor.y,
-                  sceneAnchor: anchor,
-                  transform: {
-                    ...(mechanism.transform ?? {
-                      x: anchor.x,
-                      y: anchor.y,
-                      rotation: groundAngle,
-                      scale: 1,
-                    }),
-                    x: anchor.x,
-                    y: anchor.y,
-                    rotation: groundAngle,
+    const nearestTargetDistance = targetPoints.reduce(
+      (best, target) =>
+        Math.min(best, Math.hypot(target.x - anchor.x, target.y - anchor.y)),
+      Number.POSITIVE_INFINITY,
+    );
+    for (const {
+      groundLength,
+      crankLength,
+      couplerLength,
+      rockerLength,
+    } of linkageSets) {
+      if (nearestTargetDistance > groundLength + rockerLength + tolerance * 2)
+        continue;
+      const crankTraceCouldFit = traceCircleCouldFit(anchor, crankLength);
+      for (const groundAngle of angles) {
+        const groundAngleRad = (groundAngle * Math.PI) / 180;
+        const groundPivot = {
+          x: anchor.x + groundLength * Math.cos(groundAngleRad),
+          y: anchor.y + groundLength * Math.sin(groundAngleRad),
+        };
+        const rockerTraceCouldFit = traceCircleCouldFit(
+          groundPivot,
+          rockerLength,
+        );
+        if (!crankTraceCouldFit && !rockerTraceCouldFit) continue;
+        for (const assemblyMode of modes) {
+          const candidateInput: MechanismConfig = {
+            ...mechanism,
+            type: '4bar',
+            anchorX: anchor.x,
+            anchorY: anchor.y,
+            sceneAnchor: anchor,
+            transform: {
+              ...(mechanism.transform ?? {
+                x: anchor.x,
+                y: anchor.y,
+                rotation: groundAngle,
+                scale: 1,
+              }),
+              x: anchor.x,
+              y: anchor.y,
+              rotation: groundAngle,
+            },
+            groundLength,
+            crankLength,
+            couplerLength,
+            rockerLength,
+            groundAngle,
+            assemblyMode,
+            targetPartId,
+            targetSceneObjectId: path.sceneObjectId,
+            targetPathId: path.id,
+            targetAnchorJointId: path.sceneObjectId
+              ? undefined
+              : (mechanism.targetAnchorJointId ?? path.targetAnchorJointId),
+            activeVisualPartIds: targetPartId ? [targetPartId] : [],
+            source: 'optimized',
+            recommendation: 'Fit path',
+            speed1: 1,
+            driverPhaseOffset: 0,
+          };
+          const baseCandidate = normalizeMechanismToFabricationSet(
+            project.settings.physicalKit.gridPitchMm === FABRICATION_DEFAULT_GRID_PITCH_MM && !mechanism.fabricationMetadata
+              ? candidateInput
+              : {
+                  ...candidateInput,
+                  fabricationMetadata: {
+                    ...(mechanism.fabricationMetadata ?? {}),
+                    gridPitchMm: project.settings.physicalKit.gridPitchMm,
                   },
-                  groundLength,
-                  crankLength,
-                  couplerLength,
-                  rockerLength,
-                  groundAngle,
-                  assemblyMode,
-                  targetPartId,
-                  targetSceneObjectId: path.sceneObjectId,
-                  targetPathId: path.id,
-                  targetAnchorJointId: path.sceneObjectId
-                    ? undefined
-                    : (mechanism.targetAnchorJointId ?? path.targetAnchorJointId),
-                  activeVisualPartIds: targetPartId ? [targetPartId] : [],
-                  source: 'optimized',
-                  recommendation: 'Fit path',
-                };
-                const candidate = normalizeMechanismToFabricationSet(
-                  project.settings.physicalKit.gridPitchMm === FABRICATION_DEFAULT_GRID_PITCH_MM && !mechanism.fabricationMetadata
-                    ? candidateInput
-                    : {
-                        ...candidateInput,
-                        fabricationMetadata: {
-                          ...(mechanism.fabricationMetadata ?? {}),
-                          gridPitchMm: project.settings.physicalKit.gridPitchMm,
-                        },
-                      },
-                );
-                const baseCandidate = normalizeMechanismToFabricationSet({
-                  ...candidate,
-                  speed1: 1,
-                  driverPhaseOffset: 0,
-                });
-                if (fabricationPlacementErrorsForCandidate(project, baseCandidate).length)
-                  continue;
-                const traces = generateMechanismPointTraces(
-                  baseCandidate,
-                  COARSE_FIT_RESOLUTION,
-                );
-                // Coarse samples can land exactly on a circle-intersection
-                // tangent. Keep candidates through this screening pass and
-                // enforce the real sweep-validity threshold after refinement.
-                if (traces.percentValid < 0.75) continue;
-                const movingTraces = traces.traces.filter((trace) =>
-                  trace.id === 'B' || trace.id === 'C',
-                );
-                for (const trace of movingTraces) {
-                  const fit = orderedFit(
-                    trace.points,
-                    targetPoints,
-                    COARSE_FIT_RESOLUTION,
-                  );
-                  rememberCandidate(
-                    baseCandidate,
-                    trace.id,
-                    fit.error +
-                      fit.maxError * 0.15 +
-                      fit.tangentError * 0.25,
-                  );
-                }
-              }
-            }
+                },
+          );
+          if (fabricationPlacementErrorsForCandidate(project, baseCandidate).length)
+            continue;
+          const traces = generateMechanismPointTraces(
+            baseCandidate,
+            COARSE_FIT_RESOLUTION,
+          );
+          // Coarse samples can land exactly on a circle-intersection tangent.
+          // Keep candidates through this screening pass and enforce the real
+          // sweep-validity threshold after refinement.
+          if (traces.percentValid < 0.75) continue;
+          const movingTraces = traces.traces.filter((trace) =>
+            (trace.id === 'B' && crankTraceCouldFit) ||
+            (trace.id === 'C' && rockerTraceCouldFit),
+          );
+          for (const trace of movingTraces) {
+            const fit = orderedFit(
+              trace.points,
+              targetPoints,
+              COARSE_FIT_RESOLUTION,
+            );
+            rememberCandidate(
+              baseCandidate,
+              trace.id,
+              fit.error + fit.maxError * 0.15 + fit.tangentError * 0.25,
+            );
           }
         }
       }
@@ -676,6 +754,6 @@ export const fitFourBarKitMechanismToPath = (
     (candidate) =>
       !fabricationErrorsForCandidate(validationProject, candidate.mechanism).length,
   )?.mechanism;
-  fitCache.set(cacheKey, fitted ? cloneFitResult(fitted, mechanism) : null);
+  writeCachedFit(cacheKey, fitted ? cloneFitResult(fitted, mechanism) : null);
   return fitted ? cloneFitResult(fitted, mechanism) : undefined;
 };
