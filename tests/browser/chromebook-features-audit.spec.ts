@@ -54,9 +54,9 @@ const goToStage = async (
   await expect(ready).toBeVisible();
   if (name === "Design") {
     await expect(page.getByRole("button", { name: /Recommend/i }))
-      .toHaveAttribute("data-recommendation-worker-prepared", "true");
+      .toHaveAttribute("data-recommendation-worker", "on-demand");
     await expect(page.getByRole("button", { name: "Fit", exact: true }))
-      .toHaveAttribute("data-optimizer-worker-prepared", "true");
+      .toHaveAttribute("data-optimizer-worker", "on-demand");
   }
 };
 

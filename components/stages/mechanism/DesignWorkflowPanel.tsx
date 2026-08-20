@@ -32,8 +32,6 @@ import {
 import { MechanismRecommendationSheet } from "../path/MechanismRecommendationSheet";
 import {
   createMechanismRecommendationWorkerClient,
-  disposePreparedMechanismRecommendationWorker,
-  prepareMechanismRecommendationWorker,
 } from "../../../runtime/recommendations/mechanismRecommendationWorkerClient";
 import { createMechanismFitJobInput } from "../../../runtime/fitting/mechanismFitJob";
 import { createMechanismFitWorkerClient } from "../../../runtime/fitting/mechanismFitWorkerClient";
@@ -50,31 +48,18 @@ const DesignRecommendationControl = ({
   onApply: (mechanism: MechanismConfig) => void;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [workerPrepared, setWorkerPrepared] = useState(false);
   const workerClient = useMemo(
     () => createMechanismRecommendationWorkerClient(),
     [],
   );
 
-  useEffect(() => {
-    let mounted = true;
-    void prepareMechanismRecommendationWorker().then(() => {
-      if (mounted) setWorkerPrepared(true);
-    });
-    return () => {
-      mounted = false;
-      workerClient.dispose();
-      disposePreparedMechanismRecommendationWorker();
-    };
-  }, [workerClient]);
+  useEffect(() => () => workerClient.dispose(), [workerClient]);
 
   return (
     <>
       <button
         className="btn-primary"
-        data-recommendation-worker-prepared={workerPrepared ? "true" : "false"}
-        disabled={!workerPrepared}
-        aria-busy={!workerPrepared}
+        data-recommendation-worker="on-demand"
         onClick={() => setIsOpen(true)}
       >
         <Sparkles size={16} /> Recommend

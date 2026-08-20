@@ -9,7 +9,6 @@ import {
 } from "../runtime/recommendations/mechanismRecommendationJob";
 import {
   createMechanismRecommendationWorkerClient,
-  prepareMechanismRecommendationWorker,
   type MechanismRecommendationWorkerPort,
 } from "../runtime/recommendations/mechanismRecommendationWorkerClient";
 import { generateSmartConfig } from "../utils/optimizer";
@@ -136,26 +135,6 @@ class FakeRecommendationWorker implements MechanismRecommendationWorkerPort {
   }
 }
 
-const warmWorker = new FakeRecommendationWorker();
-const warmComplete = prepareMechanismRecommendationWorker(() => warmWorker);
-assert.deepEqual(
-  warmWorker.posted,
-  [{ type: "warm" }],
-  "Design preparation asks only for the tiny worker bootstrap",
-);
-assert.equal(
-  warmWorker.terminated,
-  false,
-  "the bootstrap remains owned until its ready acknowledgement",
-);
-warmWorker.respond({ type: "ready" });
-await warmComplete;
-assert.equal(
-  warmWorker.terminated,
-  true,
-  "the prepared worker releases immediately without loading a fit job",
-);
-
 const workers: FakeRecommendationWorker[] = [];
 const completed: string[] = [];
 const failed: string[] = [];
@@ -236,8 +215,8 @@ assert(
 assert(
   componentSource.includes("workerClient.cancel()") &&
     designWorkflowSource.includes("workerClient.dispose()") &&
-    designWorkflowSource.includes("disposePreparedMechanismRecommendationWorker()"),
-  "the sheet cancels stale work while its Design owner releases the retained worker on unmount",
+    designWorkflowSource.includes('data-recommendation-worker="on-demand"'),
+  "the sheet cancels stale work while its Design owner releases on-demand workers on unmount",
 );
 
 const workerSource = readFileSync(
@@ -245,8 +224,8 @@ const workerSource = readFileSync(
   "utf8",
 );
 assert(workerSource.includes("runMechanismRecommendationJob(data.input)"));
-assert(workerSource.includes('data?.type === "warm"'));
-assert(workerSource.includes('postMessage({ type: "ready" })'));
+assert(!workerSource.includes('type === "warm"'));
+assert(!workerSource.includes('type: "ready"'));
 assert(
   workerSource.includes("await import("),
   "the worker entry stays small and loads the recommendation job after it owns the request",

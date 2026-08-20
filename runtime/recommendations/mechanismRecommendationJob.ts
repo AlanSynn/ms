@@ -23,12 +23,9 @@ export type MechanismRecommendationWorkerRequest = {
   type: "build";
   generationId: number;
   input: MechanismRecommendationJobInput;
-} | {
-  type: "warm";
 };
 
 export type MechanismRecommendationWorkerResponse =
-  | { type: "ready" }
   | {
       type: "result";
       generationId: number;

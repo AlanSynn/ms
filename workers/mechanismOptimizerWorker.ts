@@ -9,10 +9,6 @@ const worker = globalThis as unknown as {
 };
 
 worker.onmessage = async ({ data }) => {
-  if (data?.type === 'warm') {
-    worker.postMessage({ type: 'ready' });
-    return;
-  }
   if (data?.type !== 'optimize') return;
   try {
     const { runMechanismOptimizerJob } = await import(

@@ -5,7 +5,8 @@ import { AssemblyCanvasPane } from "./AssemblyCanvasPane";
 import { AssemblyControlPanel } from "./AssemblyControlPanel";
 import { AssemblyInspectorPanel } from "./AssemblyInspectorPanel";
 import {
-  buildAssemblyGuideModel,
+  prepareAssemblyGuideModel,
+  selectAssemblyGuideStep,
   type AssemblyGuideMode,
 } from "./assemblyGuideModel";
 import { useAssemblyGuidePlayback } from "./useAssemblyGuidePlayback";
@@ -52,7 +53,7 @@ export const AssemblyGuide = ({
   setStepCount: Dispatch<SetStateAction<number>>;
   playbackClock: PlaybackClock;
 }) => {
-  const validation = validateForFabrication(project);
+  const validation = useMemo(() => validateForFabrication(project), [project]);
   const create = () =>
     dispatch({
       type: "set_export",
@@ -65,6 +66,17 @@ export const AssemblyGuide = ({
   const [lane, setLane] = useState<AssemblyLane>(() =>
     assemblyLaneForExportMode(project.settings.physicalKit.exportMode),
   );
+  const preparedModel = useMemo(
+    () =>
+      prepareAssemblyGuideModel({
+        project,
+        pkg,
+        selectedRecipeId,
+        assemblyMode,
+        lane,
+      }),
+    [project, pkg, selectedRecipeId, assemblyMode, lane],
+  );
   const {
     recipes,
     selectedRecipe,
@@ -73,21 +85,11 @@ export const AssemblyGuide = ({
     activeAssemblyMode,
     activePlaybackSteps,
     activeStepCount,
-    currentStep,
-    currentCharacterStep,
-    activeDisplayStep,
     resetKey,
-  } = useMemo(
-    () =>
-      buildAssemblyGuideModel({
-        project,
-        pkg,
-        selectedRecipeId,
-        assemblyMode,
-        lane,
-        stepIndex,
-      }),
-    [project, pkg, selectedRecipeId, assemblyMode, lane, stepIndex],
+  } = preparedModel;
+  const { currentStep, currentCharacterStep, activeDisplayStep } = useMemo(
+    () => selectAssemblyGuideStep(preparedModel, stepIndex),
+    [preparedModel, stepIndex],
   );
   const { goAssemblyStep } = useAssemblyGuidePlayback({
     activeStepCount,

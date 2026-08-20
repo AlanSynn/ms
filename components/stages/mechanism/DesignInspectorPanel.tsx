@@ -24,10 +24,6 @@ import {
   shouldShowMechanismParam,
 } from "./mechanismParamPolicy";
 import { MechanismFeasibilityStatus } from "./MechanismFeasibilityStatus";
-import {
-  disposePreparedMechanismOptimizerWorker,
-  prepareMechanismOptimizerWorker,
-} from "../../../runtime/optimizer/mechanismOptimizerWorkerClient";
 
 type DesignInspectorPanelProps = {
   project: ProjectState;
@@ -54,7 +50,6 @@ export const DesignInspectorPanel = ({
   exportDxf,
   onBlueprint,
 }: DesignInspectorPanelProps) => {
-  const [workerPrepared, setWorkerPrepared] = useState(false);
   const [pendingBinding, setPendingBinding] = useState<{
     mechanismId: string;
     targetPartId?: string;
@@ -62,16 +57,6 @@ export const DesignInspectorPanel = ({
     targetPathId?: string;
     targetAnchorJointId?: string;
   }>();
-  useEffect(() => {
-    let mounted = true;
-    void prepareMechanismOptimizerWorker().then(() => {
-      if (mounted) setWorkerPrepared(true);
-    });
-    return () => {
-      mounted = false;
-      disposePreparedMechanismOptimizerWorker();
-    };
-  }, []);
   const selectedRange = selectedMechanism
     ? getInspectorFeasibleRange(selectedMechanism)
     : undefined;
@@ -360,8 +345,7 @@ export const DesignInspectorPanel = ({
             <button
               className="btn-primary"
               data-testid="design-fit-button"
-              data-optimizer-worker-prepared={workerPrepared ? "true" : "false"}
-              disabled={!workerPrepared}
+              data-optimizer-worker="on-demand"
               aria-busy={optimizerBusy}
               onClick={optimizerBusy ? onCancelOptimize : onOptimize}
             >

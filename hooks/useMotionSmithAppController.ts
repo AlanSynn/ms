@@ -97,7 +97,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   const characterImportProgressRef = useRef<CharacterImportProgressStore | null>(null);
   characterImportProgressRef.current ??= createCharacterImportProgressStore();
   const characterImportProgress = characterImportProgressRef.current;
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [showTrace, setShowTrace] = useState(true);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showAbout, setShowAbout] = useState(false);

@@ -1,4 +1,10 @@
-import { useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import {
+  useEffect,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import { WorkspacePlayerDock } from "../components/AppShell";
 import type { AppStage } from "../types";
 import type { PlaybackClock } from "../runtime/playback/externalPlaybackClock";
@@ -41,6 +47,31 @@ export const useWorkspacePlayerDock = ({
   const [assemblyStepIndex, setAssemblyStepIndex] = useState(0);
   const [assemblyStepProgress, setAssemblyStepProgress] = useState(0);
   const [assemblyStepCount, setAssemblyStepCount] = useState(0);
+
+  useEffect(() => {
+    setIsPlaying(false);
+    setAssemblyPlaying(false);
+    playbackClock.stop();
+  }, [editorStage, playbackClock, setIsPlaying]);
+
+  useEffect(() => {
+    if (!modalOpen) return;
+    setIsPlaying(false);
+    setAssemblyPlaying(false);
+    playbackClock.stop();
+  }, [modalOpen, playbackClock, setIsPlaying]);
+
+  useEffect(() => {
+    const pauseHiddenPlayback = () => {
+      if (!document.hidden) return;
+      setIsPlaying(false);
+      setAssemblyPlaying(false);
+      playbackClock.stop();
+    };
+    document.addEventListener("visibilitychange", pauseHiddenPlayback);
+    return () =>
+      document.removeEventListener("visibilitychange", pauseHiddenPlayback);
+  }, [playbackClock, setIsPlaying]);
 
   const goSharedAssemblyStep = (index: number) => {
     const maxStepIndex = Math.max(0, assemblyStepCount - 1);

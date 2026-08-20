@@ -11,10 +11,6 @@ const worker = globalThis as unknown as {
 };
 
 worker.onmessage = async ({ data }) => {
-  if (data?.type === "warm") {
-    worker.postMessage({ type: "ready" });
-    return;
-  }
   if (data?.type !== "build") return;
   try {
     const { runMechanismRecommendationJob } = await import(

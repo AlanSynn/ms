@@ -2661,7 +2661,7 @@ test('Character tab owns body layer and skeleton edits used by design controls',
   expectCleanPage(pageErrors, consoleErrors);
 });
 
-test('Recommendation job stays idle after its tiny worker bootstrap', async ({ page }) => {
+test('Recommendation worker and job stay unloaded until explicit request', async ({ page }) => {
   const recommendationWorkerRequests: string[] = [];
   const recommendationJobRequests: string[] = [];
   page.on('request', request => {
@@ -2677,8 +2677,8 @@ test('Recommendation job stays idle after its tiny worker bootstrap', async ({ p
   await openFabricationReadyFourBar(page);
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   const recommend = page.getByRole('button', { name: /Recommend/i });
-  await expect(recommend).toHaveAttribute('data-recommendation-worker-prepared', 'true');
-  expect(recommendationWorkerRequests.length, 'Design prepares the tiny worker entry').toBeGreaterThan(0);
+  await expect(recommend).toHaveAttribute('data-recommendation-worker', 'on-demand');
+  expect(recommendationWorkerRequests, 'Design entry starts no recommendation worker').toEqual([]);
   expect(recommendationJobRequests, 'closed recommendation sheet starts no fit job').toEqual([]);
 
   const nextPaintMs = await recommend.evaluate((button: HTMLButtonElement) =>
@@ -2697,9 +2697,10 @@ test('Recommendation job stays idle after its tiny worker bootstrap', async ({ p
     () => recommendationJobRequests.length,
     { message: 'opening recommendations loads the heavy fit job in its dedicated worker' },
   ).toBeGreaterThan(0);
+  expect(recommendationWorkerRequests.length, 'Recommend owns its worker only after the click').toBeGreaterThan(0);
   await expect(page.getByTestId('recommendation-card-4bar')).toBeVisible({ timeout: 60_000 });
   await sheet.getByRole('button', { name: 'Close', exact: true }).click();
-  await expect(sheet).toHaveCount(0);
+  await expect(sheet).toBeHidden();
 });
 
 test('Design Fit runs in a disposable worker without blocking its next paint', async ({ page }) => {
@@ -2717,9 +2718,9 @@ test('Design Fit runs in a disposable worker without blocking its next paint', a
   await page.goto('/');
   await openFabricationReadyFourBar(page);
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
-  const fit = page.getByRole('button', { name: 'Fit', exact: true });
-  await expect(fit).toHaveAttribute('data-optimizer-worker-prepared', 'true');
-  expect(optimizerWorkerRequests.length, 'Design prepares the tiny optimizer worker entry').toBeGreaterThan(0);
+  const fit = page.getByTestId('design-fit-button');
+  await expect(fit).toHaveAttribute('data-optimizer-worker', 'on-demand');
+  expect(optimizerWorkerRequests, 'Design entry starts no optimizer worker').toEqual([]);
   expect(optimizerJobRequests, 'Design starts no optimizer job before explicit Fit').toEqual([]);
   const nextPaintMs = await fit.evaluate((button: HTMLButtonElement) =>
     new Promise<number>((resolve) => {
@@ -2731,11 +2732,12 @@ test('Design Fit runs in a disposable worker without blocking its next paint', a
     }),
   );
   expect(nextPaintMs, 'Fit click yields a painted busy state promptly').toBeLessThan(100);
-  await expect(fit).toBeDisabled();
+  await expect(fit).toHaveAttribute('aria-busy', 'true');
   await expect.poll(() => optimizerJobRequests.length, {
     message: 'explicit Fit loads the heavy optimizer job in its dedicated worker',
   }).toBeGreaterThan(0);
-  await expect(fit).toBeEnabled({ timeout: 120_000 });
+  await expect(fit).toHaveAttribute('aria-busy', 'false', { timeout: 120_000 });
+  expect(optimizerWorkerRequests.length, 'Fit owns its worker only after the click').toBeGreaterThan(0);
   await expect.poll(() => page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('motionsmith.autosave') ?? '{}');
     return project.mechanisms?.find(
@@ -3075,9 +3077,9 @@ test('Every visible path-fit trigger owns and releases the shared fit worker', a
   await page.getByRole('button', { name: /Use mechanism/i }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
   await expect(page.getByTestId('design-fit-button'))
-    .toHaveAttribute('data-optimizer-worker-prepared', 'true');
+    .toHaveAttribute('data-optimizer-worker', 'on-demand');
   await expect(page.getByRole('button', { name: /Recommend/i }))
-    .toHaveAttribute('data-recommendation-worker-prepared', 'true');
+    .toHaveAttribute('data-recommendation-worker', 'on-demand');
   const designBaseline = await readFeatureRuntimeProbe(page);
 
   await page.getByTestId('design-add-gear_linkage').click();
@@ -3111,6 +3113,25 @@ test('Every visible path-fit trigger owns and releases the shared fit worker', a
       .__FIT_WORKER_REQUESTS__ ?? [],
   );
   expect(fitRequests).toEqual(['fit', 'fit', 'fit', 'fit']);
+});
+
+test('Classroom playback is opt-in and pauses across stage or hidden-tab boundaries', async ({ page }) => {
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  const player = page.getByTestId('workspace-player-dock');
+  await expect(player.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
+  await player.getByRole('button', { name: 'Play', exact: true }).click();
+  await expect(player.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
+
+  await clickStage(page, 'Design');
+  await expect(player.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
+  await player.getByRole('button', { name: 'Play', exact: true }).click();
+  await expect(player.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect(player.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
 });
 
 test('Foundry M B C D drags stay local until one pointerup commit', async ({ page }) => {

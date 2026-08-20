@@ -20,86 +20,10 @@ const browserWorkerFactory: MechanismOptimizerWorkerFactory = () =>
     { type: 'module', name: 'motionsmith-mechanism-optimizer' },
   ) as unknown as MechanismOptimizerWorkerPort;
 
-let workerBootstrap: Promise<void> | undefined;
-let preparedWorker: MechanismOptimizerWorkerPort | undefined;
-
 const releaseWorker = (worker: MechanismOptimizerWorkerPort) => {
   worker.onmessage = null;
   worker.onerror = null;
   worker.terminate();
-};
-
-const retainPreparedWorker = (worker: MechanismOptimizerWorkerPort) => {
-  worker.onmessage = null;
-  worker.onerror = null;
-  if (preparedWorker) {
-    releaseWorker(worker);
-    return;
-  }
-  preparedWorker = worker;
-  workerBootstrap = Promise.resolve();
-};
-
-const takePreparedWorker = (workerFactory: MechanismOptimizerWorkerFactory) => {
-  if (workerFactory !== browserWorkerFactory || !preparedWorker) return undefined;
-  const worker = preparedWorker;
-  preparedWorker = undefined;
-  workerBootstrap = undefined;
-  return worker;
-};
-
-export const disposePreparedMechanismOptimizerWorker = () => {
-  if (preparedWorker) releaseWorker(preparedWorker);
-  preparedWorker = undefined;
-  workerBootstrap = undefined;
-};
-
-/** Prepare one tiny worker entry without importing the optimizer job. */
-export const prepareMechanismOptimizerWorker = (
-  workerFactory: MechanismOptimizerWorkerFactory = browserWorkerFactory,
-) => {
-  const warmWorker = (retain: boolean) => new Promise<void>((resolve) => {
-    let worker: MechanismOptimizerWorkerPort;
-    let settled = false;
-    const finish = (ready = false) => {
-      if (settled) return;
-      settled = true;
-      if (ready && retain) {
-        retainPreparedWorker(worker);
-      } else {
-        releaseWorker(worker);
-      }
-      resolve();
-    };
-    try {
-      worker = workerFactory();
-    } catch {
-      resolve();
-      return;
-    }
-    worker.onmessage = ({ data }) => {
-      if (data.type === 'ready') finish(true);
-    };
-    worker.onerror = () => finish();
-    try {
-      worker.postMessage({ type: 'warm' });
-    } catch {
-      finish();
-    }
-  });
-
-  if (workerFactory !== browserWorkerFactory) return warmWorker(false);
-  if (preparedWorker) return Promise.resolve();
-  if (!workerBootstrap) {
-    const bootstrap = warmWorker(true);
-    workerBootstrap = bootstrap;
-    void bootstrap.then(() => {
-      if (!preparedWorker && workerBootstrap === bootstrap) {
-        workerBootstrap = undefined;
-      }
-    });
-  }
-  return workerBootstrap;
 };
 
 export const createMechanismOptimizerWorkerClient = (
@@ -114,7 +38,6 @@ export const createMechanismOptimizerWorkerClient = (
       }
     | undefined;
 
-  const keepsPreparedWorker = workerFactory === browserWorkerFactory;
   const cancel = () => {
     generationSequence += 1;
     if (active) releaseWorker(active.worker);
@@ -132,7 +55,7 @@ export const createMechanismOptimizerWorkerClient = (
     const generationId = ++generationSequence;
     let worker: MechanismOptimizerWorkerPort;
     try {
-      worker = takePreparedWorker(workerFactory) ?? workerFactory();
+      worker = workerFactory();
     } catch (error) {
       callbacks.failed(error instanceof Error ? error : new Error(String(error)));
       return generationId;
@@ -143,7 +66,6 @@ export const createMechanismOptimizerWorkerClient = (
       worker,
     };
     worker.onmessage = ({ data }) => {
-      if (data.type === 'ready') return;
       if (
         !active ||
         active.worker !== worker ||
@@ -155,11 +77,7 @@ export const createMechanismOptimizerWorkerClient = (
         return;
       }
       active = undefined;
-      if (keepsPreparedWorker && data.type === 'result') {
-        retainPreparedWorker(worker);
-      } else {
-        releaseWorker(worker);
-      }
+      releaseWorker(worker);
       if (data.type === 'result') callbacks.complete(data.result);
       else callbacks.failed(new Error(data.message));
     };
