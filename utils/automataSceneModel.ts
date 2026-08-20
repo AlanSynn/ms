@@ -10,7 +10,12 @@ import type {
 import { mechanismFeature, type MechanismFeatureIssue } from './mechanismFeatureRegistry';
 import { normalizeGearMeshMechanism } from './mechanismRecommendations';
 import { buildMechanismSceneContract, type MechanismSceneContract } from './mechanismSceneContract';
-import { buildFoundryMechanismPreviewModel, type FoundryMechanismPreviewModel } from './foundryPreviewModel';
+import {
+    createFoundryMechanismPreviewRuntime,
+    sampleFoundryMechanismPreviewRuntime,
+    type FoundryMechanismPreviewModel,
+    type FoundryMechanismPreviewRuntime,
+} from './foundryPreviewModel';
 import {
     mechanismBindingWarnings,
     mechanismPathFitIsUsable,
@@ -66,13 +71,83 @@ const generatedPathForMechanism = (mechanism: MechanismConfig): ProjectMotionPat
     };
 };
 
-export const buildAutomataSceneModel = (
+export type AutomataSceneRuntime = {
+    mode: AutomataSceneMode;
+    project: ProjectState;
+    mechanism?: MechanismConfig;
+    mechanisms: MechanismConfig[];
+    foundryPreview?: FoundryMechanismPreviewRuntime;
+    mechanismContract?: MechanismSceneContract;
+    userPath?: ProjectMotionPath;
+    mechanismPath?: ProjectMotionPath;
+    featureLabel?: string;
+    featureIssues: MechanismFeatureIssue[];
+    warnings: Record<string, string[]>;
+};
+
+export const createAutomataSceneRuntime = (
     project: ProjectState,
     mechanism: MechanismConfig | undefined,
-    angle: number,
     mode: AutomataSceneMode = 'design-live'
-): AutomataSceneModel => {
+): AutomataSceneRuntime => {
     if (!mechanism) {
+        return {
+            mode,
+            project,
+            mechanisms: [],
+            featureIssues: [],
+            warnings: {},
+        };
+    }
+
+    const normalizedMechanisms = project.mechanisms.map(normalizeGearMeshMechanism);
+    const normalizedMechanism =
+        normalizedMechanisms.find(item => item.id === mechanism.id) ??
+        normalizeGearMeshMechanism(mechanism);
+    const mechanisms = normalizedMechanisms.length ? normalizedMechanisms : [normalizedMechanism];
+    const userPath = targetPathForMechanism(project, normalizedMechanism);
+    const feature = mechanismFeature(normalizedMechanism.type);
+    return {
+        mode,
+        project,
+        mechanism: normalizedMechanism,
+        mechanisms,
+        foundryPreview: createFoundryMechanismPreviewRuntime(
+            normalizedMechanism,
+            project.settings,
+            userPath?.points ?? [],
+            360,
+            240,
+            96,
+            'scene'
+        ),
+        mechanismContract: buildMechanismSceneContract(normalizedMechanism),
+        userPath,
+        mechanismPath: generatedPathForMechanism(normalizedMechanism),
+        featureLabel: feature.label,
+        featureIssues: feature.validate(normalizedMechanism),
+        warnings: mechanismBindingWarnings(project, mechanisms),
+    };
+};
+
+export const sampleAutomataSceneRuntime = (
+    runtime: AutomataSceneRuntime,
+    angle: number
+): AutomataSceneModel => {
+    const {
+        mode,
+        project,
+        mechanism,
+        mechanisms,
+        foundryPreview,
+        mechanismContract,
+        userPath,
+        mechanismPath,
+        featureLabel,
+        featureIssues,
+        warnings,
+    } = runtime;
+    if (!mechanism || !foundryPreview) {
         return {
             mode,
             mechanisms: [],
@@ -85,25 +160,9 @@ export const buildAutomataSceneModel = (
         };
     }
 
-    const normalizedMechanisms = project.mechanisms.map(normalizeGearMeshMechanism);
-    const normalizedMechanism =
-        normalizedMechanisms.find(item => item.id === mechanism.id) ??
-        normalizeGearMeshMechanism(mechanism);
-    const mechanisms = normalizedMechanisms.length ? normalizedMechanisms : [normalizedMechanism];
-    const userPath = targetPathForMechanism(project, normalizedMechanism);
-    const foundryPreview = buildFoundryMechanismPreviewModel(
-        normalizedMechanism,
-        angle,
-        project.settings,
-        userPath?.points ?? [],
-        360,
-        240,
-        96,
-        'scene'
-    );
+    const preview = sampleFoundryMechanismPreviewRuntime(foundryPreview, angle);
     const fullMotionPreview = motionPreviewForProject(project, mechanisms, angle);
-    const selectedMotionPreview = motionPreviewForProject(project, [normalizedMechanism], angle);
-    const mechanismPath = generatedPathForMechanism(normalizedMechanism);
+    const selectedMotionPreview = motionPreviewForProject(project, [mechanism], angle);
     const generatedTarget = mechanismPath ? pointOnGeneratedMechanismPath(mechanismPath.points, angle) : undefined;
     const authoredTarget = userPath ? pointOnProjectPath(userPath, angle) : undefined;
     const targetError = authoredTarget && selectedMotionPreview.target
@@ -113,22 +172,21 @@ export const buildAutomataSceneModel = (
         ? Math.hypot(selectedMotionPreview.target.x - generatedTarget.x, selectedMotionPreview.target.y - generatedTarget.y)
         : undefined;
     const motionSource = selectedMotionPreview.target
-        ? normalizedMechanism.fabricationMetadata?.pathFit?.outputTraceId
+        ? mechanism.fabricationMetadata?.pathFit?.outputTraceId
             ? 'linkage-trace'
             : 'linkage-effector'
-        : normalizedMechanism.type === '4bar' && normalizedMechanism.targetPathId && !mechanismPathFitIsUsable(project, normalizedMechanism)
+        : mechanism.type === '4bar' && mechanism.targetPathId && !mechanismPathFitIsUsable(project, mechanism)
             ? 'missing-target'
         : generatedTarget
             ? 'missing-target'
             : 'linkage-effector';
-    const feature = mechanismFeature(normalizedMechanism.type);
 
     return {
         mode,
-        mechanism: normalizedMechanism,
+        mechanism,
         mechanisms,
-        foundryPreview,
-        mechanismContract: buildMechanismSceneContract(normalizedMechanism),
+        foundryPreview: preview,
+        mechanismContract,
         animatedParts: fullMotionPreview.parts,
         animatedSceneObjects: fullMotionPreview.sceneObjects ?? {},
         skeleton: fullMotionPreview.skeleton ?? project.skeleton,
@@ -140,8 +198,19 @@ export const buildAutomataSceneModel = (
         targetError,
         generatedPathError,
         motionSource,
-        featureLabel: feature.label,
-        featureIssues: feature.validate(normalizedMechanism),
-        warnings: mechanismBindingWarnings(project, mechanisms)
+        featureLabel,
+        featureIssues,
+        warnings,
     };
 };
+
+export const buildAutomataSceneModel = (
+    project: ProjectState,
+    mechanism: MechanismConfig | undefined,
+    angle: number,
+    mode: AutomataSceneMode = 'design-live'
+): AutomataSceneModel =>
+    sampleAutomataSceneRuntime(
+        createAutomataSceneRuntime(project, mechanism, mode),
+        angle
+    );
