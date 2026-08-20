@@ -87,6 +87,8 @@ type FoundryCanvasPaneProps = {
   foundryParamHandleZSummary: string;
   hasManualAnchor: boolean;
   landingBoardLabel: string;
+  gestureActive: boolean;
+  gestureEmissionCount: number;
   onSetCameraPreset: (preset: Exclude<FoundryViewPreset, "custom">) => void;
   onToggleGrid: () => void;
   onToggleUserPathPreview: () => void;
@@ -170,6 +172,8 @@ export const FoundryCanvasPane = ({
   foundryParamHandleZSummary,
   hasManualAnchor,
   landingBoardLabel,
+  gestureActive,
+  gestureEmissionCount,
   onSetCameraPreset,
   onToggleGrid,
   onToggleUserPathPreview,
@@ -262,6 +266,8 @@ export const FoundryCanvasPane = ({
       data-fit-board-cells={kit.boardCells}
       data-fit-anchor-grid={anchorGrid}
       data-fit-target-path={targetPathId ?? landedFoundry.targetPathId ?? ""}
+      data-foundry-gesture-draft={gestureActive ? "active" : "idle"}
+      data-foundry-gesture-emissions={gestureEmissionCount}
       data-user-to-mech-fit-error={
         pathFitError === undefined ? "missing" : pathFitError.toFixed(2)
       }

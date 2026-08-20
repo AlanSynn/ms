@@ -15,6 +15,7 @@ const UNIT_TEST_FILES = [
   'b695-study.test.ts',
   'cadenced-playback-sampler.test.ts',
   'chromebook-audit-contract.test.ts',
+  'foundry-handle-gesture.test.ts',
   'four-bar-fit-retention.test.ts',
   'interactive-sampling.test.ts',
   'mechanism-optimizer-worker.test.ts',

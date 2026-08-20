@@ -1,6 +1,7 @@
 import { useState, type SetStateAction } from "react";
 import type { ProjectAction, ProjectState } from "../types";
 import { applyProjectAction, projectSelfCheck } from "../utils/project";
+import { recordProjectAction } from "../utils/performanceAudit";
 
 const PROJECT_HISTORY_LIMIT = 80;
 
@@ -55,10 +56,12 @@ export const useProjectHistory = (createInitialProject: () => ProjectState) => {
     });
   };
 
-  const dispatch = (action: ProjectAction) =>
+  const dispatch = (action: ProjectAction) => {
+    recordProjectAction(action.type);
     setProject((prev) => applyProjectAction(prev, action), {
       history: isUndoableProjectAction(action),
     });
+  };
 
   const undoProject = () => {
     if (!projectHistory.past.length) return false;

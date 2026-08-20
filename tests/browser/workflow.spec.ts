@@ -2192,8 +2192,12 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(page.getByTestId('foundry-cad-plane')).toHaveCount(0);
   await expect(page.getByTestId('foundry-angle-strip'), 'Foundry no longer adds extra multi-view mini canvases over the work area').toHaveCount(0);
   await expect(page.getByTestId('foundry-z-spacer')).toHaveCount(0);
-  await expect(page.getByTestId('foundry-velocity-overlay'), 'Velocity vectors are on by default in the physics sandbox').toBeVisible();
-  await expect(page.getByTestId('foundry-forces-overlay'), 'Force vectors are on by default in the physics sandbox').toBeVisible();
+  await expect(page.getByTestId('foundry-velocity-overlay'), 'Velocity vectors stay off until requested').toHaveCount(0);
+  await expect(page.getByTestId('foundry-forces-overlay'), 'Force vectors stay off until requested').toHaveCount(0);
+  await page.getByTestId('foundry-toggle-velocity').click();
+  await page.getByTestId('foundry-toggle-forces').click();
+  await expect(page.getByTestId('foundry-velocity-overlay')).toBeVisible();
+  await expect(page.getByTestId('foundry-forces-overlay')).toBeVisible();
   await expect(page.getByTestId('foundry-velocity-vector')).toBeVisible();
   await expect(page.getByTestId('foundry-force-vector')).toBeVisible();
   await expect(page.getByTestId('foundry-drive-force-vector')).toBeVisible();
@@ -3032,6 +3036,86 @@ test('Foundry defers Rapier until physics diagnostics are requested', async ({ p
   });
   await expect(rig).toHaveAttribute('data-physics-kernel-version', /\d+\.\d+\.\d+/);
   expect(rapierRequests).toHaveLength(1);
+});
+
+test('Foundry M B C D drags stay local until one pointerup commit', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByRole('button', { name: /Foundry/i }).click();
+  await page.getByTestId('foundry-fit-path').click();
+  await expect(page.getByTestId('foundry-canvas-pane')).not.toHaveAttribute(
+    'data-fit-target-path',
+    '',
+  );
+  await page.evaluate(() => {
+    (window as typeof window & {
+      __MOTIONSMITH_CHROMEBOOK_AUDIT__?: {
+        projectActionCounts?: Record<string, number>;
+      };
+    }).__MOTIONSMITH_CHROMEBOOK_AUDIT__ = { projectActionCounts: {} };
+  });
+
+  const pane = page.getByTestId('foundry-canvas-pane');
+  const upsertCount = () => page.evaluate(() => (
+    (window as typeof window & {
+      __MOTIONSMITH_CHROMEBOOK_AUDIT__?: {
+        projectActionCounts?: Record<string, number>;
+      };
+    }).__MOTIONSMITH_CHROMEBOOK_AUDIT__?.projectActionCounts?.upsert_mechanism ?? 0
+  ));
+
+  for (const [index, handleId] of ['B', 'C', 'D', 'M'].entries()) {
+    const handle = page.getByTestId(`foundry-param-handle-${handleId}`);
+    const beforeBox = await handle.boundingBox();
+    expect(beforeBox, `${handleId} handle is visible`).toBeTruthy();
+    const beforeCount = await upsertCount();
+    const center = {
+      x: beforeBox!.x + beforeBox!.width / 2,
+      y: beforeBox!.y + beforeBox!.height / 2,
+    };
+    await page.mouse.move(center.x, center.y);
+    await page.mouse.down();
+    const moveX = handleId === 'M' ? 100 : 30 + index * 4;
+    const moveY = handleId === 'M' ? 40 : 14 + index * 3;
+    await page.mouse.move(
+      center.x + moveX,
+      center.y + moveY,
+      { steps: 6 },
+    );
+    await expect(pane).toHaveAttribute('data-foundry-gesture-draft', 'active');
+    expect(await upsertCount(), `${handleId} pointermove has no ProjectAction`).toBe(beforeCount);
+    await expect.poll(async () => {
+      const current = await handle.boundingBox();
+      return current
+        ? Math.hypot(current.x - beforeBox!.x, current.y - beforeBox!.y)
+        : 0;
+    }, {
+      message: `${handleId} receives a local visual update before pointerup`,
+    }).toBeGreaterThan(2);
+    await page.mouse.up();
+    await expect(pane).toHaveAttribute('data-foundry-gesture-draft', 'idle');
+    await expect.poll(upsertCount, {
+      message: `${handleId} pointerup performs one canonical commit`,
+    }).toBe(beforeCount + 1);
+  }
+
+  const cancelHandle = page.getByTestId('foundry-param-handle-B');
+  const cancelBox = await cancelHandle.boundingBox();
+  expect(cancelBox, 'B remains available for cancellation').toBeTruthy();
+  const countBeforeCancel = await upsertCount();
+  await page.mouse.move(
+    cancelBox!.x + cancelBox!.width / 2,
+    cancelBox!.y + cancelBox!.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(cancelBox!.x + 45, cancelBox!.y + 30, { steps: 4 });
+  await expect(pane).toHaveAttribute('data-foundry-gesture-draft', 'active');
+  await cancelHandle.dispatchEvent('pointercancel', { pointerId: 1 });
+  await page.mouse.up();
+  await expect(pane).toHaveAttribute('data-foundry-gesture-draft', 'idle');
+  expect(await upsertCount(), 'pointercancel discards the draft without a ProjectAction')
+    .toBe(countBeforeCancel);
 });
 
 test('Foundry supports CAD-style 3D camera presets and drag orbit', async ({ page }) => {

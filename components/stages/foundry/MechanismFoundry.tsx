@@ -89,6 +89,8 @@ import {
 } from "../../../utils/motion";
 import { resolveRenderPerformancePolicy } from "../../../utils/renderPerformancePolicy";
 import { sampleIndexedValues } from "../../../utils/interactiveSampling";
+import { createCadencedGestureDraft } from "../../../runtime/interactions/cadencedGestureDraft";
+import { foundryMechanismForHandleGesture } from "./foundryHandleGesture";
 
 const traceDistanceToGeneratedPath = (
   trace: { points: Point[] },
@@ -111,7 +113,7 @@ const traceDistanceToGeneratedPath = (
 
 export const MechanismFoundry = ({
   project,
-  foundry,
+  foundry: committedFoundry,
   setFoundry,
   onDraftChange,
   selectedPart,
@@ -135,8 +137,30 @@ export const MechanismFoundry = ({
   const renderPolicy = resolveRenderPerformancePolicy(
     project.settings.performancePreset,
   );
+  const foundryGestureDraft = useMemo(
+    () => createCadencedGestureDraft<MechanismConfig>({
+      minFrameIntervalMs: renderPolicy.minRenderIntervalMs,
+    }),
+    [renderPolicy.minRenderIntervalMs],
+  );
+  const [gestureFoundry, setGestureFoundry] =
+    useState<MechanismConfig | null>(null);
+  const foundry = gestureFoundry ?? committedFoundry;
+  useEffect(
+    () => foundryGestureDraft.subscribe(setGestureFoundry),
+    [foundryGestureDraft],
+  );
+  useEffect(() => {
+    foundryGestureDraft.clear();
+  }, [committedFoundry, foundryGestureDraft]);
+  useEffect(
+    () => () => foundryGestureDraft.dispose(),
+    [foundryGestureDraft],
+  );
   const previewTraceSamples =
-    renderPolicy.interactiveDetail.mechanismTraceSamples;
+    gestureFoundry
+      ? Math.min(16, renderPolicy.interactiveDetail.mechanismTraceSamples)
+      : renderPolicy.interactiveDetail.mechanismTraceSamples;
   const [foundryPlaying, setFoundryPlaying] = useState(false);
   const [foundryPhase, setFoundryPhase] = useState(0);
   const [isPickingAnchor, setIsPickingAnchor] = useState(false);
@@ -174,6 +198,8 @@ export const MechanismFoundry = ({
   const foundryParamDragRef = useRef<{
     pointerId: number;
     handle: FoundryParamHandleId;
+    draft: MechanismConfig;
+    dirty: boolean;
   } | null>(null);
   const targetReady = Boolean(
     selectedPath &&
@@ -265,8 +291,8 @@ export const MechanismFoundry = ({
     [landedFoundry, previewTraceSamples, rawFoundryPointTraces],
   );
   const range = useMemo(
-    () => sampleFeasibleRange(landedFoundry),
-    [landedFoundry],
+    () => sampleFeasibleRange(landedFoundry, gestureFoundry ? 24 : 96),
+    [gestureFoundry, landedFoundry],
   );
   const feasibilityStatus = feasibilityStatusForRange(range);
   const library = MECHANISM_LIBRARY[foundry.type];
@@ -859,52 +885,33 @@ export const MechanismFoundry = ({
     handle: FoundryParamHandleId,
     point: Point,
   ) => {
-    const s = selectedSimulation.state;
-    const scale = Math.max(0.001, selectedSimulation.scale);
-    const sceneDistance = (a: Point, b: Point) =>
-      Math.hypot(a.x - b.x, a.y - b.y) / scale;
-    if (handle === "M") {
-      applyAnchor({
-        x: landing.x + (point.x - s.p1.x) / scale,
-        y: landing.y - (point.y - s.p1.y) / scale,
-      });
-      return;
-    }
-    if (handle === "B") {
-      updateFoundryParam(
-        "crankLength",
-        clampMechanismParam("crankLength", sceneDistance(s.p1, point)),
-      );
-      return;
-    }
-    if (handle === "D") {
-      updateFoundryParams({
-        groundLength: clampMechanismParam(
-          "groundLength",
-          sceneDistance(s.p1, point),
-        ),
-        groundAngle:
-          (Math.atan2(point.y - s.p1.y, point.x - s.p1.x) * 180) / Math.PI,
-      });
-      return;
-    }
-    updateFoundryParams({
-      couplerLength: clampMechanismParam(
-        "couplerLength",
-        sceneDistance(s.j1, point),
-      ),
-      rockerLength: clampMechanismParam(
-        "rockerLength",
-        sceneDistance(s.p2, point),
-      ),
+    const drag = foundryParamDragRef.current;
+    if (!drag || drag.handle !== handle) return;
+    const next = foundryMechanismForHandleGesture({
+      mechanism: drag.draft,
+      handle,
+      point,
+      simulation: selectedSimulation,
+      landing,
+      kit: project.settings.physicalKit,
     });
+    drag.draft = next;
+    drag.dirty = true;
+    foundryGestureDraft.publish(next);
   };
   const handleFoundryParamPointerDown =
     (handle: FoundryParamHandleId) =>
     (event: React.PointerEvent<SVGCircleElement>) => {
       event.preventDefault();
       event.stopPropagation();
-      foundryParamDragRef.current = { pointerId: event.pointerId, handle };
+      if (handle === "M") setManualAnchor(null);
+      foundryParamDragRef.current = {
+        pointerId: event.pointerId,
+        handle,
+        draft: foundry,
+        dirty: false,
+      };
+      foundryGestureDraft.publish(foundry, true);
       setFoundryPlaying(false);
       event.currentTarget.setPointerCapture(event.pointerId);
     };
@@ -921,8 +928,15 @@ export const MechanismFoundry = ({
   const handleFoundryParamPointerUp = (
     event: React.PointerEvent<SVGCircleElement>,
   ) => {
-    if (foundryParamDragRef.current?.pointerId === event.pointerId) {
+    const drag = foundryParamDragRef.current;
+    if (drag?.pointerId === event.pointerId) {
       foundryParamDragRef.current = null;
+      if (event.type === "pointercancel" || !drag.dirty) {
+        foundryGestureDraft.clear();
+      } else {
+        foundryGestureDraft.flush();
+        setFoundryDraft(refreshEditedFoundryMechanism(drag.draft));
+      }
       if (event.currentTarget.hasPointerCapture(event.pointerId))
         event.currentTarget.releasePointerCapture(event.pointerId);
     }
@@ -1177,6 +1191,8 @@ export const MechanismFoundry = ({
             foundryParamHandleZSummary={foundryParamHandleZSummary}
             hasManualAnchor={Boolean(manualAnchor)}
             landingBoardLabel={landingBoard.label}
+            gestureActive={Boolean(gestureFoundry)}
+            gestureEmissionCount={foundryGestureDraft.getEmissionCount()}
             onSetCameraPreset={setCameraPreset}
             onToggleGrid={() => setShowFoundryGrid((value) => !value)}
             onToggleUserPathPreview={() =>
