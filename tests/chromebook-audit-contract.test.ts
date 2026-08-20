@@ -6,6 +6,7 @@ import {
   CHROMEBOOK_ACCEPTANCE_THRESHOLDS,
   CHROMEBOOK_AUDIT_ENVIRONMENT,
   evaluateChromebookAcceptance,
+  evaluateChromebookPlaybackAcceptance,
   percentile,
   type PlaybackAudit,
 } from "./browser/chromebookAuditReport";
@@ -60,6 +61,14 @@ const passingPlayback: PlaybackAudit = {
     materialCacheDelta: 0,
   },
 };
+assert.equal(
+  evaluateChromebookPlaybackAcceptance(
+    passingPlayback,
+    { p50: 40, p95: 80, p99: 90 },
+  ).passed.passed,
+  true,
+  "the short Foundry gate evaluates playback and its own controls without an end-to-end tab flow",
+);
 assert.equal(
   evaluateChromebookAcceptance(
     passingPlayback,

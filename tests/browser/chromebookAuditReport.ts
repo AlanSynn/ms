@@ -127,6 +127,27 @@ export type ChromebookAuditReport = {
   };
 };
 
+export type ChromebookPlaybackAuditReport = {
+  schemaVersion: 1;
+  generatedAt: string;
+  resultLabel: "6x CPU emulation";
+  productionBuild: true;
+  actualChromebookTested: false;
+  workload: "foundry-playback";
+  environment: typeof CHROMEBOOK_AUDIT_ENVIRONMENT & {
+    browserVersion: string;
+    userAgent: string;
+    measuredDeviceScaleFactor: number;
+    throttlingScope: "feature-action";
+  };
+  actions: ActionLatency[];
+  interactionLatencyMs: Percentiles;
+  playback: PlaybackAudit;
+  acceptance: Record<string, AcceptanceCheck> & {
+    passed: AcceptanceCheck;
+  };
+};
+
 export const percentile = (values: readonly number[], fraction: number) => {
   if (!values.length) return 0;
   const sorted = [...values].sort((left, right) => left - right);
@@ -139,11 +160,9 @@ export const percentiles = (values: readonly number[]): Percentiles => ({
   p99: percentile(values, 0.99),
 });
 
-export const evaluateChromebookAcceptance = (
+export const evaluateChromebookPlaybackAcceptance = (
   playback: PlaybackAudit,
-  actionLatencyMs: Percentiles,
-  tabSwitchLatencyMs: Percentiles,
-  bootAiRequestCount: number,
+  interactionLatencyMs: Percentiles,
 ) => {
   const limit = CHROMEBOOK_ACCEPTANCE_THRESHOLDS;
   const checks: Record<string, AcceptanceCheck> = {
@@ -152,8 +171,7 @@ export const evaluateChromebookAcceptance = (
     frameP99: { passed: playback.frameIntervalMs.p99 <= limit.frameP99Ms, observed: playback.frameIntervalMs.p99, limit: limit.frameP99Ms },
     framesOver50: { passed: playback.framesOver50Percent <= limit.framesOver50Percent, observed: playback.framesOver50Percent, limit: limit.framesOver50Percent },
     framesOver200: { passed: playback.framesOver200 <= limit.framesOver200, observed: playback.framesOver200, limit: limit.framesOver200 },
-    interactionLatency: { passed: actionLatencyMs.p95 <= limit.interactionP95Ms, observed: actionLatencyMs.p95, limit: limit.interactionP95Ms },
-    tabSwitchLatency: { passed: tabSwitchLatencyMs.p95 <= limit.tabSwitchP95Ms, observed: tabSwitchLatencyMs.p95, limit: limit.tabSwitchP95Ms },
+    interactionLatency: { passed: interactionLatencyMs.p95 <= limit.interactionP95Ms, observed: interactionLatencyMs.p95, limit: limit.interactionP95Ms },
     heapStable: { passed: playback.heap.stable, observed: playback.heap.stable, limit: true },
     reactPlaybackCommits: { passed: playback.reactCommits <= limit.reactPlaybackCommits, observed: playback.reactCommits, limit: limit.reactPlaybackCommits },
     webglResourcesStable: { passed: playback.webgl.liveResourceDelta <= 0, observed: playback.webgl.liveResourceDelta, limit: 0 },
@@ -161,6 +179,26 @@ export const evaluateChromebookAcceptance = (
     geometryCacheStable: { passed: playback.webgl.geometryCacheDelta <= 0, observed: playback.webgl.geometryCacheDelta, limit: 0 },
     materialCacheStable: { passed: playback.webgl.materialCacheDelta <= 0, observed: playback.webgl.materialCacheDelta, limit: 0 },
     persistentTopology: { passed: playback.webgl.topologyBuildDelta <= 0, observed: playback.webgl.topologyBuildDelta, limit: 0 },
+  };
+  const passed = Object.values(checks).every((check) => check.passed);
+  return { ...checks, passed: { passed, observed: passed, limit: true } };
+};
+
+export const evaluateChromebookAcceptance = (
+  playback: PlaybackAudit,
+  actionLatencyMs: Percentiles,
+  tabSwitchLatencyMs: Percentiles,
+  bootAiRequestCount: number,
+) => {
+  const playbackAcceptance = evaluateChromebookPlaybackAcceptance(
+    playback,
+    actionLatencyMs,
+  );
+  const { passed: _playbackPassed, ...playbackChecks } = playbackAcceptance;
+  const limit = CHROMEBOOK_ACCEPTANCE_THRESHOLDS;
+  const checks: Record<string, AcceptanceCheck> = {
+    ...playbackChecks,
+    tabSwitchLatency: { passed: tabSwitchLatencyMs.p95 <= limit.tabSwitchP95Ms, observed: tabSwitchLatencyMs.p95, limit: limit.tabSwitchP95Ms },
     aiBootOptIn: { passed: bootAiRequestCount === 0, observed: bootAiRequestCount, limit: 0 },
   };
   const passed = Object.values(checks).every((check) => check.passed);
