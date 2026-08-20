@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  startTransition,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { FoundryCanvasPane } from "./FoundryCanvasPane";
 import { useWorkspacePlaybackLoop } from "../../../hooks/useWorkspacePlaybackLoop";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
@@ -79,7 +85,6 @@ import {
   pointsToSvgPath,
 } from "../../../utils/mechanismPreview";
 import {
-  fitMechanismToTargetPath,
   normalizeGearMeshMechanism,
 } from "../../../utils/mechanismRecommendations";
 import { createDefaultMechanism, mechanismWithGeneratedPath, uid } from "../../../utils/project";
@@ -91,6 +96,8 @@ import { resolveRenderPerformancePolicy } from "../../../utils/renderPerformance
 import { sampleIndexedValues } from "../../../utils/interactiveSampling";
 import { createCadencedGestureDraft } from "../../../runtime/interactions/cadencedGestureDraft";
 import { foundryMechanismForHandleGesture } from "./foundryHandleGesture";
+import { createMechanismFitJobInput } from "../../../runtime/fitting/mechanismFitJob";
+import { createMechanismFitWorkerClient } from "../../../runtime/fitting/mechanismFitWorkerClient";
 
 const traceDistanceToGeneratedPath = (
   trace: { points: Point[] },
@@ -173,6 +180,14 @@ export const MechanismFoundry = ({
   const [selectedOutputTraceId, setSelectedOutputTraceId] = useState<string | null>(null);
   const [showFoundryGrid, setShowFoundryGrid] = useState(true);
   const [showSensemaking, setShowSensemaking] = useState(false);
+  const [pathFitBusy, setPathFitBusy] = useState(false);
+  const [pathFitJobError, setPathFitJobError] = useState(false);
+  const pathFitClient = useMemo(() => createMechanismFitWorkerClient(), []);
+  useEffect(() => () => pathFitClient.dispose(), [pathFitClient]);
+  useEffect(() => {
+    pathFitClient.cancel();
+    setPathFitBusy(false);
+  }, [pathFitClient, project.metadata.updatedAt]);
   const [foundryExplode, setFoundryExplode] = useState(0);
   const [foundryCamera, setFoundryCamera] = useState<FoundryCamera>({
     ...FOUNDRY_VIEW_PRESETS.iso,
@@ -959,23 +974,18 @@ export const MechanismFoundry = ({
   });
   const setAnchoredFoundry = (mechanism: MechanismConfig) =>
     setFoundryDraft(invalidatePathFit(normalizeGearMeshMechanism(keepCurrentAnchor(mechanism))));
-  const createPathFittedFoundry = (mechanism: MechanismConfig) => {
+  const createPathFitCandidate = (mechanism: MechanismConfig) => {
     const anchored = keepCurrentAnchor(mechanism);
-    if (!targetReady || !selectedPath) return normalizeGearMeshMechanism(anchored);
-    return fitMechanismToTargetPath(
-      project,
-      {
-        ...anchored,
-        targetPartId: selectedPath.sceneObjectId ? undefined : selectedPath.partId,
-        targetSceneObjectId: selectedPath.sceneObjectId,
-        targetPathId: selectedPath.id,
-        targetAnchorJointId: selectedPath.sceneObjectId ? undefined : targetIkJointId,
-        activeVisualPartIds: selectedPath.sceneObjectId ? [] : [selectedPath.partId],
-        source: "optimized",
-        recommendation: mechanism.recommendation ?? "Fit path",
-      },
-      selectedPath.id,
-    );
+    return normalizeGearMeshMechanism({
+      ...anchored,
+      targetPartId: selectedPath?.sceneObjectId ? undefined : selectedPath?.partId,
+      targetSceneObjectId: selectedPath?.sceneObjectId,
+      targetPathId: selectedPath?.id,
+      targetAnchorJointId: selectedPath?.sceneObjectId ? undefined : targetIkJointId,
+      activeVisualPartIds: selectedPath?.sceneObjectId ? [] : selectedPath ? [selectedPath.partId] : [],
+      source: "optimized",
+      recommendation: mechanism.recommendation ?? "Fit path",
+    });
   };
   const setFoundryPhaseAndClock = (phase: number) => {
     playbackClock.setPhase(phase);
@@ -986,13 +996,37 @@ export const MechanismFoundry = ({
     setFoundryPlaying((value) => !value);
   };
   const applyPathFit = (mechanism = foundry) => {
+    if (pathFitBusy) {
+      pathFitClient.cancel();
+      setPathFitBusy(false);
+      return;
+    }
     setFoundryPlaying(false);
     setFoundryPhaseAndClock(0);
     setManualAnchor(null);
     setSelectedOutputTraceId(null);
     setShowUserPathPreview(true);
     setShowPathPreview(true);
-    setFoundryDraft(createPathFittedFoundry(mechanism));
+    const candidate = createPathFitCandidate(mechanism);
+    if (!targetReady || !selectedPath) {
+      setFoundryDraft(candidate);
+      return;
+    }
+    setPathFitJobError(false);
+    setPathFitBusy(true);
+    pathFitClient.request(
+      createMechanismFitJobInput(project, candidate, "path", selectedPath.id),
+      {
+        complete: ({ mechanism: fitted }) => {
+          setPathFitBusy(false);
+          startTransition(() => setFoundryDraft(fitted));
+        },
+        failed: () => {
+          setPathFitBusy(false);
+          setPathFitJobError(true);
+        },
+      },
+    );
   };
   const resetFoundryPreview = () => {
     setFoundryPlaying(false);
@@ -1119,6 +1153,8 @@ export const MechanismFoundry = ({
             fitState={foundry.fabricationMetadata?.pathFit?.status}
             fitError={effectivePathFit?.error}
             fitMaxError={effectivePathFit?.maxError}
+            fitBusy={pathFitBusy}
+            fitJobError={pathFitJobError}
             isPickingAnchor={isPickingAnchor}
             hardBlocked={hardBlocked}
             onToggleAnchorPick={() => setIsPickingAnchor((value) => !value)}

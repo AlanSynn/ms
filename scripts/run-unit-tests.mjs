@@ -18,6 +18,7 @@ const UNIT_TEST_FILES = [
   'foundry-handle-gesture.test.ts',
   'four-bar-fit-retention.test.ts',
   'interactive-sampling.test.ts',
+  'mechanism-fit-worker.test.ts',
   'mechanism-optimizer-worker.test.ts',
   'mechanism-recommendation-worker.test.ts',
   'no-image-recognition-runtime.test.ts',

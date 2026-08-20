@@ -53,6 +53,8 @@ import { MechanismLinkagePreview } from '../components/stages/foundry/MechanismL
 import { FoundryWorkflowPanel } from '../components/stages/foundry/FoundryWorkflowPanel';
 import { useAppMechanismActions } from '../hooks/useAppMechanismActions';
 import { createMechanismOptimizerJobInput, runMechanismOptimizerJob } from '../runtime/optimizer/mechanismOptimizerJob';
+import { runMechanismFitJob } from '../runtime/fitting/mechanismFitJob';
+import type { MechanismFitWorkerClient } from '../runtime/fitting/mechanismFitWorkerClient';
 import { createStageNavigator, navigateAppStage } from '../utils/appStageNavigation';
 import { assemblyCoordToSvg, characterBoardProjector, characterCanvasProjector, smoothAssemblyProgress, svgPathFromPoints } from '../components/stages/assembly/assemblyGeometry';
 import { smoothTrackingPoints, trackingPointsToWorldPath } from '../utils/trackingPath';
@@ -218,6 +220,14 @@ const renderMechanismActionHarness = (overrides: {
   let stage: AppStage = 'character';
   let commandStatus = '';
   let actions: MechanismActionHarness | undefined;
+  const mechanismFitClient: MechanismFitWorkerClient = {
+    request: (input, callbacks) => {
+      callbacks.complete(runMechanismFitJob(input));
+      return 1;
+    },
+    cancel: () => undefined,
+    dispose: () => undefined,
+  };
   const Harness = () => {
     actions = useAppMechanismActions({
       project,
@@ -231,6 +241,7 @@ const renderMechanismActionHarness = (overrides: {
       angle: overrides.angle ?? 0,
       setStage: (nextStage) => { stage = nextStage; },
       setCommandStatus: (status) => { commandStatus = status; },
+      mechanismFitClient,
     });
     return null;
   };
@@ -745,7 +756,7 @@ assert.deepEqual(tauriConfig.bundle.icon, ['icons/icon.png', 'icons/icon.ico', '
 assert(cargoTomlText.includes(`version = "${packageJson.version}"`), 'Cargo.toml version stays aligned with package.json');
 assert(cargoLockText.includes('name = "motionsmith"') && cargoLockText.includes(`version = "${packageJson.version}"`), 'Cargo.lock MotionSmith package version stays aligned with package.json');
 assert.equal(packageJson.packageManager, 'bun@1.3.14', 'Bun is the canonical package manager');
-assert.equal(packageJson.scripts['test:contracts'], 'bun tests/project-contract.test.ts && bun tests/no-image-recognition-runtime.test.ts && bun tests/b695-fit.test.ts && bun tests/four-bar-fit-retention.test.ts && bun tests/foundry-handle-gesture.test.ts && bun tests/mechanism-recommendation-worker.test.ts && bun tests/mechanism-optimizer-worker.test.ts && bun tests/tracking-media-policy.test.ts && bun tests/chromebook-audit-contract.test.ts && bun tests/render-performance-policy.test.ts && bun tests/interactive-sampling.test.ts && bun tests/path-gesture-draft.test.ts && bun tests/automata-scene-runtime.test.ts && bun tests/three-resource-retention.test.ts && bun tests/cadenced-playback-sampler.test.ts', 'contract tests include the image-recognition exclusion gate plus deterministic fit, worker, media-memory, Chromebook, render-policy, Path/Foundry gesture-draft, sampling, and retention gates');
+assert.equal(packageJson.scripts['test:contracts'], 'bun tests/project-contract.test.ts && bun tests/no-image-recognition-runtime.test.ts && bun tests/b695-fit.test.ts && bun tests/four-bar-fit-retention.test.ts && bun tests/foundry-handle-gesture.test.ts && bun tests/mechanism-fit-worker.test.ts && bun tests/mechanism-recommendation-worker.test.ts && bun tests/mechanism-optimizer-worker.test.ts && bun tests/tracking-media-policy.test.ts && bun tests/chromebook-audit-contract.test.ts && bun tests/render-performance-policy.test.ts && bun tests/interactive-sampling.test.ts && bun tests/path-gesture-draft.test.ts && bun tests/automata-scene-runtime.test.ts && bun tests/three-resource-retention.test.ts && bun tests/cadenced-playback-sampler.test.ts', 'contract tests include the image-recognition exclusion gate plus deterministic fit, worker, media-memory, Chromebook, render-policy, Path/Foundry gesture-draft, sampling, and retention gates');
 assert.equal(packageJson.scripts['test:all'], 'bun scripts/run-unit-tests.mjs', 'release verification uses the checked deterministic unit-test manifest');
 assert.equal(packageJson.scripts['test:bundle-budget'], 'bun scripts/check-browser-bundle.mjs', 'bundle budget runs from the checked production dist');
 assert(bundleBudgetSource.includes('CORE_JS_GZIP_LIMIT_BYTES = 450_000'), 'core JavaScript gzip budget stays at 450 KB');
@@ -2871,6 +2882,9 @@ const recommendationMechanismSketchText = readFileSync(join(process.cwd(), 'comp
 const mechanismRecommendationJobText = readFileSync(join(process.cwd(), 'runtime', 'recommendations', 'mechanismRecommendationJob.ts'), 'utf8');
 const mechanismRecommendationWorkerClientText = readFileSync(join(process.cwd(), 'runtime', 'recommendations', 'mechanismRecommendationWorkerClient.ts'), 'utf8');
 const mechanismRecommendationWorkerText = readFileSync(join(process.cwd(), 'workers', 'mechanismRecommendationWorker.ts'), 'utf8');
+const mechanismFitJobText = readFileSync(join(process.cwd(), 'runtime', 'fitting', 'mechanismFitJob.ts'), 'utf8');
+const mechanismFitWorkerClientText = readFileSync(join(process.cwd(), 'runtime', 'fitting', 'mechanismFitWorkerClient.ts'), 'utf8');
+const mechanismFitWorkerText = readFileSync(join(process.cwd(), 'workers', 'mechanismFitWorker.ts'), 'utf8');
 const mechanismOptimizerJobText = readFileSync(join(process.cwd(), 'runtime', 'optimizer', 'mechanismOptimizerJob.ts'), 'utf8');
 const mechanismOptimizerWorkerClientText = readFileSync(join(process.cwd(), 'runtime', 'optimizer', 'mechanismOptimizerWorkerClient.ts'), 'utf8');
 const mechanismOptimizerWorkerText = readFileSync(join(process.cwd(), 'workers', 'mechanismOptimizerWorker.ts'), 'utf8');
@@ -3019,8 +3033,10 @@ assert(
     !appStageRouterText.includes('fitMechanismToTargetPath') &&
     appText.includes('useAppMechanismActions') &&
     appMechanismActionsHookText.includes('exportFoundryMechanism') &&
-    appMechanismActionsHookText.includes('fitMechanismToTargetPath') &&
-    appMechanismActionsHookText.includes('fitRecommendedMechanismToSheet') &&
+    appMechanismActionsHookText.includes('createMechanismFitWorkerClient') &&
+    appMechanismActionsHookText.includes('createMechanismFitJobInput') &&
+    !appMechanismActionsHookText.includes('fitMechanismToTargetPath') &&
+    !appMechanismActionsHookText.includes('fitRecommendedMechanismToSheet') &&
     appMechanismActionsHookText.includes('normalizeGearMeshMechanism') &&
     appMechanismActionsHookText.includes('optimizeSelectedMechanism') &&
     appMechanismActionsHookText.includes('exportMechanismSvg') &&
@@ -3119,7 +3135,7 @@ assert(appProjectHistoryHookText.includes('recordProjectAction(action.type)') &&
 assert(mechanismFoundryText.includes('useState(false);\n  const [showVelocity') && mechanismFoundryText.includes('setShowForces(false)') && mechanismFoundryText.includes('setShowVelocity(false)'), 'Foundry keeps optional force and velocity overlays off at entry and reset');
 assert(threeFoundryPreviewText.includes('if (!showForces) return;') && threeFoundryPreviewText.includes('setPhysicsKernelRuntime("loading")') && threeFoundryPreviewText.includes('}, [showForces]);'), 'Foundry loads the Rapier WASM kernel only after the student requests physics diagnostics');
 assert(workflowSpecText.includes('Foundry defers Rapier until physics diagnostics are requested') && workflowSpecText.includes('expect(rapierRequests).toEqual([])') && workflowSpecText.includes('expect(rapierRequests).toHaveLength(1)'), 'production preview proves ordinary Foundry entry does not request the optional Rapier chunk');
-assert(mechanismFoundryText.includes('fitMechanismToTargetPath') && mechanismFoundryText.includes('onFitPath={() => applyPathFit()}') && !mechanismFoundryText.includes('lastPathFitSignatureRef') && !mechanismFoundryText.includes('applyPathFit(next)') && foundryWorkflowPanelText.includes('data-testid="foundry-fit-path"') && foundryWorkflowPanelText.includes('foundry.fitPath') && foundryCanvasPaneText.includes('data-fit-board-cells') && foundryCanvasPaneText.includes('data-fit-target-path'), 'Foundry exposes a prominent Fit path action while preserving the default mechanism until the user clicks Fit');
+assert(mechanismFoundryText.includes('createMechanismFitJobInput') && mechanismFoundryText.includes('onFitPath={() => applyPathFit()}') && !mechanismFoundryText.includes('lastPathFitSignatureRef') && !mechanismFoundryText.includes('applyPathFit(next)') && foundryWorkflowPanelText.includes('data-testid="foundry-fit-path"') && foundryWorkflowPanelText.includes('foundry.fitPath') && foundryCanvasPaneText.includes('data-fit-board-cells') && foundryCanvasPaneText.includes('data-fit-target-path'), 'Foundry exposes a prominent cancellable worker Fit path action while preserving the default mechanism until the user clicks Fit');
 assert(foundryWorkflowPanelText.includes('No valid fabrication fit. Try a shorter path or another mechanism.') && foundryWorkflowPanelText.includes('fitError?: number') && foundryWorkflowPanelText.includes('fitMaxError?: number') && !foundryWorkflowPanelText.includes('Math.round(fitError)') && !foundryWorkflowPanelText.includes('Math.round(fitMaxError)'), 'Foundry keeps fit diagnostics in the data contract while showing only an actionable student warning');
 assert(foundryWorkflowPanelText.includes('ENABLED_FOUNDRY_MECHANISM_TYPES.map') && foundryInspectorPanelText.includes('ENABLED_FOUNDRY_MECHANISM_TYPES.map') && designWorkflowPanelText.includes('ENABLED_AUTHORABLE_MECHANISM_TYPES.map') && mechanismFoundryText.includes('if (!isMechanismTypeEnabled(type)) return') && mechanismRecommendationsText.includes('.filter((candidate) => isMechanismTypeEnabled(candidate.type))') && appControllerSource.includes('const ENABLED_GUIDED_LESSONS = CLASSROOM_LESSONS.filter') && appProjectCommandsHookText.includes('!isMechanismTypeEnabled(lesson.mechanismType)'), 'all new-work mechanism entry points share the central linkage-and-gear availability gate');
 const foundryFitContractSeed = createDefaultMechanism('4bar', 'foundry-fit-contract');
@@ -3611,7 +3627,10 @@ assert(threePreviewText.includes("const PUPPET_CAMERA_PRESETS: Viewer3DCameraPre
 assert(threePreviewText.includes('onWheel={handleViewerWheel}') && threePreviewText.includes('data-camera-yaw'), 'puppet 3D canvas exposes direct wheel zoom and orbit state for browser verification');
 assert(appStageRouterText.includes('<PathEditor') && !appText.includes('<PathEditor'), 'AppStageRouter delegates Path Editor stage to the extracted PathEditor seam');
 assert(designWorkflowPanelText.includes('const DesignRecommendationControl') && designWorkflowPanelText.includes('useState(false)') && designWorkflowPanelText.includes('<MechanismRecommendationSheet') && designWorkflowPanelText.includes('onApply(mechanism)') && designWorkflowPanelText.includes('prepareMechanismRecommendationWorker') && designWorkflowPanelText.includes('createMechanismRecommendationWorkerClient') && !mechanismDesignText.includes('useState(false)') && !appWorkspaceShellText.includes('<MechanismRecommendationSheet') && !mechanismRecommendationSheetText.includes('createMechanismRecommendationWorkerClient') && mechanismRecommendationSheetText.includes('workerClient: MechanismRecommendationWorkerClient') && mechanismRecommendationSheetText.includes('mechanismWithGeneratedPath') && mechanismRecommendationJobText.includes('buildMechanismRecommendations') && mechanismRecommendationWorkerClientText.includes('generationId') && mechanismRecommendationWorkerClientText.includes('type: "warm"') && mechanismRecommendationWorkerText.includes('runMechanismRecommendationJob'), 'the Design recommendation control owns modal visibility and its retained worker client while the sheet only dispatches the generation-checked heavy job');
-assert(appMechanismActionsHookText.includes('createMechanismOptimizerWorkerClient') && appMechanismActionsHookText.includes('cancelMechanismOptimization') && mechanismOptimizerJobText.includes('runMechanismOptimizerSearch') && mechanismOptimizerJobText.includes('fitMechanismToTargetPath') && mechanismOptimizerWorkerClientText.includes('generationId') && mechanismOptimizerWorkerClientText.includes("type: 'warm'") && mechanismOptimizerWorkerText.includes('runMechanismOptimizerJob(data.input') && designInspectorPanelText.includes('prepareMechanismOptimizerWorker') && designInspectorPanelText.includes('optimizerBusy ? onCancelOptimize : onOptimize') && !appMechanismActionsHookText.includes('for (let i = 0; i < iterations; i++)'), 'Design fitting prewarms only the tiny worker entry, then runs deterministic search and final path fitting in a directly cancellable generation-checked worker');
+assert(appMechanismActionsHookText.includes('createMechanismOptimizerWorkerClient') && appMechanismActionsHookText.includes('cancelMechanismOptimization') && mechanismOptimizerJobText.includes('runMechanismOptimizerSearch') && mechanismOptimizerJobText.includes('fitMechanismInWorkerJob') && mechanismOptimizerWorkerClientText.includes('generationId') && mechanismOptimizerWorkerClientText.includes("type: 'warm'") && mechanismOptimizerWorkerText.includes('runMechanismOptimizerJob(data.input') && designInspectorPanelText.includes('prepareMechanismOptimizerWorker') && designInspectorPanelText.includes('optimizerBusy ? onCancelOptimize : onOptimize') && !appMechanismActionsHookText.includes('for (let i = 0; i < iterations; i++)'), 'Design fitting prewarms only the tiny worker entry, then runs deterministic search and final path fitting in the shared worker fit authority');
+assert(mechanismFitJobText.includes('fitMechanismInWorkerJob') && mechanismFitJobText.includes("mode === 'path'") && mechanismFitJobText.includes('fitRecommendedMechanismToSheet'), 'path and sheet placement share one serializable fit job authority');
+assert(mechanismFitWorkerClientText.includes('active.firstFrame') && mechanismFitWorkerClientText.includes('active.secondFrame') && mechanismFitWorkerClientText.includes('releaseWorker(worker)') && mechanismFitWorkerText.includes('runMechanismFitJob(data.input)') && workflowSpecText.includes('Every visible path-fit trigger owns and releases the shared fit worker'), 'fit jobs wait for two paints, reject stale generations, terminate their heavy worker after completion, and expose production lifecycle evidence');
+assert(!designWorkflowPanelText.includes('fitMechanismToTargetPath') && designWorkflowPanelText.includes('createMechanismFitWorkerClient') && !foundry3dText.includes('fitMechanismToTargetPath') && foundry3dText.includes('createMechanismFitWorkerClient'), 'new Design families and Foundry Fit use the same cancellable worker protocol instead of blocking the main thread');
 assert(mechanismRecommendationSheetText.includes('RecommendationFitPreview') && mechanismRecommendationSheetText.includes('<MechanismLinkagePreview') && mechanismRecommendationSheetText.includes('<RecommendationMechanismSketch') && mechanismRecommendationSheetText.includes('data-board-cells') && mechanismRecommendationSheetText.includes('data-user-path-preview') && mechanismRecommendationSheetText.includes('data-mechanism-path-preview') && mechanismRecommendationSheetText.includes('renderPolicy.overlayQuality === "full"') && mechanismRecommendationSheetText.includes('data-ghost-preview') && mechanismRecommendationSheetText.includes('data-trace-samples') && mechanismRecommendationSheetText.includes('.slice(0, visibleRecommendationCount)') && mechanismRecommendationSheetText.includes('visibleRecommendationStep - recommendations.length') && recommendationMechanismSketchText.includes('sketchSegments') && recommendationMechanismSketchText.includes('data-mechanism-type'), 'recommendation modal incrementally mounts cards and bounded path previews from the actual joint state while reserving fabrication detail and ghost frames for High quality');
 assert(pathCanvasPaneText.includes('path-view-2d') && pathCanvasPaneText.includes('path-view-3d'), 'Path Editor exposes a persistent 2D/3D Path view switch');
 assert(pathCanvasPaneText.includes('<ThreePuppetPreview') && pathCanvasPaneText.includes('testId="path-three-puppet"') && pathCanvasPaneText.includes('initialCameraPreset={pathViewMode === "2d" ? "front" : "iso"}'), 'Path Editor uses the shared Three scene for both front 2D and orbitable 3D views');

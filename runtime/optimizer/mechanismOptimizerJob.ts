@@ -4,10 +4,7 @@ import type {
   Point,
   ProjectState,
 } from '../../types';
-import {
-  fitMechanismToTargetPath,
-  normalizeGearMeshMechanism,
-} from '../../utils/mechanismRecommendations';
+import { normalizeGearMeshMechanism } from '../../utils/mechanismRecommendations';
 import {
   evaluateFitness,
   generateSmartConfig,
@@ -17,6 +14,7 @@ import {
   createRecommendationRandom,
   recommendationProjectSnapshot,
 } from '../recommendations/mechanismRecommendationJob';
+import { fitMechanismInWorkerJob } from '../fitting/mechanismFitJob';
 
 export type MechanismOptimizerJobInput = {
   project: ProjectState;
@@ -163,7 +161,12 @@ export const runMechanismOptimizerJob = (
     warnings: bestScore > 350 ? [`Loose fit score ${Math.round(bestScore)}`] : [],
   });
   return {
-    mechanism: fitMechanismToTargetPath(input.project, optimized, path.id),
+    mechanism: fitMechanismInWorkerJob(
+      input.project,
+      optimized,
+      'path',
+      path.id,
+    ),
     score: bestScore,
   };
 };

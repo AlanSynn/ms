@@ -55,6 +55,13 @@ export const DesignInspectorPanel = ({
   onBlueprint,
 }: DesignInspectorPanelProps) => {
   const [workerPrepared, setWorkerPrepared] = useState(false);
+  const [pendingBinding, setPendingBinding] = useState<{
+    mechanismId: string;
+    targetPartId?: string;
+    targetSceneObjectId?: string;
+    targetPathId?: string;
+    targetAnchorJointId?: string;
+  }>();
   useEffect(() => {
     let mounted = true;
     void prepareMechanismOptimizerWorker().then(() => {
@@ -80,26 +87,71 @@ export const DesignInspectorPanel = ({
   const selectedBindingWarnings = selectedMechanism
     ? (bindingWarnings[selectedMechanism.id] ?? [])
     : [];
-  const targetAnchorOptions = selectedMechanism?.targetPartId
-    ? motionAnchorJointIds(project, selectedMechanism.targetPartId)
+  const activePendingBinding =
+    pendingBinding?.mechanismId === selectedMechanism?.id
+      ? pendingBinding
+      : undefined;
+  const effectiveTargetPartId = activePendingBinding
+    ? activePendingBinding.targetPartId
+    : selectedMechanism?.targetPartId;
+  const effectiveTargetSceneObjectId = activePendingBinding
+    ? activePendingBinding.targetSceneObjectId
+    : selectedMechanism?.targetSceneObjectId;
+  const effectiveTargetPathId = activePendingBinding
+    ? activePendingBinding.targetPathId
+    : selectedMechanism?.targetPathId;
+  const effectiveTargetAnchorJointId = activePendingBinding
+    ? activePendingBinding.targetAnchorJointId
+    : selectedMechanism?.targetAnchorJointId;
+  useEffect(() => {
+    if (!pendingBinding || !selectedMechanism) return;
+    if (
+      pendingBinding.mechanismId !== selectedMechanism.id ||
+      (
+        pendingBinding.targetPartId === selectedMechanism.targetPartId &&
+        pendingBinding.targetSceneObjectId === selectedMechanism.targetSceneObjectId &&
+        pendingBinding.targetPathId === selectedMechanism.targetPathId &&
+        pendingBinding.targetAnchorJointId === selectedMechanism.targetAnchorJointId
+      )
+    ) {
+      setPendingBinding(undefined);
+    }
+  }, [pendingBinding, selectedMechanism]);
+  const targetAnchorOptions = effectiveTargetPartId
+    ? motionAnchorJointIds(project, effectiveTargetPartId)
     : [];
-  const selectedTargetAnchor = selectedMechanism?.targetPartId
+  const selectedTargetAnchor = effectiveTargetPartId
     ? preferredMotionJointId(
         project,
-        selectedMechanism.targetPartId,
-        selectedMechanism.targetAnchorJointId,
+        effectiveTargetPartId,
+        effectiveTargetAnchorJointId,
       )
     : undefined;
-  const targetSelectValue = selectedMechanism?.targetSceneObjectId
-    ? `object:${selectedMechanism.targetSceneObjectId}`
-    : selectedMechanism?.targetPartId
-      ? selectedMechanism.targetPartId
+  const targetSelectValue = effectiveTargetSceneObjectId
+    ? `object:${effectiveTargetSceneObjectId}`
+    : effectiveTargetPartId
+      ? effectiveTargetPartId
       : "";
+  const updateSelectedMechanism = (updates: Partial<MechanismConfig>) => {
+    if (!selectedMechanism) return;
+    updateMechanism(
+      selectedMechanism.id,
+      activePendingBinding
+        ? {
+            ...updates,
+            targetPartId: effectiveTargetPartId,
+            targetSceneObjectId: effectiveTargetSceneObjectId,
+            targetPathId: effectiveTargetPathId,
+            targetAnchorJointId: effectiveTargetAnchorJointId,
+          }
+        : updates,
+    );
+  };
   const pathBelongsToSelection = (path: ProjectMotionPath) =>
-    selectedMechanism?.targetSceneObjectId
-      ? path.sceneObjectId === selectedMechanism.targetSceneObjectId
-      : !selectedMechanism?.targetPartId ||
-        (!path.sceneObjectId && path.partId === selectedMechanism.targetPartId);
+    effectiveTargetSceneObjectId
+      ? path.sceneObjectId === effectiveTargetSceneObjectId
+      : !effectiveTargetPartId ||
+        (!path.sceneObjectId && path.partId === effectiveTargetPartId);
   const updateTarget = (value: string) => {
     if (!selectedMechanism) return;
     const targetSceneObjectId = value.startsWith("object:")
@@ -115,20 +167,28 @@ export const DesignInspectorPanel = ({
             (path) => path.sceneObjectId === targetSceneObjectId,
           )
         : undefined;
+    const targetAnchorJointId =
+      targetPath?.targetAnchorJointId ??
+      (targetPartId
+        ? preferredMotionJointId(
+            project,
+            targetPartId,
+            selectedMechanism.targetAnchorJointId,
+            { preferDistalWhenRoot: true },
+          )
+        : undefined);
+    setPendingBinding({
+      mechanismId: selectedMechanism.id,
+      targetPartId,
+      targetSceneObjectId,
+      targetPathId: targetPath?.id,
+      targetAnchorJointId,
+    });
     updateMechanism(selectedMechanism.id, {
       targetPartId,
       targetSceneObjectId,
       targetPathId: targetPath?.id,
-      targetAnchorJointId:
-        targetPath?.targetAnchorJointId ??
-        (targetPartId
-          ? preferredMotionJointId(
-              project,
-              targetPartId,
-              selectedMechanism.targetAnchorJointId,
-              { preferDistalWhenRoot: true },
-            )
-          : undefined),
+      targetAnchorJointId,
     });
   };
 
@@ -147,16 +207,12 @@ export const DesignInspectorPanel = ({
           <Toggle
             label="Visible"
             checked={selectedMechanism.visible}
-            onChange={(visible) =>
-              updateMechanism(selectedMechanism.id, { visible })
-            }
+            onChange={(visible) => updateSelectedMechanism({ visible })}
           />
           <Toggle
             label="Enabled"
             checked={selectedMechanism.enabled !== false}
-            onChange={(enabled) =>
-              updateMechanism(selectedMechanism.id, { enabled })
-            }
+            onChange={(enabled) => updateSelectedMechanism({ enabled })}
           />
           <div className="section-title">Move</div>
           <select
@@ -189,12 +245,28 @@ export const DesignInspectorPanel = ({
           <select
             aria-label="Mechanism motion path"
             className="field"
-            value={selectedMechanism.targetPathId ?? ""}
-            onChange={(e) =>
+            value={effectiveTargetPathId ?? ""}
+            onChange={(e) => {
+              const targetPathId = e.target.value || undefined;
+              const targetPath = targetPathId
+                ? project.paths[targetPathId]
+                : undefined;
+              setPendingBinding({
+                mechanismId: selectedMechanism.id,
+                targetPartId: targetPath?.sceneObjectId
+                  ? undefined
+                  : (targetPath?.partId ?? effectiveTargetPartId),
+                targetSceneObjectId:
+                  targetPath?.sceneObjectId ?? effectiveTargetSceneObjectId,
+                targetPathId,
+                targetAnchorJointId: targetPath?.sceneObjectId
+                  ? undefined
+                  : (targetPath?.targetAnchorJointId ?? effectiveTargetAnchorJointId),
+              });
               updateMechanism(selectedMechanism.id, {
-                targetPathId: e.target.value || undefined,
-              })
-            }
+                targetPathId,
+              });
+            }}
           >
             <option value="">No path</option>
             {Object.values(project.paths)
@@ -209,16 +281,27 @@ export const DesignInspectorPanel = ({
                 </option>
               ))}
           </select>
-          {selectedMechanism.targetPartId && project.skeleton && (
+          {effectiveTargetPartId && project.skeleton && (
             <select
               aria-label="Motion handle"
               className="field"
               value={selectedTargetAnchor ?? ""}
-              onChange={(e) =>
+              onChange={(e) => {
+                const targetAnchorJointId = e.target.value || undefined;
+                setPendingBinding({
+                  mechanismId: selectedMechanism.id,
+                  targetPartId: effectiveTargetPartId,
+                  targetSceneObjectId: effectiveTargetSceneObjectId,
+                  targetPathId: effectiveTargetPathId,
+                  targetAnchorJointId,
+                });
                 updateMechanism(selectedMechanism.id, {
-                  targetAnchorJointId: e.target.value || undefined,
-                })
-              }
+                  targetPartId: effectiveTargetPartId,
+                  targetSceneObjectId: effectiveTargetSceneObjectId,
+                  targetPathId: effectiveTargetPathId,
+                  targetAnchorJointId,
+                });
+              }}
             >
               <option value="">Default handle</option>
               {targetAnchorOptions.map((id) => (
@@ -234,9 +317,7 @@ export const DesignInspectorPanel = ({
           )}
           <MechanismParametricEditor
             mechanism={selectedMechanism}
-            onChange={(updates) =>
-              updateMechanism(selectedMechanism.id, updates)
-            }
+            onChange={updateSelectedMechanism}
             testId="design-parametric-editor"
           />
           {selectedFeasibilityStatus && (
@@ -257,7 +338,7 @@ export const DesignInspectorPanel = ({
                 max={p.max}
                 step={p.step}
                 onChange={(value) =>
-                  updateMechanism(selectedMechanism.id, {
+                  updateSelectedMechanism({
                     [p.key]: value,
                   } as Partial<MechanismConfig>)
                 }

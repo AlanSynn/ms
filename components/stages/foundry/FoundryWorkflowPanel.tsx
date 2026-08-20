@@ -36,6 +36,8 @@ export const FoundryWorkflowPanel = ({
   targetReady,
   fitRequired,
   fitState,
+  fitBusy = false,
+  fitJobError = false,
   isPickingAnchor,
   hardBlocked,
   onToggleAnchorPick,
@@ -52,6 +54,8 @@ export const FoundryWorkflowPanel = ({
   fitState?: MechanismPathFitState;
   fitError?: number;
   fitMaxError?: number;
+  fitBusy?: boolean;
+  fitJobError?: boolean;
   isPickingAnchor: boolean;
   hardBlocked: boolean;
   onToggleAnchorPick: () => void;
@@ -107,9 +111,10 @@ export const FoundryWorkflowPanel = ({
           data-testid="foundry-fit-path"
           className="btn-primary flex-1"
           disabled={!targetReady}
+          aria-busy={fitBusy}
           onClick={onFitPath}
         >
-          <Sparkles size={16} /> Fit path
+          <Sparkles size={16} /> {fitBusy ? "Cancel" : "Fit path"}
         </button>
         <ContextHelp helpId="foundry.fitPath" />
       </div>
@@ -130,6 +135,7 @@ export const FoundryWorkflowPanel = ({
         <Boxes size={16} /> Use mechanism
       </button>
       {!targetReady && <div className="warning">Draw a path first.</div>}
+      {fitJobError && <div className="warning">Fit failed. Try again.</div>}
       {fitRequired && targetReady && (!fitState || fitState === "unfitted") && (
         <div className="warning">Fit path first.</div>
       )}

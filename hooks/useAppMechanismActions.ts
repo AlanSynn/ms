@@ -20,6 +20,11 @@ import type {
 import { generateDXF, generateSVG } from "../utils/exporter";
 import { createMechanismOptimizerJobInput } from "../runtime/optimizer/mechanismOptimizerJob";
 import { createMechanismOptimizerWorkerClient } from "../runtime/optimizer/mechanismOptimizerWorkerClient";
+import { createMechanismFitJobInput } from "../runtime/fitting/mechanismFitJob";
+import {
+  createMechanismFitWorkerClient,
+  type MechanismFitWorkerClient,
+} from "../runtime/fitting/mechanismFitWorkerClient";
 import { mechanismPathFitIsUsable, preferredMotionJointId } from "../utils/motion";
 import {
   downloadText,
@@ -27,8 +32,6 @@ import {
   mechanismWithGeneratedPath,
 } from "../utils/project";
 import {
-  fitMechanismToTargetPath,
-  fitRecommendedMechanismToSheet,
   normalizeGearMeshMechanism,
 } from "../utils/mechanismRecommendations";
 
@@ -83,6 +86,7 @@ export const useAppMechanismActions = ({
   angle,
   setStage,
   setCommandStatus,
+  mechanismFitClient: providedMechanismFitClient,
 }: {
   project: ProjectState;
   dispatch: (action: ProjectAction) => void;
@@ -95,11 +99,16 @@ export const useAppMechanismActions = ({
   angle: number;
   setStage: (stage: AppStage) => void;
   setCommandStatus: (status: string) => void;
+  mechanismFitClient?: MechanismFitWorkerClient;
 }) => {
   const [optimizerBusy, setOptimizerBusy] = useState(false);
   const optimizerClient = useMemo(
     () => createMechanismOptimizerWorkerClient(),
     [],
+  );
+  const mechanismFitClient = useMemo(
+    () => providedMechanismFitClient ?? createMechanismFitWorkerClient(),
+    [providedMechanismFitClient],
   );
   const optimizerScheduleRef = useRef<{
     generation: number;
@@ -122,13 +131,15 @@ export const useAppMechanismActions = ({
   useEffect(() => {
     cancelScheduledOptimizer();
     optimizerClient.cancel();
+    mechanismFitClient.cancel();
     setOptimizerBusy(false);
-  }, [cancelScheduledOptimizer, optimizerClient, project]);
+  }, [cancelScheduledOptimizer, mechanismFitClient, optimizerClient, project]);
 
   useEffect(() => () => {
     cancelScheduledOptimizer();
     optimizerClient.dispose();
-  }, [cancelScheduledOptimizer, optimizerClient]);
+    mechanismFitClient.dispose();
+  }, [cancelScheduledOptimizer, mechanismFitClient, optimizerClient]);
 
   const cancelMechanismOptimization = useCallback(() => {
     cancelScheduledOptimizer();
@@ -214,29 +225,45 @@ export const useAppMechanismActions = ({
       const normalized = normalizeGearMeshMechanism(next);
       const preserveGeneratedPath =
         hasStoredGeneratedPath(mechanism) && !changesGeneratedPathGeometry(updates);
-      const fitted =
+      const requiresPathFit =
         nextUpdates.targetPathId &&
         (updates.targetPathId !== undefined ||
           updates.targetPartId !== undefined ||
-          updates.targetSceneObjectId !== undefined)
-          ? fitMechanismToTargetPath(
-              project,
-              normalized,
-              nextUpdates.targetPathId,
-            )
-          : mechanismWithGeneratedPath({
-              ...(
-                changesGeneratedPathGeometry(updates)
-                  ? invalidateMechanismPathFit(normalized)
-                  : normalized
-              ),
-              activeVisualPartIds: normalized.targetPartId
-                ? [normalized.targetPartId]
-                : [],
-            }, { preserveGeneratedPath });
-      dispatch({ type: "upsert_mechanism", mechanism: fitted });
+          updates.targetSceneObjectId !== undefined ||
+          updates.targetAnchorJointId !== undefined);
+      if (requiresPathFit) {
+        mechanismFitClient.request(
+          createMechanismFitJobInput(
+            project,
+            normalized,
+            "path",
+            nextUpdates.targetPathId,
+          ),
+          {
+            complete: ({ mechanism: fitted }) => {
+              startTransition(() => {
+                dispatch({ type: "upsert_mechanism", mechanism: fitted });
+                setCommandStatus("Fit ready");
+              });
+            },
+            failed: (error) => setCommandStatus(`Fit failed: ${error.message}`),
+          },
+        );
+        return;
+      }
+      const refreshed = mechanismWithGeneratedPath({
+        ...(
+          changesGeneratedPathGeometry(updates)
+            ? invalidateMechanismPathFit(normalized)
+            : normalized
+        ),
+        activeVisualPartIds: normalized.targetPartId
+          ? [normalized.targetPartId]
+          : [],
+      }, { preserveGeneratedPath });
+      dispatch({ type: "upsert_mechanism", mechanism: refreshed });
     },
-    [dispatch, project],
+    [dispatch, mechanismFitClient, project, setCommandStatus],
   );
 
   const optimizeSelectedMechanism = useCallback(() => {
@@ -366,43 +393,64 @@ export const useAppMechanismActions = ({
         },
         { preserveGeneratedPath: true },
       );
-      const fittedMechanism = fitRecommendedMechanismToSheet(
-        project,
-        normalizeGearMeshMechanism(rawMechanism),
-      );
-      const generatedPath =
-        fittedMechanism.generatedPath ??
-        rawMechanism.generatedPath ??
-        pkg.generatedPath;
-      const mechanism = mechanismWithGeneratedPath(
+      setCommandStatus("Preparing mechanism");
+      mechanismFitClient.request(
+        createMechanismFitJobInput(
+          project,
+          normalizeGearMeshMechanism(rawMechanism),
+          "sheet",
+        ),
         {
-          ...fittedMechanism,
-          foundryExport: {
-            ...pkg,
-            parameters: { ...fittedMechanism },
-            pivot: {
-              x: fittedMechanism.anchorX ?? pkg.pivot.x,
-              y: fittedMechanism.anchorY ?? pkg.pivot.y,
-            },
-            outputPoint: generatedPath[0] ?? pkg.outputPoint,
-            generatedPath,
+          complete: ({ mechanism: fittedMechanism }) => {
+            const generatedPath =
+              fittedMechanism.generatedPath ??
+              rawMechanism.generatedPath ??
+              pkg.generatedPath;
+            const mechanism = mechanismWithGeneratedPath(
+              {
+                ...fittedMechanism,
+                foundryExport: {
+                  ...pkg,
+                  parameters: { ...fittedMechanism },
+                  pivot: {
+                    x: fittedMechanism.anchorX ?? pkg.pivot.x,
+                    y: fittedMechanism.anchorY ?? pkg.pivot.y,
+                  },
+                  outputPoint: generatedPath[0] ?? pkg.outputPoint,
+                  generatedPath,
+                },
+                generatedPath,
+                warnings: [
+                  ...new Set([
+                    ...(fittedMechanism.warnings ?? []),
+                    ...(pkg.warnings ?? []),
+                  ]),
+                ],
+                activeVisualPartIds,
+              },
+              { preserveGeneratedPath: true },
+            );
+            startTransition(() => {
+              dispatch({ type: "set_foundry_export", foundryExport: pkg });
+              dispatch({ type: "upsert_mechanism", mechanism });
+              setStage("design");
+              setCommandStatus("Mechanism ready");
+            });
           },
-          generatedPath,
-          warnings: [
-            ...new Set([
-              ...(fittedMechanism.warnings ?? []),
-              ...(pkg.warnings ?? []),
-            ]),
-          ],
-          activeVisualPartIds,
+          failed: (error) =>
+            setCommandStatus(`Mechanism failed: ${error.message}`),
         },
-        { preserveGeneratedPath: true },
       );
-      dispatch({ type: "set_foundry_export", foundryExport: pkg });
-      dispatch({ type: "upsert_mechanism", mechanism });
-      setStage("design");
     },
-    [dispatch, foundry, project, selectedPart, setStage],
+    [
+      dispatch,
+      foundry,
+      mechanismFitClient,
+      project,
+      selectedPart,
+      setCommandStatus,
+      setStage,
+    ],
   );
 
   const applyRecommendedMechanism = useCallback(

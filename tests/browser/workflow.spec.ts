@@ -8,6 +8,11 @@ import { ENABLED_MECHANISM_TYPES, isMechanismTypeEnabled } from '../../utils/mec
 import { createFabricationReadyFourBarProject } from '../fixtures/fabricationProject';
 import { FABRICATION_RENDER_LAYER_Z_STEP } from '../../utils/fabrication';
 import { APP_COMMANDS, APP_MENU_GROUPS, commandById, type AppCommandId } from '../../utils/appCommands';
+import {
+  installChromebookAuditInstrumentation,
+  readFeatureRuntimeProbe,
+  waitForLifecycleBaseline,
+} from './chromebookAuditHarness';
 
 const ENABLED_CLASSROOM_LESSONS = CLASSROOM_LESSONS.filter(lesson => isMechanismTypeEnabled(lesson.mechanismType));
 
@@ -3038,6 +3043,76 @@ test('Foundry defers Rapier until physics diagnostics are requested', async ({ p
   expect(rapierRequests).toHaveLength(1);
 });
 
+test('Every visible path-fit trigger owns and releases the shared fit worker', async ({ page, context }) => {
+  await installChromebookAuditInstrumentation(context);
+  await page.goto('/');
+  await openFabricationReadyFourBar(page);
+  await page.evaluate(() => {
+    const target = window as typeof window & { __FIT_WORKER_REQUESTS__?: string[] };
+    target.__FIT_WORKER_REQUESTS__ = [];
+    window.addEventListener('motionsmith:chromebook-worker-request', (event) => {
+      const detail = (event as CustomEvent<{ name?: string; type?: string }>).detail;
+      if (detail?.name === 'motionsmith-mechanism-fit') {
+        target.__FIT_WORKER_REQUESTS__?.push(detail.type ?? 'unknown');
+      }
+    });
+  });
+
+  await page.getByRole('button', { name: /Foundry/i }).click();
+  const foundryBaseline = await readFeatureRuntimeProbe(page);
+  await page.getByTestId('foundry-fit-path').click();
+  await expect(page.getByTestId('foundry-fit-path')).toHaveAttribute('aria-busy', 'false');
+  await expect(page.getByRole('button', { name: /Use mechanism/i })).toBeEnabled();
+  await waitForLifecycleBaseline(page, foundryBaseline.lifecycle);
+  const afterFoundryFit = await readFeatureRuntimeProbe(page);
+  expect(afterFoundryFit.lifecycle.workers.acquired).toBeGreaterThan(
+    foundryBaseline.lifecycle.workers.acquired,
+  );
+  expect(afterFoundryFit.lifecycle.workers.released).toBeGreaterThan(
+    foundryBaseline.lifecycle.workers.released,
+  );
+
+  await page.getByRole('button', { name: /Use mechanism/i }).click();
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+  await expect(page.getByTestId('design-fit-button'))
+    .toHaveAttribute('data-optimizer-worker-prepared', 'true');
+  await expect(page.getByRole('button', { name: /Recommend/i }))
+    .toHaveAttribute('data-recommendation-worker-prepared', 'true');
+  const designBaseline = await readFeatureRuntimeProbe(page);
+
+  await page.getByTestId('design-add-gear_linkage').click();
+  await expectProjectCounts(page, 14, 1, 2);
+  await waitForLifecycleBaseline(page, designBaseline.lifecycle);
+  const afterFamilyFit = await readFeatureRuntimeProbe(page);
+  expect(afterFamilyFit.lifecycle.workers.acquired).toBeGreaterThan(
+    designBaseline.lifecycle.workers.acquired,
+  );
+  expect(afterFamilyFit.lifecycle.workers.released).toBeGreaterThan(
+    designBaseline.lifecycle.workers.released,
+  );
+
+  await page.getByLabel('Mechanism target').selectOption('head');
+  await expect(page.getByLabel('Mechanism motion path')).toHaveValue('');
+  const targetBaseline = await readFeatureRuntimeProbe(page);
+  await page.getByLabel('Mechanism target').selectOption('right_arm_lower');
+  await expect(page.getByLabel('Mechanism motion path')).toHaveValue(/\S+/);
+  await expect(page.getByTestId('status-bar')).toContainText('Fit ready');
+  await waitForLifecycleBaseline(page, targetBaseline.lifecycle);
+  const afterTargetFit = await readFeatureRuntimeProbe(page);
+  expect(afterTargetFit.lifecycle.workers.acquired).toBeGreaterThan(
+    targetBaseline.lifecycle.workers.acquired,
+  );
+  expect(afterTargetFit.lifecycle.workers.released).toBeGreaterThan(
+    targetBaseline.lifecycle.workers.released,
+  );
+
+  const fitRequests = await page.evaluate(() =>
+    (window as typeof window & { __FIT_WORKER_REQUESTS__?: string[] })
+      .__FIT_WORKER_REQUESTS__ ?? [],
+  );
+  expect(fitRequests).toEqual(['fit', 'fit', 'fit', 'fit']);
+});
+
 test('Foundry M B C D drags stay local until one pointerup commit', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
@@ -4023,7 +4098,7 @@ test('Detached visible mechanisms block browser blueprint generation', async ({ 
   await page.goto('/');
   await openWavingArmTemplate(page);
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
-  await page.getByRole('button', { name: 'Slider piston', exact: true }).click();
+  await page.getByRole('button', { name: 'Gear linkage', exact: true }).click();
   await page.getByLabel('Mechanism target').selectOption('head');
   await expect(page.getByLabel('Mechanism motion path')).toHaveValue('');
 
@@ -4074,14 +4149,14 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   await expect(page.getByTestId('design-mechanism-library')).toContainText('Four-bar linkage');
   await expect(page.getByTestId('design-visible-sensemaking')).toContainText('Crank turns');
 
-  await page.getByRole('button', { name: 'Slider piston', exact: true }).click();
+  await page.getByRole('button', { name: 'Gear linkage', exact: true }).click();
   await expectProjectCounts(page, 14, 1, 2);
   const selectedMechanismText = await page.getByLabel('Mechanism instance').evaluate((select: HTMLSelectElement) => select.selectedOptions[0]?.textContent ?? '');
-  expect(selectedMechanismText).toContain('piston');
-  await expect(page.getByTestId('design-mechanism-library')).toContainText('Slider piston');
-  await expect(page.getByTestId('design-visible-sensemaking')).toContainText('Crank turns');
-  await expect(page.getByLabel('slider offset number')).toBeVisible();
-  await expect(page.getByLabel('rod length number')).toBeVisible();
+  expect(selectedMechanismText).toContain('Gear linkage');
+  await expect(page.getByTestId('design-mechanism-library')).toContainText('Gear linkage');
+  await expect(page.getByTestId('design-visible-sensemaking')).toContainText('Two driven gears');
+  await expect(page.getByLabel('Drive gear size')).toBeVisible();
+  await expect(page.getByLabel('Paired link length')).toBeVisible();
   await expect(page.getByLabel('Mechanism target')).toHaveValue('right_arm_lower');
   await expect(page.getByLabel('Mechanism motion path')).toHaveValue(/\S+/);
 
@@ -4096,7 +4171,7 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   const anchorOptionValues = await page.getByLabel('Motion handle').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
   expect(anchorOptionValues).toEqual(['', 'right_elbow', 'right_hand']);
   const anchorOptions = await page.getByLabel('Motion handle').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
-  expect(anchorOptions.join(' ')).toContain('2 joints');
+  expect(anchorOptions.join(' ')).toContain('1 joint');
   expect(anchorOptions.join(' ')).not.toContain('left hand');
   await expect(page.getByLabel('Motion handle')).toHaveValue('right_hand');
   await expect(page.getByTestId('mechanism-ik-chain-summary')).toHaveCount(0);
@@ -4107,7 +4182,7 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   await page.getByRole('button', { name: 'Delete', exact: true }).click();
   await expectProjectCounts(page, 14, 1, 1);
   const remainingOptions = await page.getByLabel('Mechanism instance').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
-  expect(remainingOptions.join(' ')).not.toContain('piston');
+  expect(remainingOptions.join(' ')).not.toContain('Gear linkage');
 
   await page.locator('label').filter({ hasText: 'Enabled' }).locator('input[type="checkbox"]').uncheck();
   await clickStage(page, 'Blueprint');
