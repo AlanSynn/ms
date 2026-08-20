@@ -1,12 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { BrainCircuit, Sparkles, Upload } from 'lucide-react';
+import { FileJson, Sparkles, Upload } from 'lucide-react';
 import type { BodyPartLayer, MechanismConfig, Point, ProjectState } from '../../types';
 import { pathFromPoints, sceneToSvg } from '../../utils/coordinates';
 import { gearTrainCenters, gearTrainPitchRadii } from '../../utils/kinematics';
 import { type ClassroomLessonId, createLessonProject, createSampleProject } from '../../utils/project';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlinePathD } from '../../utils/partGeometry';
 
-export type StarterImageTemplate = { id: string; label: string; fileName: string; url: string; thumbUrl: string };
 export type GuidedLessonTile = {
     id: string;
     label: string;
@@ -177,15 +176,13 @@ const GuidedLessonMotionPreview = ({ lessonId, project }: { lessonId: string; pr
 const starterCopy = {
     guide: 'Pick a working motion project.',
     humanoid: 'Start with a simple body.',
-    image: 'Turn one picture into parts.',
-    sample: 'Ready character art.'
+    character: 'Open editable parts and joints.'
 } as const;
 
 const starterCues = {
     guide: ['Edit one move', 'Ready to build'],
     humanoid: ['Move arms or legs', 'Add a path next'],
-    image: ['Upload image', 'Cut moving parts'],
-    sample: ['Edit the parts', 'Draw a path']
+    character: ['Edit the parts', 'Draw a path']
 } as const;
 
 const StarterCues = ({ items }: { items: readonly string[] }) => (
@@ -194,21 +191,18 @@ const StarterCues = ({ items }: { items: readonly string[] }) => (
     </span>
 );
 
-export const GettingStartedDialog = ({ starterTemplates, showStarterImages, guidedLessons, hideForSession, onLesson, onSample, onStarterImage, onProcess, onImport, onHideForSessionChange, onClose }: {
-    starterTemplates: StarterImageTemplate[];
-    showStarterImages: boolean;
+export const GettingStartedDialog = ({ guidedLessons, hideForSession, onLesson, onSample, onPackage, onImport, onHideForSessionChange, onClose }: {
     guidedLessons: readonly GuidedLessonTile[];
     hideForSession: boolean;
     onLesson: (lessonId: string) => void;
     onSample: () => void;
-    onStarterImage: (template: StarterImageTemplate) => void;
-    onProcess: (file: File) => void;
+    onPackage: (files: File[]) => void;
     onImport: (file: File) => void;
     onHideForSessionChange: (hidden: boolean) => void;
     onClose: () => void;
 }) => {
     const dialogRef = useRef<HTMLElement>(null);
-    const onnxInputRef = useRef<HTMLInputElement>(null);
+    const packageInputRef = useRef<HTMLInputElement>(null);
     const importInputRef = useRef<HTMLInputElement>(null);
     const [showGuided, setShowGuided] = useState(false);
     const previewProjects = useMemo(
@@ -265,7 +259,7 @@ export const GettingStartedDialog = ({ starterTemplates, showStarterImages, guid
                     <b><Sparkles size={16}/> Open</b>
                 </button>)}
             </div> : <>
-                <div className="template-gallery" data-testid="getting-started-gallery" data-starter-images={showStarterImages ? 'visible' : 'hidden'}>
+                <div className="template-gallery" data-testid="getting-started-gallery">
                     <button type="button" className="template-tile primary" data-testid="getting-started-card-guided" aria-label="Open Guide" onClick={() => setShowGuided(true)}>
                         <span className="template-icon-slot guide-preview-slot" data-testid="getting-started-guide-preview">
                             <GuidedLessonMotionPreview lessonId="starter-rig" project={starterRigPreview} />
@@ -282,26 +276,17 @@ export const GettingStartedDialog = ({ starterTemplates, showStarterImages, guid
                         <StarterCues items={starterCues.humanoid} />
                         <b><Sparkles size={16}/> Start</b>
                     </button>
-                    {showStarterImages && starterTemplates.map(template => (
-                        <button key={template.id} type="button" className="template-tile starter cursor-pointer" data-testid={`getting-started-card-${template.id}`} aria-label={`Start ${template.label} starter`} onClick={() => onStarterImage(template)}>
-                            <span className="template-icon-slot"><img className="starter-thumb" src={template.thumbUrl} alt="" /></span>
-                            <strong>{template.label}</strong>
-                            <small>{starterCopy.sample}</small>
-                            <StarterCues items={starterCues.sample} />
-                            <b><Sparkles size={16}/> Start</b>
-                        </button>
-                    ))}
-                    <button type="button" className="template-tile cursor-pointer" data-testid="getting-started-card-image" aria-label="Choose image" onClick={() => onnxInputRef.current?.click()}>
-                        <span className="template-icon-slot"><BrainCircuit size={18}/></span>
-                        <strong>Image</strong>
-                        <small>{starterCopy.image}</small>
-                        <StarterCues items={starterCues.image} />
-                        <b><BrainCircuit size={16}/> Choose</b>
+                    <button type="button" className="template-tile cursor-pointer" data-testid="getting-started-card-character" aria-label="Open character file" onClick={() => packageInputRef.current?.click()}>
+                        <span className="template-icon-slot"><FileJson size={18}/></span>
+                        <strong>Character file</strong>
+                        <small>{starterCopy.character}</small>
+                        <StarterCues items={starterCues.character} />
+                        <b><Upload size={16}/> Open</b>
                     </button>
-                    <input ref={onnxInputRef} data-testid="getting-started-onnx-input" hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={e => {
-                        const file = e.currentTarget.files?.[0];
+                    <input ref={packageInputRef} data-testid="getting-started-package-input" hidden type="file" multiple accept=".json,.yaml,.yml,image/png,image/jpeg,image/webp,image/svg+xml" onChange={e => {
+                        const files = e.currentTarget.files ? Array.from(e.currentTarget.files) : [];
                         e.currentTarget.value = '';
-                        if (file) onProcess(file);
+                        if (files.length) onPackage(files);
                     }}/>
                 </div>
                 <div className="getting-started-foot">

@@ -16,7 +16,6 @@ type CharacterRouterProps = Pick<
   | "onOpenGettingStarted"
   | "onAcceptPendingCharacter"
   | "onDiscardPendingCharacter"
-  | "onProcessCharacter"
   | "onPackageCharacter"
   | "onImportProject"
   | "onEditCharacter"

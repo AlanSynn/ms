@@ -107,7 +107,7 @@ Target layout:
 Keep:
 
 - template-led novice start;
-- real ONNX/package/camera/project flows;
+- real local package/project flows; image recognition and camera capture are excluded;
 - package review before replacing project.
 
 Change later:

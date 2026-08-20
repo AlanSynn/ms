@@ -27,7 +27,7 @@ import { CharacterLessonOwnership } from "./CharacterLessonOwnership";
 import { CharacterSetupPanel } from "./CharacterSetupPanel";
 import { SceneObjectInspector } from "./SceneObjectInspector";
 import { ContextHelp } from "../../ui/ContextHelp";
-import type { CharacterImportProgressStore } from "../../../runtime/ai/characterImportProgressStore";
+import type { CharacterImportProgressStore } from "../../../runtime/import/characterImportProgressStore";
 
 export const CharacterSelection = ({
   project,
@@ -36,7 +36,6 @@ export const CharacterSelection = ({
   onOpenGettingStarted,
   onAccept,
   onDiscard,
-  onProcess,
   onPackage,
   onImport,
   onEditCharacter,
@@ -53,7 +52,6 @@ export const CharacterSelection = ({
   onOpenGettingStarted: () => void;
   onAccept: () => void;
   onDiscard: () => void;
-  onProcess: (file: File) => void;
   onPackage: (files: FileList | File[]) => void;
   onImport: (file: File) => void;
   onEditCharacter: () => void;
@@ -66,7 +64,6 @@ export const CharacterSelection = ({
 }) => {
   const packageInputRef = useRef<HTMLInputElement>(null);
   const objectInputRef = useRef<HTMLInputElement>(null);
-  const onnxInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const partPanelProject = project;
   const partPanelDisabled = false;
@@ -141,13 +138,11 @@ export const CharacterSelection = ({
                 <CharacterImportControls
                   packageInputRef={packageInputRef}
                   objectInputRef={objectInputRef}
-                  onnxInputRef={onnxInputRef}
                   importInputRef={importInputRef}
                   onOpenGettingStarted={onOpenGettingStarted}
                   onAddSceneObject={addSceneObject}
                   sceneObjectDisabled={partPanelDisabled}
                   onPackage={onPackage}
-                  onProcess={onProcess}
                   onImport={onImport}
                 />
                 <details

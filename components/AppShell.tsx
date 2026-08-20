@@ -1,5 +1,4 @@
-export { GettingStartedDialog, type GuidedLessonTile, type StarterImageTemplate } from './shell/GettingStartedDialog';
-export { OnnxCacheStatusPill } from './shell/OnnxCacheStatusPill';
+export { GettingStartedDialog, type GuidedLessonTile } from './shell/GettingStartedDialog';
 export { WorkflowRail } from './shell/WorkflowRail';
 export { TopCommandBar } from './shell/TopCommandBar';
 export { ShortcutHelpDialog, AboutDialog } from './shell/ShellDialogs';

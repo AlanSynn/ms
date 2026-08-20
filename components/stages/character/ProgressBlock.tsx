@@ -7,10 +7,7 @@ export const processingLabel = (
 ) => {
   if (stage === "error") return message || "Fix needed";
   if (stage === "ready") return "Ready";
-  if (stage === "downloading-model") return "Getting AI…";
   if (stage === "loading-model") return "Opening…";
-  if (stage === "running-onnx") return "Finding joints…";
-  if (stage === "extracting-parts") return "Cutting parts…";
   if (stage === "normalizing") return "Fitting sheet…";
   return message || "Pick file";
 };
@@ -28,10 +25,7 @@ export const ProgressBlock = ({
     label: string;
   }> = [
     { stage: "selecting", label: "Pick file" },
-    { stage: "downloading-model", label: "Get AI" },
     { stage: "loading-model", label: "Open" },
-    { stage: "running-onnx", label: "Find joints" },
-    { stage: "extracting-parts", label: "Cut parts" },
     { stage: "normalizing", label: "Fit sheet" },
     { stage: "ready", label: "Ready" },
   ];

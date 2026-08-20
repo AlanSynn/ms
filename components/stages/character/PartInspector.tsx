@@ -139,7 +139,7 @@ export const PartInspector = ({
     part.contourSource === "user"
       ? "user cut"
       : part.contourSource === "onnx-mask"
-        ? "ONNX cut"
+        ? "legacy detected cut"
         : part.contourSource === "imported"
           ? "imported cut"
           : "auto joint cut";

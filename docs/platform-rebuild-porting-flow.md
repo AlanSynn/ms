@@ -21,7 +21,7 @@ the same user promises:
 
 Automataii has three nested products in one app:
 
-1. **Character authoring**: turn an image into movable body parts and a skeleton.
+1. **Character authoring**: load or create editable body parts and a skeleton from local project/package data.
 2. **Motion authoring**: define how body parts should move, then attach mechanisms
    that produce that motion.
 3. **Fabrication authoring**: convert the current scene into printable/cuttable
@@ -719,9 +719,10 @@ The rebuild is not equivalent until these scenarios pass.
 These documents remain part of the project record:
 
 Workspace note: this web-port workspace does not include the full historical Qt
-tree at `src/automataii/...`. The ONNX/AI subset that was copied for this port
-lives under `docs/to-port-web-onnx/repo/`; current web implementation evidence
-lives in `App.tsx`, `components/`, `utils/`, `types.ts`, and `tests/`.
+tree at `src/automataii/...`. Historical image-recognition material may exist in
+the local ignored archive under `docs/to-port-web-onnx/`, but it is not a current
+runtime or release source. Current implementation evidence lives in `App.tsx`,
+`components/`, `utils/`, `types.ts`, and `tests/`.
 
 - [`docs/mechanism-blueprint-manual.md`](mechanism-blueprint-manual.md) — user-facing
   blueprint/fabrication manual.
@@ -746,7 +747,7 @@ For this web rebuild, use the current web inventory first:
 | Area | Current web files | What to extract |
 | --- | --- | --- |
 | App shell/orchestration | `App.tsx` | Stage order, global options routing, project import/save/export actions. |
-| Character Selection + Web ONNX | `App.tsx`, `utils/webOnnx.ts`, `utils/packageLoader.ts`, `public/onnx/pose_model.onnx` | Browser ONNX processing, package import, review/accept handoff. |
+| Character Selection | `components/stages/character/*`, `hooks/useAppCharacterImportActions.ts`, `utils/packageLoader.ts` | Local package/project import, review/accept handoff, part/joint editing, and ordinary scene-object images. Image recognition is excluded. |
 | Project load/state | `types.ts`, `utils/project.ts`, `utils/sanitize.ts` | Project schema, reducer/actions, migrations, snapshot serialization. |
 | Coordinates/physical kit | `utils/coordinates.ts` | Letter sheet, 2 cm grid, board/scene/sheet/SVG transforms. |
 | Path Editor | `App.tsx`, `components/TrackingModal.tsx` | Part/layer editing, skeleton anchor editing, path drawing/editing/playback. |

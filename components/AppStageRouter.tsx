@@ -21,7 +21,7 @@ import type {
 } from "../types";
 import type { ClassroomLessonTemplate } from "../utils/project";
 import type { PlaybackClock } from "../runtime/playback/externalPlaybackClock";
-import type { CharacterImportProgressStore } from "../runtime/ai/characterImportProgressStore";
+import type { CharacterImportProgressStore } from "../runtime/import/characterImportProgressStore";
 
 export type AppStageRouterProps = {
   editorStage: AppStage;
@@ -35,7 +35,6 @@ export type AppStageRouterProps = {
   onOpenGettingStarted: () => void;
   onAcceptPendingCharacter: () => void;
   onDiscardPendingCharacter: () => void;
-  onProcessCharacter: (file: File) => void | Promise<void>;
   onPackageCharacter: (files: FileList | File[]) => void | Promise<void>;
   onImportProject: (file: File) => void | Promise<void>;
   onEditCharacter: () => void;
@@ -98,7 +97,6 @@ export const AppStageRouter = ({
   onOpenGettingStarted,
   onAcceptPendingCharacter,
   onDiscardPendingCharacter,
-  onProcessCharacter,
   onPackageCharacter,
   onImportProject,
   onEditCharacter,
@@ -153,7 +151,6 @@ export const AppStageRouter = ({
         onOpenGettingStarted={onOpenGettingStarted}
         onAccept={onAcceptPendingCharacter}
         onDiscard={onDiscardPendingCharacter}
-        onProcess={onProcessCharacter}
         onPackage={onPackageCharacter}
         onImport={onImportProject}
         onEditCharacter={onEditCharacter}

@@ -1,17 +1,14 @@
 import { useSyncExternalStore } from "react";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import type { ProjectState } from "../../../types";
-import type { CharacterImportProgressStore } from "../../../runtime/ai/characterImportProgressStore";
-import type { PendingCharacterReview } from "../../../runtime/ai/characterImportProgressStore";
+import type { CharacterImportProgressStore } from "../../../runtime/import/characterImportProgressStore";
+import type { PendingCharacterReview } from "../../../runtime/import/characterImportProgressStore";
 import { ProgressBlock } from "./ProgressBlock";
 
-export type { PendingCharacterReview } from "../../../runtime/ai/characterImportProgressStore";
+export type { PendingCharacterReview } from "../../../runtime/import/characterImportProgressStore";
 
 const activeImportStages = new Set([
-  "downloading-model",
   "loading-model",
-  "running-onnx",
-  "extracting-parts",
   "normalizing",
   "error",
 ]);
@@ -42,7 +39,8 @@ export const CharacterImportStatusDock = ({
   const showImportProgress = Boolean(
     project.settings.detailedProcessingSteps ||
       activeImportStages.has(processing.stage) ||
-      processing.stage === "ready",
+      ((transientProgress !== null || pendingCharacter !== null) &&
+        processing.stage === "ready"),
   );
   if (!showImportProgress) return null;
 

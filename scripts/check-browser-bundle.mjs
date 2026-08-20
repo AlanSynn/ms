@@ -37,7 +37,7 @@ const coreJsGzipBytes = (await Promise.all(coreFiles.map(compressedBytes)))
 const htmlPath = join(DIST, 'index.html');
 const html = await readFile(htmlPath, 'utf8');
 const shellReferences = [...new Set(
-  [...html.matchAll(/(?:assets|fonts|onnx)\/[A-Za-z0-9._-]+/g)]
+  [...html.matchAll(/(?:assets|fonts)\/[A-Za-z0-9._-]+/g)]
     .map(([reference]) => reference),
 )];
 const shellPaths = [
@@ -59,7 +59,7 @@ const report = {
   schemaVersion: 1,
   generatedAt: new Date().toISOString(),
   basis: 'static compressed production shell',
-  excludesOptionalAiModel: true,
+  imageRecognitionRuntime: 'absent',
   coreJs: {
     files: coreFiles.map((file) => `assets/${basename(file)}`),
     gzipBytes: coreJsGzipBytes,

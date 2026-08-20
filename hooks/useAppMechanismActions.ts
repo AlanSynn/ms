@@ -279,11 +279,6 @@ export const useAppMechanismActions = ({
             setCommandStatus(`Optimize failed: ${error.message}`);
           },
         });
-        if (__MOTIONSMITH_E2E_DIAGNOSTICS__) {
-          window.dispatchEvent(
-            new Event("motionsmith:optimizer-worker-request"),
-          );
-        }
       });
     });
   }, [

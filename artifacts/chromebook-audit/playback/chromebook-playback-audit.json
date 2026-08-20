@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-20T18:28:05.894Z",
+  "generatedAt": "2026-08-20T19:17:11.342Z",
   "resultLabel": "6x CPU emulation",
   "productionBuild": true,
   "actualChromebookTested": false,
@@ -19,7 +19,7 @@
       "downloadBytesPerSecond": 1310720,
       "uploadBytesPerSecond": 655360
     },
-    "browserVersion": "151.0.7922.140",
+    "browserVersion": "151.0.7922.170",
     "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.7827.55 Safari/537.36",
     "measuredDeviceScaleFactor": 1,
     "throttlingScope": "feature-action"
@@ -28,26 +28,26 @@
     {
       "label": "foundry-play",
       "kind": "click",
-      "durationMs": 51
+      "durationMs": 54.89999997615814
     },
     {
       "label": "foundry-pause",
       "kind": "click",
-      "durationMs": 55.19999998807907
+      "durationMs": 61.40000003576279
     }
   ],
   "interactionLatencyMs": {
-    "p50": 51,
-    "p95": 55.19999998807907,
-    "p99": 55.19999998807907
+    "p50": 54.89999997615814,
+    "p95": 61.40000003576279,
+    "p99": 61.40000003576279
   },
   "playback": {
-    "durationMs": 15013.5,
-    "frameCount": 1587,
+    "durationMs": 15019.599999964237,
+    "frameCount": 1512,
     "frameIntervalMs": {
-      "p50": 8.399999999999636,
-      "p95": 16.700000000000728,
-      "p99": 17.5
+      "p50": 8.400000000000091,
+      "p95": 17,
+      "p99": 17.599999999998545
     },
     "framesOver50": 0,
     "framesOver50Percent": 0,
@@ -65,9 +65,9 @@
     "reactCommits": 0,
     "heap": {
       "supported": true,
-      "samples": 21,
-      "firstBytes": 17610492,
-      "lastBytes": 17610492,
+      "samples": 22,
+      "firstBytes": 18241759,
+      "lastBytes": 18241759,
       "growthBytes": 0,
       "allowedGrowthBytes": 8388608,
       "tailRangeBytes": 0,
@@ -232,17 +232,17 @@
   "acceptance": {
     "frameP50": {
       "passed": true,
-      "observed": 8.399999999999636,
+      "observed": 8.400000000000091,
       "limit": 33.3
     },
     "frameP95": {
       "passed": true,
-      "observed": 16.700000000000728,
+      "observed": 17,
       "limit": 42
     },
     "frameP99": {
       "passed": true,
-      "observed": 17.5,
+      "observed": 17.599999999998545,
       "limit": 75
     },
     "framesOver50": {
@@ -257,7 +257,7 @@
     },
     "interactionLatency": {
       "passed": true,
-      "observed": 55.19999998807907,
+      "observed": 61.40000003576279,
       "limit": 100
     },
     "heapStable": {

@@ -1,7 +1,5 @@
 import { expect, test, type CDPSession, type Page } from "@playwright/test";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { createSampleProject } from "../../utils/project";
 
 import {
   buildChromebookFeatureAudit,
@@ -21,57 +19,7 @@ import {
 } from "./chromebookAuditHarness";
 
 const ENABLED = process.env.CHROMEBOOK_AUDIT === "1";
-const REAL_AI = process.env.CHROMEBOOK_AUDIT_REAL_AI === "1";
 const GIF_FIXTURE = join(process.cwd(), "ref/animation.gif");
-const IMAGE_FIXTURE = join(process.cwd(), "tests/fixtures/stick-character.png");
-const TEST_TEXTURE = `data:image/png;base64,${readFileSync(IMAGE_FIXTURE).toString("base64")}`;
-
-const setupDeterministicAiWorker = async (page: Page) => {
-  const project = createSampleProject();
-  if (!project.skeleton) throw new Error("sample project requires a skeleton");
-  const result = {
-    skeleton: project.skeleton,
-    parts: project.partOrder.map((partId) => ({
-      ...project.parts[partId],
-      textureUrl: TEST_TEXTURE,
-      maskUrl: TEST_TEXTURE,
-    })),
-    textureUrl: TEST_TEXTURE,
-    maskUrl: TEST_TEXTURE,
-    keypoints: [],
-  };
-  const resultUrl = "/__motionsmith_audit__/web-onnx-result.json";
-  const body = `
-const timeline = [
-  ['decode-image', 2],
-  ['segment-character', 10],
-  ['downloading-model', 12],
-  ['downloading-model', 22],
-  ['loading-model', 35],
-  ['running-onnx', 45],
-  ['extracting-keypoints', 70],
-  ['extracting-parts', 75],
-  ['normalizing', 90],
-];
-self.onmessage = async ({ data }) => {
-  const result = await fetch(${JSON.stringify(resultUrl)}).then((response) => response.json());
-  timeline.forEach(([stage, progress], index) => setTimeout(() => {
-    self.postMessage({ type: 'progress', generationId: data.generationId, stage, progress });
-  }, index * 20));
-  setTimeout(() => self.postMessage({
-    type: 'result',
-    generationId: data.generationId,
-    result,
-  }), timeline.length * 20 + 20);
-};`;
-  await page.route(`**${resultUrl}`, (route) => route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify(result),
-  }));
-  await page.route(/\/assets\/webOnnxInferenceWorker-[^/]+\.js$/, (route) =>
-    route.fulfill({ status: 200, contentType: "text/javascript", body }));
-};
 
 const stageButton = (page: Page, name: "Character" | "Path" | "Design") => {
   const names = {
@@ -218,20 +166,31 @@ const auditDesignFit = async (
   const actions: FeatureActionAudit[] = [];
   const fit = page.getByTestId("design-fit-button");
 
-  await page.evaluate(() => {
-    window.addEventListener(
-      "motionsmith:optimizer-worker-request",
-      () => {
-        const button = document.querySelector<HTMLButtonElement>(
-          '[data-testid="design-fit-button"]',
-        );
-        if (!button || button.textContent?.trim() !== "Cancel") {
-          throw new Error("Design Fit cancel control is unavailable.");
+  await fit.evaluate((button) => {
+    const fitButton = button as HTMLButtonElement;
+    const cancelDispatchedFit = (event: Event) => {
+      const detail = (event as CustomEvent<{ name?: string; type?: string }>).detail;
+      if (
+        detail?.name !== "motionsmith-mechanism-optimizer" ||
+        detail.type !== "optimize"
+      ) return;
+      window.removeEventListener(
+        "motionsmith:chromebook-worker-request",
+        cancelDispatchedFit,
+      );
+      const cancel = () => {
+        if (fitButton.getAttribute("aria-busy") !== "true") {
+          requestAnimationFrame(cancel);
+          return;
         }
-        button.setAttribute("data-audit-cancelled-on-dispatch", "true");
-        button.click();
-      },
-      { once: true },
+        fitButton.setAttribute("data-audit-cancelled-on-dispatch", "true");
+        fitButton.click();
+      };
+      cancel();
+    };
+    window.addEventListener(
+      "motionsmith:chromebook-worker-request",
+      cancelDispatchedFit,
     );
   });
 
@@ -357,128 +316,6 @@ const auditTraceGif = async (
   });
 };
 
-const auditAiImport = async (
-  page: Page,
-  client: CDPSession,
-): Promise<FeatureAudit> => {
-  await expect(page.getByTestId("character-screen")).toBeVisible();
-  const baseline = await stableProbe(page, client);
-  const actions: FeatureActionAudit[] = [];
-  const onboardingInput = page.getByTestId("getting-started-onnx-input");
-  const input = (await onboardingInput.count())
-    ? onboardingInput
-    : page.getByTestId("onnx-input");
-
-  const cancelledBefore = await readFeatureRuntimeProbe(page);
-  const cancelledTiming = await measureExternalActionToNextPaint(
-    page,
-    () => input.setInputFiles(IMAGE_FIXTURE),
-  );
-  await expect.poll(() => workerActive(page), {
-    message: "explicit AI import owns an inference worker before supersession",
-  }).toBeGreaterThan(baseline.lifecycle.workers.active);
-
-  const completedBefore = await readFeatureRuntimeProbe(page);
-  const releasedBefore = completedBefore.lifecycle.workers.released;
-  const repeatInput = page.getByTestId("onnx-input");
-  await expect(repeatInput).toHaveCount(1);
-  const completedTiming = await measureExternalActionToNextPaint(
-    page,
-    () => repeatInput.setInputFiles(IMAGE_FIXTURE),
-  );
-  await expect.poll(async () =>
-    (await readFeatureRuntimeProbe(page)).lifecycle.workers.released,
-  { timeout: 120_000, message: "the superseded AI import terminates its worker" })
-    .toBeGreaterThan(releasedBefore);
-  actions.push(await finishFeatureAction(page, {
-    label: "ai-import-superseded",
-    cycle: 1,
-    outcome: "cancelled",
-    timing: cancelledTiming,
-    before: cancelledBefore,
-  }));
-
-  const review = page.getByTestId("character-import-review");
-  const importOutcome = await page.waitForFunction(() => {
-    if (document.querySelector('[data-testid="character-import-review"]')) {
-      return { kind: "ready", message: "" };
-    }
-    const error = document.querySelector(
-      '[data-testid="character-status-dock"] pre',
-    );
-    if (error?.textContent) {
-      return { kind: "error", message: error.textContent };
-    }
-    return undefined;
-  }, undefined, { timeout: 300_000 }).then((handle) => handle.jsonValue());
-  if (!importOutcome) throw new Error("Explicit AI import produced no outcome");
-  if (importOutcome.kind === "error") {
-    throw new Error(`Explicit AI import failed: ${importOutcome.message}`);
-  }
-  await expect(review).toBeVisible();
-  await expect(review.getByText("Ready", { exact: true })).toBeVisible();
-  const jobCompletionMs = await elapsedFeatureTime(page, completedTiming);
-  await expect.poll(async () =>
-    (await readFeatureRuntimeProbe(page)).lifecycle.workers.active,
-  { message: "completed inference releases its worker before review" })
-    .toBe(baseline.lifecycle.workers.active);
-  actions.push(await finishFeatureAction(page, {
-    label: "ai-import-complete",
-    cycle: 2,
-    outcome: "completed",
-    timing: completedTiming,
-    before: completedBefore,
-    jobCompletionMs,
-  }));
-
-  const acceptBefore = await readFeatureRuntimeProbe(page);
-  const acceptTiming = await measureClickToNextPaint(
-    review.getByRole("button", { name: "Use it", exact: true }),
-  );
-  await expect(review).toHaveCount(0);
-  await expect(page.getByTestId("character-three-puppet")).toHaveAttribute(
-    "data-part-count",
-    /[1-9]\d*/,
-  );
-  await expect.poll(async () =>
-    (await readFeatureRuntimeProbe(page)).lifecycle.imageBitmaps.acquired,
-  { message: "accepted artwork decodes outside HTML image tasks" })
-    .toBeGreaterThan(baseline.lifecycle.imageBitmaps.acquired);
-  actions.push(await finishFeatureAction(page, {
-    label: "ai-import-accept",
-    cycle: 3,
-    outcome: "completed",
-    timing: acceptTiming,
-    before: acceptBefore,
-  }));
-
-  await page.getByTestId("top-command-bar").getByText("File", { exact: true }).click();
-  const newProject = page.getByRole("button", { name: "New Project", exact: true });
-  page.once("dialog", (dialog) => dialog.accept());
-  const cleanupBefore = await readFeatureRuntimeProbe(page);
-  const cleanupTiming = await measureClickToNextPaint(newProject);
-  await expect(page.getByTestId("character-three-puppet")).toHaveAttribute(
-    "data-part-count",
-    "0",
-  );
-  await waitForLifecycleBaseline(page, baseline.lifecycle);
-  actions.push(await finishFeatureAction(page, {
-    label: "ai-import-release",
-    cycle: 4,
-    outcome: "completed",
-    timing: cleanupTiming,
-    before: cleanupBefore,
-  }));
-
-  const final = await finalProbe(page, client, baseline);
-  return buildChromebookFeatureAudit("aiImport", actions, baseline, final, {
-    minimumWorkerCreations: 2,
-    minimumImageBitmapAcquisitions: 1,
-    requireCompletedCycle: true,
-    requireCancelledCycle: true,
-  });
-};
-
 test.describe("Chromebook M3 feature audit", () => {
   test.skip(!ENABLED, "run with CHROMEBOOK_AUDIT=1 against a production preview");
   test.describe.configure({ mode: "serial" });
@@ -525,17 +362,4 @@ test.describe("Chromebook M3 feature audit", () => {
     });
   });
 
-  test("explicit AI import supersedes cleanly and stabilizes heap", async ({ browser }, testInfo) => {
-    test.setTimeout(0);
-    await runChromebookFeatureAudit({
-      browser,
-      testInfo,
-      name: "aiImport",
-      setup: REAL_AI ? undefined : setupDeterministicAiWorker,
-      workload: REAL_AI
-        ? "production-feature"
-        : "deterministic-ai-worker-boundary",
-      audit: auditAiImport,
-    });
-  });
 });

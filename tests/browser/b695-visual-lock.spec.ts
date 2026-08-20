@@ -12,7 +12,6 @@ const VIEWPORTS = [
   { name: '1440x900', width: 1440, height: 900 },
 ] as const;
 const PHASES = [0, 45, 90, 180, 270] as const;
-const TEST_ONNX_MODEL_BYTES = Buffer.alloc(1_000_001, 1);
 
 const sha256 = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 
@@ -148,12 +147,6 @@ test.describe('b695 visual lock evidence', () => {
   test.describe.configure({ mode: 'serial' });
 
   test('captures the complete baseline evidence set', async ({ page }) => {
-    await page.route('**/onnx/pose_model.onnx', async route => route.fulfill({
-      status: 200,
-      contentType: 'application/octet-stream',
-      headers: { 'content-length': String(TEST_ONNX_MODEL_BYTES.length) },
-      body: TEST_ONNX_MODEL_BYTES,
-    }));
     const manifest: Record<string, unknown> = {
       baseline: 'b695b02275d03506969f2d13c98bc38107c17e0e',
       capturedAt: new Date().toISOString(),

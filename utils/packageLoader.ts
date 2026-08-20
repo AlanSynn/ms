@@ -1,5 +1,5 @@
 import { BodyPartLayer, Point, StandardJoint } from '../types';
-import { buildSkeleton, createProjectFromProcessed } from './project';
+import { buildSkeleton, createProjectFromCharacterPackage } from './project';
 import { isUsableContourPoints } from './partGeometry';
 import { clampNumber, finiteNumber, sanitizeHexColor } from './sanitize';
 
@@ -193,7 +193,7 @@ export const createProjectFromPackageData = (
         };
     });
 
-    return createProjectFromProcessed({
+    return createProjectFromCharacterPackage({
         name,
         sourceImageName: name,
         skeleton,

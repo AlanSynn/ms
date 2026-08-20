@@ -148,6 +148,9 @@ export const installChromebookAuditInstrumentation = async (context: BrowserCont
       const AuditedWorker = new Proxy(NativeWorker, {
         construct(target, args) {
           const instance = Reflect.construct(target, args) as Worker;
+          const workerName = (
+            args[1] as WorkerOptions | undefined
+          )?.name ?? "";
           let terminated = false;
           acquire(state.runtime.workers);
           instance.addEventListener("message", (event) => {
@@ -155,6 +158,25 @@ export const installChromebookAuditInstrumentation = async (context: BrowserCont
             if (payload?.bitmap) trackBitmap(payload.bitmap);
           });
           const nativeTerminate = instance.terminate.bind(instance);
+          const nativePostMessage = instance.postMessage.bind(instance) as (
+            ...messageArgs: unknown[]
+          ) => void;
+          Object.defineProperty(instance, "postMessage", {
+            configurable: true,
+            value: (...messageArgs: unknown[]) => {
+              const message = messageArgs[0] as { type?: string } | undefined;
+              window.dispatchEvent(new CustomEvent(
+                "motionsmith:chromebook-worker-request",
+                {
+                  detail: {
+                    name: workerName,
+                    type: message?.type ?? "unknown",
+                  },
+                },
+              ));
+              nativePostMessage(...messageArgs);
+            },
+          });
           Object.defineProperty(instance, "terminate", {
             configurable: true,
             value: () => {

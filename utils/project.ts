@@ -1151,7 +1151,7 @@ const normalizeSkeletonToSheet = (skeleton: StandardSkeleton, scale: number, cen
     return normalized;
 };
 
-export const createProjectFromProcessed = (input: {
+export const createProjectFromCharacterPackage = (input: {
     name: string;
     sourceImageName: string;
     skeleton: StandardSkeleton;
@@ -1168,7 +1168,7 @@ export const createProjectFromProcessed = (input: {
         id: `char-${Date.now().toString(36)}`,
         createdAt: nowIso(),
         sourceImageName: input.sourceImageName,
-        outputDir: `web-onnx://${input.sourceImageName}`,
+        outputDir: `local-package://${input.sourceImageName}`,
         partsInfo: {
             parts: Object.fromEntries(normalized.parts.map(p => [p.id, {
                 name: p.name,

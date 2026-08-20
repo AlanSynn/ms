@@ -1,7 +1,7 @@
 # Workbench Flow + UX Contract
 
 Status: active contract
-Last refreshed: 2026-07-05
+Last refreshed: 2026-08-20
 Scope: tabs, panes, buttons, tooltips, and classroom workflow surfaces.
 
 This is the compact UX contract for the current MotionSmith workbench. It does not replace `AGENTS.md`, `DESIGN.md`, `docs/subsystem-governance-and-mechanism-contracts.md`, or mechanism-specific PRDs. It names how those rules show up in the app shell.
@@ -24,7 +24,7 @@ Getting Started -> Character -> Path -> Foundry -> Design -> Blueprint -> Assemb
 Rules:
 
 - Start from a working template or explicit import; blank/open exploration stays secondary.
-- Creation/import happens in Character only: character files, image segmentation, starter rigs, scene objects, rig/body-part edits.
+- Creation/import happens in Character only: local character files, starter rigs, scene objects, and rig/body-part edits. Image recognition is not shipped.
 - Later tabs select, move, fit, tune, export, or assemble existing project data; they do not create new character/object sources.
 - `ProjectState` is the authoring truth for durable project data. Current snapshots also carry recovery-compatible selected ids and last-result fields; new work must not add more transient UI state there without a documented migration rule.
 - Foundry/fabrication helpers are the mechanism visual/physical truth. Design and Assembly consume that truth.
@@ -45,8 +45,8 @@ Rules:
 
 | Stage | Left pane | Center canvas | Right inspector | Primary buttons | Help keys | Current gaps to track |
 |---|---|---|---|---|---|---|
-| Getting Started | Starter tiles and import choices in modal | none; releases to Character | none | Guide, Starter rig, Image, Character file, Open full project | none | Keep result-first; do not add videos/manuals here. |
-| Character | Getting Started, Load character file, Add object, Create from image, Open full project, parts/objects, ownership/reset | character/scene-object workbench and selection handles | selected part/object/skeleton inspector | Getting Started, Load character file, Add object, Create from image, Open full project | `character.loadCharacterFile`, `character.loadObjectFile`, `character.createFromImage` | Character is correct creation owner. Keep rig creation here; remove creation controls from later tabs. |
+| Getting Started | Starter tiles and import choices in modal | none; releases to Character | none | Guide, Starter rig, Character file, Open full project | none | Keep result-first; do not add videos/manuals here. |
+| Character | Getting Started, Load character file, Add object, Open full project, parts/objects, ownership/reset | character/scene-object workbench and selection handles | selected part/object/skeleton inspector | Getting Started, Load character file, Add object, Open full project | `character.loadCharacterFile`, `character.loadObjectFile` | Character is correct creation owner. Keep rig creation here; remove creation controls from later tabs. |
 | Path | motion target, Draw/Clear, Open/Closed, Smoothness, Trace/Play/Reset in More | path drawing/editing, character/object target preview, 2D/3D view | selected path/target, IK start/handle, bend | Draw, Clear path, Open, Closed, Trace, Reset | `path.draw`, `path.smoothness`, `path.trace` | Path no longer owns rig creation controls; default path topology stays closed unless explicitly changed. |
 | Foundry | target summary, Fit path, Pick anchor, Use mechanism, mechanism templates | Foundry physical preview, user path, mechanism path, camera/layer/play controls | sensemaking first, view controls, opacity/explode, selected mechanism params | Fit path, Pick anchor, Use mechanism | `foundry.fitPath`, `viewer.layers` | Center is dense but acceptable. Mechanism cards must stay front-view Foundry-derived, not separate drawings. |
 | Design | mechanism instance list, Trace, Recommend, Blueprint | one Foundry-backed automata scene: mechanism drives character/object target, target/driven/error layers | selected mechanism binding, visible/enabled, target/path/handle, params, export | Trace, Recommend, Blueprint, SVG/DXF | none yet | Keep `buildAutomataSceneModel` + `ThreeFoundryPreview`; do not reintroduce split Foundry/Puppet layers. |
@@ -59,9 +59,9 @@ Rules:
 
 Facts verified from code and tests on 2026-07-05:
 
-- The compact Getting Started dialog exposes `Guide`, `Starter rig`, `Image`, and secondary `Open full project` actions; bundled Boy/Girl starter assets stay out of the first landing surface.
+- The compact Getting Started dialog exposes `Guide`, `Starter rig`, `Character file`, and secondary `Open full project` actions. Recognition starters are not shipped.
 - The three-pane shell is implemented through `EditorStageFrame` surfaces with `stage-left-pane`, `stage-canvas-pane`, and `stage-right-inspector` browser contracts.
-- Character owns source creation: character package load, scene object image load, ONNX image creation, starter entry, rig/body-part edits, and lesson reset.
+- Character owns source creation: character package load, ordinary scene-object image load, starter entry, rig/body-part edits, and lesson reset.
 - Path owns motion target selection, draw/clear, open/closed topology, smoothing, trace import, path visibility/enabled state, and path point editing; it no longer owns rig creation.
 - Foundry owns mechanism template choice, 15 x 15 board fit, anchor picking, physical mechanism preview, user/mechanism path overlays, and `Use mechanism` handoff.
 - Design owns mechanism instance selection/tuning, trace/recommend/fit, target/path/handle binding, visibility/enabled flags, deletion, and export handoff.
@@ -76,7 +76,7 @@ Facts verified from code and tests on 2026-07-05:
 
 | Action family | Owning stage | Valid outside owner? | Notes |
 |---|---|---:|---|
-| Load character file, Create from image, Add object, Rename object, rig/body-part edits | Character | no | Later tabs may select or bind existing targets only. |
+| Load character file, Add object, Rename object, rig/body-part edits | Character | no | Later tabs may select or bind existing targets only. |
 | Draw, Clear path, Open/Closed, Smoothness, Trace, Delete point | Path | no | Design/Foundry consume selected paths; they do not draw new ones. |
 | Fit path, Pick anchor, Use mechanism, mechanism template selection | Foundry | partly | Design can fit/tune existing instances, but primary new mechanism choice should stay Foundry-first. |
 | Mechanism target/path/handle binding, param tuning, visibility/enabled, delete, export | Design | yes, for selected instance only | Must not invent private geometry, stack, z, pin, or fabrication rules. |
@@ -88,7 +88,7 @@ Facts verified from code and tests on 2026-07-05:
 
 | Surface | Required registry help | Current coverage | Risk |
 |---|---|---|---|
-| Character import | `character.loadCharacterFile`, `character.loadObjectFile`, `character.createFromImage` | covered | low |
+| Character import | `character.loadCharacterFile`, `character.loadObjectFile` | covered | low |
 | Path draw/smooth/trace | `path.draw`, `path.smoothness`, `path.trace` | covered | low; one raw IK `title` remains. |
 | Foundry fit/layers | `foundry.fitPath`, `viewer.layers` | partially covered | medium; `Pick anchor` is direct manipulation with no registry help yet. |
 | Design instance tuning | none required yet | none | medium; `Recommend`, `Fit`, path toggles, and type chips may need help if they remain visible. |

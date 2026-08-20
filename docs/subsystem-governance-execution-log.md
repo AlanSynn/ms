@@ -1,7 +1,7 @@
 # Subsystem Governance Execution Log
 
-Status: active
-Date: 2026-06-27
+Status: historical execution log; current contracts supersede dependency decisions
+Date: 2026-08-20
 
 ## Source docs
 
@@ -24,7 +24,7 @@ Current local dependency check uses `package.json` + `bun.lock`; latest version 
 | Bun | 1.3.14 | 1.3.14 | Canonical package manager; `bun.lock` replaces `package-lock.json`. |
 | React / React DOM | 19.2.7 | 19.2.7 | Keep current. |
 | Three | 0.185.0 | 0.185.0 | Keep current. |
-| onnxruntime-web | 1.27.0 | 1.27.0 | Keep. |
+| onnxruntime-web | removed | 1.27.0 (historical observation) | Removed from classroom/Tauri builds on 2026-08-20; exclusion guard blocks reintroduction. |
 | @playwright/test | 1.61.1 | 1.61.1 | Keep; browser suite runs against production preview mode without weakening coverage. |
 | Vite | 8.1.0 | 8.1.0 | Keep current after build/test verification. |
 | TypeScript | 6.0.3 | 6.0.3 | Keep current after typecheck verification. |

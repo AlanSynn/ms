@@ -9,24 +9,7 @@ import { createFabricationReadyFourBarProject } from '../fixtures/fabricationPro
 import { FABRICATION_RENDER_LAYER_Z_STEP } from '../../utils/fabrication';
 import { APP_COMMANDS, APP_MENU_GROUPS, commandById, type AppCommandId } from '../../utils/appCommands';
 
-
-const TEST_ONNX_MODEL_BYTES = Buffer.alloc(1_000_001, 1);
-const ONNX_MODEL_ROUTE = '**/onnx/pose_model.onnx';
-const ONNX_IMAGE_FIXTURE = process.env.ONNX_IMAGE_FIXTURE
-  ?? 'tests/fixtures/stick-character.png';
 const ENABLED_CLASSROOM_LESSONS = CLASSROOM_LESSONS.filter(lesson => isMechanismTypeEnabled(lesson.mechanismType));
-
-test.beforeEach(async ({ page }, testInfo) => {
-  if (testInfo.title.includes('Create from image upload')) return;
-  await page.route(ONNX_MODEL_ROUTE, async route => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/octet-stream',
-      headers: { 'content-length': String(TEST_ONNX_MODEL_BYTES.length) },
-      body: TEST_ONNX_MODEL_BYTES,
-    });
-  });
-});
 
 const expectCleanPage = (pageErrors: string[], consoleErrors: string[]) => {
   expect(pageErrors, 'no uncaught browser exceptions').toEqual([]);
@@ -259,13 +242,13 @@ test('Context help opens compact registry popovers', async ({ page }) => {
   await expect(controls).toContainText('Getting Started');
   await expect(controls).toContainText('Add object');
   const controlsBefore = await controls.boundingBox();
-  const imageHelp = page.locator('[data-help-id="character.createFromImage"]').getByTestId('context-help-trigger');
-  await expect(imageHelp).toBeVisible();
-  await imageHelp.click();
+  const fileHelp = page.locator('[data-help-id="character.loadCharacterFile"]').getByTestId('context-help-trigger');
+  await expect(fileHelp).toBeVisible();
+  await fileHelp.click();
   const popover = page.getByTestId('context-help-popover');
   await expect(popover).toBeVisible();
-  await expect(popover).toContainText('Turn one picture');
-  await expect(imageHelp).toHaveAttribute('aria-expanded', 'true');
+  await expect(popover).toContainText('Load a rigged character');
+  await expect(fileHelp).toHaveAttribute('aria-expanded', 'true');
   const controlsAfter = await controls.boundingBox();
   expect(Math.abs((controlsAfter?.height ?? 0) - (controlsBefore?.height ?? 0)), 'tooltip overlay does not change import control height').toBeLessThan(1);
   expect(Math.abs((controlsAfter?.y ?? 0) - (controlsBefore?.y ?? 0)), 'tooltip overlay does not move import controls').toBeLessThan(1);
@@ -841,8 +824,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.locator('#boot-loader')).toHaveCount(0, { timeout: 180_000 });
   await expect(page.getByTestId('character-screen')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.classList.contains('welcome-modal-open'))).toBe(true);
-  await expect(page.getByTestId('onnx-cache-status')).toBeVisible();
-  await expect(page.getByTestId('onnx-cache-status')).toContainText(/AI ready|AI preparing|Get AI|AI \d+%|Try again/);
+  await expect(page.getByTestId('onnx-cache-status')).toHaveCount(0);
   await expect(page.getByTestId('status-bar')).not.toContainText(/parts:|paths:|mechs:|zoom/);
 
   const gettingStarted = page.getByTestId('getting-started-dialog');
@@ -850,15 +832,14 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(gettingStarted).toContainText('Start.');
   const starterGallery = gettingStarted.getByTestId('getting-started-gallery');
   await expect(starterGallery).toBeVisible();
-  await expect(starterGallery).toHaveAttribute('data-starter-images', 'hidden');
   const guidePreview = gettingStarted.getByTestId('getting-started-guide-preview');
   await expect(guidePreview).toBeVisible();
   await expect(guidePreview.locator('[data-preview-mode="rendered-character-motion"]')).toBeVisible();
   await expect(guidePreview.locator('svg')).toHaveAttribute('data-motion-preview', 'character-path');
   await expect(starterGallery).toContainText('Guide');
   await expect(starterGallery).toContainText('Starter rig');
-  await expect(starterGallery).toContainText('Image');
-  await expect(starterGallery).not.toContainText('Character file');
+  await expect(starterGallery).toContainText('Character file');
+  await expect(starterGallery).not.toContainText('Image');
   await expect(starterGallery).not.toContainText('Girl');
   await expect(starterGallery).not.toContainText('Boy');
   await expect(gettingStarted.getByTestId('getting-started-card-girl')).toHaveCount(0);
@@ -869,7 +850,9 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(starterGallery).toContainText('Start with a simple body.');
   await expect(starterGallery).toContainText('Move arms or legs');
   await expect(starterGallery).toContainText('Add a path next');
-  await expect(starterGallery).toContainText('Turn one picture into parts.');
+  await expect(starterGallery).toContainText('Open editable parts and joints.');
+  await expect(starterGallery).toContainText('Edit the parts');
+  await expect(starterGallery).toContainText('Draw a path');
   await gettingStarted.getByTestId('getting-started-card-guided').click();
   await expect(gettingStarted).toContainText('Pick a project.');
   const guidedLibrary = gettingStarted.getByTestId('guided-project-library');
@@ -898,8 +881,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(gettingStarted).toContainText('Start.');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Guide');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Starter rig');
-  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Image');
-  await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Character file');
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Character file');
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Image');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Girl');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Boy');
   await expect(gettingStarted).toContainText('Open full project');
@@ -1449,16 +1432,12 @@ test('Character tab processing controls route to real browser workflows', async 
   expect(packageChooser.isMultiple()).toBe(true);
   await packageChooser.setFiles([]);
 
-  const imageChooserPromise = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Create from image', exact: true }).click();
-  const imageChooser = await imageChooserPromise;
-  expect(imageChooser.isMultiple()).toBe(false);
-  await imageChooser.setFiles([]);
+  await expect(page.getByRole('button', { name: 'Create from image', exact: true })).toHaveCount(0);
 
   await page.getByRole('button', { name: /Open Getting Started/i }).click();
   await expect(page.getByTestId('getting-started-dialog')).toBeVisible();
   await switchGettingStartedToStarters(page);
-  await expect(page.getByTestId('getting-started-dialog')).not.toContainText('Character file');
+  await expect(page.getByTestId('getting-started-dialog')).toContainText('Character file');
   await page.getByRole('button', { name: 'Close' }).click();
   await page.getByText('Tools').click();
 
@@ -1549,56 +1528,6 @@ test('animation performance: Foundry playback stays responsive without runaway T
   expect(Math.abs(phaseAfter - phaseBefore), 'Foundry phase advances during optimized playback').toBeGreaterThan(0);
 
   await page.getByTestId('foundry-toolbar').getByRole('button', { name: 'Pause', exact: true }).click();
-  expectCleanPage(pageErrors, consoleErrors);
-});
-
-test('Create from image upload creates a reviewed character package in browser', async ({ page }) => {
-  const pageErrors: string[] = [];
-  const consoleErrors: string[] = [];
-  page.on('pageerror', error => pageErrors.push(error.message));
-  page.on('console', msg => {
-    if (msg.type() === 'error') consoleErrors.push(msg.text());
-  });
-
-  await page.goto('/');
-  await openCharacterScreen(page);
-  const characterPuppet = page.getByTestId('character-three-puppet');
-  const existingPartCount = await characterPuppet.getAttribute('data-part-count');
-  expect(existingPartCount, 'the current character exposes its part count before import').not.toBeNull();
-  const runOnnxButton = page.getByRole('button', { name: /Create from image/i });
-  await runOnnxButton.focus();
-  await expect(runOnnxButton).toBeFocused();
-  const [onnxChooser] = await Promise.all([
-    page.waitForEvent('filechooser'),
-    page.keyboard.press('Enter')
-  ]);
-  await onnxChooser.setFiles(ONNX_IMAGE_FIXTURE);
-
-  const review = page.getByTestId('character-import-review');
-  await expect(review).toBeVisible({ timeout: 180_000 });
-  await expect(review.getByText('Ready', { exact: true })).toBeVisible({ timeout: 180_000 });
-  await expect(review.getByText(/parts · .*joints/i)).toBeVisible();
-  const reviewBox = await review.boundingBox();
-  const viewport = page.viewportSize();
-  const reviewCenterX = (reviewBox?.x ?? 0) + (reviewBox?.width ?? 0) / 2;
-  expect(Math.abs(reviewCenterX - (viewport?.width ?? 0) / 2), 'character import approval is centered on screen').toBeLessThan(8);
-  await expect(characterPuppet).toHaveAttribute('data-part-count', existingPartCount!);
-  await expect(page.getByRole('button', { name: 'Use it' })).toBeVisible();
-
-  await page.getByRole('button', { name: 'Use it' }).click();
-  await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Path Editor' })).toHaveCount(0);
-  await expectProjectCounts(page, 10, 0, 0);
-  await expect(page.getByTestId('character-three-puppet-canvas')).toBeVisible();
-  const generatedPuppet = page.getByTestId('character-three-puppet-state');
-  await expect(generatedPuppet).toHaveAttribute('data-part-outline-mode', 'model-or-user-contour-with-fabrication-fallback');
-  await expect(generatedPuppet).toHaveAttribute('data-puppet-mode', 'thick-flat-assembly');
-  await expect(generatedPuppet).toHaveAttribute('data-three-part-surface', 'solid-cut-plates');
-  await expect(generatedPuppet).toHaveAttribute('data-three-part-art', 'top-texture-decal');
-  await expect(generatedPuppet).toHaveAttribute('data-three-part-opacity', '1');
-  expect(Number(await generatedPuppet.getAttribute('data-three-part-hole-count')), 'generated character 3D puppet keeps cut-through joint holes').toBeGreaterThan(0);
-  await expect.poll(async () => Number(await generatedPuppet.getAttribute('data-three-render-triangles')), { message: 'accepted ONNX character renders as real 3D fabrication geometry' }).toBeGreaterThan(0);
-
   expectCleanPage(pageErrors, consoleErrors);
 });
 
@@ -2862,7 +2791,7 @@ test('Trace lazily streams bounded GIF frames and releases them on close', async
   expect(Number(await canvas.getAttribute('height'))).toBe(450);
   const timeline = modal.locator('input[type="range"]');
   await expect(timeline).toBeVisible();
-  expect(Number(await timeline.getAttribute('max'))).toBe(299);
+  expect(Number(await timeline.getAttribute('max'))).toBe(239);
   await expect(canvas).toHaveAttribute('data-gif-delivered-frame', '0');
   const frameLabel = modal.getByText(/^Frame \d+ \/ \d+$/).first();
   const lastFrame = Number(await timeline.getAttribute('max'));
@@ -2925,6 +2854,9 @@ test('Recommendation sheet applies a distinct mechanism and blueprint recipe', a
   await expect(fitPreview).toHaveAttribute('data-board-cells', '15');
   await expect(fitPreview).toHaveAttribute('data-user-path-preview', 'shown');
   await expect(fitPreview).toHaveAttribute('data-mechanism-path-preview', 'shown');
+  await expect(fitPreview).toHaveAttribute('data-ghost-preview', 'hidden');
+  await expect(fitPreview).toHaveAttribute('data-trace-samples', '12');
+  await expect(fitPreview.locator('.mechanism-choice-ghost')).toHaveCount(0);
   await expect(page.getByTestId('recommendation-linkage-4bar')).toBeVisible();
   await page.getByTestId('recommendation-card-4bar').getByRole('button', { name: /^Use$/ }).click();
   await expect(page.getByTestId('recommendation-sheet')).toBeHidden();
@@ -2980,11 +2912,17 @@ test('Recommendation sheet applies a distinct mechanism and blueprint recipe', a
   await openWavingArmTemplate(page);
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await page.getByRole('button', { name: /Recommend/i }).click();
-  await expect(page.getByTestId('recommendation-sheet')).toBeVisible();
-  const enabledApplyButtons = page.getByTestId('recommendation-sheet').locator('button.btn-primary:not(:disabled)');
-  await expect(enabledApplyButtons.first()).toBeVisible({ timeout: 60_000 });
-  expect(await enabledApplyButtons.count(), 'at least two fabrication-ready recommendations').toBeGreaterThan(1);
-  await enabledApplyButtons.nth(1).click();
+  const wavingRecommendations = page.getByTestId('recommendation-sheet');
+  await expect(wavingRecommendations).toBeVisible();
+  const readyGear = page.getByTestId('recommendation-card-gear');
+  const blockedFourBar = page.getByTestId('recommendation-card-4bar');
+  await expect(readyGear).toBeVisible({ timeout: 60_000 });
+  await expect(blockedFourBar).toBeVisible({ timeout: 60_000 });
+  await expect(readyGear.getByRole('button', { name: /^Use$/ })).toBeEnabled();
+  await expect(blockedFourBar).toContainText('No fabrication-valid path fit.');
+  await expect(blockedFourBar.getByRole('button', { name: /^Use$/ })).toBeDisabled();
+  await expect(wavingRecommendations.locator('button.btn-primary:not(:disabled)')).toHaveCount(1);
+  await wavingRecommendations.getByRole('button', { name: 'Close', exact: true }).click();
   await clickStage(page, 'Blueprint');
   await expect(page.getByTestId('blueprint-control-panel')).toContainText('No fabrication-valid path fit.');
   await expect(page.getByRole('button', { name: /Generate package/i })).toBeDisabled();
@@ -3326,10 +3264,12 @@ test('Mobile path editor keeps Draw free path action above the canvas', async ({
 });
 
 
-test('Startup opens the workspace without preparing AI until an explicit cache action', async ({ page }) => {
-  let modelRequests = 0;
+test('School build has no image-recognition surface or network request', async ({ page }) => {
+  const forbiddenRequests: string[] = [];
   page.on('request', request => {
-    if (request.url().includes('/onnx/pose_model.onnx')) modelRequests += 1;
+    if (/(?:\/onnx\/|pose_model\.onnx|onnxruntime|ort(?:\.bundle|-wasm)|webOnnx)/i.test(request.url())) {
+      forbiddenRequests.push(request.url());
+    }
   });
   await page.goto('/');
   const bootText = await page.evaluate(() => document.getElementById('boot-loader')?.textContent ?? '');
@@ -3341,13 +3281,15 @@ test('Startup opens the workspace without preparing AI until an explicit cache a
   await expect(page.getByTestId('character-screen')).toBeVisible();
   const gettingStarted = page.getByTestId('getting-started-dialog');
   await expect(gettingStarted).toBeVisible();
-  await expect(page.getByTestId('onnx-cache-status')).toContainText('Get AI');
-  await expect.poll(() => modelRequests, { message: 'startup does not request the ONNX model' }).toBe(0);
+  await expect(gettingStarted).toContainText('Character file');
+  await expect(gettingStarted.getByText('Image', { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId('onnx-cache-status')).toHaveCount(0);
+  await expect(page.getByTestId('onnx-input')).toHaveCount(0);
+  await expect(page.getByTestId('getting-started-onnx-input')).toHaveCount(0);
   await gettingStarted.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(gettingStarted).toHaveCount(0);
-  await page.getByTestId('onnx-cache-status').click();
-  await expect.poll(() => modelRequests, { timeout: 15_000, message: 'explicit Get AI starts model preparation' }).toBeGreaterThan(0);
-  await expect(page.getByTestId('onnx-cache-status')).toContainText('AI ready', { timeout: 180_000 });
+  await expect(page.getByRole('button', { name: 'Create from image', exact: true })).toHaveCount(0);
+  expect(forbiddenRequests, 'school workflow never requests image-recognition assets').toEqual([]);
 });
 
 test('Mobile startup shows compact Getting Started with a session opt-out', async ({ page }) => {

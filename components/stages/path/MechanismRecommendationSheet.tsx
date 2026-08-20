@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import type {
   BodyPartLayer,
   MechanismConfig,
@@ -19,6 +19,7 @@ import {
 import { MechanismLinkagePreview } from "../foundry/MechanismLinkagePreview";
 import { resolveRenderPerformancePolicy } from "../../../utils/renderPerformancePolicy";
 import { sampleIndexedValues } from "../../../utils/interactiveSampling";
+import { RecommendationMechanismSketch } from "./RecommendationMechanismSketch";
 
 type MechanismRecommendationSheetProps = {
   isOpen: boolean;
@@ -42,41 +43,52 @@ const RecommendationFitPreview = ({
   const renderPolicy = resolveRenderPerformancePolicy(
     project.settings.performancePreset,
   );
+  const previewTraceSamples = renderPolicy.overlayQuality === "full"
+    ? renderPolicy.interactiveDetail.mechanismTraceSamples
+    : 12;
+  const previewPathPoints = useMemo(
+    () =>
+      sampleIndexedValues(
+        selectedPath?.points ?? [],
+        renderPolicy.interactiveDetail.maxPathHandles,
+      ).map(({ value }) => value),
+    [renderPolicy.interactiveDetail.maxPathHandles, selectedPath?.points],
+  );
   const context = useMemo(
     () =>
       createMechanismFitContext(
         option.mechanism,
         220,
         136,
-        renderPolicy.interactiveDetail.mechanismTraceSamples,
-        selectedPath?.points ?? [],
+        previewTraceSamples,
+        previewPathPoints,
       ),
     [
       option.mechanism,
-      renderPolicy.interactiveDetail.mechanismTraceSamples,
-      selectedPath?.points,
+      previewTraceSamples,
+      previewPathPoints,
     ],
   );
   const current = useMemo(
     () => fitMechanismSimulationWithContext(option.mechanism, 0, context),
     [context, option.mechanism],
   );
+  const showGhostFrames = renderPolicy.overlayQuality === "full";
   const ghost = useMemo(
-    () =>
-      [Math.PI * 0.65, Math.PI * 1.3].map((phase) =>
+    () => {
+      if (!showGhostFrames) return [];
+      return [Math.PI * 0.65, Math.PI * 1.3].map((phase) =>
         fitMechanismSimulationWithContext(option.mechanism, phase, context),
-      ),
-    [context, option.mechanism],
+      );
+    },
+    [context, option.mechanism, showGhostFrames],
   );
   const userPathD = useMemo(() => {
-    if (!selectedPath || selectedPath.points.length < 2) return "";
+    if (previewPathPoints.length < 2) return "";
     return pointsToSvgPath(
-      sampleIndexedValues(
-        selectedPath.points,
-        renderPolicy.interactiveDetail.maxPathLinePoints,
-      ).map(({ value }) => context.map(value)),
+      previewPathPoints.map((point) => context.map(point)),
     );
-  }, [context, renderPolicy.interactiveDetail.maxPathLinePoints, selectedPath]);
+  }, [context, previewPathPoints]);
 
   return (
     <svg
@@ -87,6 +99,8 @@ const RecommendationFitPreview = ({
       data-board-cells={project.settings.physicalKit.boardCells}
       data-user-path-preview={userPathD ? "shown" : "hidden"}
       data-mechanism-path-preview={current.pathD ? "shown" : "hidden"}
+      data-ghost-preview={showGhostFrames ? "shown" : "hidden"}
+      data-trace-samples={previewTraceSamples}
     >
       <text x="10" y="18" fill="#64748b" fontSize="10" fontWeight="900">
         {project.settings.physicalKit.boardCells}×
@@ -127,13 +141,21 @@ const RecommendationFitPreview = ({
             />
           </g>
         ))}
-        <MechanismLinkagePreview
-          mechanism={option.mechanism}
-          simulation={current}
-          kit={project.settings.physicalKit}
-          testId={`recommendation-linkage-${option.type}`}
-          compact
-        />
+        {showGhostFrames ? (
+          <MechanismLinkagePreview
+            mechanism={option.mechanism}
+            simulation={current}
+            kit={project.settings.physicalKit}
+            testId={`recommendation-linkage-${option.type}`}
+            compact
+          />
+        ) : (
+          <RecommendationMechanismSketch
+            mechanism={option.mechanism}
+            simulation={current}
+            testId={`recommendation-linkage-${option.type}`}
+          />
+        )}
       </g>
       <circle
         cx={current.state.effector.x}
@@ -207,10 +229,12 @@ const OpenMechanismRecommendationSheet = ({
             if (sheetRef.current) {
               sheetRef.current.dataset.recommendationWorkerRequest = "settled";
             }
-            setLoadState({
-              inputFingerprint: input.inputFingerprint,
-              status: "ready",
-              recommendations,
+            startTransition(() => {
+              setLoadState({
+                inputFingerprint: input.inputFingerprint,
+                status: "ready",
+                recommendations,
+              });
             });
           },
           failed: (error) => {
@@ -247,6 +271,37 @@ const OpenMechanismRecommendationSheet = ({
           recommendations: [],
         };
   const recommendations = currentState.recommendations;
+  const [visibleRecommendationStep, setVisibleRecommendationStep] = useState(0);
+  const visibleRecommendationCount = Math.min(
+    visibleRecommendationStep,
+    recommendations.length,
+  );
+  const visiblePreviewCount = Math.max(
+    0,
+    visibleRecommendationStep - recommendations.length,
+  );
+  const finalRecommendationStep = recommendations.length * 2;
+
+  useEffect(() => {
+    if (!isOpen || currentState.status !== "ready") {
+      if (visibleRecommendationStep !== 0) setVisibleRecommendationStep(0);
+      return;
+    }
+    if (visibleRecommendationStep >= finalRecommendationStep) return;
+    const frame = requestAnimationFrame(() => {
+      startTransition(() => {
+        setVisibleRecommendationStep((step) =>
+          Math.min(step + 1, finalRecommendationStep),
+        );
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [
+    currentState.status,
+    finalRecommendationStep,
+    isOpen,
+    visibleRecommendationStep,
+  ]);
 
   const apply = (option: MechanismRecommendation) => {
     onApply(
@@ -276,6 +331,7 @@ const OpenMechanismRecommendationSheet = ({
         data-testid="recommendation-sheet"
         data-recommendation-state={currentState.status}
         data-recommendation-worker-request="idle"
+        data-visible-recommendations={visibleRecommendationCount}
       >
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -310,43 +366,52 @@ const OpenMechanismRecommendationSheet = ({
           </div>
         ) : (
           <div className="recommendation-grid mt-5">
-            {recommendations.map((option) => (
-              <article
-                key={option.type}
-                className="recommendation-card recommendation-option"
-                data-testid={`recommendation-card-${option.type}`}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="font-bold text-slate-800">
-                      {option.label}
+            {recommendations
+              .slice(0, visibleRecommendationCount)
+              .map((option, index) => (
+                <article
+                  key={option.type}
+                  className="recommendation-card recommendation-option"
+                  data-testid={`recommendation-card-${option.type}`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="font-bold text-slate-800">
+                        {option.label}
+                      </div>
+                      <div className="text-xs font-black uppercase tracking-wider text-slate-500">
+                        Fit score {option.score}/100
+                      </div>
                     </div>
-                    <div className="text-xs font-black uppercase tracking-wider text-slate-500">
-                      Fit score {option.score}/100
-                    </div>
+                    <span className="recommendation-score">{option.score}</span>
                   </div>
-                  <span className="recommendation-score">{option.score}</span>
-                </div>
-                <RecommendationFitPreview
-                  option={option}
-                  project={project}
-                  selectedPath={selectedPath}
-                />
-                <p className="mt-3">{option.reason}</p>
-                <p
-                  className={`mt-2 text-xs ${option.fabricationErrors.length ? "font-bold text-amber-700" : "text-slate-500"}`}
-                >
-                  {option.feasibility}
-                </p>
-                <button
-                  className="btn-primary mt-4"
-                  disabled={!!option.fabricationErrors.length}
-                  onClick={() => apply(option)}
-                >
-                  Use
-                </button>
-              </article>
-            ))}
+                  {index < visiblePreviewCount ? (
+                    <RecommendationFitPreview
+                      option={option}
+                      project={project}
+                      selectedPath={selectedPath}
+                    />
+                  ) : (
+                    <div
+                      className="recommendation-preview mt-3"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <p className="mt-3">{option.reason}</p>
+                  <p
+                    className={`mt-2 text-xs ${option.fabricationErrors.length ? "font-bold text-amber-700" : "text-slate-500"}`}
+                  >
+                    {option.feasibility}
+                  </p>
+                  <button
+                    className="btn-primary mt-4"
+                    disabled={!!option.fabricationErrors.length}
+                    onClick={() => apply(option)}
+                  >
+                    Use
+                  </button>
+                </article>
+              ))}
           </div>
         )}
       </section>

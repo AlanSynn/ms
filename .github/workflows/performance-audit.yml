@@ -11,7 +11,6 @@ on:
         options:
           - feature
           - full
-          - real-ai
   schedule:
     - cron: "23 5 * * *"
 
@@ -28,18 +27,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-        with:
-          lfs: true
-
-      - name: Verify ONNX model bytes
-        run: |
-          git lfs pull --include="public/onnx/pose_model.onnx"
-          BYTES="$(wc -c < public/onnx/pose_model.onnx | tr -d ' ')"
-          test "$BYTES" -gt 1000000
-          if head -c 64 public/onnx/pose_model.onnx | grep -q "version https://git-lfs"; then
-            echo "public/onnx/pose_model.onnx is a Git LFS pointer" >&2
-            exit 1
-          fi
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -59,10 +46,6 @@ jobs:
       - name: Run full ten-minute audit
         if: github.event_name == 'schedule' || inputs.scope == 'full'
         run: bun run test:chromebook-audit:full
-
-      - name: Run explicit real-model AI audit
-        if: github.event_name == 'workflow_dispatch' && inputs.scope == 'real-ai'
-        run: bun run test:chromebook-audit:real-ai
 
       - name: Upload audit evidence
         if: always()

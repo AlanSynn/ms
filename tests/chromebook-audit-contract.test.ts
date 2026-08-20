@@ -222,7 +222,7 @@ const packageJson = JSON.parse(read("package.json")) as { scripts: Record<string
 assert(packageJson.scripts["test:chromebook-audit"].startsWith("bun run build &&"), "acceptance runs a normal production build");
 assert(!packageJson.scripts["test:chromebook-audit"].includes("build:e2e"), "acceptance excludes diagnostic-build overhead");
 assert(packageJson.scripts["test:chromebook-audit"].includes("chromebook-features-audit.spec.ts"), "production-preview acceptance includes the M3 feature audit");
-assert(packageJson.scripts["test:chromebook-audit:real-ai"].includes("CHROMEBOOK_AUDIT_REAL_AI=1"), "the shipped-model AI audit remains an explicit production-preview gate");
+assert.equal(packageJson.scripts["test:chromebook-audit:real-ai"], undefined, "the removed image-recognition workload has no audit command");
 assert(!packageJson.scripts["test:chromebook-audit"].includes("chromebook-audit.spec.ts"), "the short per-feature audit is the primary gate");
 assert(packageJson.scripts["test:chromebook-audit:full"].includes("chromebook-audit.spec.ts"), "the full workflow and soak remain available separately");
 const config = read("playwright.config.ts");
@@ -233,14 +233,14 @@ const featureSpec = read("tests/browser/chromebook-features-audit.spec.ts");
 for (const stage of ["Path", "Foundry", "Design", "Blueprint", "Assembly"]) {
   assert(spec.includes(`measureStage(page, actions, \"${stage}\"`), `audit measures the ${stage} transition`);
 }
-assert(spec.includes("bootAiRequests") && spec.includes("actualChromebookTested: false"));
-for (const feature of ["auditRecommend", "auditDesignFit", "auditTraceGif", "auditAiImport"]) {
+assert(spec.includes("forbiddenImageRecognitionRequests") && spec.includes("actualChromebookTested: false"));
+for (const feature of ["auditRecommend", "auditDesignFit", "auditTraceGif"]) {
   assert(featureSpec.includes(feature), `feature audit exercises ${feature}`);
 }
 assert(featureSpec.includes("measureClickToNextPaint") && featureSpec.includes("jobCompletionMs"));
-assert(featureSpec.includes("setupDeterministicAiWorker") && featureSpec.includes("deterministic-ai-worker-boundary"), "the short gate exercises AI result integration without hiding that its worker is deterministic");
+assert(!featureSpec.includes("auditAiImport") && !featureSpec.includes("deterministic-ai-worker-boundary"), "the feature gate contains no removed image-recognition workload");
 assert(featureSpec.includes("waitForLifecycleBaseline") && featureSpec.includes("collectStableFeatureProbe"));
-assert(!featureSpec.includes("minimumObjectUrlCreations"), "worker-owned GIF and AI paths gate URL leaks without requiring main-window URL creation");
+assert(!featureSpec.includes("minimumObjectUrlCreations"), "the worker-owned GIF path gates URL leaks without requiring main-window URL creation");
 const featureRunner = read("tests/browser/chromebookFeatureAuditRunner.ts");
 assert(featureRunner.includes("chromebook-feature-${report.feature.name}-audit.json"));
 assert(featureRunner.includes('"artifacts/chromebook-audit/features"'), "passed feature reports survive Playwright output cleanup");

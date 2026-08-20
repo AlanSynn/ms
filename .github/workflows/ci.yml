@@ -16,8 +16,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-        with:
-          lfs: true
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -51,4 +49,4 @@ jobs:
           tests/browser/webgl-recovery.spec.ts
           tests/browser/workflow.spec.ts
           --grep
-          'WebGL unavailable|Foundry restores the same scene|Getting Started guided project|Load package review|Legacy storage namespace|Recommendation job stays idle|Design Fit runs|Trace lazily streams|Startup opens the workspace'
+          'WebGL unavailable|Foundry restores the same scene|Getting Started guided project|Load package review|Legacy storage namespace|Recommendation job stays idle|Design Fit runs|Trace lazily streams|School build has no image-recognition'

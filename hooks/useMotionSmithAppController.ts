@@ -3,7 +3,6 @@ import { useRef, useState, useEffect } from "react";
 import type { AppStageRouterProps } from "../components/AppStageRouter";
 import type { AppWorkspaceShellProps } from "../components/AppWorkspaceShell";
 import { STAGES } from "../components/AppShell";
-import { STARTER_IMAGE_TEMPLATES } from "../resources/starterImageTemplates";
 import type { AppStage, CanvasViewport, MechanismConfig } from "../types";
 import {
   CLASSROOM_LESSONS,
@@ -22,7 +21,6 @@ import { useAppCharacterImportActions } from "./useAppCharacterImportActions";
 import { useAppCommandBindings } from "./useAppCommandBindings";
 import { useAppDerivedState } from "./useAppDerivedState";
 import { useAppMechanismActions } from "./useAppMechanismActions";
-import { useAppOnnxBootstrap } from "./useAppOnnxBootstrap";
 import { useAppPathActions } from "./useAppPathActions";
 import { useAppProjectCommands } from "./useAppProjectCommands";
 import { useModalInertEffect } from "./useModalInertEffect";
@@ -37,7 +35,7 @@ import {
 import {
   createCharacterImportProgressStore,
   type CharacterImportProgressStore,
-} from "../runtime/ai/characterImportProgressStore";
+} from "../runtime/import/characterImportProgressStore";
 
 const ENABLED_GUIDED_LESSONS = CLASSROOM_LESSONS.filter((lesson) =>
   isMechanismTypeEnabled(lesson.mechanismType),
@@ -111,8 +109,6 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     DEFAULT_CANVAS_VIEWPORT,
   );
   const [commandStatus, setCommandStatus] = useState("Ready");
-  const { onnxCacheStatus, setOnnxCacheStatus, cacheOnnxModel } =
-    useAppOnnxBootstrap(setCommandStatus);
   const projectInputRef = useRef<HTMLInputElement>(null);
   const appShellRef = useRef<HTMLDivElement>(null);
   const assessmentQueryApplied = useRef(false);
@@ -173,26 +169,21 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   });
   const {
     setPendingCharacter,
-    runWebOnnx,
     importCharacterPackage,
     importProject,
     editCharacterParts,
     saveSkeleton,
     acceptPendingCharacter,
     discardPendingCharacter,
-    startFromStarterImage,
     startFromPackage,
-    startFromImage,
     startFromProject,
   } = useAppCharacterImportActions({
     project,
-    stage,
     dispatch,
     setProject,
     setStage,
     setCommandStatus,
     setShowGettingStarted,
-    setOnnxCacheStatus,
     characterImportProgress,
   });
   const activeClassroomLesson = classroomLessonById(
@@ -321,7 +312,6 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
       onOpenGettingStarted: () => setShowGettingStarted(true),
       onAcceptPendingCharacter: acceptPendingCharacter,
       onDiscardPendingCharacter: discardPendingCharacter,
-      onProcessCharacter: runWebOnnx,
       onPackageCharacter: importCharacterPackage,
       onImportProject: importProject,
       onEditCharacter: editCharacterParts,
@@ -391,18 +381,12 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     stageRouterProps,
     workflowStatus,
     commandStatus,
-    onnxCacheStatus,
-    cacheOnnxModel,
     showGettingStarted,
     hideGettingStartedThisSession,
-    starterTemplates: STARTER_IMAGE_TEMPLATES,
-    showStarterImages: false,
     guidedLessons: ENABLED_GUIDED_LESSONS,
     onLesson: openClassroomLesson,
-    onStarterImage: startFromStarterImage,
     onSample: openSampleProject,
     onPackage: startFromPackage,
-    onProcess: startFromImage,
     onImport: startFromProject,
     onHideGettingStartedThisSessionChange: updateGettingStartedSessionPreference,
     onCloseGettingStarted: closeGettingStarted,

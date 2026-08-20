@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-20T18:27:16.831Z",
+  "generatedAt": "2026-08-20T19:16:48.492Z",
   "resultLabel": "6x CPU emulation",
   "productionBuild": true,
   "actualChromebookTested": false,
@@ -8,7 +8,7 @@
   "workload": "production-feature",
   "environment": {
     "browser": "chrome",
-    "browserVersion": "151.0.7922.140",
+    "browserVersion": "151.0.7922.170",
     "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.7827.55 Safari/537.36",
     "viewport": {
       "width": 1366,
@@ -31,8 +31,8 @@
         "label": "design-fit-cancel",
         "cycle": 1,
         "outcome": "cancelled",
-        "nextPaintMs": 67.80000001192093,
-        "settleMs": 176.39999997615814,
+        "nextPaintMs": 58.89999997615814,
+        "settleMs": 215,
         "longTasks": {
           "durationsMs": [],
           "latencyMs": {
@@ -45,9 +45,9 @@
         },
         "puppetTopologyDurationsMs": [],
         "before": {
-          "atMs": 2335.5,
-          "heapBytes": 19248874,
-          "longTaskCount": 4,
+          "atMs": 2582,
+          "heapBytes": 20133289,
+          "longTaskCount": 5,
           "puppetTopologyCount": 7,
           "lifecycle": {
             "probeSupport": {
@@ -76,9 +76,9 @@
           }
         },
         "after": {
-          "atMs": 2752,
-          "heapBytes": 21037705,
-          "longTaskCount": 4,
+          "atMs": 3070.899999976158,
+          "heapBytes": 21192787,
+          "longTaskCount": 5,
           "puppetTopologyCount": 7,
           "lifecycle": {
             "probeSupport": {
@@ -111,9 +111,9 @@
         "label": "design-fit-complete",
         "cycle": 2,
         "outcome": "completed",
-        "nextPaintMs": 44.90000003576279,
-        "settleMs": 230,
-        "jobCompletionMs": 152.4000000357628,
+        "nextPaintMs": 35,
+        "settleMs": 207.19999998807907,
+        "jobCompletionMs": 136.69999998807907,
         "longTasks": {
           "durationsMs": [],
           "latencyMs": {
@@ -126,9 +126,9 @@
         },
         "puppetTopologyDurationsMs": [],
         "before": {
-          "atMs": 2784.300000011921,
-          "heapBytes": 20016224,
-          "longTaskCount": 4,
+          "atMs": 3103.5,
+          "heapBytes": 20170936,
+          "longTaskCount": 5,
           "puppetTopologyCount": 7,
           "lifecycle": {
             "probeSupport": {
@@ -157,9 +157,9 @@
           }
         },
         "after": {
-          "atMs": 3277.5,
-          "heapBytes": 20956825,
-          "longTaskCount": 4,
+          "atMs": 3545.800000011921,
+          "heapBytes": 19258980,
+          "longTaskCount": 5,
           "puppetTopologyCount": 7,
           "lifecycle": {
             "probeSupport": {
@@ -190,19 +190,19 @@
       }
     ],
     "nextPaintLatencyMs": {
-      "p50": 44.90000003576279,
-      "p95": 67.80000001192093,
-      "p99": 67.80000001192093
+      "p50": 35,
+      "p95": 58.89999997615814,
+      "p99": 58.89999997615814
     },
     "jobCompletionLatencyMs": {
-      "p50": 152.4000000357628,
-      "p95": 152.4000000357628,
-      "p99": 152.4000000357628
+      "p50": 136.69999998807907,
+      "p95": 136.69999998807907,
+      "p99": 136.69999998807907
     },
     "settleLatencyMs": {
-      "p50": 176.39999997615814,
-      "p95": 230,
-      "p99": 230
+      "p50": 207.19999998807907,
+      "p95": 215,
+      "p99": 215
     },
     "mainThreadLongTaskLatencyMs": {
       "p50": 0,
@@ -266,22 +266,22 @@
     },
     "heap": {
       "supported": true,
-      "baselineBytes": 19207467,
-      "finalBytes": 20805364,
-      "growthBytes": 1597897,
+      "baselineBytes": 18908440,
+      "finalBytes": 19807500,
+      "growthBytes": 899060,
       "allowedGrowthBytes": 8388608,
       "finalSamplesBytes": [
-        19866223,
-        20524171,
-        20805364
+        19432284,
+        19618967,
+        19807500
       ],
-      "tailRangeBytes": 939141,
+      "tailRangeBytes": 375216,
       "stable": true
     },
     "acceptance": {
       "nextPaintP95": {
         "passed": true,
-        "observed": 67.80000001192093,
+        "observed": 58.89999997615814,
         "limit": 100
       },
       "mainThreadLongTaskP95": {
@@ -346,12 +346,12 @@
       },
       "heapBounded": {
         "passed": true,
-        "observed": 1597897,
+        "observed": 899060,
         "limit": 8388608
       },
       "heapStable": {
         "passed": true,
-        "observed": 939141,
+        "observed": 375216,
         "limit": 8388608
       },
       "passed": {

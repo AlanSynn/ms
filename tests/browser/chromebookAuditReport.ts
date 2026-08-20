@@ -121,7 +121,7 @@ export type ChromebookAuditReport = {
   tabSwitchLatencyMs: Percentiles;
   playback: PlaybackAudit;
   networkRequests: NetworkRequestRecord[];
-  bootAiRequests: string[];
+  forbiddenImageRecognitionRequests: string[];
   acceptance: Record<string, AcceptanceCheck> & {
     passed: AcceptanceCheck;
   };
@@ -188,7 +188,7 @@ export const evaluateChromebookAcceptance = (
   playback: PlaybackAudit,
   actionLatencyMs: Percentiles,
   tabSwitchLatencyMs: Percentiles,
-  bootAiRequestCount: number,
+  forbiddenImageRecognitionRequestCount: number,
 ) => {
   const playbackAcceptance = evaluateChromebookPlaybackAcceptance(
     playback,
@@ -199,7 +199,11 @@ export const evaluateChromebookAcceptance = (
   const checks: Record<string, AcceptanceCheck> = {
     ...playbackChecks,
     tabSwitchLatency: { passed: tabSwitchLatencyMs.p95 <= limit.tabSwitchP95Ms, observed: tabSwitchLatencyMs.p95, limit: limit.tabSwitchP95Ms },
-    aiBootOptIn: { passed: bootAiRequestCount === 0, observed: bootAiRequestCount, limit: 0 },
+    imageRecognitionAbsent: {
+      passed: forbiddenImageRecognitionRequestCount === 0,
+      observed: forbiddenImageRecognitionRequestCount,
+      limit: 0,
+    },
   };
   const passed = Object.values(checks).every((check) => check.passed);
   return { ...checks, passed: { passed, observed: passed, limit: true } };

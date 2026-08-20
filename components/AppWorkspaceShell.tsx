@@ -5,20 +5,17 @@ import { AppStageRouter, type AppStageRouterProps } from "./AppStageRouter";
 import {
   AboutDialog,
   GettingStartedDialog,
-  OnnxCacheStatusPill,
   STAGES,
   ShortcutHelpDialog,
   TopCommandBar,
   WorkflowRail,
   WorkflowStatusStrip,
   type GuidedLessonTile,
-  type StarterImageTemplate,
 } from "./AppShell";
 import { TrackingModal } from "./TrackingModal";
 import motionSmithIconUrl from "../src-tauri/icons/icon.png?url";
 import type { AppStage, Point, ProjectState } from "../types";
 import type { AppCommandHandlerMap } from "../utils/appCommands";
-import type { WebOnnxCacheStatus } from "../utils/webOnnx";
 import type { WorkflowStatus } from "../utils/workflowStatus";
 
 export type AppWorkspaceShellProps = {
@@ -34,18 +31,12 @@ export type AppWorkspaceShellProps = {
   stageRouterProps: AppStageRouterProps;
   workflowStatus: WorkflowStatus;
   commandStatus: string;
-  onnxCacheStatus: WebOnnxCacheStatus;
-  cacheOnnxModel: () => void | Promise<void>;
   showGettingStarted: boolean;
   hideGettingStartedThisSession: boolean;
-  starterTemplates: StarterImageTemplate[];
-  showStarterImages: boolean;
   guidedLessons: readonly GuidedLessonTile[];
   onLesson: (lessonId: string) => void;
-  onStarterImage: (template: StarterImageTemplate) => void;
   onSample: () => void;
   onPackage: (files: FileList | File[]) => void | Promise<void>;
-  onProcess: (file: File) => void | Promise<void>;
   onImport: (file: File) => void | Promise<void>;
   onHideGettingStartedThisSessionChange: (hidden: boolean) => void;
   onCloseGettingStarted: () => void;
@@ -79,18 +70,12 @@ export const AppWorkspaceShell = ({
   stageRouterProps,
   workflowStatus,
   commandStatus,
-  onnxCacheStatus,
-  cacheOnnxModel,
   showGettingStarted,
   hideGettingStartedThisSession,
-  starterTemplates,
-  showStarterImages,
   guidedLessons,
   onLesson,
-  onStarterImage,
   onSample,
   onPackage,
-  onProcess,
   onImport,
   onHideGettingStartedThisSessionChange,
   onCloseGettingStarted,
@@ -188,23 +173,16 @@ export const AppWorkspaceShell = ({
           <WorkflowStatusStrip {...workflowStatus} />
           <footer className="status-bar" data-testid="status-bar">
             <span>{commandStatus}</span>
-            <OnnxCacheStatusPill
-              status={onnxCacheStatus}
-              onDownload={cacheOnnxModel}
-            />
           </footer>
         </section>
       </div>
       {showGettingStarted && (
         <GettingStartedDialog
-          starterTemplates={starterTemplates}
-          showStarterImages={showStarterImages}
           guidedLessons={guidedLessons}
           hideForSession={hideGettingStartedThisSession}
           onLesson={onLesson}
-          onStarterImage={onStarterImage}
           onSample={onSample}
-          onProcess={onProcess}
+          onPackage={onPackage}
           onImport={onImport}
           onHideForSessionChange={onHideGettingStartedThisSessionChange}
           onClose={onCloseGettingStarted}

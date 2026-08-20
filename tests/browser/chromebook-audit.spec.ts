@@ -22,7 +22,7 @@ const ENABLED = process.env.CHROMEBOOK_AUDIT === "1";
 const ENFORCE = process.env.CHROMEBOOK_AUDIT_ENFORCE !== "0";
 const PLAYBACK_MS = Number(process.env.CHROMEBOOK_AUDIT_PLAYBACK_MS ?? 10 * 60 * 1_000);
 const OUTPUT = process.env.CHROMEBOOK_AUDIT_OUTPUT;
-const AI_BOOT_REQUEST = /(?:\/onnx\/pose_model\.onnx|ort(?:\.bundle|-wasm)|webOnnxCacheWorker)/i;
+const FORBIDDEN_IMAGE_RECOGNITION_REQUEST = /(?:\/onnx\/|pose_model\.onnx|onnxruntime|ort(?:\.bundle|-wasm)|webOnnx(?:Cache|Inference)Worker)/i;
 
 const stageButton = (page: Page, name: string) => {
   const names: Record<string, RegExp> = {
@@ -181,8 +181,8 @@ test.describe("Chromebook workflow audit", () => {
     await measureStage(page, actions, "Assembly", page.getByTestId("assembly-canvas-preview"));
 
     await network.flush();
-    const bootAiRequests = network.records
-      .filter((request) => request.phase !== "workflow" && AI_BOOT_REQUEST.test(request.url))
+    const forbiddenImageRecognitionRequests = network.records
+      .filter((request) => FORBIDDEN_IMAGE_RECOGNITION_REQUEST.test(request.url))
       .map((request) => request.url);
     const actionLatencyMs = percentiles(actions.filter((action) => action.kind !== "tab").map((action) => action.durationMs));
     const tabSwitchLatencyMs = percentiles(actions.filter((action) => action.kind === "tab").map((action) => action.durationMs));
@@ -190,7 +190,7 @@ test.describe("Chromebook workflow audit", () => {
       playback,
       actionLatencyMs,
       tabSwitchLatencyMs,
-      bootAiRequests.length,
+      forbiddenImageRecognitionRequests.length,
     );
     const report: ChromebookAuditReport = {
       schemaVersion: 1,
@@ -210,7 +210,7 @@ test.describe("Chromebook workflow audit", () => {
       tabSwitchLatencyMs,
       playback,
       networkRequests: network.records,
-      bootAiRequests,
+      forbiddenImageRecognitionRequests,
       acceptance,
     };
     const json = `${JSON.stringify(report, null, 2)}\n`;
@@ -223,7 +223,10 @@ test.describe("Chromebook workflow audit", () => {
     }
 
     expect(network.records.filter((request) => request.url.includes("/@vite/client")), "audit used a production preview").toEqual([]);
-    expect(bootAiRequests, "boot does not request ONNX models, ORT runtime, WASM, or the AI cache worker").toEqual([]);
+    expect(
+      forbiddenImageRecognitionRequests,
+      "the complete workflow never requests image-recognition models or runtime assets",
+    ).toEqual([]);
     expect(pageErrors, "audit workflow has no uncaught page errors").toEqual([]);
     if (ENFORCE) {
       for (const [name, check] of Object.entries(acceptance)) {
