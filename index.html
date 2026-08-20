@@ -395,6 +395,7 @@
       .three-puppet-overlay { position: absolute; inset: 0; z-index: 12; pointer-events: none; opacity: .96; mix-blend-mode: normal; }
       .three-puppet-host, .three-puppet-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
       .three-puppet-canvas { display: block; }
+      .three-renderer-status { position: absolute; left: 50%; top: 50%; z-index: 30; transform: translate(-50%, -50%); border: 1px solid var(--ms-line); border-radius: 999px; background: rgba(255,255,255,.94); color: var(--ms-text-soft); box-shadow: 0 12px 32px rgba(15,23,42,.08); padding: .5rem .75rem; font-size: .75rem; font-weight: 720; pointer-events: none; }
       .three-puppet-overlay[data-input-mode="always"] .three-puppet-host, .three-puppet-overlay[data-input-mode="always"] .three-puppet-canvas, .three-puppet-overlay[data-input-mode="3d-only"][data-view-mode="3d"] .three-puppet-host, .three-puppet-overlay[data-input-mode="3d-only"][data-view-mode="3d"] .three-puppet-canvas { pointer-events: auto; touch-action: none; cursor: grab; }
       .three-puppet-overlay[data-input-mode="select-only"] .three-puppet-host, .three-puppet-overlay[data-input-mode="select-only"] .three-puppet-canvas { pointer-events: auto; cursor: pointer; }
       .three-puppet-overlay[data-is-dragging="true"] .three-puppet-host, .three-puppet-overlay[data-is-dragging="true"] .three-puppet-canvas { cursor: grabbing; }

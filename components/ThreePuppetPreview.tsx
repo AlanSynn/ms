@@ -37,7 +37,7 @@ const PUPPET_CAMERA_PRESETS: Viewer3DCameraPreset[] = ['front', 'iso'];
 const E2E_DIAGNOSTICS = typeof __MOTIONSMITH_E2E_DIAGNOSTICS__ === 'boolean'
   ? __MOTIONSMITH_E2E_DIAGNOSTICS__
   : false;
-type RendererStatus = 'pending' | 'webgl' | 'unavailable';
+type RendererStatus = 'pending' | 'webgl' | 'restoring' | 'unavailable';
 type LinkKey = 'base' | 'driver' | 'coupler' | 'output' | 'effector' | 'follower';
 
 type MaterialKit = {
@@ -1015,6 +1015,16 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     warmPartTopologyPipeline(renderPolicy.partTopology);
     if (E2E_DIAGNOSTICS) renderer.domElement.dataset.testid = `${testId}-canvas`;
     renderer.domElement.className = 'three-puppet-canvas';
+    const handleContextLost = (event: Event) => {
+      event.preventDefault();
+      setRendererStatus('restoring');
+    };
+    const handleContextRestored = () => {
+      setRendererStatus('webgl');
+      render();
+    };
+    renderer.domElement.addEventListener('webglcontextlost', handleContextLost);
+    renderer.domElement.addEventListener('webglcontextrestored', handleContextRestored);
     host.appendChild(renderer.domElement);
 
     const materials = createMaterials();
@@ -1069,6 +1079,8 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       activePuppetScenes.delete(scene);
       pruneSharedGeometryCache(true);
       disposeMaterials(materialsRef.current);
+      renderer.domElement.removeEventListener('webglcontextlost', handleContextLost);
+      renderer.domElement.removeEventListener('webglcontextrestored', handleContextRestored);
       renderer.dispose();
       if (renderer.domElement.parentElement === host) host.removeChild(renderer.domElement);
       materialsRef.current = null;
@@ -2102,6 +2114,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     data-joint-count={joints.length}
     data-scene-object-count={sceneObjects.length}
     data-selected-scene-object-id={project?.selectedSceneObjectId ?? ''}
+    data-three-renderer-status={rendererStatus}
     data-assembly-mode={assemblyPhase ? 'character' : ''}
     data-assembly-phase={assemblyPhase ?? ''}
     data-assembly-progress={Math.round(assemblyProgress * 100)}
@@ -2117,6 +2130,15 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       onPointerCancel={finishViewerDrag}
       onContextMenu={event => event.preventDefault()}
     />
+    {rendererStatus !== 'pending' && rendererStatus !== 'webgl' && (
+      <div
+        className="three-renderer-status"
+        data-testid={`${testId}-renderer-status`}
+        role="status"
+      >
+        {rendererStatus === 'restoring' ? 'Restoring 3D…' : '3D unavailable'}
+      </div>
+    )}
     {project?.settings.debugVisuals && (
       <div
         data-testid="canvas-debug-visuals"

@@ -2907,6 +2907,7 @@ const designAutomataProjectionText = readFileSync(join(process.cwd(), 'utils', '
 const automataSceneModelText = readFileSync(join(process.cwd(), 'utils', 'automataSceneModel.ts'), 'utf8');
 const designWorkflowPanelText = readFileSync(join(process.cwd(), 'components', 'stages', 'mechanism', 'DesignWorkflowPanel.tsx'), 'utf8');
 const workflowSpecText = readFileSync(join(process.cwd(), 'tests', 'browser', 'workflow.spec.ts'), 'utf8');
+const webglRecoverySpecText = readFileSync(join(process.cwd(), 'tests', 'browser', 'webgl-recovery.spec.ts'), 'utf8');
 const designInspectorPanelText = readFileSync(join(process.cwd(), 'components', 'stages', 'mechanism', 'DesignInspectorPanel.tsx'), 'utf8');
 const foundryPreviewModelText = readFileSync(join(process.cwd(), 'utils', 'foundryPreviewModel.ts'), 'utf8');
 const mechanismDesignStageText = `${mechanismDesignText}
@@ -3588,6 +3589,7 @@ assert.deepEqual(foundryCardSimulation.pathPoints, foundryCardContext.pathPoints
 assert(foundry3dText.includes('buildFoundryPhysicsOverlay') && physicsSessionText.includes('export const buildFoundryPhysicsOverlay'), 'Foundry force/velocity/constraint overlay math lives in PhysicsSession, not the React stage');
 assert(foundry3dText.includes('const range = useMemo(') && foundry3dText.includes('() => sampleFeasibleRange(landedFoundry)') && foundry3dText.includes('[landedFoundry]'), 'Foundry feasible-range sampling is memoized by mechanism, not re-run on every animation render');
 assert(renderPerformancePolicyText.includes('interface RenderPerformancePolicy') && renderPerformancePolicyText.includes("preset: 'balanced'") && !renderPerformancePolicyText.includes('navigator') && threeFoundryPreviewText.includes('resolveRenderPerformancePolicy') && foundry3dText.includes('resolveRenderPerformancePolicy'), 'persisted performance presets drive both Three renderers through one deterministic policy without User-Agent branching');
+assert(threePreviewText.includes("setRendererStatus('restoring')") && threePreviewText.includes("setRendererStatus('unavailable')") && threeFoundryPreviewText.includes('setRendererStatus("restoring")') && threeFoundryPreviewText.includes('setRendererStatus("unavailable")') && webglRecoverySpecText.includes('WEBGL_lose_context') && webglRecoverySpecText.includes('WebGL unavailable'), 'Character and Foundry keep controls mounted across unavailable/lost WebGL and production browser coverage restores the same scene');
 assert(!threePreviewText.includes('loadRapierPhysicsKernel') && threePreviewText.includes('deferred-to-foundry') && threeFoundryPreviewText.includes('loadRapierPhysicsKernel'), 'Character and Path boot without compiling Rapier; the Foundry renderer owns lazy contact validation when a mechanism scene opens');
 assert(threePreviewText.includes("const PUPPET_CAMERA_PRESETS: Viewer3DCameraPreset[] = ['front', 'iso']"), 'puppet viewer toolbar exposes only the fixed 2D and orbitable 3D modes');
 assert(threePreviewText.includes('onWheel={handleViewerWheel}') && threePreviewText.includes('data-camera-yaw'), 'puppet 3D canvas exposes direct wheel zoom and orbit state for browser verification');

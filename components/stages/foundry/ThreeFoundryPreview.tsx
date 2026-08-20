@@ -90,6 +90,7 @@ import {
 } from "./foundryPreviewStacks";
 
 const E2E_DIAGNOSTICS = __MOTIONSMITH_E2E_DIAGNOSTICS__;
+type FoundryRendererStatus = "pending" | "webgl" | "restoring" | "unavailable";
 
 type ThreeFoundryPreviewProps = {
   mechanism: MechanismConfig;
@@ -681,6 +682,7 @@ export const ThreeFoundryPreview = ({
   assemblySceneFrameRef.current = assemblySceneFrame;
   const geometryCacheRef = useRef<Map<string, THREE.BufferGeometry>>(new Map());
   const materialCacheRef = useRef<Map<string, THREE.Material>>(new Map());
+  const [rendererStatus, setRendererStatus] = useState<FoundryRendererStatus>("pending");
   const [physicsKernelRuntime, setPhysicsKernelRuntime] = useState<
     "loading" | "ready" | "unavailable"
   >("loading");
@@ -1418,14 +1420,31 @@ export const ThreeFoundryPreview = ({
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const renderer = new THREE.WebGLRenderer({
-      antialias: renderPolicy.antialias,
-      alpha: true,
-    });
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        antialias: renderPolicy.antialias,
+        alpha: true,
+      });
+    } catch (error) {
+      console.warn("ThreeFoundryPreview WebGL unavailable", error);
+      setRendererStatus("unavailable");
+      return;
+    }
     setRendererPixelRatioCap(renderer, renderPolicy.pixelRatioCap);
     renderer.shadowMap.enabled = false;
     renderer.domElement.className = "foundry-three-canvas";
     if (E2E_DIAGNOSTICS) renderer.domElement.dataset.testid = "foundry-three-canvas";
+    const handleContextLost = (event: Event) => {
+      event.preventDefault();
+      setRendererStatus("restoring");
+    };
+    const handleContextRestored = () => {
+      setRendererStatus("webgl");
+      renderCamera(cameraStateRef.current);
+    };
+    renderer.domElement.addEventListener("webglcontextlost", handleContextLost);
+    renderer.domElement.addEventListener("webglcontextrestored", handleContextRestored);
     host.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
     scene.background = new THREE.Color("#f8f9ff");
@@ -1457,6 +1476,7 @@ export const ThreeFoundryPreview = ({
     sceneRef.current = scene;
     rendererRef.current = renderer;
     cameraRef.current = cam;
+    setRendererStatus("webgl");
     const resize = () => {
       const width = Math.max(1, host.clientWidth);
       const height = Math.max(1, host.clientHeight);
@@ -1485,6 +1505,8 @@ export const ThreeFoundryPreview = ({
       geometryCacheRef.current.clear();
       materialCacheRef.current.clear();
       primitivePoolRef.current = null;
+      renderer.domElement.removeEventListener("webglcontextlost", handleContextLost);
+      renderer.domElement.removeEventListener("webglcontextrestored", handleContextRestored);
       renderer.dispose();
       if (renderer.domElement.parentElement === host)
         host.removeChild(renderer.domElement);
@@ -1936,8 +1958,18 @@ export const ThreeFoundryPreview = ({
       data-layer-forces={viewer3DLayerDataValue(showForces)}
       data-layer-velocity={viewer3DLayerDataValue(showVelocity)}
       data-layer-trail={viewer3DLayerDataValue(showTrail)}
+      data-three-renderer-status={rendererStatus}
     >
       <div ref={hostRef} className="foundry-three-host" />
+      {rendererStatus !== "pending" && rendererStatus !== "webgl" && (
+        <div
+          className="three-renderer-status"
+          data-testid="foundry-renderer-status"
+          role="status"
+        >
+          {rendererStatus === "restoring" ? "Restoring 3D…" : "3D unavailable"}
+        </div>
+      )}
       {E2E_DIAGNOSTICS && <FoundryPreviewStateProbe
         stateRef={stateRef}
         viewerContract={viewerContract}

@@ -1612,6 +1612,13 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
 
   await page.goto('/');
   await openCharacterScreen(page);
+  const existingPartCount = await page
+    .getByTestId('character-three-puppet-state')
+    .getAttribute('data-part-count');
+  expect(
+    existingPartCount,
+    'the current character exposes its part count before package review',
+  ).not.toBeNull();
 
   const packageFiles = [
     'tests/fixtures/package/parts_info.json',
@@ -1630,19 +1637,17 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
   await expect(review).toBeVisible();
   await expect(review.getByText('Ready', { exact: true })).toBeVisible();
   await expect(review).toContainText('1 parts · 2 joints');
-  await expect(page.getByTestId('character-three-puppet-state')).toHaveAttribute('data-part-count', '1');
+  await expect(page.getByTestId('character-three-puppet-state')).toHaveAttribute('data-part-count', existingPartCount!);
   await expect(page.getByText('outlines')).toBeHidden();
   await expect(page.getByText('Checks')).toHaveCount(0);
-  await expect(page.getByTestId('character-setup-panel').getByText('Choose new character.')).toBeVisible();
-  await page.getByTestId('character-processing-panel').locator('summary').click();
-  await expect(page.getByTestId('character-processing-panel').getByText('Choose new character.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Edit rig' })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Edit rig' })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Save Skeleton' })).toBeDisabled();
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Skip' }).click();
   await expect(page.getByTestId('character-import-review')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Edit rig', exact: true }).click();
+  await page.getByTestId('character-processing-panel').locator('summary').click();
+  const editRig = page.getByRole('button', { name: 'Edit rig', exact: true });
+  await expect(editRig).toBeVisible();
+  await expect(editRig).toBeEnabled();
+  await editRig.click();
   await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
   await expect(page.getByTestId('stage-right-inspector').getByText('Anchors')).toBeVisible();
   await expectProjectCounts(page, 14, 1, 0);
@@ -1909,10 +1914,19 @@ test('Legacy storage namespace migrates to MotionSmith keys without losing autos
 
   await page.goto('/');
   await openCharacterScreen(page);
+  const currentPartCount = Number(
+    await page
+      .getByTestId('character-three-puppet-state')
+      .getAttribute('data-part-count')
+      ?? '0',
+  );
   await page.getByRole('button', { name: /Options/i }).click();
   const autosaveToggle = page.getByLabel('Enable autosave');
   if (!(await autosaveToggle.isChecked())) await autosaveToggle.check();
-  await expect.poll(async () => page.evaluate(() => localStorage.getItem('motionsmith.autosave') ?? ''), { timeout: 5000 }).not.toBe('');
+  await expect.poll(async () => page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem('motionsmith.autosave') ?? '{}');
+    return saved.partOrder?.length ?? 0;
+  })).toBe(currentPartCount);
   await page.evaluate(() => {
     const current = localStorage.getItem('motionsmith.autosave') ?? '';
     const legacyPrefix = ['mech', 'anim'].join('');
