@@ -612,6 +612,17 @@ test('Getting Started guided project opens a real editable lesson', async ({ pag
   await expect(guidedContext).toHaveAttribute('data-layer-paths', 'shown');
   await expect(guidedContext).toHaveAttribute('data-layer-mechanisms', 'shown');
   await expect(guidedContext).toHaveAttribute('data-three-automata-part-count', '14');
+  await expect(designPreview).toHaveAttribute('data-design-fit-status', 'fit');
+  await expect(designPreview).toHaveAttribute('data-design-motion-source', 'linkage-trace');
+  expect(Number(await designPreview.getAttribute('data-design-target-error'))).toBeLessThan(0.1);
+  expect(Number(await designPreview.getAttribute('data-design-animated-part-count'))).toBeGreaterThanOrEqual(3);
+  const guidedHandBefore = await waitForThreePartTarget(guidedFoundryRig, 'right_hand_part');
+  await page.getByLabel('Workspace scrubber').fill('35');
+  await expect.poll(async () => {
+    const moved = (await readThreeScreenTargets(guidedFoundryRig, 'data-three-part-screen-targets'))
+      .find(item => item.id === 'right_hand_part' && item.visible);
+    return moved ? Math.hypot(moved.x - guidedHandBefore.x, moved.y - guidedHandBefore.y) : 0;
+  }, { message: 'guided Design hand follows the physical four-bar output while scrubbing' }).toBeGreaterThan(2);
   expectCleanPage(pageErrors, consoleErrors);
 });
 
@@ -696,6 +707,25 @@ const writeWavingArmLessonProject = async () => {
   const path = join(dir, 'waving-arm.motionsmith.json');
   await writeFile(path, serializeProject(createLessonProject('waving-arm')), 'utf8');
   return path;
+};
+
+const writeUnfittedWavingArmLessonProject = async () => {
+  const project = createLessonProject('waving-arm');
+  const path = project.paths['path-right-arm'];
+  project.paths[path.id] = {
+    ...path,
+    points: [
+      { x: 500, y: 500 },
+      { x: 620, y: 500 },
+      { x: 620, y: 620 },
+      { x: 500, y: 620 },
+    ],
+    timedPoints: undefined,
+  };
+  const dir = await mkdtemp(join(tmpdir(), 'motionsmith-unfitted-lesson-'));
+  const projectPath = join(dir, 'unfitted-waving-arm.motionsmith.json');
+  await writeFile(projectPath, serializeProject(project), 'utf8');
+  return projectPath;
 };
 
 const writeHeadBobLessonProject = async () => {
@@ -1870,7 +1900,8 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
 
   await page.getByRole('button', { name: /Path Editor/i }).click();
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
-  await expect(page.getByTestId('scene-grid-label')).toContainText('Letter sheet · 0.98 in grid');
+  await expect(page.getByTestId('path-three-puppet-state')).toHaveAttribute('data-layer-grid', 'shown');
+  await expect(page.getByTestId('stage-project-card')).toHaveAttribute('aria-label', /25 millimeter grid/);
   await page.getByRole('button', { name: 'Drawing free path', exact: true }).click();
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await expect(page.getByTestId('design-shared-foundry-preview')).toBeVisible();
@@ -1896,8 +1927,14 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await expect(page.getByRole('button', { name: /Use mechanism/i })).toBeDisabled();
   await expect(page.getByText('No valid fabrication fit. Try a shorter path or another mechanism.', { exact: true })).toBeVisible();
   await clickStage(page, 'Mechanism Design');
-  await expect(page.getByTestId('design-shared-foundry-preview')).toHaveAttribute('data-design-fit-status', 'rejected');
-  await expect(page.getByTestId('design-shared-foundry-preview')).toHaveAttribute('data-design-motion-source', 'missing-target');
+  const rejectedDesignPreview = page.getByTestId('design-shared-foundry-preview');
+  await expect(rejectedDesignPreview).toHaveAttribute('data-design-fit-status', 'rejected');
+  await page.getByLabel('Workspace scrubber').fill('15');
+  await expect(rejectedDesignPreview).toHaveAttribute('data-design-motion-source', 'linkage-trace');
+  expect(Number(await rejectedDesignPreview.getAttribute('data-design-animated-part-count'))).toBeGreaterThan(0);
+  const rejectedTargetBefore = `${await rejectedDesignPreview.getAttribute('data-design-target-x')},${await rejectedDesignPreview.getAttribute('data-design-target-y')}`;
+  await page.getByLabel('Workspace scrubber').fill('35');
+  await expect.poll(async () => `${await rejectedDesignPreview.getAttribute('data-design-target-x')},${await rejectedDesignPreview.getAttribute('data-design-target-y')}`, { message: 'fit rejection blocks export without disconnecting the Design target' }).not.toBe(rejectedTargetBefore);
   await clickStage(page, 'Blueprint');
   await expect(page.getByTestId('blueprint-control-panel')).toContainText('No fabrication-valid path fit.');
   await expect(page.getByRole('button', { name: /Generate package/i })).toBeDisabled();
@@ -4462,7 +4499,7 @@ test('Detached visible mechanisms block browser blueprint generation', async ({ 
 
 test('Unfitted classroom path stays blocked until a fabrication-valid fit exists', async ({ page }) => {
   await page.goto('/');
-  await openWavingArmTemplate(page);
+  await importProjectFile(page, await writeUnfittedWavingArmLessonProject());
   await page.getByRole('button', { name: /Foundry/i }).click();
   await expect(page.getByTestId('foundry-fit-path')).toBeEnabled();
   await page.getByTestId('foundry-fit-path').click();
@@ -4480,8 +4517,12 @@ test('Unfitted classroom path stays blocked until a fabrication-valid fit exists
   await clickStage(page, 'Design');
   const designPreview = page.getByTestId('design-shared-foundry-preview');
   await expect(designPreview).toHaveAttribute('data-design-fit-status', 'rejected');
-  await expect(designPreview).toHaveAttribute('data-design-motion-source', 'missing-target');
+  await expect(designPreview).toHaveAttribute('data-design-motion-source', 'linkage-trace');
   await expect(designPreview).toHaveAttribute('data-design-generated-path-count', '0');
+  expect(Number(await designPreview.getAttribute('data-design-animated-part-count'))).toBeGreaterThan(0);
+  const rejectedTargetBefore = `${await designPreview.getAttribute('data-design-target-x')},${await designPreview.getAttribute('data-design-target-y')}`;
+  await page.getByLabel('Workspace scrubber').fill('35');
+  await expect.poll(async () => `${await designPreview.getAttribute('data-design-target-x')},${await designPreview.getAttribute('data-design-target-y')}`, { message: 'unfitted path keeps physical Design motion while Blueprint remains blocked' }).not.toBe(rejectedTargetBefore);
   await clickStage(page, 'Blueprint');
   await expect(page.getByTestId('blueprint-control-panel')).toContainText('No fabrication-valid path fit.');
   await expect(page.getByRole('button', { name: /Generate package/i })).toBeDisabled();

@@ -10,9 +10,8 @@ import type { ProjectState } from '../../types';
 
 /**
  * A deterministic accepted four-bar fixture for export/renderer contracts.
- * The classroom waving path is intentionally not used here: it is a useful
- * no-fit regression fixture, while these tests need a genuinely buildable
- * project to exercise package generation.
+ * Keep this independent from the certified classroom baseline so export tests
+ * retain a small, purpose-built mechanism and path fixture.
  */
 export const createFabricationReadyFourBarProject = (): ProjectState => {
   const project = createSampleProject();

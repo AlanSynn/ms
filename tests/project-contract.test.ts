@@ -1018,18 +1018,20 @@ const wavingLessonGround = calculateLinkage(wavingLessonMechanism, 0);
 assert(sceneToBoardRaw({ x: wavingLessonMechanism.anchorX ?? Number.NaN, y: wavingLessonMechanism.anchorY ?? Number.NaN }, classroomLesson.settings.physicalKit).valid, 'waving-arm chooses a board-hole main pivot');
 assert(sceneToBoardRaw(wavingLessonGround.p2, classroomLesson.settings.physicalKit).valid, 'waving-arm chooses a board-hole second fixed pivot');
 assert([0, 90, 180, 270].includes(((wavingLessonMechanism.groundAngle ?? 0) % 360 + 360) % 360), 'waving-arm keeps the ground link on a fabricatable cardinal board direction');
-assert.equal(wavingLessonMechanism.fabricationMetadata?.pathFit?.status, 'rejected', 'waving-arm does not claim a fabrication fit when the authored path misses hard tolerance');
-assert.equal(wavingLessonMechanism.fabricationMetadata?.pathFit?.outputTraceId, undefined, 'rejected waving-arm fit does not invent a physical output trace');
-assert.equal(classroomLesson.mechanisms[0].generatedPath, undefined, 'rejected waving-arm fit does not expose an arbitrary generated target path');
+assert.equal(sceneToBoardRaw({ x: wavingLessonMechanism.anchorX!, y: wavingLessonMechanism.anchorY! }, classroomLesson.settings.physicalKit).label, 'H13', 'waving-arm uses the certified H13 input pivot');
+assert.equal(sceneToBoardRaw(wavingLessonGround.p2, classroomLesson.settings.physicalKit).label, 'H5', 'waving-arm uses the certified H5 ground pivot');
+assert.equal(wavingLessonMechanism.fabricationMetadata?.pathFit?.status, 'fit', 'waving-arm ships a fabrication-valid physical output path');
+assert.equal(wavingLessonMechanism.fabricationMetadata?.pathFit?.outputTraceId, 'C', 'waving-arm binds the hand to the physical output pin');
+assert.equal(classroomLesson.mechanisms[0].generatedPath?.length, 96, 'waving-arm stores one bounded physical sweep instead of fitting at lesson-open time');
 const classroomLessonRoundTrip = loadProjectSnapshot(JSON.parse(serializeProject(classroomLesson)));
-assert.equal(classroomLessonRoundTrip.mechanisms[0].fabricationMetadata?.pathFit?.status, 'rejected', 'lesson load preserves the explicit rejected fit state');
-assert(classroomLessonRoundTrip.mechanisms[0].warnings?.includes('No fabrication-valid path fit.'), 'lesson load preserves the hard path-fit blocker');
-const rejectedFitReducerReplay = applyProjectAction(classroomLesson, {
+assert.equal(classroomLessonRoundTrip.mechanisms[0].fabricationMetadata?.pathFit?.status, 'fit', 'lesson load preserves the certified physical fit');
+assert.deepEqual(classroomLessonRoundTrip.mechanisms[0].warnings, [], 'lesson load preserves a warning-free certified fit');
+const fittedReducerReplay = applyProjectAction(classroomLesson, {
   type: 'upsert_mechanism',
   mechanism: classroomLesson.mechanisms[0],
 });
-assert.equal(rejectedFitReducerReplay.mechanisms[0].fabricationMetadata?.pathFit?.status, 'rejected', 'ProjectState upsert preserves a deliberate rejected fit even without a generated trace');
-const rejectedFitPathEdit = applyProjectAction(classroomLesson, {
+assert.equal(fittedReducerReplay.mechanisms[0].fabricationMetadata?.pathFit?.status, 'fit', 'ProjectState upsert preserves the certified fit and generated trace');
+const fittedPathEdit = applyProjectAction(classroomLesson, {
   type: 'upsert_path',
   path: {
     ...classroomLesson.paths['path-right-arm'],
@@ -1038,23 +1040,71 @@ const rejectedFitPathEdit = applyProjectAction(classroomLesson, {
     ),
   },
 });
-assert.equal(rejectedFitPathEdit.mechanisms[0].fabricationMetadata?.pathFit?.status, 'unfitted', 'editing the authored path invalidates the previous rejected fit metadata');
+assert.equal(fittedPathEdit.mechanisms[0].fabricationMetadata?.pathFit?.status, 'unfitted', 'editing the authored path invalidates the previous certified fit metadata');
+const wavingTraceSet = generateFoundryPlaybackPointTraces(wavingLessonMechanism, 96);
+const wavingBoardHalfSpan = ((classroomLesson.settings.physicalKit.boardCells - 1) / 2)
+  * classroomLesson.settings.physicalKit.gridPitchMm
+  * SCENE_PX_PER_MM;
+assert.equal(wavingTraceSet.percentValid, 1, 'waving-arm remains valid through the complete input rotation');
+assert(
+  wavingTraceSet.traces.flatMap(trace => trace.points).every(point =>
+    Math.abs(point.x) <= wavingBoardHalfSpan + 1e-6 && Math.abs(point.y) <= wavingBoardHalfSpan + 1e-6
+  ),
+  'waving-arm keeps every moving pin inside the 15x15 board for the complete sweep',
+);
+for (const phase of [0, 0.37, 1.2, 3.14, 5.9]) {
+  const state = calculateLinkage(wavingLessonMechanism, phase);
+  const physicalTarget = mechanismTracePointForState(
+    wavingLessonMechanism.type,
+    state,
+    wavingLessonMechanism.fabricationMetadata?.pathFit?.outputTraceId,
+  );
+  const pathTarget = pointOnProjectPath(classroomLesson.paths['path-right-arm'], phase);
+  const preview = motionPreviewForProject(classroomLesson, [wavingLessonMechanism], phase);
+  assert(state.isValid && physicalTarget && preview.target, `waving-arm has a physical Design target at phase ${phase}`);
+  assert(Math.hypot(physicalTarget!.x - pathTarget.x, physicalTarget!.y - pathTarget.y) < 0.1, `waving-arm authored path follows the output pin at phase ${phase}`);
+  assert(Math.hypot(preview.target!.x - physicalTarget!.x, preview.target!.y - physicalTarget!.y) < 1e-9, `waving-arm target binding follows the mechanism at phase ${phase}`);
+  assert(Object.keys(preview.parts).length >= 3, `waving-arm moves the complete bound arm chain at phase ${phase}`);
+}
+const rejectedPreviewMechanism: MechanismConfig = {
+  ...wavingLessonMechanism,
+  fabricationMetadata: {
+    ...wavingLessonMechanism.fabricationMetadata,
+    pathFit: {
+      ...wavingLessonMechanism.fabricationMetadata!.pathFit!,
+      status: 'rejected',
+    },
+  },
+  warnings: ['No fabrication-valid path fit.'],
+};
+const rejectedPreviewProject = { ...classroomLesson, mechanisms: [rejectedPreviewMechanism] };
+const rejectedPhysicalState = calculateLinkage(rejectedPreviewMechanism, 0.75);
+const rejectedPhysicalTarget = mechanismTracePointForState(
+  rejectedPreviewMechanism.type,
+  rejectedPhysicalState,
+  rejectedPreviewMechanism.fabricationMetadata?.pathFit?.outputTraceId,
+);
+assert(Math.hypot(rejectedPhysicalTarget.x - rejectedPhysicalState.j2.x, rejectedPhysicalTarget.y - rejectedPhysicalState.j2.y) < 1e-9, 'missing fit metadata falls back to the visible primary output pin instead of an arbitrary coupler point');
+const rejectedDesignPreview = motionPreviewForProject(rejectedPreviewProject, [rejectedPreviewMechanism], 0.75);
+assert.equal(mechanismPathFitIsUsable(rejectedPreviewProject, rejectedPreviewMechanism), false, 'rejected path fit remains blocked from fabrication');
+assert(rejectedDesignPreview.warnings?.[rejectedPreviewMechanism.id]?.includes('No fabrication-valid path fit.'), 'rejected path fit remains visible as a Design warning');
+assert(rejectedDesignPreview.target && rejectedPhysicalTarget && Math.hypot(rejectedDesignPreview.target.x - rejectedPhysicalTarget.x, rejectedDesignPreview.target.y - rejectedPhysicalTarget.y) < 1e-9, 'fit warnings do not disconnect the bound character target from the physical mechanism');
 const recommendationAuditProject: ProjectState = { ...classroomLesson, mechanisms: [], selectedMechanismId: undefined };
 const wavingPathForRecommendations = recommendationAuditProject.paths['path-right-arm'];
 const wavingRecommendations = buildMechanismRecommendations(recommendationAuditProject, recommendationAuditProject.parts[wavingPathForRecommendations.partId], wavingPathForRecommendations);
 assert(wavingRecommendations.every(option => isMechanismTypeEnabled(option.type)), 'recommendations contain only currently enabled linkage and gear mechanisms');
 assert(!wavingRecommendations.some(option => ['piston', 'cam', 'planetary_gear'].includes(option.type)), 'recommendations do not surface disabled mechanism combinations');
 const wavingFourBarRecommendation = wavingRecommendations.find(option => option.type === '4bar');
-assert(wavingFourBarRecommendation, 'recommendation audit keeps a four-bar card with an explicit fit blocker for the classroom hand-wave path');
-assert(wavingFourBarRecommendation!.fabricationErrors.some(error => error.includes('No fabrication-valid path fit.')), 'four-bar recommendation surfaces the hard path-fit blocker instead of hiding it');
-assert.equal(wavingFourBarRecommendation!.mechanism.fabricationMetadata?.pathFit?.status, 'rejected', 'four-bar recommendation records a rejected physical path-fit state');
-assert.equal(wavingFourBarRecommendation!.mechanism.fabricationMetadata?.pathFit?.outputTraceId, undefined, 'rejected four-bar recommendation does not select an output trace');
-assert(validateForFabrication({ ...recommendationAuditProject, mechanisms: [wavingFourBarRecommendation!.mechanism] }).errors.some(error => error.includes('No fabrication-valid path fit.')), 'four-bar recommendation remains blocked from export until the path fits');
+assert(wavingFourBarRecommendation, 'recommendation audit keeps a four-bar card for the certified classroom hand-wave path');
+assert.deepEqual(wavingFourBarRecommendation!.fabricationErrors, [], 'four-bar recommendation reuses the board-valid hand-wave path without a fit blocker');
+assert.equal(wavingFourBarRecommendation!.mechanism.fabricationMetadata?.pathFit?.status, 'fit', 'four-bar recommendation records a physical path-fit state');
+assert.equal(wavingFourBarRecommendation!.mechanism.fabricationMetadata?.pathFit?.outputTraceId, 'C', 'four-bar recommendation selects the physical output pin');
+assert.deepEqual(validateForFabrication({ ...recommendationAuditProject, mechanisms: [wavingFourBarRecommendation!.mechanism] }).errors, [], 'four-bar recommendation remains fabrication-ready');
 const occupiedAnchorRecommendations = buildMechanismRecommendations(classroomLesson, classroomLesson.parts[classroomLesson.selectedPartId!], classroomLesson.paths['path-right-arm']);
 const occupiedFourBarRecommendation = occupiedAnchorRecommendations.find(option => option.type === '4bar');
 assert.equal(occupiedFourBarRecommendation?.mechanism.targetPartId, 'right_arm_lower', 'recommendations retarget to the closest parent part when the hand anchor already has a driver');
 assert.equal(occupiedFourBarRecommendation?.mechanism.targetAnchorJointId, 'right_hand', 'recommendation retarget keeps the hand end-effector for IK motion');
-assert(validateForFabrication({ ...classroomLesson, mechanisms: [...classroomLesson.mechanisms, { ...occupiedFourBarRecommendation!.mechanism, id: 'recommendation-contract-4bar' }] }).errors.some(error => error.includes('No fabrication-valid path fit.')), 'retargeted recommendation preserves the path-fit blocker instead of exporting a mismatched motion');
+assert.deepEqual(validateForFabrication({ ...classroomLesson, mechanisms: [...classroomLesson.mechanisms, { ...occupiedFourBarRecommendation!.mechanism, id: 'recommendation-contract-4bar' }] }).errors, [], 'retargeted recommendation preserves the certified physical fit');
 const guidedChainReach = (project: ProjectState, jointIds: string[]) => {
   const skeleton = project.skeleton;
   assert(skeleton, 'guided project has skeleton');
@@ -1097,8 +1147,23 @@ assert.equal(walkingLegMechanism.type, '4bar', 'walking-leg guided theme creates
 assert.equal(walkingLegLesson.selectedPathId, 'path-right-foot-step', 'walking-leg guided theme creates an editable foot path');
 assert.equal(walkingLegLesson.paths['path-right-foot-step'].partId, 'right_foot_part', 'walking-leg drives the foot part instead of the lower leg plate');
 assert.equal(walkingLegMechanism.targetPartId, 'right_foot_part', 'walking-leg mechanism binds to the foot part instead of the lower leg plate');
-assert((walkingLegMechanism.anchorX ?? -Infinity) > Math.max(...walkingLegLesson.paths['path-right-foot-step'].points.map(point => point.x)), 'walking-leg keeps the linkage driver to the outside of the foot path');
-assert.equal(walkingLegMechanism.groundAngle, 180, 'walking-leg points the mechanism back toward the character from the outside');
+const walkingLegGround = calculateLinkage(walkingLegMechanism, 0);
+assert.equal(sceneToBoardRaw({ x: walkingLegMechanism.anchorX!, y: walkingLegMechanism.anchorY! }, walkingLegLesson.settings.physicalKit).label, 'F13', 'walking-leg uses the certified F13 input pivot');
+assert.equal(sceneToBoardRaw(walkingLegGround.p2, walkingLegLesson.settings.physicalKit).label, 'F5', 'walking-leg uses the certified F5 ground pivot');
+assert.equal(walkingLegMechanism.groundAngle, 90, 'walking-leg keeps its fixed pivots on one board column');
+assert.equal(walkingLegMechanism.fabricationMetadata?.pathFit?.status, 'fit', 'walking-leg ships a fabrication-valid physical output path');
+assert.equal(walkingLegMechanism.fabricationMetadata?.pathFit?.outputTraceId, 'C', 'walking-leg binds the foot to the physical output pin');
+const walkingTraceSet = generateFoundryPlaybackPointTraces(walkingLegMechanism, 96);
+const walkingBoardHalfSpan = ((walkingLegLesson.settings.physicalKit.boardCells - 1) / 2)
+  * walkingLegLesson.settings.physicalKit.gridPitchMm
+  * SCENE_PX_PER_MM;
+assert.equal(walkingTraceSet.percentValid, 1, 'walking-leg remains valid through the complete input rotation');
+assert(
+  walkingTraceSet.traces.flatMap(trace => trace.points).every(point =>
+    Math.abs(point.x) <= walkingBoardHalfSpan + 1e-6 && Math.abs(point.y) <= walkingBoardHalfSpan + 1e-6
+  ),
+  'walking-leg keeps every moving pin inside the 15x15 board for the complete sweep',
+);
 assertGuidedPathUsesReach(walkingLegLesson, 'path-right-foot-step', ['right_hip', 'right_knee', 'right_foot'], 0.7);
 const spinGearsLesson = createLessonProject('spin-gears');
 assert.equal(spinGearsLesson.mechanisms[0]?.type, 'gear', 'spin-gears guided theme creates a real gear mechanism baseline');
@@ -1612,7 +1677,7 @@ assert.deepEqual(
   Object.fromEntries(Object.entries(goldenMaster).map(([key, value]) => [key, goldenMasterHash(value)])),
   {
     project: '2b8b317121b8013563fb8478915e2596769ea9f17d121ba67698fc53366f813a',
-    lesson: 'b637062b9a6ebbe8d2756c2422f8780f466f1d26ce13616427b4c591cf13cabc',
+    lesson: '1e82e1582ce990a346effb1a574ef80eecf28c84cb477713da30a7bb705db7d2',
     mechanismSnapshot: '25f57f11023993ac2623d6863ee5528573befa68c3053ae4bfbb5b6e20db65a7',
     allMechanismSnapshots: '16a8a3b3c54f3352926b56a69ce65da46a027d993eb44556ba3705ab5ee18f09',
     sceneProjection: '84e51e7b708660831a8a7bb540fe9bea2f61807841f3e7dafe17c6fe44350dba',
@@ -3579,7 +3644,7 @@ const assertMotionFitSourceContracts = () => {
     designFoundryPreviewText.includes('data-design-target-error') &&
     designFoundryPreviewText.includes('data-design-target-x') &&
     designFoundryPreviewText.includes('data-design-animated-part-count');
-  assert.equal(designGeneratedPathMotion, true, 'Mechanism Design fails closed unless the selected fitted mechanism drives character motion from the physical linkage trace through motionPreviewForProject');
+  assert.equal(designGeneratedPathMotion, true, 'Mechanism Design drives character motion from the physical linkage trace through motionPreviewForProject while fabrication fit remains a separate export gate');
 
   const puppetMechanismContinuity =
     threePreviewText.includes('data-three-selected-mechanism-generated-path-count') &&

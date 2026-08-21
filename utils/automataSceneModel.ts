@@ -18,7 +18,6 @@ import {
 } from './foundryPreviewModel';
 import {
     mechanismBindingWarnings,
-    mechanismPathFitIsUsable,
     motionPreviewForProject,
     pointOnGeneratedMechanismPath,
     pointOnProjectPath,
@@ -43,7 +42,7 @@ export type AutomataSceneModel = {
     targetJointId?: string;
     targetError?: number;
     generatedPathError?: number;
-    motionSource: 'linkage-trace' | 'linkage-effector' | 'missing-target' | 'none';
+    motionSource: 'linkage-trace' | 'missing-target' | 'none';
     featureLabel?: string;
     featureIssues: MechanismFeatureIssue[];
     warnings: Record<string, string[]>;
@@ -173,15 +172,7 @@ export const sampleAutomataSceneRuntime = (
     const generatedPathError = generatedTarget && selectedMotionPreview.target
         ? Math.hypot(selectedMotionPreview.target.x - generatedTarget.x, selectedMotionPreview.target.y - generatedTarget.y)
         : undefined;
-    const motionSource = selectedMotionPreview.target
-        ? mechanism.fabricationMetadata?.pathFit?.outputTraceId
-            ? 'linkage-trace'
-            : 'linkage-effector'
-        : mechanism.type === '4bar' && mechanism.targetPathId && !mechanismPathFitIsUsable(project, mechanism)
-            ? 'missing-target'
-        : generatedTarget
-            ? 'missing-target'
-            : 'linkage-effector';
+    const motionSource = selectedMotionPreview.target ? 'linkage-trace' : 'missing-target';
 
     return {
         mode,

@@ -869,8 +869,10 @@ export const motionPreviewForProject = (project: ProjectState, mechanisms: Mecha
     const warnings = mechanismBindingWarnings(project, mechanisms);
     const drivenTargets = new Set<string>();
     let preview: MotionPreview = { parts: {}, sceneObjects: {}, skeleton: project.skeleton, warnings };
+    // A rejected authored-path fit still has a real mechanism output. Keep the
+    // fabrication/export blocker, but preview that physical output so Design
+    // never disconnects a valid target binding from the moving mechanism.
     mechanisms.filter(m => m.visible && m.enabled !== false).forEach(m => {
-        if (!mechanismPathFitIsUsable(project, m)) return;
         if (m.targetSceneObjectId) {
             const object = project.sceneObjects[m.targetSceneObjectId];
             if (!object) return;
