@@ -53,7 +53,7 @@ const stlNum = (value: number) => Number.isFinite(value) ? Number(value.toFixed(
 export const makeCustomPartsStl = (project: ProjectState) => {
     const thicknessMm = 2.4;
     const holeRadiusMm = Math.max(0.5, project.settings.physicalKit.holeDiameterMm / 2);
-    const cellMm = Math.max(1, Math.min(2, holeRadiusMm * 0.75));
+    const cellMm = Math.max(1.5, Math.min(2.5, holeRadiusMm));
     const facets: string[] = [];
     const vertex = (x: number, y: number, z: number) => `      vertex ${stlNum(x)} ${stlNum(y)} ${stlNum(z)}`;
     const tri = (a: [number, number, number], b: [number, number, number], c: [number, number, number]) => {
@@ -88,20 +88,54 @@ export const makeCustomPartsStl = (project: ProjectState) => {
             }
         }
         const hasCell = (col: number, row: number) => occupied.has(`${col}:${row}`);
-        occupied.forEach(key => {
-            const [col, row] = key.split(':').map(Number);
-            const x0 = cursorX + col * cellMm;
-            const y0 = row * cellMm;
-            const x1 = cursorX + (col + 1) * cellMm;
-            const y1 = (row + 1) * cellMm;
-            tri([x0, y0, thicknessMm], [x1, y0, thicknessMm], [x1, y1, thicknessMm]);
-            tri([x0, y0, thicknessMm], [x1, y1, thicknessMm], [x0, y1, thicknessMm]);
-            tri([x0, y0, 0], [x1, y1, 0], [x1, y0, 0]);
-            tri([x0, y0, 0], [x0, y1, 0], [x1, y1, 0]);
-            if (!hasCell(col - 1, row)) edge([x0, y0], [x0, y1]);
-            if (!hasCell(col + 1, row)) edge([x1, y1], [x1, y0]);
-            if (!hasCell(col, row - 1)) edge([x1, y0], [x0, y0]);
-            if (!hasCell(col, row + 1)) edge([x0, y1], [x1, y1]);
+        const runsByRow: Array<Array<{ start: number; end: number }>> = [];
+        for (let row = 0; row < rows; row += 1) {
+            const runs: Array<{ start: number; end: number }> = [];
+            let col = 0;
+            while (col < cols) {
+                while (col < cols && !hasCell(col, row)) col += 1;
+                if (col >= cols) break;
+                const startCol = col;
+                while (col < cols && hasCell(col, row)) col += 1;
+                runs.push({ start: startCol, end: col });
+            }
+            runsByRow.push(runs);
+        }
+        const boundaryColumns = new Set(
+            runsByRow.flatMap(runs => runs.flatMap(run => [run.start, run.end])),
+        );
+        runsByRow.forEach((runs, row) => {
+            for (const run of runs) {
+                const splitColumns = new Set([run.start, run.end]);
+                for (const column of boundaryColumns) {
+                    if (column > run.start && column < run.end) {
+                        splitColumns.add(column);
+                    }
+                }
+                const splits = [...splitColumns].sort((a, b) => a - b);
+                const y0 = row * cellMm;
+                const y1 = (row + 1) * cellMm;
+                edge(
+                    [cursorX + run.start * cellMm, y0],
+                    [cursorX + run.start * cellMm, y1],
+                );
+                edge(
+                    [cursorX + run.end * cellMm, y1],
+                    [cursorX + run.end * cellMm, y0],
+                );
+                for (let index = 0; index < splits.length - 1; index += 1) {
+                    const startCol = splits[index];
+                    const endCol = splits[index + 1];
+                    const x0 = cursorX + startCol * cellMm;
+                    const x1 = cursorX + endCol * cellMm;
+                    tri([x0, y0, thicknessMm], [x1, y0, thicknessMm], [x1, y1, thicknessMm]);
+                    tri([x0, y0, thicknessMm], [x1, y1, thicknessMm], [x0, y1, thicknessMm]);
+                    tri([x0, y0, 0], [x1, y1, 0], [x1, y0, 0]);
+                    tri([x0, y0, 0], [x0, y1, 0], [x1, y1, 0]);
+                    if (!hasCell(startCol, row - 1)) edge([x1, y0], [x0, y0]);
+                    if (!hasCell(startCol, row + 1)) edge([x0, y1], [x1, y1]);
+                }
+            }
         });
         cursorX += bounds.width / SCENE_PX_PER_MM + 12;
     });
