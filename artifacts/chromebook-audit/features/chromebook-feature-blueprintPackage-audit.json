@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-21T01:53:00.579Z",
+  "generatedAt": "2026-08-21T03:19:54.844Z",
   "resultLabel": "6x CPU emulation",
   "productionBuild": true,
   "actualChromebookTested": false,
@@ -31,8 +31,8 @@
         "label": "blueprint-package-cancel",
         "cycle": 1,
         "outcome": "cancelled",
-        "nextPaintMs": 24.69999998807907,
-        "settleMs": 82.89999997615814,
+        "nextPaintMs": 30.80000001192093,
+        "settleMs": 88.5,
         "longTasks": {
           "durationsMs": [],
           "latencyMs": {
@@ -45,8 +45,8 @@
         },
         "puppetTopologyDurationsMs": [],
         "before": {
-          "atMs": 1333.800000011921,
-          "heapBytes": 11529063,
+          "atMs": 1746.0999999642372,
+          "heapBytes": 10655676,
           "longTaskCount": 2,
           "puppetTopologyCount": 17,
           "lifecycle": {
@@ -76,8 +76,8 @@
           }
         },
         "after": {
-          "atMs": 1478.9000000357628,
-          "heapBytes": 10781146,
+          "atMs": 1893.3999999761581,
+          "heapBytes": 12007235,
           "longTaskCount": 2,
           "puppetTopologyCount": 17,
           "lifecycle": {
@@ -111,9 +111,9 @@
         "label": "blueprint-package-complete",
         "cycle": 2,
         "outcome": "completed",
-        "nextPaintMs": 14.299999952316284,
-        "settleMs": 299.5999999642372,
-        "jobCompletionMs": 277.2999999523163,
+        "nextPaintMs": 15.5,
+        "settleMs": 308.10000002384186,
+        "jobCompletionMs": 289.9000000357628,
         "longTasks": {
           "durationsMs": [],
           "latencyMs": {
@@ -126,8 +126,8 @@
         },
         "puppetTopologyDurationsMs": [],
         "before": {
-          "atMs": 1486.9000000357628,
-          "heapBytes": 11189318,
+          "atMs": 1901.300000011921,
+          "heapBytes": 12416247,
           "longTaskCount": 2,
           "puppetTopologyCount": 17,
           "lifecycle": {
@@ -157,8 +157,8 @@
           }
         },
         "after": {
-          "atMs": 1841.6000000238419,
-          "heapBytes": 15151288,
+          "atMs": 2260.300000011921,
+          "heapBytes": 15774190,
           "longTaskCount": 2,
           "puppetTopologyCount": 17,
           "lifecycle": {
@@ -190,19 +190,19 @@
       }
     ],
     "nextPaintLatencyMs": {
-      "p50": 14.299999952316284,
-      "p95": 24.69999998807907,
-      "p99": 24.69999998807907
+      "p50": 15.5,
+      "p95": 30.80000001192093,
+      "p99": 30.80000001192093
     },
     "jobCompletionLatencyMs": {
-      "p50": 277.2999999523163,
-      "p95": 277.2999999523163,
-      "p99": 277.2999999523163
+      "p50": 289.9000000357628,
+      "p95": 289.9000000357628,
+      "p99": 289.9000000357628
     },
     "settleLatencyMs": {
-      "p50": 82.89999997615814,
-      "p95": 299.5999999642372,
-      "p99": 299.5999999642372
+      "p50": 88.5,
+      "p95": 308.10000002384186,
+      "p99": 308.10000002384186
     },
     "mainThreadLongTaskLatencyMs": {
       "p50": 0,
@@ -266,22 +266,22 @@
     },
     "heap": {
       "supported": true,
-      "baselineBytes": 10119838,
-      "finalBytes": 13313493,
-      "growthBytes": 3193655,
+      "baselineBytes": 10911507,
+      "finalBytes": 12882986,
+      "growthBytes": 1971479,
       "allowedGrowthBytes": 8388608,
       "finalSamplesBytes": [
-        13438773,
-        13307405,
-        13313493
+        13012902,
+        12876878,
+        12882986
       ],
-      "tailRangeBytes": 131368,
+      "tailRangeBytes": 136024,
       "stable": true
     },
     "acceptance": {
       "nextPaintP95": {
         "passed": true,
-        "observed": 24.69999998807907,
+        "observed": 30.80000001192093,
         "limit": 100
       },
       "mainThreadLongTaskP95": {
@@ -346,12 +346,12 @@
       },
       "heapBounded": {
         "passed": true,
-        "observed": 3193655,
+        "observed": 1971479,
         "limit": 8388608
       },
       "heapStable": {
         "passed": true,
-        "observed": 131368,
+        "observed": 136024,
         "limit": 8388608
       },
       "passed": {

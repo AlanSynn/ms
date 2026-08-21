@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-21T02:16:29.372Z",
+  "generatedAt": "2026-08-21T03:20:35.174Z",
   "resultLabel": "6x CPU emulation",
   "productionBuild": true,
   "actualChromebookTested": false,
@@ -31,9 +31,9 @@
         "label": "object-artwork-supersede-raster-complete",
         "cycle": 1,
         "outcome": "completed",
-        "nextPaintMs": 12.399999976158142,
-        "settleMs": 319.5,
-        "jobCompletionMs": 301.89999997615814,
+        "nextPaintMs": 9.899999976158142,
+        "settleMs": 313.60000002384186,
+        "jobCompletionMs": 295.60000002384186,
         "longTasks": {
           "durationsMs": [],
           "latencyMs": {
@@ -46,10 +46,10 @@
         },
         "puppetTopologyDurationsMs": [],
         "before": {
-          "atMs": 2346.900000035763,
-          "heapBytes": 10493864,
+          "atMs": 2756.699999988079,
+          "heapBytes": 11820845,
           "longTaskCount": 3,
-          "puppetTopologyCount": 21,
+          "puppetTopologyCount": 20,
           "lifecycle": {
             "probeSupport": {
               "workers": true,
@@ -57,10 +57,10 @@
               "objectUrls": true
             },
             "workers": {
-              "acquired": 1,
-              "released": 1,
+              "acquired": 0,
+              "released": 0,
               "active": 0,
-              "peakActive": 1
+              "peakActive": 0
             },
             "imageBitmaps": {
               "acquired": 0,
@@ -77,10 +77,10 @@
           }
         },
         "after": {
-          "atMs": 2885.2000000476837,
-          "heapBytes": 16374918,
+          "atMs": 3272,
+          "heapBytes": 12326928,
           "longTaskCount": 4,
-          "puppetTopologyCount": 21,
+          "puppetTopologyCount": 20,
           "lifecycle": {
             "probeSupport": {
               "workers": true,
@@ -88,8 +88,8 @@
               "objectUrls": true
             },
             "workers": {
-              "acquired": 3,
-              "released": 3,
+              "acquired": 2,
+              "released": 2,
               "active": 0,
               "peakActive": 1
             },
@@ -110,19 +110,19 @@
       }
     ],
     "nextPaintLatencyMs": {
-      "p50": 12.399999976158142,
-      "p95": 12.399999976158142,
-      "p99": 12.399999976158142
+      "p50": 9.899999976158142,
+      "p95": 9.899999976158142,
+      "p99": 9.899999976158142
     },
     "jobCompletionLatencyMs": {
-      "p50": 301.89999997615814,
-      "p95": 301.89999997615814,
-      "p99": 301.89999997615814
+      "p50": 295.60000002384186,
+      "p95": 295.60000002384186,
+      "p99": 295.60000002384186
     },
     "settleLatencyMs": {
-      "p50": 319.5,
-      "p95": 319.5,
-      "p99": 319.5
+      "p50": 313.60000002384186,
+      "p95": 313.60000002384186,
+      "p99": 313.60000002384186
     },
     "mainThreadLongTaskLatencyMs": {
       "p50": 0,
@@ -137,10 +137,10 @@
           "objectUrls": true
         },
         "workers": {
-          "acquired": 1,
-          "released": 1,
+          "acquired": 0,
+          "released": 0,
           "active": 0,
-          "peakActive": 1
+          "peakActive": 0
         },
         "imageBitmaps": {
           "acquired": 0,
@@ -162,8 +162,8 @@
           "objectUrls": true
         },
         "workers": {
-          "acquired": 3,
-          "released": 3,
+          "acquired": 2,
+          "released": 2,
           "active": 0,
           "peakActive": 1
         },
@@ -186,22 +186,22 @@
     },
     "heap": {
       "supported": true,
-      "baselineBytes": 10814587,
-      "finalBytes": 10712441,
-      "growthBytes": -102146,
+      "baselineBytes": 11787459,
+      "finalBytes": 10860404,
+      "growthBytes": -927055,
       "allowedGrowthBytes": 8388608,
       "finalSamplesBytes": [
-        10207585,
-        10508569,
-        10712441
+        10326984,
+        10628724,
+        10860404
       ],
-      "tailRangeBytes": 504856,
+      "tailRangeBytes": 533420,
       "stable": true
     },
     "acceptance": {
       "nextPaintP95": {
         "passed": true,
-        "observed": 12.399999976158142,
+        "observed": 9.899999976158142,
         "limit": 100
       },
       "mainThreadLongTaskP95": {
@@ -266,12 +266,12 @@
       },
       "heapBounded": {
         "passed": true,
-        "observed": -102146,
+        "observed": -927055,
         "limit": 8388608
       },
       "heapStable": {
         "passed": true,
-        "observed": 504856,
+        "observed": 533420,
         "limit": 8388608
       },
       "passed": {

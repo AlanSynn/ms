@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-21T01:34:15.589Z",
+  "generatedAt": "2026-08-21T03:20:18.007Z",
   "resultLabel": "6x CPU emulation",
   "productionBuild": true,
   "actualChromebookTested": false,
@@ -31,9 +31,9 @@
         "label": "project-import-supersede-complete",
         "cycle": 1,
         "outcome": "completed",
-        "nextPaintMs": 30.30000001192093,
-        "settleMs": 525.9000000357628,
-        "jobCompletionMs": 460.60000002384186,
+        "nextPaintMs": 32.299999952316284,
+        "settleMs": 520.2999999523163,
+        "jobCompletionMs": 475.5999999642372,
         "longTasks": {
           "durationsMs": [],
           "latencyMs": {
@@ -45,20 +45,19 @@
           "maxMs": 0
         },
         "puppetTopologyDurationsMs": [
-          5.5,
-          2.800000011920929,
-          2.600000023841858,
-          3.599999964237213,
-          2.399999976158142,
-          2.199999988079071,
-          1.2000000476837158,
-          1.100000023841858
+          5.400000035762787,
+          2.300000011920929,
+          1.800000011920929,
+          1.600000023841858,
+          2.5,
+          2,
+          0.9000000357627869
         ],
         "before": {
-          "atMs": 2278.300000011921,
-          "heapBytes": 11071758,
-          "longTaskCount": 3,
-          "puppetTopologyCount": 19,
+          "atMs": 2649.7000000476837,
+          "heapBytes": 12691283,
+          "longTaskCount": 2,
+          "puppetTopologyCount": 22,
           "lifecycle": {
             "probeSupport": {
               "workers": true,
@@ -66,10 +65,10 @@
               "objectUrls": true
             },
             "workers": {
-              "acquired": 0,
-              "released": 0,
+              "acquired": 1,
+              "released": 1,
               "active": 0,
-              "peakActive": 0
+              "peakActive": 1
             },
             "imageBitmaps": {
               "acquired": 0,
@@ -86,10 +85,10 @@
           }
         },
         "after": {
-          "atMs": 7761.300000011921,
-          "heapBytes": 165441480,
-          "longTaskCount": 4,
-          "puppetTopologyCount": 27,
+          "atMs": 8152.900000035763,
+          "heapBytes": 173079097,
+          "longTaskCount": 3,
+          "puppetTopologyCount": 29,
           "lifecycle": {
             "probeSupport": {
               "workers": true,
@@ -97,8 +96,8 @@
               "objectUrls": true
             },
             "workers": {
-              "acquired": 2,
-              "released": 2,
+              "acquired": 3,
+              "released": 3,
               "active": 0,
               "peakActive": 1
             },
@@ -119,19 +118,19 @@
       }
     ],
     "nextPaintLatencyMs": {
-      "p50": 30.30000001192093,
-      "p95": 30.30000001192093,
-      "p99": 30.30000001192093
+      "p50": 32.299999952316284,
+      "p95": 32.299999952316284,
+      "p99": 32.299999952316284
     },
     "jobCompletionLatencyMs": {
-      "p50": 460.60000002384186,
-      "p95": 460.60000002384186,
-      "p99": 460.60000002384186
+      "p50": 475.5999999642372,
+      "p95": 475.5999999642372,
+      "p99": 475.5999999642372
     },
     "settleLatencyMs": {
-      "p50": 525.9000000357628,
-      "p95": 525.9000000357628,
-      "p99": 525.9000000357628
+      "p50": 520.2999999523163,
+      "p95": 520.2999999523163,
+      "p99": 520.2999999523163
     },
     "mainThreadLongTaskLatencyMs": {
       "p50": 0,
@@ -146,10 +145,10 @@
           "objectUrls": true
         },
         "workers": {
-          "acquired": 0,
-          "released": 0,
+          "acquired": 1,
+          "released": 1,
           "active": 0,
-          "peakActive": 0
+          "peakActive": 1
         },
         "imageBitmaps": {
           "acquired": 0,
@@ -171,8 +170,8 @@
           "objectUrls": true
         },
         "workers": {
-          "acquired": 2,
-          "released": 2,
+          "acquired": 3,
+          "released": 3,
           "active": 0,
           "peakActive": 1
         },
@@ -195,22 +194,22 @@
     },
     "heap": {
       "supported": true,
-      "baselineBytes": 10833479,
-      "finalBytes": 11579696,
-      "growthBytes": 746217,
+      "baselineBytes": 11760217,
+      "finalBytes": 10810870,
+      "growthBytes": -949347,
       "allowedGrowthBytes": 8388608,
       "finalSamplesBytes": [
-        11057304,
-        10624608,
-        11579696
+        11803990,
+        11548534,
+        10810870
       ],
-      "tailRangeBytes": 955088,
+      "tailRangeBytes": 993120,
       "stable": true
     },
     "acceptance": {
       "nextPaintP95": {
         "passed": true,
-        "observed": 30.30000001192093,
+        "observed": 32.299999952316284,
         "limit": 100
       },
       "mainThreadLongTaskP95": {
@@ -275,12 +274,12 @@
       },
       "heapBounded": {
         "passed": true,
-        "observed": 746217,
+        "observed": -949347,
         "limit": 8388608
       },
       "heapStable": {
         "passed": true,
-        "observed": 955088,
+        "observed": 993120,
         "limit": 8388608
       },
       "passed": {

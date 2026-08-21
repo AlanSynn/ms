@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-21T00:58:43.253Z",
+  "generatedAt": "2026-08-21T03:21:29.884Z",
   "resultLabel": "6x CPU emulation",
   "productionBuild": true,
   "actualChromebookTested": false,
@@ -28,26 +28,26 @@
     {
       "label": "path-play",
       "kind": "click",
-      "durationMs": 32.5
+      "durationMs": 35.80000001192093
     },
     {
       "label": "path-pause",
       "kind": "click",
-      "durationMs": 16.30000001192093
+      "durationMs": 17
     }
   ],
   "interactionLatencyMs": {
-    "p50": 16.30000001192093,
-    "p95": 32.5,
-    "p99": 32.5
+    "p50": 17,
+    "p95": 35.80000001192093,
+    "p99": 35.80000001192093
   },
   "playback": {
-    "durationMs": 5005.899999976158,
+    "durationMs": 5012.800000011921,
     "frameCount": 601,
     "frameIntervalMs": {
       "p50": 8.300000000000182,
       "p95": 9.199999999999818,
-      "p99": 9.300000000000182
+      "p99": 9.399999999999636
     },
     "framesOver50": 0,
     "framesOver50Percent": 0,
@@ -66,8 +66,8 @@
     "heap": {
       "supported": true,
       "samples": 22,
-      "firstBytes": 12849199,
-      "lastBytes": 12849199,
+      "firstBytes": 18175799,
+      "lastBytes": 18175799,
       "growthBytes": 0,
       "allowedGrowthBytes": 8388608,
       "tailRangeBytes": 0,
@@ -117,10 +117,10 @@
             "peakLive": 0
           },
           "vertexArray": {
-            "created": 120,
+            "created": 119,
             "deleted": 36,
-            "live": 84,
-            "peakLive": 84
+            "live": 83,
+            "peakLive": 83
           },
           "query": {
             "created": 0,
@@ -191,10 +191,10 @@
             "peakLive": 0
           },
           "vertexArray": {
-            "created": 120,
+            "created": 119,
             "deleted": 36,
-            "live": 84,
-            "peakLive": 84
+            "live": 83,
+            "peakLive": 83
           },
           "query": {
             "created": 0,
@@ -242,7 +242,7 @@
     },
     "frameP99": {
       "passed": true,
-      "observed": 9.300000000000182,
+      "observed": 9.399999999999636,
       "limit": 75
     },
     "framesOver50": {
@@ -257,7 +257,7 @@
     },
     "interactionLatency": {
       "passed": true,
-      "observed": 32.5,
+      "observed": 35.80000001192093,
       "limit": 100
     },
     "heapStable": {

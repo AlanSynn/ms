@@ -805,8 +805,8 @@ assert(performanceWorkflowText.includes('bun run test:chromebook-audit') && perf
 assert(!ciWorkflowText.includes('deploy-pages') && !performanceWorkflowText.includes('deploy-pages'), 'verification workflows cannot deploy GitHub Pages');
 assert(docsMap.includes('chromebook-feature-audit.md'), 'docs map registers the current Chromebook feature evidence');
 assert(chromebookAuditDoc.includes('Actual Chromebook tested: no') && chromebookAuditDoc.includes('6× CPU emulation'), 'Chromebook evidence does not claim untested physical hardware');
-assert(/not a ten-minute stabilization\s+claim/.test(chromebookAuditDoc) && chromebookAuditDoc.includes('not run locally'), 'short memory evidence keeps the unrun ten-minute boundary explicit');
-assert(chromebookAuditDoc.includes('396,023 bytes') && chromebookAuditDoc.includes('457,064 bytes'), 'audit document records the checked production bundle evidence');
+assert(chromebookAuditDoc.includes('does not establish ten-minute heap stabilization') && chromebookAuditDoc.includes('No physical Chromebook was tested'), 'short memory evidence keeps the physical-device and ten-minute boundaries explicit');
+assert(chromebookAuditDoc.includes('393,538 compressed bytes') && chromebookAuditDoc.includes('454,579 compressed bytes'), 'audit document records the checked production bundle evidence');
 assert(dockerfileText.includes('FROM oven/bun:1.3.14-alpine') && dockerfileText.includes('bun install --frozen-lockfile') && dockerfileText.includes('\"preview\"'), 'Docker image uses Bun install, build, and preview runtime');
 assert.equal(tauriConfig.build.beforeDevCommand, 'bun run dev', 'Tauri dev hook uses Bun');
 assert.equal(tauriConfig.build.beforeBuildCommand, 'bun run build:tauri-frontend', 'Tauri build hook uses Bun');

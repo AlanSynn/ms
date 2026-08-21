@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-21T01:34:26.883Z",
+  "generatedAt": "2026-08-21T03:20:30.408Z",
   "resultLabel": "6x CPU emulation",
   "productionBuild": true,
   "actualChromebookTested": false,
@@ -31,9 +31,9 @@
         "label": "character-package-supersede-complete-discard",
         "cycle": 1,
         "outcome": "completed",
-        "nextPaintMs": 32.5,
-        "settleMs": 682.3000000119209,
-        "jobCompletionMs": 286.30000001192093,
+        "nextPaintMs": 34.799999952316284,
+        "settleMs": 442.19999998807907,
+        "jobCompletionMs": 292.89999997615814,
         "longTasks": {
           "durationsMs": [],
           "latencyMs": {
@@ -46,10 +46,10 @@
         },
         "puppetTopologyDurationsMs": [],
         "before": {
-          "atMs": 2298.100000023842,
-          "heapBytes": 10867997,
-          "longTaskCount": 1,
-          "puppetTopologyCount": 20,
+          "atMs": 2751.199999988079,
+          "heapBytes": 11394357,
+          "longTaskCount": 2,
+          "puppetTopologyCount": 21,
           "lifecycle": {
             "probeSupport": {
               "workers": true,
@@ -77,10 +77,10 @@
           }
         },
         "after": {
-          "atMs": 10461,
-          "heapBytes": 202343555,
-          "longTaskCount": 2,
-          "puppetTopologyCount": 20,
+          "atMs": 10785.300000011921,
+          "heapBytes": 202589949,
+          "longTaskCount": 3,
+          "puppetTopologyCount": 21,
           "lifecycle": {
             "probeSupport": {
               "workers": true,
@@ -110,19 +110,19 @@
       }
     ],
     "nextPaintLatencyMs": {
-      "p50": 32.5,
-      "p95": 32.5,
-      "p99": 32.5
+      "p50": 34.799999952316284,
+      "p95": 34.799999952316284,
+      "p99": 34.799999952316284
     },
     "jobCompletionLatencyMs": {
-      "p50": 286.30000001192093,
-      "p95": 286.30000001192093,
-      "p99": 286.30000001192093
+      "p50": 292.89999997615814,
+      "p95": 292.89999997615814,
+      "p99": 292.89999997615814
     },
     "settleLatencyMs": {
-      "p50": 682.3000000119209,
-      "p95": 682.3000000119209,
-      "p99": 682.3000000119209
+      "p50": 442.19999998807907,
+      "p95": 442.19999998807907,
+      "p99": 442.19999998807907
     },
     "mainThreadLongTaskLatencyMs": {
       "p50": 0,
@@ -186,22 +186,22 @@
     },
     "heap": {
       "supported": true,
-      "baselineBytes": 10256947,
-      "finalBytes": 12007177,
-      "growthBytes": 1750230,
+      "baselineBytes": 11725331,
+      "finalBytes": 12161967,
+      "growthBytes": 436636,
       "allowedGrowthBytes": 8388608,
       "finalSamplesBytes": [
-        10537065,
-        10398745,
-        12007177
+        10687303,
+        10547455,
+        12161967
       ],
-      "tailRangeBytes": 1608432,
+      "tailRangeBytes": 1614512,
       "stable": true
     },
     "acceptance": {
       "nextPaintP95": {
         "passed": true,
-        "observed": 32.5,
+        "observed": 34.799999952316284,
         "limit": 100
       },
       "mainThreadLongTaskP95": {
@@ -266,12 +266,12 @@
       },
       "heapBounded": {
         "passed": true,
-        "observed": 1750230,
+        "observed": 436636,
         "limit": 8388608
       },
       "heapStable": {
         "passed": true,
-        "observed": 1608432,
+        "observed": 1614512,
         "limit": 8388608
       },
       "passed": {
