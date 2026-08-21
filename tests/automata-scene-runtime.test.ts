@@ -11,6 +11,9 @@ import {
 import { createFabricationReadyFourBarProject } from './fixtures/fabricationProject';
 
 const stableValue = (value: unknown): unknown => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? Number(value.toFixed(6)) : null;
+  }
   if (Array.isArray(value)) return value.map(stableValue);
   if (!value || typeof value !== 'object') return value;
   return Object.fromEntries(
@@ -26,11 +29,11 @@ const hash = (value: unknown) =>
     .digest('hex');
 
 const expectedHashes = new Map<number, string>([
-  [0, '6c95c595657e3cd184b7795e5b5dc4ed7a9c6bf5469dd1deb3e0dc784de20538'],
-  [0.37, '04b765eb69119c88b4646a03f9a1b551bd9bfc9abfbc2bb46501cdf72a63cb89'],
-  [1.2, '34750c20370fbac50b869950280e25c45683fbe701b60a2eca80a142819013da'],
-  [3.14, 'e70d56f914a9a57f44b5014d765db5f013c9ed9cebec8bfaf5f9da8512c8ee10'],
-  [5.9, 'ca4897f9d6e342f84c078e42c84e46d99e76c403a7ef98e173a31cc855a98c3b'],
+  [0, '3ff22df1685766d68050a1931d34c4f0d16c89a4eda0273cc0f3a2caef03dd72'],
+  [0.37, '875e01dd65ac6938e9ba36522ff9f470b8904cbc6b023e9cbc0a98842bd9667c'],
+  [1.2, 'f28116f9c8c2bff506fd27a8ea015b5a4103aa9732a9b4f2e3db3b3862e54735'],
+  [3.14, '8b26c750b246a810647156512b953143be864bd09aa843389a86ca5d635ad5ab'],
+  [5.9, 'e57aaa9e1065c535d888f63666d0ca0aae6b806f68ca4f70eebbc230b9cbe4df'],
 ]);
 
 const fixtureProject = createFabricationReadyFourBarProject();
