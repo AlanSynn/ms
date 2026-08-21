@@ -9,16 +9,30 @@ const worker = globalThis as unknown as {
 };
 
 worker.onmessage = async ({ data }) => {
-  if (data?.type !== "create-package") return;
+  if (
+    data?.type !== "create-package" &&
+    data?.type !== "create-custom-parts-stl"
+  ) return;
   try {
-    const { runBlueprintPackageJob } = await import(
+    const {
+      runBlueprintCustomPartsStlJob,
+      runBlueprintPackageJob,
+    } = await import(
       "../runtime/blueprint/blueprintPackageJob"
     );
-    worker.postMessage({
-      type: "result",
-      generationId: data.generationId,
-      fabricationPackage: runBlueprintPackageJob(data.project),
-    });
+    if (data.type === "create-custom-parts-stl") {
+      worker.postMessage({
+        type: "stl-result",
+        generationId: data.generationId,
+        customPartsStl: runBlueprintCustomPartsStlJob(data.project),
+      });
+    } else {
+      worker.postMessage({
+        type: "result",
+        generationId: data.generationId,
+        fabricationPackage: runBlueprintPackageJob(data.project),
+      });
+    }
   } catch (error) {
     worker.postMessage({
       type: "error",

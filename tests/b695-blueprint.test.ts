@@ -6,6 +6,7 @@ import {
   createBlueprintPackage,
 } from '../runtime/blueprint/BlueprintModel';
 import { SCENE_PX_PER_MM } from '../utils/coordinates';
+import { makeCustomPartsStl } from '../utils/fabricationCustomParts';
 import {
   fabricablePartOutlinePoints,
   partLandmarkLocalPoints,
@@ -41,8 +42,10 @@ assert.equal(
   secondPackage.cutSheetPdf,
   'cached package PDF bytes remain exact',
 );
+assert.equal(firstPackage.customPartsStl, '', 'ordinary Blueprint packages leave optional STL generation on demand');
 
-const vertices = [...firstPackage.customPartsStl.matchAll(/vertex ([^\n]+)/g)]
+const customPartsStl = makeCustomPartsStl(project);
+const vertices = [...customPartsStl.matchAll(/vertex ([^\n]+)/g)]
   .map((match) => match[1].trim());
 const edgeUse = new Map<string, number>();
 for (let index = 0; index < vertices.length; index += 3) {
@@ -102,7 +105,7 @@ assert.equal(
 );
 assert(vertices.length / 3 < 20_000, 'compacted classroom STL stays below 20k facets');
 assert(
-  Buffer.byteLength(firstPackage.customPartsStl) < 1_300_000,
+  Buffer.byteLength(customPartsStl) < 1_300_000,
   'compacted classroom STL stays below 1.3 MB without dropping plate or hole surfaces',
 );
 

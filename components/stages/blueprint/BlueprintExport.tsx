@@ -10,6 +10,7 @@ import {
   buildBlueprintModel,
 } from "../../../runtime/blueprint/BlueprintModel";
 import { createBlueprintPackageWorkerClient } from "../../../runtime/blueprint/blueprintPackageWorkerClient";
+import { downloadText } from "../../../utils/project";
 import {
   EditorStageFrame,
   canvasPane,
@@ -18,7 +19,7 @@ import {
 } from "../stageLayout";
 import { BlueprintControlPanel } from "./BlueprintControlPanel";
 import { BlueprintDetailPanel } from "./BlueprintDetailPanel";
-import { ThreePuppetPreview } from "../../ThreePuppetPreview";
+import { DeferredThreePuppetPreview } from "../../DeferredThreePuppetPreview";
 
 export const selectBlueprintRecipe = (
   recipes: FabricationRecipe[],
@@ -41,9 +42,12 @@ export const BlueprintExport = ({
   const { validation, pkg, recipes } = buildBlueprintModel(project);
   const packageClient = useMemo(() => createBlueprintPackageWorkerClient(), []);
   const [packageStatus, setPackageStatus] = useState<"idle" | "running">("idle");
+  const [stlStatus, setStlStatus] = useState<"idle" | "running">("idle");
   const [packageError, setPackageError] = useState<string>();
+  const [stlError, setStlError] = useState<string>();
   useEffect(() => () => packageClient.dispose(), [packageClient]);
   const create = () => {
+    if (stlStatus === "running") return;
     if (packageStatus === "running") {
       packageClient.cancel();
       setPackageStatus("idle");
@@ -65,6 +69,30 @@ export const BlueprintExport = ({
       },
     });
   };
+  const createStl = () => {
+    if (stlStatus === "running") {
+      packageClient.cancel();
+      setStlStatus("idle");
+      return;
+    }
+    if (packageStatus === "running" || !pkg) return;
+    setStlError(undefined);
+    setStlStatus("running");
+    packageClient.requestCustomPartsStl(project, {
+      complete: ({ customPartsStl }) => {
+        setStlStatus("idle");
+        downloadText(
+          `${pkg.id}-custom-parts.stl`,
+          customPartsStl,
+          "model/stl",
+        );
+      },
+      failed: (error) => {
+        setStlStatus("idle");
+        setStlError(error.message);
+      },
+    });
+  };
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const selectedRecipe = selectBlueprintRecipe(recipes, selectedRecipeId, project.selectedMechanismId);
   const exposePackageDiagnostics = __MOTIONSMITH_E2E_DIAGNOSTICS__ && !(
@@ -81,8 +109,11 @@ export const BlueprintExport = ({
             goStage={goStage}
             validation={validation}
             create={create}
+            createStl={createStl}
             packageStatus={packageStatus}
+            stlStatus={stlStatus}
             packageError={packageError}
+            stlError={stlError}
             pkg={pkg}
             recipes={recipes}
             selectedRecipe={selectedRecipe}
@@ -101,7 +132,7 @@ export const BlueprintExport = ({
               <span><i className="blueprint-legend-swatch board" aria-hidden="true" />Board</span>
               <span><i className="blueprint-legend-swatch path" aria-hidden="true" />Motion path</span>
             </div>
-            <ThreePuppetPreview
+            <DeferredThreePuppetPreview
               project={project}
               skeleton={project.skeleton}
               mechanisms={project.mechanisms}

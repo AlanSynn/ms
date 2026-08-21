@@ -290,7 +290,20 @@ export const validateForFabrication = (project: ProjectState) => {
     return { warnings, errors, issues };
 };
 
-export const createFabricationPackage = (project: ProjectState): FabricationPackage => {
+export type FabricationPackageOptions = {
+    includeCustomPartsStl?: boolean;
+};
+
+export const createCustomPartsStlArtifact = (project: ProjectState): string => {
+    const validation = validateForFabrication(project);
+    if (validation.errors.length) throw new Error(validation.errors.join('\n'));
+    return makeCustomPartsStl(project);
+};
+
+export const createFabricationPackage = (
+    project: ProjectState,
+    options: FabricationPackageOptions = {}
+): FabricationPackage => {
     const validation = validateForFabrication(project);
     if (validation.errors.length) throw new Error(validation.errors.join('\n'));
     const recipes = project.mechanisms.filter(m => m.visible && m.enabled !== false).map(m => createFabricationRecipe(project, m));
@@ -300,6 +313,12 @@ export const createFabricationPackage = (project: ProjectState): FabricationPack
             return map;
         }, new Map<string, number>())
     ).map(([name, quantity]) => ({ name, quantity }));
+    const metadataSceneObjects = Object.fromEntries(
+        Object.entries(project.sceneObjects).map(([id, sceneObject]) => {
+            const { textureUrl: _textureUrl, ...metadataSceneObject } = sceneObject;
+            return [id, metadataSceneObject];
+        })
+    );
 
     const metadata = {
         projectId: project.metadata.id,
@@ -311,7 +330,7 @@ export const createFabricationPackage = (project: ProjectState): FabricationPack
             metadata: project.metadata,
             paths: project.paths,
             mechanisms: project.mechanisms,
-            sceneObjects: project.sceneObjects,
+            sceneObjects: metadataSceneObjects,
             sceneObjectOrder: project.sceneObjectOrder
         },
         recipes: recipes.map(r => ({
@@ -358,7 +377,7 @@ export const createFabricationPackage = (project: ProjectState): FabricationPack
         cutSheetPdf: makeCutSheetPdf(project, recipes),
         customPartsSvg: makeCustomPartsSvg(project),
         customPartsPdf: makeCustomPartsPdf(project),
-        customPartsStl: makeCustomPartsStl(project),
+        customPartsStl: options.includeCustomPartsStl ? makeCustomPartsStl(project) : '',
         assemblyGuideHtml: makeAssemblyGuideHtml(project, recipes, validation.warnings),
         assemblyGuidePdf: makeAssemblyGuidePdf(project, recipes, validation.warnings),
         metadataJson: JSON.stringify(metadata, null, 2)

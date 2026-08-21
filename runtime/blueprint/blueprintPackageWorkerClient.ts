@@ -36,6 +36,37 @@ const releaseWorker = (worker: BlueprintPackageWorkerPort) => {
   worker.terminate();
 };
 
+const projectForWorker = (
+  project: ProjectState,
+  requestType: BlueprintPackageWorkerRequest["type"],
+): ProjectState => {
+  const base = {
+    ...project,
+    lastExport: undefined,
+    lastFoundryExport: undefined,
+    characterPackage: undefined,
+  };
+  if (requestType === "create-package") return base;
+  return {
+    ...base,
+    parts: Object.fromEntries(Object.entries(project.parts).map(([id, part]) => {
+      const geometryPart = { ...part };
+      delete geometryPart.textureUrl;
+      delete geometryPart.maskUrl;
+      delete geometryPart.originalSvgPath;
+      delete geometryPart.enhancedSvgPath;
+      return [id, geometryPart];
+    })),
+    sceneObjects: Object.fromEntries(
+      Object.entries(project.sceneObjects).map(([id, sceneObject]) => {
+        const geometryObject = { ...sceneObject };
+        delete geometryObject.textureUrl;
+        return [id, geometryObject];
+      }),
+    ),
+  };
+};
+
 export const createBlueprintPackageWorkerClient = (
   workerFactory: BlueprintPackageWorkerFactory = browserWorkerFactory,
   frameScheduler: BlueprintPackageFrameScheduler = browserFrameScheduler,
@@ -68,11 +99,12 @@ export const createBlueprintPackageWorkerClient = (
     releaseActive();
   };
 
-  const request = (
+  const requestJob = (
+    requestType: BlueprintPackageWorkerRequest["type"],
     project: ProjectState,
     callbacks: {
       complete: (
-        result: Extract<BlueprintPackageWorkerResponse, { type: "result" }>,
+        result: Exclude<BlueprintPackageWorkerResponse, { type: "error" }>,
       ) => void;
       failed: (error: Error) => void;
     },
@@ -81,7 +113,7 @@ export const createBlueprintPackageWorkerClient = (
     const generationId = ++generationSequence;
     active = {
       generationId,
-      project: { ...project, lastExport: undefined },
+      project: projectForWorker(project, requestType),
     };
 
     const startWorker = () => {
@@ -109,14 +141,18 @@ export const createBlueprintPackageWorkerClient = (
         ) return;
         active = undefined;
         releaseWorker(worker);
-        if (data.type === "result") callbacks.complete(data);
-        else callbacks.failed(new Error(data.message));
+        if (data.type === "error") callbacks.failed(new Error(data.message));
+        else callbacks.complete(data);
       };
       worker.onmessageerror = () => fail("Blueprint worker returned unreadable data.");
       worker.onerror = (event) => fail(event.message || "Blueprint worker failed.");
       try {
-        worker.postMessage({
+        worker.postMessage(requestType === "create-package" ? {
           type: "create-package",
+          generationId,
+          project: active.project,
+        } : {
+          type: "create-custom-parts-stl",
           generationId,
           project: active.project,
         });
@@ -137,7 +173,39 @@ export const createBlueprintPackageWorkerClient = (
     return generationId;
   };
 
-  return { request, cancel, dispose: cancel };
+  const request = (
+    project: ProjectState,
+    callbacks: {
+      complete: (
+        result: Extract<BlueprintPackageWorkerResponse, { type: "result" }>,
+      ) => void;
+      failed: (error: Error) => void;
+    },
+  ) => requestJob("create-package", project, {
+    complete: (result) => {
+      if (result.type === "result") callbacks.complete(result);
+      else callbacks.failed(new Error("Blueprint worker returned an unexpected STL result."));
+    },
+    failed: callbacks.failed,
+  });
+
+  const requestCustomPartsStl = (
+    project: ProjectState,
+    callbacks: {
+      complete: (
+        result: Extract<BlueprintPackageWorkerResponse, { type: "stl-result" }>,
+      ) => void;
+      failed: (error: Error) => void;
+    },
+  ) => requestJob("create-custom-parts-stl", project, {
+    complete: (result) => {
+      if (result.type === "stl-result") callbacks.complete(result);
+      else callbacks.failed(new Error("Blueprint worker returned an unexpected package result."));
+    },
+    failed: callbacks.failed,
+  });
+
+  return { request, requestCustomPartsStl, cancel, dispose: cancel };
 };
 
 export type BlueprintPackageWorkerClient = ReturnType<
