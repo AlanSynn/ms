@@ -15,6 +15,11 @@ import {
 } from '../runtime/render/partArtMaterial';
 import { warmPartTopologyPipeline } from '../runtime/render/warmPartTopology';
 import { resolveRenderPerformancePolicy } from '../utils/renderPerformancePolicy';
+import {
+  diffPuppetPartTopologies,
+  preparePuppetPartTopology,
+} from '../runtime/render/puppetPartTopology';
+import type { BodyPartLayer, StandardSkeleton } from '../types';
 
 const root = new THREE.Group();
 const disposed: string[] = [];
@@ -246,5 +251,87 @@ assert.equal(bitmapCloses, 2, 'a late bitmap is closed instead of being retained
 const balancedTopology = resolveRenderPerformancePolicy('balanced').partTopology;
 assert.equal(warmPartTopologyPipeline(balancedTopology), true, 'part topology warms once before an interactive import');
 assert.equal(warmPartTopologyPipeline(balancedTopology), false, 'the same topology policy does not repeat warm-up allocations');
+
+const topologySkeleton: StandardSkeleton = {
+  joints: {
+    root: {
+      id: 'root',
+      name: 'root',
+      position: { x: 0, y: 0 },
+      parentId: null,
+      locked: false,
+      bendDirection: 1,
+    },
+    tip: {
+      id: 'tip',
+      name: 'tip',
+      position: { x: 48, y: 0 },
+      parentId: 'root',
+      locked: false,
+      bendDirection: 1,
+    },
+  },
+  bones: [['root', 'tip']],
+  rootJointIds: ['root'],
+  jointMap: {},
+  hierarchy: { root: ['tip'], tip: [] },
+  metadata: { sourceFormat: 'retention-test', scale: 1 },
+};
+const topologyPart: BodyPartLayer = {
+  id: 'plate-a',
+  name: 'Plate A',
+  anchorJointId: 'root',
+  transform: { x: 0, y: 0, rotation: 0, scale: 1 },
+  zIndex: 1,
+  opacity: 1,
+  visible: true,
+  locked: false,
+  selectable: true,
+  bounds: { x: -12, y: -28, width: 72, height: 56 },
+  fillColor: '#64748b',
+};
+const preparedPlateA = preparePuppetPartTopology(
+  topologyPart,
+  topologySkeleton,
+  balancedTopology,
+);
+const preparedPlateB = preparePuppetPartTopology(
+  { ...topologyPart, id: 'plate-b', name: 'Plate B', zIndex: 2 },
+  topologySkeleton,
+  balancedTopology,
+);
+const retainedIdentities = new Map([
+  [preparedPlateA.part.id, preparedPlateA.identity],
+  [preparedPlateB.part.id, preparedPlateB.identity],
+]);
+const lockOnlyDiff = diffPuppetPartTopologies(retainedIdentities, [
+  preparePuppetPartTopology(
+    { ...topologyPart, locked: true },
+    topologySkeleton,
+    balancedTopology,
+  ),
+  preparedPlateB,
+]);
+assert.deepEqual(lockOnlyDiff.removeIds, [], 'nonvisual lock state retains every part topology');
+assert.deepEqual(lockOnlyDiff.build, [], 'nonvisual lock state allocates no geometry');
+
+const movedPlateA = preparePuppetPartTopology(
+  {
+    ...topologyPart,
+    transform: { ...topologyPart.transform, x: topologyPart.transform.x + 6 },
+  },
+  topologySkeleton,
+  balancedTopology,
+);
+const onePartDiff = diffPuppetPartTopologies(retainedIdentities, [
+  movedPlateA,
+  preparedPlateB,
+]);
+assert.deepEqual(onePartDiff.removeIds, ['plate-a'], 'one changed plate replaces only its prior topology');
+assert.deepEqual(onePartDiff.build.map((entry) => entry.part.id), ['plate-a'], 'one changed plate rebuilds only itself');
+
+const removedPartDiff = diffPuppetPartTopologies(retainedIdentities, [preparedPlateA]);
+assert.deepEqual(removedPartDiff.removeIds, ['plate-b'], 'removing a layer releases only its retained plate');
+assert.deepEqual(removedPartDiff.build, [], 'removing a layer does not rebuild surviving plates');
 
 console.log('three resource retention contract ok');

@@ -2858,6 +2858,7 @@ const blueprintDetailPanelText = readFileSync(join(process.cwd(), 'components', 
 const assemblyPlaybackText = readFileSync(join(process.cwd(), 'utils', 'assemblyPlayback.ts'), 'utf8');
 const threePreviewText = readFileSync(join(process.cwd(), 'components', 'ThreePuppetPreview.tsx'), 'utf8');
 const partArtMaterialText = readFileSync(join(process.cwd(), 'runtime', 'render', 'partArtMaterial.ts'), 'utf8');
+const puppetPartTopologyText = readFileSync(join(process.cwd(), 'runtime', 'render', 'puppetPartTopology.ts'), 'utf8');
 const exporterText = readFileSync(join(process.cwd(), 'utils', 'exporter.ts'), 'utf8');
 const physicsSessionText = readFileSync(join(process.cwd(), 'utils', 'physicsSession.ts'), 'utf8');
 const mechanismPreviewText = readFileSync(join(process.cwd(), 'utils', 'mechanismPreview.ts'), 'utf8');
@@ -3684,7 +3685,7 @@ const cachedFit = fitMechanismSimulationWithContext(sample.mechanisms[0], 1.234,
 assert.deepEqual(cachedFit.pathPoints, directFit.pathPoints, 'cached Foundry fit preserves the direct preview path exactly');
 assert(Math.hypot(cachedFit.state.effector.x - directFit.state.effector.x, cachedFit.state.effector.y - directFit.state.effector.y) < 1e-9, 'cached Foundry fit maps the live effector exactly like direct fit');
 assert(!threePreviewText.includes('teeth * 2'), '3D preview no longer carries a separate saw-tooth gear implementation');
-assert(threePreviewText.includes('fabricablePartOutlinePoints'), '3D puppet preview uses shared model/user contour outlines instead of raw image crop rectangles');
+assert(puppetPartTopologyText.includes('fabricablePartOutlinePoints'), '3D puppet topology preparation uses shared model/user contour outlines instead of raw image crop rectangles');
 assert(!packageJson.dependencies['onnxruntime-web'] && !packageJson.devDependencies['onnxruntime-web'], 'the classroom dependency graph excludes ONNX Runtime');
 assert(projectText.includes('local-package://${input.sourceImageName}') && !projectText.includes('web-onnx://'), 'new character packages use an honest local-package provenance');
 assert(packageJson.scripts.build.includes('check-no-image-recognition.mjs --source') && packageJson.scripts.build.includes('check-no-image-recognition.mjs --dist'), 'the production build fails if image-recognition source or output returns');
@@ -3705,6 +3706,7 @@ ${designFoundryPreviewText}`.includes('hideSceneUnderlay/>'), 'Mechanism Design 
 assert(threePreviewText.includes('data-three-part-surface="solid-cut-plates"'), '3D puppet preview exposes the solid cut-plate surface contract');
 assert(threePreviewText.includes('data-three-part-art="top-texture-decal"'), '3D puppet preview exposes that artwork is rendered on top of plates');
 assert(threePreviewText.includes('createPartArtMaterial') && partArtMaterialText.includes('ImageBitmapLoader') && partArtMaterialText.includes('bitmap.close()'), '3D puppet preview decodes surface decals asynchronously and closes owned ImageBitmaps');
+assert(threePreviewText.includes('diffPuppetPartTopologies') && threePreviewText.includes('partTopologyIdentitiesRef') && puppetPartTopologyText.includes('preparePuppetPartTopology') && puppetPartTopologyText.includes('samePuppetPartTopologyIdentity') && !threePreviewText.includes('const staleParts = [...roots.partsLayer.children]'), '3D puppet editing retains unchanged plates and replaces only changed outline, hole, or artwork topology');
 assert(threePreviewText.includes('new THREE.ShapeGeometry(shape)'), '3D puppet artwork decals are clipped to fabrication part outlines');
 assert(threePreviewText.includes('part-art-decal'), '3D puppet preview names surface decal meshes for browser inspection');
 assert(threePreviewText.includes('cut-hole-ring'), '3D puppet preview draws raised joint-hole rings on part surfaces');
@@ -3783,7 +3785,7 @@ assert(partInspectorText.includes('sourceTextureUrl={sourceTextureUrl}') && cutO
 assert(partInspectorText.includes('contourSource: "user"') && cutOutlineEditorText.includes('Auto cut') && cutOutlineEditorText.includes('Add point'), 'Character cut editor writes user contours and can bake/add contour points');
 assert(cutOutlineEditorText.includes('type CutTool = "edit" | "draw" | "pan"') && cutOutlineEditorText.includes('data-testid={`cut-tool-${id}`}') && cutOutlineEditorText.includes('data-cut-tool={tool}') && cutOutlineEditorText.includes('replacePoints(draw.points, 0)'), 'Character cut editor exposes explicit Edit/Draw/Pan tools and replaces the contour from a one-stroke Draw cut');
 assert(cutOutlineEditorText.includes('setPointerCapture') && cutOutlineEditorText.includes('onPointerCancel={stopDrag}') && !cutOutlineEditorText.includes('onPointerLeave={stopDrag}'), 'Character cut editor keeps captured drag-pan/point-drag active when the pointer leaves the SVG edge');
-assert(threePreviewText.includes('partMeshesRef.current') && threePreviewText.includes('createPart') && threePreviewText.includes('partLandmarkLocalPoints'), 'Path Editor renders solid component geometry from the shared Three scene and canonical part landmarks');
+assert(threePreviewText.includes('partMeshesRef.current') && threePreviewText.includes('createPart') && puppetPartTopologyText.includes('partLandmarkLocalPoints'), 'Path Editor renders solid component geometry from the shared Three scene and canonical part landmarks');
 assert(!existsSync(join(process.cwd(), 'components', 'stages', 'path', 'PartShape.tsx')), 'Path Editor has no SVG-only part artwork/clip renderer');
 assert(designFoundryPreviewText.includes('data-testid="design-shared-foundry-preview"') && designFoundryPreviewText.includes('data-shared-with="foundry-renderer"') && designFoundryPreviewText.includes('sampleAutomataSceneRuntime') && automataSceneModelText.includes('createFoundryMechanismPreviewRuntime') && designFoundryPreviewText.includes('<ThreeFoundryPreview') && !designFoundryPreviewText.includes('data-testid="design-guided-context-overlay"'), 'Mechanism Design shows a retained Foundry-renderer-backed mechanism instance instead of a ghost/private mechanism overlay');
 assert(characterSelectionText.includes('Choose new character.'), 'Character tab disables active-project artwork edits while a package review is pending');
