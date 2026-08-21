@@ -95,6 +95,10 @@ export const updatePuppetJointHardwareInstances = ({
   });
   hardware.pins.instanceMatrix.needsUpdate = true;
   hardware.washers.instanceMatrix.needsUpdate = true;
+  hardware.pins.boundingBox = null;
+  hardware.pins.boundingSphere = null;
+  hardware.washers.boundingBox = null;
+  hardware.washers.boundingSphere = null;
 };
 
 export const puppetJointIdForInstance = (

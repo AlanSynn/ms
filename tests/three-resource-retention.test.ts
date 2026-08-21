@@ -388,6 +388,42 @@ assert.equal(hiddenPinMatrix.elements[0], 0, 'inactive assembly pins collapse wi
 assert.equal(hiddenPinMatrix.elements[5], 0, 'inactive assembly pins have no visible y extent');
 assert.equal(hiddenPinMatrix.elements[10], 0, 'inactive assembly pins have no visible z extent');
 
+jointHardware.pins.updateMatrixWorld(true);
+const initialJointHits = new THREE.Raycaster(
+  new THREE.Vector3(1, -2, 5),
+  new THREE.Vector3(0, 0, -1),
+).intersectObject(jointHardware.pins, false);
+assert(
+  initialJointHits.some((hit) => hit.instanceId === 0),
+  'joint raycasting finds the initial instanced pin and populates its bounds',
+);
+assert(jointHardware.pins.boundingSphere, 'the first raycast caches instance bounds');
+updatePuppetJointHardwareInstances({
+  hardware: jointHardware,
+  joints: [
+    { id: 'root', position: { x: 700, y: -70 } },
+    { id: 'tip', position: { x: 105, y: 140 } },
+  ],
+  viewScale: 35,
+  pinZ: 0.35,
+  washerZ: 0.55,
+  isVisible: (jointId) => jointId === 'root',
+});
+assert.equal(
+  jointHardware.pins.boundingSphere,
+  null,
+  'moving instances invalidates the raycaster bounding sphere',
+);
+jointHardware.pins.updateMatrixWorld(true);
+const movedJointHits = new THREE.Raycaster(
+  new THREE.Vector3(20, -2, 5),
+  new THREE.Vector3(0, 0, -1),
+).intersectObject(jointHardware.pins, false);
+assert(
+  movedJointHits.some((hit) => hit.instanceId === 0),
+  'joint raycasting follows an instanced pin beyond its previously cached bounds',
+);
+
 const ringGeometry = new THREE.TorusGeometry(0.11, 0.014, 4, 8);
 const ringMaterial = new THREE.MeshBasicMaterial();
 const rings = createPuppetCutHoleRingInstances({
