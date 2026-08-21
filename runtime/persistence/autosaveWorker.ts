@@ -1,4 +1,8 @@
-import { serializeProject } from "../../utils/project";
+import {
+  autosaveByteLength,
+  autosaveFingerprint,
+} from "../../utils/autosaveFingerprint";
+import { serializeProjectCompact } from "../../utils/projectSerialization";
 import type { ProjectState } from "../../types";
 
 type AutosaveWorkerRequest = {
@@ -7,17 +11,27 @@ type AutosaveWorkerRequest = {
   project: ProjectState;
 };
 type AutosaveWorkerResponse =
-  | { id: number; generation: number; type: "prepared"; serialized: string }
+  | {
+      id: number;
+      generation: number;
+      type: "prepared";
+      serialized: string;
+      bytes: number;
+      fingerprint: string;
+    }
   | { id: number; generation: number; type: "error"; message: string };
 
 self.onmessage = ({ data }: MessageEvent<AutosaveWorkerRequest>) => {
   const post = (message: AutosaveWorkerResponse) => self.postMessage(message);
   try {
+    const serialized = serializeProjectCompact(data.project);
     post({
       id: data.id,
       generation: data.generation,
       type: "prepared",
-      serialized: serializeProject(data.project),
+      serialized,
+      bytes: autosaveByteLength(serialized),
+      fingerprint: autosaveFingerprint(serialized),
     });
   } catch (error) {
     post({

@@ -112,7 +112,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   const projectInputRef = useRef<HTMLInputElement>(null);
   const appShellRef = useRef<HTMLDivElement>(null);
   const assessmentQueryApplied = useRef(false);
-  useProjectAutosave(project);
+  useProjectAutosave(project, { onFailure: setCommandStatus });
 
   useEffect(() => {
     playbackClock.setPhase(angle);

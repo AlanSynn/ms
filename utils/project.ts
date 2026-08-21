@@ -24,8 +24,9 @@ import { clampNumber, finiteNumber, sanitizeHexColor, sanitizeMechanismType, san
 import { isUsableContourPoints } from './partGeometry';
 import { DEFAULT_CLASSROOM_ASSESSMENT_KEY, normalizeClassroomAssessmentKey } from './classroomContent';
 import { fitFourBarKitMechanismToPath, rejectedFourBarPathFit } from './fourBarPathFit';
+import { APP_STATE_VERSION, serializeProject } from './projectSerialization';
 
-export const APP_STATE_VERSION = 1;
+export { APP_STATE_VERSION, serializeProject, serializeProjectCompact } from './projectSerialization';
 
 const DEFAULT_DRIVE_GEAR_RADIUS = REFERENCE_DEFAULTS.gearTrain.driveRadius; // reference G3 / 24T
 const DEFAULT_OUTPUT_GEAR_RADIUS = REFERENCE_DEFAULTS.gearTrain.outputRadius; // reference G3 / 24T
@@ -1466,9 +1467,6 @@ export const validatePath = (path: ProjectMotionPath): ProjectMotionPath => {
         ]
     };
 };
-
-export const serializeProject = (project: ProjectState): string => JSON.stringify({ ...project, version: APP_STATE_VERSION }, null, 2);
-
 
 const normalizeSkeletonSnapshot = (skeleton: unknown): StandardSkeleton | null => {
     if (!skeleton || typeof skeleton !== 'object') return null;

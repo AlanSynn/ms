@@ -2,6 +2,8 @@ import { strict as assert } from "node:assert";
 import { createEmptyProject } from "../utils/project";
 import {
   AUTOSAVE_STORAGE_KEYS,
+  byteLength,
+  fingerprint,
   type AutosaveStorage,
 } from "../utils/projectAutosaveFormat";
 import {
@@ -10,6 +12,10 @@ import {
 import {
   writeAutosaveSnapshot,
 } from "../utils/projectAutosaveTransactions";
+import {
+  serializeProject,
+  serializeProjectCompact,
+} from "../utils/projectSerialization";
 import {
   createAutosaveTransaction,
   type AutosaveIdleBoundary,
@@ -26,6 +32,26 @@ const memoryStorage = (): AutosaveStorage & { values: Map<string, string> } => {
     setItem: (key, value) => values.set(key, value),
     removeItem: (key) => values.delete(key),
   };
+};
+
+const quotaStorage = (maxCharacters: number) => {
+  const storage = memoryStorage();
+  return {
+    ...storage,
+    setItem: (key: string, value: string) => {
+      const previousLength = storage.values.get(key)?.length ?? 0;
+      const nextLength =
+        [...storage.values.values()].reduce((sum, item) => sum + item.length, 0) -
+        previousLength +
+        value.length;
+      if (nextLength > maxCharacters) {
+        const error = new Error("quota exceeded");
+        error.name = "QuotaExceededError";
+        throw error;
+      }
+      storage.values.set(key, value);
+    },
+  } satisfies AutosaveStorage & { values: Map<string, string> };
 };
 
 const manualBoundary = () => {
@@ -185,6 +211,36 @@ const projectB = createEmptyProject();
   if (recovered.status === "loaded") {
     assert.equal(recovered.project.metadata.id, second.metadata.id);
     assert.equal(recovered.recovery.outcome, "clean");
+  }
+}
+
+{
+  const unicode = "ASCII · café · \uD55C\uAE00 · 🤖";
+  assert.equal(byteLength(unicode), Buffer.byteLength(unicode, "utf8"));
+  assert.equal(fingerprint(unicode), fingerprint(unicode));
+  assert(
+    serializeProjectCompact(projectA).length < serializeProject(projectA).length,
+    "autosave uses the same schema without portable-file whitespace",
+  );
+}
+
+{
+  const storage = quotaStorage(4 * 1024 * 1024);
+  const first = createEmptyProject();
+  first.metadata.name = `A${"a".repeat(3 * 1024 * 1024)}`;
+  const second = { ...first, metadata: { ...first.metadata, name: `B${"b".repeat(3 * 1024 * 1024)}` } };
+  const firstWrite = writeAutosaveSnapshot(first, storage);
+  const secondWrite = writeAutosaveSnapshot(second, storage);
+  assert.equal(firstWrite.status, "saved");
+  assert.equal(secondWrite.status, "saved", "quota pressure keeps the newest generation");
+  if (secondWrite.status === "saved") {
+    assert.equal(secondWrite.retainedGenerations, 1, "optional previous bytes are dropped only after quota pressure");
+  }
+  assert.equal(storage.values.has(AUTOSAVE_STORAGE_KEYS.autosavePrevious), false);
+  const recovered = readAutosaveProject(first, storage);
+  assert.equal(recovered.status, "loaded");
+  if (recovered.status === "loaded") {
+    assert(recovered.project.metadata.name.startsWith("B"));
   }
 }
 

@@ -1,5 +1,11 @@
 import type { ProjectState } from "../../types";
 
+export type AutosaveSerializedSnapshot = {
+  serialized: string;
+  bytes: number;
+  fingerprint: string;
+};
+
 export type AutosaveBoundaryHandle = {
   timeoutId?: number;
   idleId?: number;
@@ -86,7 +92,7 @@ export const browserAutosaveIdleBoundary = (): AutosaveIdleBoundary => {
 };
 
 type AutosaveWorkerResponse =
-  | { id: number; generation: number; type: "prepared"; serialized: string }
+  | ({ id: number; generation: number; type: "prepared" } & AutosaveSerializedSnapshot)
   | { id: number; generation: number; type: "error"; message: string };
 
 /**
@@ -97,7 +103,7 @@ type AutosaveWorkerResponse =
  */
 export const createBrowserAutosavePreparationDriver = (): AutosavePreparationDriver<
   ProjectState,
-  string
+  AutosaveSerializedSnapshot
 > => {
   let worker: Worker | undefined;
   let nextRequestId = 1;
@@ -105,7 +111,7 @@ export const createBrowserAutosavePreparationDriver = (): AutosavePreparationDri
     | {
         id: number;
         generation: number;
-        callbacks: AutosavePreparationCallbacks<string>;
+        callbacks: AutosavePreparationCallbacks<AutosaveSerializedSnapshot>;
       }
     | undefined;
 
@@ -118,7 +124,7 @@ export const createBrowserAutosavePreparationDriver = (): AutosavePreparationDri
   const start = (
     project: ProjectState,
     generation: number,
-    callbacks: AutosavePreparationCallbacks<string>,
+    callbacks: AutosavePreparationCallbacks<AutosaveSerializedSnapshot>,
   ) => {
     if (typeof Worker === "undefined") {
       callbacks.failed(new Error("This browser cannot prepare autosave bytes."));
@@ -142,12 +148,14 @@ export const createBrowserAutosavePreparationDriver = (): AutosavePreparationDri
         data.generation !== active.generation
       ) return;
       const current = active;
-      active = undefined;
-      if (worker) {
-        worker.onmessage = null;
-        worker.onerror = null;
+      terminate();
+      if (data.type === "prepared") {
+        current.callbacks.ready({
+          serialized: data.serialized,
+          bytes: data.bytes,
+          fingerprint: data.fingerprint,
+        });
       }
-      if (data.type === "prepared") current.callbacks.ready(data.serialized);
       else current.callbacks.failed(new Error(data.message));
     };
     worker.onerror = () => {

@@ -4,12 +4,14 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CLASSROOM_LESSONS, createLessonProject, serializeProject } from '../../utils/project';
+import { serializeProjectCompact } from '../../utils/projectSerialization';
 import { ENABLED_MECHANISM_TYPES, isMechanismTypeEnabled } from '../../utils/mechanismTemplates';
 import { createFabricationReadyFourBarProject } from '../fixtures/fabricationProject';
 import { FABRICATION_RENDER_LAYER_Z_STEP } from '../../utils/fabrication';
 import { APP_COMMANDS, APP_MENU_GROUPS, commandById, type AppCommandId } from '../../utils/appCommands';
 import {
   installChromebookAuditInstrumentation,
+  applyChromebookEmulation,
   readFeatureRuntimeProbe,
   waitForLifecycleBaseline,
 } from './chromebookAuditHarness';
@@ -664,6 +666,25 @@ const writeFabricationReadyFourBarProject = async () => {
   fabricationReadyFourBarSnapshot ??= serializeProject(createFabricationReadyFourBarProject());
   await writeFile(path, fabricationReadyFourBarSnapshot, 'utf8');
   return path;
+};
+
+const largeAutosaveProjectFile = (megabytes: number, generation: 'a' | 'b' = 'a') => {
+  const project = createLessonProject('waving-arm');
+  const partId = project.partOrder[0];
+  project.parts[partId] = {
+    ...project.parts[partId],
+    originalSvgPath: `memory://${generation.repeat(megabytes * 1024 * 1024)}`,
+  };
+  project.settings = {
+    ...project.settings,
+    autosave: true,
+    autosaveIntervalSeconds: 60,
+  };
+  return {
+    name: `autosave-${megabytes}mb-${generation}.motionsmith.json`,
+    mimeType: 'application/json',
+    buffer: Buffer.from(serializeProjectCompact(project)),
+  };
 };
 
 let fabricationReadyFourBarSnapshot: string | undefined;
@@ -1836,6 +1857,207 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await expect(page.getByTestId('processing-step-details')).toContainText('Fit sheet');
 
   expectCleanPage(pageErrors, consoleErrors);
+});
+
+test('Autosave keeps cold boot idle and bounds 1/3/5MB writes at 6x CPU', async ({ page, context }, testInfo) => {
+  await installChromebookAuditInstrumentation(context);
+  await context.addInitScript(() => {
+    type AutosaveWrite = {
+      key: string;
+      characters: number;
+      durationMs: number;
+      failed: boolean;
+    };
+    const target = window as Window & {
+      __MOTIONSMITH_AUTOSAVE_WRITES__?: AutosaveWrite[];
+    };
+    target.__MOTIONSMITH_AUTOSAVE_WRITES__ = [];
+    const nativeSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key: string, value: string) {
+      const startedAt = performance.now();
+      let failed = true;
+      try {
+        const result = Reflect.apply(nativeSetItem, this, [key, value]);
+        failed = false;
+        return result;
+      } finally {
+        if (key.startsWith('motionsmith.autosave')) {
+          target.__MOTIONSMITH_AUTOSAVE_WRITES__?.push({
+            key,
+            characters: value.length,
+            durationMs: performance.now() - startedAt,
+            failed,
+          });
+        }
+      }
+    };
+  });
+  const workerRequests: string[] = [];
+  page.on('request', request => {
+    if (/autosaveWorker-[^/]+\.js/.test(request.url())) workerRequests.push(request.url());
+  });
+
+  await page.goto('/');
+  await waitForBootLoader(page);
+  await page.waitForTimeout(750);
+  expect(workerRequests, 'cold boot requests no autosave worker').toEqual([]);
+  const client = await applyChromebookEmulation(page);
+  const baseline = await readFeatureRuntimeProbe(page);
+  expect(baseline.lifecycle.workers.active).toBe(0);
+
+  const results: Array<{
+    megabytes: number;
+    outcome: 'saved' | 'quota';
+    maxAutosaveWriteMs: number;
+    totalStoredCharacters: number;
+    retainedGenerations: 0 | 1 | 2;
+  }> = [];
+  let autosaveAttempts = 0;
+  const waitForAutosaveOutcome = async (generation: number) => {
+    await expect.poll(() => page.evaluate((expectedGeneration) => {
+      const raw = localStorage.getItem('motionsmith.autosave.metadata');
+      const committedGeneration = raw ? JSON.parse(raw).currentGeneration : 0;
+      if (committedGeneration === expectedGeneration) return 'saved';
+      return document.querySelector('[data-testid="status-bar"]')?.textContent
+        ?.includes('Autosave failed: Storage full')
+        ? 'quota'
+        : 'pending';
+    }, generation), { timeout: 30_000 }).toMatch(/saved|quota/);
+    return page.evaluate((expectedGeneration) => {
+      const raw = localStorage.getItem('motionsmith.autosave.metadata');
+      return raw && JSON.parse(raw).currentGeneration === expectedGeneration
+        ? 'saved' as const
+        : 'quota' as const;
+    }, generation);
+  };
+  const readAutosaveMeasurement = () => page.evaluate(() => {
+    type AutosaveWrite = {
+      key: string;
+      characters: number;
+      durationMs: number;
+      failed: boolean;
+    };
+    const writes = (window as Window & {
+      __MOTIONSMITH_AUTOSAVE_WRITES__?: AutosaveWrite[];
+    }).__MOTIONSMITH_AUTOSAVE_WRITES__ ?? [];
+    const currentWrites = writes.filter(item => item.key === 'motionsmith.autosave');
+    const metadataRaw = localStorage.getItem('motionsmith.autosave.metadata');
+    const metadata = metadataRaw
+      ? JSON.parse(metadataRaw) as { previousGeneration?: number | null }
+      : undefined;
+    let totalStoredCharacters = 0;
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key?.startsWith('motionsmith.autosave')) {
+        totalStoredCharacters += localStorage.getItem(key)?.length ?? 0;
+      }
+    }
+    return {
+      maxAutosaveWriteMs: Math.max(0, ...currentWrites.map(item => item.durationMs)),
+      successfulCurrentWrites: currentWrites.filter(item => !item.failed).length,
+      failedCurrentWrites: currentWrites.filter(item => item.failed).length,
+      totalStoredCharacters,
+      retainedGenerations: (
+        !metadata ? 0 : metadata.previousGeneration == null ? 1 : 2
+      ) as 0 | 1 | 2,
+    };
+  });
+  for (const megabytes of [1, 3, 5]) {
+    await page.evaluate(() => {
+      localStorage.clear();
+      const target = window as Window & {
+        __MOTIONSMITH_AUTOSAVE_WRITES__?: unknown[];
+      };
+      target.__MOTIONSMITH_AUTOSAVE_WRITES__ = [];
+    });
+    const firstInput = await page.getByTestId('getting-started-dialog').count()
+      ? page.getByTestId('getting-started-import-input')
+      : page.getByTestId('project-file-input');
+    if (await page.getByTestId('guided-project-library').count()) {
+      await switchGettingStartedToStarters(page);
+    }
+    await firstInput.setInputFiles(largeAutosaveProjectFile(megabytes, 'a'));
+    await expect(page.getByTestId('status-bar')).toContainText(
+      `Loaded project autosave-${megabytes}mb-a.motionsmith.json`,
+    );
+    autosaveAttempts += 1;
+    const firstOutcome = await waitForAutosaveOutcome(1);
+    await waitForLifecycleBaseline(page, baseline.lifecycle);
+
+    if (firstOutcome === 'quota') {
+      const measured = await readAutosaveMeasurement();
+      expect(measured.failedCurrentWrites, `${megabytes}MB reports its browser quota limit`).toBeGreaterThan(0);
+      expect(measured.maxAutosaveWriteMs, `${megabytes}MB rejected write at 6x CPU`).toBeLessThan(100);
+      results.push({ megabytes, outcome: 'quota', ...measured });
+      continue;
+    }
+
+    await page.evaluate(() => {
+      const target = window as Window & {
+        __MOTIONSMITH_AUTOSAVE_WRITES__?: unknown[];
+      };
+      target.__MOTIONSMITH_AUTOSAVE_WRITES__ = [];
+    });
+    const second = largeAutosaveProjectFile(megabytes, 'b');
+    await page.getByTestId('project-file-input').setInputFiles(second);
+    await expect(page.getByTestId('status-bar')).toContainText(
+      `Loaded project autosave-${megabytes}mb-b.motionsmith.json`,
+    );
+    autosaveAttempts += 1;
+    const secondOutcome = await waitForAutosaveOutcome(2);
+    await waitForLifecycleBaseline(page, baseline.lifecycle);
+    expect(secondOutcome, `${megabytes}MB newest generation survives optional-history quota pressure`).toBe('saved');
+    const measured = await readAutosaveMeasurement();
+    expect(measured.successfulCurrentWrites, `${megabytes}MB current generation commits`).toBeGreaterThan(0);
+    expect(measured.maxAutosaveWriteMs, `${megabytes}MB localStorage write at 6x CPU`).toBeLessThan(100);
+    results.push({ megabytes, outcome: 'saved', ...measured });
+  }
+
+  expect(results.find(result => result.megabytes === 1)?.outcome).toBe('saved');
+
+  const after = await readFeatureRuntimeProbe(page);
+  expect(after.lifecycle.workers.acquired - baseline.lifecycle.workers.acquired).toBe(autosaveAttempts);
+  expect(after.lifecycle.workers.released - baseline.lifecycle.workers.released).toBe(autosaveAttempts);
+  expect(after.lifecycle.workers.active).toBe(baseline.lifecycle.workers.active);
+  expect(workerRequests.length, 'autosave worker loads only after an edit').toBeGreaterThan(0);
+
+  await page.getByRole('button', { name: /Options/i }).click();
+  await page.getByLabel('Theme').selectOption('dark');
+  const pagehideMs = await page.evaluate(() => {
+    const startedAt = performance.now();
+    window.dispatchEvent(new PageTransitionEvent('pagehide'));
+    return performance.now() - startedAt;
+  });
+  expect(pagehideMs, 'pagehide only flushes prepared bytes or a small dirty marker').toBeLessThan(50);
+  const autosaveReport = testInfo.outputPath('autosave-6x-results.json');
+  await writeFile(
+    autosaveReport,
+    `${JSON.stringify({ results, pagehideMs }, null, 2)}\n`,
+    'utf8',
+  );
+  await testInfo.attach('autosave-6x-results.json', {
+    path: autosaveReport,
+    contentType: 'application/json',
+  });
+  await client.detach();
+});
+
+test('Autosave quota failure is visible in the status dock', async ({ page, context }) => {
+  await context.addInitScript(() => {
+    const nativeSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (key === 'motionsmith.autosave') {
+        throw new DOMException('storage full', 'QuotaExceededError');
+      }
+      return Reflect.apply(nativeSetItem, this, [key, value]);
+    };
+  });
+  await page.goto('/');
+  await openCharacterScreen(page);
+  await expect(page.getByTestId('status-bar')).toContainText(
+    'Autosave failed: Storage full',
+    { timeout: 15_000 },
+  );
 });
 
 test('Legacy storage namespace migrates to MotionSmith keys without losing autosave or workspace layout', async ({ page }) => {
