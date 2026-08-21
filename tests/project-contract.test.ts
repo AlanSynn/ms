@@ -1679,8 +1679,8 @@ const goldenExportConfig = {
   mechanisms: goldenSample.mechanisms
 };
 const goldenMaster = {
-  project: serializeProject(stableProjectForGoldenMaster(goldenSample)),
-  lesson: serializeProject(stableProjectForGoldenMaster(goldenLesson)),
+  project: JSON.parse(serializeProject(stableProjectForGoldenMaster(goldenSample))),
+  lesson: JSON.parse(serializeProject(stableProjectForGoldenMaster(goldenLesson))),
   mechanismSnapshot: stableMechanismSnapshotForGoldenMaster(goldenSnapshot),
   allMechanismSnapshots: goldenAllMechanismSnapshots.map(stableMechanismSnapshotForGoldenMaster),
   sceneProjection: buildToonSceneProjection(goldenSample),
@@ -1693,8 +1693,8 @@ const goldenMaster = {
 assert.deepEqual(
   Object.fromEntries(Object.entries(goldenMaster).map(([key, value]) => [key, goldenMasterHash(value)])),
   {
-    project: '2b8b317121b8013563fb8478915e2596769ea9f17d121ba67698fc53366f813a',
-    lesson: '1e82e1582ce990a346effb1a574ef80eecf28c84cb477713da30a7bb705db7d2',
+    project: '313706e17f200518b12a7870842f8cd411bda133f426ecae0a5a764a2f907f37',
+    lesson: '65ca58904c584e0241a0ee3685dc9153248b2630d56d3bcbe137f04026f40abd',
     mechanismSnapshot: '25f57f11023993ac2623d6863ee5528573befa68c3053ae4bfbb5b6e20db65a7',
     allMechanismSnapshots: '16a8a3b3c54f3352926b56a69ce65da46a027d993eb44556ba3705ab5ee18f09',
     sceneProjection: '84e51e7b708660831a8a7bb540fe9bea2f61807841f3e7dafe17c6fe44350dba',
