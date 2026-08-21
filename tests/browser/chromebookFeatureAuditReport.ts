@@ -12,6 +12,8 @@ export const CHROMEBOOK_FEATURE_NAMES = [
   "pathGestures",
   "foundryGestures",
   "designControls",
+  "projectImport",
+  "characterPackageImport",
 ] as const;
 
 export type ChromebookFeatureName = (typeof CHROMEBOOK_FEATURE_NAMES)[number];

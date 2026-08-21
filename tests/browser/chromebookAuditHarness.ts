@@ -26,6 +26,7 @@ import type {
 
 type BrowserAuditState = {
   longTasks: number[];
+  longTaskEntries: Array<{ startTime: number; duration: number }>;
   eventDurations: number[];
   reactCommits: number;
   foundryTopologyBuilds: number;
@@ -46,6 +47,7 @@ export const installChromebookAuditInstrumentation = async (context: BrowserCont
     const resources: WebGLAuditSnapshot["resources"] = {};
     const state: BrowserAuditState = {
       longTasks: [],
+      longTaskEntries: [],
       eventDurations: [],
       reactCommits: 0,
       foundryTopologyBuilds: 0,
@@ -228,7 +230,12 @@ export const installChromebookAuditInstrumentation = async (context: BrowserCont
 
     try {
       new PerformanceObserver((list) => {
-        state.longTasks.push(...list.getEntries().map((entry) => entry.duration));
+        const entries = list.getEntries();
+        state.longTasks.push(...entries.map((entry) => entry.duration));
+        state.longTaskEntries.push(...entries.map((entry) => ({
+          startTime: entry.startTime,
+          duration: entry.duration,
+        })));
       }).observe({ type: "longtask", buffered: true });
     } catch {
       // Chromium exposes long-task entries; unsupported browsers keep an empty list.
@@ -587,7 +594,7 @@ export const finishFeatureAction = async (
 ): Promise<FeatureActionAudit> => {
   const settleMs = await elapsedFeatureTime(page, input.timing);
   const result = await page.evaluate(
-    ({ longTaskOffset, puppetTopologyOffset }) => {
+    ({ actionStartedAt, longTaskOffset, puppetTopologyOffset }) => {
       const state = (window as Window & {
         __MOTIONSMITH_CHROMEBOOK_AUDIT__?: BrowserAuditState;
       }).__MOTIONSMITH_CHROMEBOOK_AUDIT__;
@@ -603,11 +610,21 @@ export const finishFeatureAction = async (
           puppetTopologyCount: state.puppetTopologyDurations.length,
           lifecycle: structuredClone(state.runtime),
         } satisfies FeatureRuntimeProbe,
-        longTasks: state.longTasks.slice(longTaskOffset),
+        longTasks: state.longTaskEntries
+          .slice(longTaskOffset)
+          .map((entry) => Math.max(
+            0,
+            entry.startTime + entry.duration - Math.max(
+              entry.startTime,
+              actionStartedAt,
+            ),
+          ))
+          .filter((duration) => duration > 0),
         puppetTopologyDurations: state.puppetTopologyDurations.slice(puppetTopologyOffset),
       };
     },
     {
+      actionStartedAt: input.timing.startedAt,
       longTaskOffset: input.before.longTaskCount,
       puppetTopologyOffset: input.before.puppetTopologyCount,
     },

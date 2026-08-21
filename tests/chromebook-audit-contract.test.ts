@@ -225,6 +225,7 @@ assert(packageJson.scripts["test:chromebook-audit"].includes("chromebook-feature
 assert(packageJson.scripts["test:chromebook-audit"].includes("chromebook-stage-switch-audit.spec.ts"), "production-preview acceptance includes repeated stage ownership checks");
 assert(packageJson.scripts["test:chromebook-audit"].includes("chromebook-simulation-audit.spec.ts"), "production-preview acceptance covers every animated classroom stage");
 assert(packageJson.scripts["test:chromebook-audit"].includes("chromebook-interaction-audit.spec.ts"), "production-preview acceptance covers direct classroom manipulation");
+assert(packageJson.scripts["test:chromebook-audit"].includes("chromebook-import-audit.spec.ts"), "production-preview acceptance covers bounded project and character imports");
 assert.equal(packageJson.scripts["test:chromebook-audit:real-ai"], undefined, "the removed image-recognition workload has no audit command");
 assert(!packageJson.scripts["test:chromebook-audit"].includes("chromebook-audit.spec.ts"), "the short per-feature audit is the primary gate");
 assert(packageJson.scripts["test:chromebook-audit:full"].includes("chromebook-audit.spec.ts"), "the full workflow and soak remain available separately");
@@ -236,7 +237,9 @@ const featureSpec = read("tests/browser/chromebook-features-audit.spec.ts");
 const stageSwitchSpec = read("tests/browser/chromebook-stage-switch-audit.spec.ts");
 const simulationSpec = read("tests/browser/chromebook-simulation-audit.spec.ts");
 const interactionSpec = read("tests/browser/chromebook-interaction-audit.spec.ts");
+const importSpec = read("tests/browser/chromebook-import-audit.spec.ts");
 const interactionAudit = read("tests/browser/chromebookInteractionAudit.ts");
+const auditHarness = read("tests/browser/chromebookAuditHarness.ts");
 const workflowRail = read("components/shell/WorkflowRail.tsx");
 assert(workflowRail.includes("workflow-stage-${item.id}"), "stage timing uses stable rail controls without accessibility-tree traversal overhead");
 const stageRouter = read("components/AppStageRouter.tsx");
@@ -268,6 +271,13 @@ for (const interaction of ["pathGestures", "foundryGestures", "designControls"])
 }
 assert(interactionSpec.includes("measurePointerEventToNextPaint") && interactionSpec.includes("measureRangeUpdate"));
 assert(interactionAudit.includes("webglResourceGrowthBounded") && interactionAudit.includes("puppetTopologyP95"));
+for (const importFeature of ["projectImport", "characterPackageImport"]) {
+  assert(importSpec.includes(`"${importFeature}"`), `import audit measures ${importFeature}`);
+}
+assert(importSpec.includes("12 * 1024 * 1024") && importSpec.includes("Buffer.alloc(5 * 1024 * 1024"), "import audit exercises supersession while large bounded files are still owned");
+assert(importSpec.includes("minimumWorkerCreations: 2") && importSpec.includes("waitForLifecycleBaseline"), "import audit requires worker cancellation and final ownership return");
+assert(importSpec.includes("FORBIDDEN_RUNTIME") && importSpec.includes("forbiddenRequests"), "local import audit blocks recognition and physics downloads");
+assert(auditHarness.includes("longTaskEntries") && auditHarness.includes("actionStartedAt") && auditHarness.includes("entry.startTime + entry.duration"), "feature Long Tasks are clipped to the measured action window so file-injection setup is not attributed to app work");
 assert(
   stageSwitchSpec.indexOf("await openWavingArm(page)") < stageSwitchSpec.indexOf("applyChromebookEmulation(page)"),
   "the stage audit throttles only measured stage interactions",
