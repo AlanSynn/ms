@@ -22,6 +22,7 @@ import { scheduleIncrementalTopologyBuild } from '../runtime/render/incrementalT
 import { createPartArtMaterial, disposePartArtMaterial } from '../runtime/render/partArtMaterial';
 import { warmPartTopologyPipeline } from '../runtime/render/warmPartTopology';
 import {
+  acquireSharedWebGLRenderer,
   cachedThreeResource,
   clearThreeGroup,
   collectThreeObjectResourceUsage,
@@ -1096,14 +1097,18 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     const host = hostRef.current;
     if (!host) return;
 
-    let renderer: THREE.WebGLRenderer;
+    let rendererLease;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: renderPolicy.antialias, alpha: true });
+      rendererLease = acquireSharedWebGLRenderer({
+        antialias: renderPolicy.antialias,
+        alpha: true,
+      });
     } catch (error) {
       console.warn('ThreePuppetPreview WebGL unavailable', error);
       setRendererStatus('unavailable');
       return;
     }
+    const renderer = rendererLease.renderer;
 
     setRendererPixelRatioCap(renderer, renderPolicy.pixelRatioCap);
     warmPartTopologyPipeline(renderPolicy.partTopology);
@@ -1175,8 +1180,8 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       disposeMaterials(materialsRef.current);
       renderer.domElement.removeEventListener('webglcontextlost', handleContextLost);
       renderer.domElement.removeEventListener('webglcontextrestored', handleContextRestored);
-      renderer.dispose();
       if (renderer.domElement.parentElement === host) host.removeChild(renderer.domElement);
+      rendererLease.release();
       materialsRef.current = null;
       rendererRef.current = null;
       sceneRef.current = null;

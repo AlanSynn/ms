@@ -54,7 +54,7 @@ const definePolicy = (
 const RENDER_PERFORMANCE_POLICIES: Readonly<Record<RenderPerformancePreset, RenderPerformancePolicy>> = Object.freeze({
   fast: definePolicy({
     preset: 'fast',
-    pixelRatioCap: 0.75,
+    pixelRatioCap: 0.5,
     antialias: false,
     targetFramesPerSecond: 20,
     overlayQuality: 'reduced',
@@ -83,7 +83,7 @@ const RENDER_PERFORMANCE_POLICIES: Readonly<Record<RenderPerformancePreset, Rend
   }),
   balanced: definePolicy({
     preset: 'balanced',
-    pixelRatioCap: 0.75,
+    pixelRatioCap: 0.625,
     antialias: false,
     targetFramesPerSecond: 30,
     overlayQuality: 'balanced',

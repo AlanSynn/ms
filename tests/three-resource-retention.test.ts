@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { FoundryThreeObjectPool } from '../components/stages/foundry/foundryThreeObjectPool';
 import {
   collectThreeObjectResourceUsage,
+  disposeThreeObjectGraph,
   pruneUnusedThreeResourceCache,
 } from '../utils/threeResourceKit';
 import { scheduleIncrementalTopologyBuild } from '../runtime/render/incrementalTopologyBuild';
@@ -117,6 +118,26 @@ assert.equal(staleMaterialDisposals, 1, 'evicted material is disposed exactly on
 
 usedGeometry.dispose();
 usedMaterial.dispose();
+
+const instancedGeometry = new THREE.BoxGeometry(1, 1, 1);
+const instancedMaterial = new THREE.MeshBasicMaterial();
+const instanced = new THREE.InstancedMesh(
+  instancedGeometry,
+  instancedMaterial,
+  2,
+);
+let instancedDisposals = 0;
+instanced.addEventListener('dispose', () => {
+  instancedDisposals += 1;
+});
+const instancedRoot = new THREE.Group();
+instancedRoot.add(instanced);
+disposeThreeObjectGraph(instancedRoot);
+assert.equal(
+  instancedDisposals,
+  1,
+  'graph cleanup releases InstancedMesh-owned matrix and color buffers',
+);
 
 const scheduledFrames = new Map<number, () => void>();
 let nextFrameHandle = 1;

@@ -1520,7 +1520,7 @@ test('animation performance: Foundry playback stays responsive without runaway T
   await expect(foundryRig).toHaveAttribute('data-render-performance-preset', 'balanced');
   await expect(foundryRig).toHaveAttribute('data-render-antialias', 'off');
   await expect(foundryRig).toHaveAttribute('data-repeated-geometry-policy', 'pool-and-instance');
-  await expect(foundryRig).toHaveAttribute('data-three-pixel-ratio-cap', '0.75');
+  await expect(foundryRig).toHaveAttribute('data-three-pixel-ratio-cap', '0.63');
 
   const dynamicBuildsBefore = Number(await foundryRig.getAttribute('data-three-dynamic-build-count') ?? '0');
   const geometryCacheBefore = Number(await foundryRig.getAttribute('data-three-geometry-cache-size') ?? '0');

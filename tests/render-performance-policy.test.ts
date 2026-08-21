@@ -27,7 +27,7 @@ assert.deepEqual(
     interactiveDetail: balanced.interactiveDetail,
   },
   {
-    pixelRatioCap: 0.75,
+    pixelRatioCap: 0.625,
     antialias: false,
     targetFramesPerSecond: 30,
     overlayQuality: 'balanced',

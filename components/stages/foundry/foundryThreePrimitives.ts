@@ -46,6 +46,9 @@ type FoundryThreePrimitiveFactoryOptions = {
   baseColor: string;
   simulationScale: number;
   objectPool: FoundryThreeObjectPool;
+  edgeGeometryEnabled: boolean;
+  bevelEnabled: boolean;
+  curveSegments: number;
 };
 
 export const createFoundryThreePrimitiveFactory = ({
@@ -58,11 +61,22 @@ export const createFoundryThreePrimitiveFactory = ({
   baseColor,
   simulationScale,
   objectPool,
+  edgeGeometryEnabled,
+  bevelEnabled,
+  curveSegments,
 }: FoundryThreePrimitiveFactoryOptions) => {
+  const topologyDetailKey = `${bevelEnabled ? "bevel" : "flat"}:${curveSegments}`;
+  const radialSegments = Math.max(12, curveSegments * 4);
+  const camSegments = Math.max(24, curveSegments * 8);
   const cachedGeometry = <T extends THREE.BufferGeometry>(
     key: string,
     create: () => T,
-  ): T => cachedThreeResource(geometryCache, key, create, FOUNDRY_CACHE_MARKER);
+  ): T => cachedThreeResource(
+    geometryCache,
+    `${topologyDetailKey}:${key}`,
+    create,
+    FOUNDRY_CACHE_MARKER,
+  );
   const cachedMaterial = <T extends THREE.Material>(
     key: string,
     create: () => T,
@@ -91,15 +105,17 @@ export const createFoundryThreePrimitiveFactory = ({
       () => new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.25 }),
     ),
     dark: materialForLayer("#334155", 0.62, 0.03),
-    edge: cachedMaterial(
-      "edge:#334155:0.72",
-      () =>
-        new THREE.LineBasicMaterial({
-          color: "#334155",
-          transparent: true,
-          opacity: 0.72,
-        }),
-    ),
+    edge: edgeGeometryEnabled
+      ? cachedMaterial(
+          "edge:#334155:0.72",
+          () =>
+            new THREE.LineBasicMaterial({
+              color: "#334155",
+              transparent: true,
+              opacity: 0.72,
+            }),
+        )
+      : null,
     path: cachedMaterial(
       `path:${color}`,
       () =>
@@ -142,6 +158,7 @@ export const createFoundryThreePrimitiveFactory = ({
   };
 
   const addEdges = (mesh: THREE.Mesh, key = mesh.geometry.uuid) => {
+    if (!material.edge) return;
     const edges = new THREE.LineSegments(
       cachedGeometry(`edges:${key}`, () => new THREE.EdgesGeometry(mesh.geometry)),
       material.edge,
@@ -171,7 +188,7 @@ export const createFoundryThreePrimitiveFactory = ({
     const ring = new THREE.Mesh(
       cachedGeometry(
         `hole-ring:${holeR.toFixed(3)}`,
-        () => new THREE.TorusGeometry(holeR * 1.1, 0.025, 8, 24),
+        () => new THREE.TorusGeometry(holeR * 1.1, 0.025, 6, radialSegments),
       ),
       material.accent,
     );
@@ -190,8 +207,11 @@ export const createFoundryThreePrimitiveFactory = ({
           shape.holes.push(circularHole(0, 0, spacerInnerR));
           return new THREE.ExtrudeGeometry(shape, {
             depth: spacerDepth,
-            bevelEnabled: true,
+            bevelEnabled,
             bevelSize: 0.012,
+            bevelSegments: 1,
+            curveSegments,
+            steps: 1,
           });
         }),
         mat,
@@ -271,9 +291,12 @@ export const createFoundryThreePrimitiveFactory = ({
           shape.holes.push(...holeXs.map((x) => circularHole(x, 0)));
           return new THREE.ExtrudeGeometry(shape, {
             depth: thickness,
-            bevelEnabled: true,
+            bevelEnabled,
             bevelSize: 0.025,
             bevelThickness: 0.018,
+            bevelSegments: 1,
+            curveSegments,
+            steps: 1,
           });
         }),
         mat,
@@ -333,9 +356,12 @@ export const createFoundryThreePrimitiveFactory = ({
           () =>
             new THREE.ExtrudeGeometry(shape, {
               depth: thickness,
-              bevelEnabled: true,
+              bevelEnabled,
               bevelSize: 0.025,
               bevelThickness: 0.02,
+              bevelSegments: 1,
+              curveSegments,
+              steps: 1,
             }),
         ),
         mat,
@@ -397,9 +423,12 @@ export const createFoundryThreePrimitiveFactory = ({
           () =>
             new THREE.ExtrudeGeometry(shape, {
               depth: thickness,
-              bevelEnabled: true,
+              bevelEnabled,
               bevelSize: 0.025,
               bevelThickness: 0.02,
+              bevelSegments: 1,
+              curveSegments,
+              steps: 1,
             }),
         ),
         mat,
@@ -426,8 +455,8 @@ export const createFoundryThreePrimitiveFactory = ({
     const geometryKey = `cam:${mechanism.crankLength.toFixed(2)}:${(mechanism.camProfileSamples ?? []).join(",")}:${simulationScale.toFixed(3)}:${thickness.toFixed(3)}`;
     const { object: mesh } = objectPool.acquire("cam", geometryKey, () => {
       const shape = new THREE.Shape();
-      for (let i = 0; i < 56; i++) {
-        const angle = (i / 56) * Math.PI * 2;
+      for (let i = 0; i < camSegments; i++) {
+        const angle = (i / camSegments) * Math.PI * 2;
         const rr = r * sampledCamProfileScale(
           angle,
           mechanism.camProfileSamples,
@@ -445,8 +474,11 @@ export const createFoundryThreePrimitiveFactory = ({
           () =>
             new THREE.ExtrudeGeometry(shape, {
               depth: thickness,
-              bevelEnabled: true,
+              bevelEnabled,
               bevelSize: 0.025,
+              bevelSegments: 1,
+              curveSegments,
+              steps: 1,
             }),
         ),
         mat,
@@ -479,9 +511,12 @@ export const createFoundryThreePrimitiveFactory = ({
           );
           return new THREE.ExtrudeGeometry(shape, {
             depth: thickness,
-            bevelEnabled: true,
+            bevelEnabled,
             bevelSize: 0.02,
             bevelThickness: 0.015,
+            bevelSegments: 1,
+            curveSegments,
+            steps: 1,
           });
         }),
         mat,
@@ -525,7 +560,7 @@ export const createFoundryThreePrimitiveFactory = ({
               holeR * 1.3,
               holeR * 1.3,
               thickness * 1.18,
-              28,
+              radialSegments,
             ),
         ),
         material.accent,

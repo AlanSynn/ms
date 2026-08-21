@@ -1,4 +1,4 @@
-import type { Dispatch, ReactNode, SetStateAction } from "react";
+import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 
 import { AssemblyGuide } from "./stages/assembly/AssemblyGuide";
 import { BlueprintExport } from "./stages/blueprint/BlueprintExport";
@@ -86,6 +86,25 @@ export type AppStageRouterProps = {
   setAssemblyStepCount: Dispatch<SetStateAction<number>>;
 };
 
+const useDeferredStageMount = (editorStage: AppStage) => {
+  const [mountedStage, setMountedStage] = useState(editorStage);
+  useEffect(() => {
+    if (mountedStage === editorStage) return;
+    let firstFrame = 0;
+    let secondFrame = 0;
+    firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        setMountedStage(editorStage);
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+    };
+  }, [editorStage, mountedStage]);
+  return mountedStage === editorStage ? editorStage : null;
+};
+
 export const AppStageRouter = ({
   editorStage,
   project,
@@ -138,12 +157,24 @@ export const AppStageRouter = ({
   assemblyPlaying,
   setAssemblyPlaying,
   setAssemblyStepCount,
-}: AppStageRouterProps) => (
-  <div
+}: AppStageRouterProps) => {
+  const mountedStage = useDeferredStageMount(editorStage);
+  return <div
     className="stage-body editor-workbench relative min-h-0 flex-1 overflow-hidden p-7"
     data-testid="shared-workbench"
   >
-    {editorStage === "character" && (
+    {mountedStage === null && (
+      <div
+        className="editor-stage-frame stage-transition-frame"
+        data-testid="stage-transition-frame"
+        aria-busy="true"
+      >
+        <aside className="stage-left-pane workspace" />
+        <section className="stage-canvas-pane canvas-workspace" />
+        <aside className="stage-right-inspector workspace" />
+      </div>
+    )}
+    {mountedStage === "character" && (
       <CharacterSelection
         project={project}
         dispatch={dispatch}
@@ -162,7 +193,7 @@ export const AppStageRouter = ({
         setViewport={setViewport}
       />
     )}
-    {editorStage === "path" && (
+    {mountedStage === "path" && (
       <PathEditor
         project={project}
         sortedParts={sortedParts}
@@ -184,7 +215,7 @@ export const AppStageRouter = ({
         setViewport={setViewport}
       />
     )}
-    {editorStage === "foundry" && (
+    {mountedStage === "foundry" && (
       <MechanismFoundry
         project={project}
         foundry={foundry}
@@ -198,7 +229,7 @@ export const AppStageRouter = ({
         onExport={onFoundryExport}
       />
     )}
-    {editorStage === "design" && (
+    {mountedStage === "design" && (
       <MechanismDesign
         project={project}
         selectedPart={selectedPart}
@@ -221,10 +252,10 @@ export const AppStageRouter = ({
         goStage={goStage}
       />
     )}
-    {editorStage === "blueprint" && (
+    {mountedStage === "blueprint" && (
       <BlueprintExport project={project} dispatch={dispatch} goStage={goStage} />
     )}
-    {editorStage === "assembly" && (
+    {mountedStage === "assembly" && (
       <AssemblyGuide
         project={project}
         dispatch={dispatch}
@@ -239,7 +270,7 @@ export const AppStageRouter = ({
         playbackClock={playbackClock}
       />
     )}
-    {editorStage === "options" && (
+    {mountedStage === "options" && (
       <Options project={project} dispatch={dispatch} goStage={goStage} />
     )}
     {playerDock && (
@@ -251,5 +282,5 @@ export const AppStageRouter = ({
         {playerDock}
       </div>
     )}
-  </div>
-);
+  </div>;
+};

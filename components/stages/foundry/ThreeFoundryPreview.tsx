@@ -54,12 +54,15 @@ import type { MechanismPreviewSimulation } from "../../../utils/mechanismPreview
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 import { subscribeCadencedPlaybackSampler } from "../../../runtime/playback/cadencedPlaybackSampler";
 import {
+  acquireSharedWebGLRenderer,
+  cachedThreeResource,
   collectThreeObjectResourceUsage,
   pruneUnusedThreeResourceCache,
   setRendererPixelRatioCap,
 } from "../../../utils/threeResourceKit";
 import { recordFoundryTopologyBuild } from "../../../utils/performanceAudit";
 import { resolveRenderPerformancePolicy } from "../../../utils/renderPerformancePolicy";
+import type { PartTopologyPolicy } from "../../../utils/renderPerformancePolicy";
 import { sampleIndexedValues } from "../../../utils/interactiveSampling";
 import { fittedGearTrainCenters } from "./foundryPreviewGeometry";
 import { FoundryPreviewStateProbe } from "./FoundryPreviewStateProbe";
@@ -92,6 +95,12 @@ import {
 
 const E2E_DIAGNOSTICS = __MOTIONSMITH_E2E_DIAGNOSTICS__;
 type FoundryRendererStatus = "pending" | "webgl" | "restoring" | "unavailable";
+
+const sharedFoundryGeometryCache = new Map<string, THREE.BufferGeometry>();
+const sharedFoundryMaterialCache = new Map<string, THREE.Material>();
+
+const foundryTopologyPointKey = (points: readonly Point[]) =>
+  points.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(";");
 
 type ThreeFoundryPreviewProps = {
   mechanism: MechanismConfig;
@@ -324,18 +333,22 @@ const renderFoundryAutomataContext = ({
   root,
   context,
   assemblySceneFrame,
+  geometryCache,
   materialCache,
   onLoaded,
   baseZ,
   maxPathLinePoints,
+  partTopology,
 }: {
   root: THREE.Group;
   context?: FoundryAutomataContext;
   assemblySceneFrame?: FoundryAssemblySceneFrame;
+  geometryCache: Map<string, THREE.BufferGeometry>;
   materialCache: Map<string, THREE.Material>;
   onLoaded: () => void;
   baseZ: number;
   maxPathLinePoints: number;
+  partTopology: PartTopologyPolicy;
 }): boolean => {
   let automataRoot = root.getObjectByName(
     "foundry-automata-context",
@@ -368,6 +381,7 @@ const renderFoundryAutomataContext = ({
         sceneObjectOrder: ProjectState["sceneObjectOrder"];
         skeleton: StandardSkeleton | null | undefined;
         pathTopologyKey: string;
+        topologyDetailKey: string;
       }
     | undefined;
   const topologyMatches = Boolean(
@@ -377,9 +391,13 @@ const renderFoundryAutomataContext = ({
       topologyRefs.sceneObjects === project.sceneObjects &&
       topologyRefs.sceneObjectOrder === project.sceneObjectOrder &&
       topologyRefs.skeleton === skeleton &&
-      topologyRefs.pathTopologyKey === pathTopologyKey,
+      topologyRefs.pathTopologyKey === pathTopologyKey &&
+      topologyRefs.topologyDetailKey ===
+        `${partTopology.bevelEnabled}:${partTopology.edgeGeometryEnabled}:${partTopology.curveSegments}`,
   );
-  const edge = foundryAutomataMaterial("#334155", 0.58, materialCache);
+  const edge = partTopology.edgeGeometryEnabled
+    ? foundryAutomataMaterial("#334155", 0.58, materialCache)
+    : null;
   const selected = foundryAutomataMaterial("#a78bfa", 0.56, materialCache);
   const holeRadius = Math.max(
     1,
@@ -400,6 +418,7 @@ const renderFoundryAutomataContext = ({
       sceneObjectOrder: project.sceneObjectOrder,
       skeleton,
       pathTopologyKey,
+      topologyDetailKey: `${partTopology.bevelEnabled}:${partTopology.edgeGeometryEnabled}:${partTopology.curveSegments}`,
     };
     root.add(automataRoot);
     topologyChanged = true;
@@ -411,17 +430,27 @@ const renderFoundryAutomataContext = ({
       const outline = fabricablePartOutlinePoints(base, landmarks);
       if (outline.length < 3) return;
       const shape = foundrySceneLocalShape(outline);
-      landmarks
-        .filter((local) => pointInsideOutline(local, outline, 0.5))
-        .forEach((local) =>
-          shape.holes.push(foundrySceneLocalHole(local, holeRadius)),
-        );
-      const geometry = new THREE.ExtrudeGeometry(shape, {
-        depth: 0.16,
-        bevelEnabled: true,
-        bevelSize: 0.018,
-        bevelThickness: 0.012,
-      });
+      const localHoles = landmarks.filter((local) =>
+        pointInsideOutline(local, outline, 0.5)
+      );
+      localHoles.forEach((local) =>
+        shape.holes.push(foundrySceneLocalHole(local, holeRadius))
+      );
+      const geometryKey = `automata-part:${partId}:${foundryTopologyPointKey(outline)}:${foundryTopologyPointKey(localHoles)}:${partTopology.bevelEnabled}:${partTopology.curveSegments}`;
+      const geometry = cachedThreeResource(
+        geometryCache,
+        geometryKey,
+        () => new THREE.ExtrudeGeometry(shape, {
+          depth: 0.16,
+          bevelEnabled: partTopology.bevelEnabled,
+          bevelSize: 0.018,
+          bevelThickness: 0.012,
+          bevelSegments: 1,
+          curveSegments: partTopology.curveSegments,
+          steps: 1,
+        }),
+        FOUNDRY_CACHE_MARKER,
+      );
       const group = new THREE.Group();
       group.name = `foundry-automata-part-${partId}`;
       group.userData.partId = partId;
@@ -435,27 +464,42 @@ const renderFoundryAutomataContext = ({
       );
       mesh.position.z = -0.08;
       mesh.userData.partId = partId;
-      mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), edge));
+      if (edge) {
+        mesh.add(new THREE.LineSegments(
+          cachedThreeResource(
+            geometryCache,
+            `edges:${geometryKey}`,
+            () => new THREE.EdgesGeometry(geometry),
+            FOUNDRY_CACHE_MARKER,
+          ),
+          edge,
+        ));
+      }
       group.add(mesh);
       if (base.textureUrl) {
-        const artGeometry = new THREE.ShapeGeometry(shape);
-        const positions = artGeometry.getAttribute("position");
-        const uvs: number[] = [];
-        const width = Math.max(1, base.bounds.width);
-        const height = Math.max(1, base.bounds.height);
-        for (let index = 0; index < positions.count; index += 1) {
-          const local = sceneLocalFromFoundryGeometry(
-            positions.getX(index),
-            positions.getY(index),
-          );
-          uvs.push(
-            (local.x - base.bounds.x) / width,
-            (local.y - base.bounds.y) / height,
-          );
-        }
-        artGeometry.setAttribute(
-          "uv",
-          new THREE.Float32BufferAttribute(uvs, 2),
+        const artGeometry = cachedThreeResource(
+          geometryCache,
+          `art:${geometryKey}`,
+          () => {
+            const next = new THREE.ShapeGeometry(shape, partTopology.curveSegments);
+            const positions = next.getAttribute("position");
+            const uvs: number[] = [];
+            const width = Math.max(1, base.bounds.width);
+            const height = Math.max(1, base.bounds.height);
+            for (let index = 0; index < positions.count; index += 1) {
+              const local = sceneLocalFromFoundryGeometry(
+                positions.getX(index),
+                positions.getY(index),
+              );
+              uvs.push(
+                (local.x - base.bounds.x) / width,
+                (local.y - base.bounds.y) / height,
+              );
+            }
+            next.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+            return next;
+          },
+          FOUNDRY_CACHE_MARKER,
         );
         const art = new THREE.Mesh(
           artGeometry,
@@ -477,12 +521,21 @@ const renderFoundryAutomataContext = ({
       const base = project.sceneObjects[objectId];
       if (!base) return;
       const shape = foundrySceneObjectShape(base);
-      const geometry = new THREE.ExtrudeGeometry(shape, {
-        depth: 0.14,
-        bevelEnabled: true,
-        bevelSize: 0.014,
-        bevelThickness: 0.01,
-      });
+      const geometryKey = `automata-object:${objectId}:${base.bounds.width.toFixed(2)}:${base.bounds.height.toFixed(2)}:${partTopology.bevelEnabled}:${partTopology.curveSegments}`;
+      const geometry = cachedThreeResource(
+        geometryCache,
+        geometryKey,
+        () => new THREE.ExtrudeGeometry(shape, {
+          depth: 0.14,
+          bevelEnabled: partTopology.bevelEnabled,
+          bevelSize: 0.014,
+          bevelThickness: 0.01,
+          bevelSegments: 1,
+          curveSegments: partTopology.curveSegments,
+          steps: 1,
+        }),
+        FOUNDRY_CACHE_MARKER,
+      );
       const group = new THREE.Group();
       group.name = `foundry-automata-object-${objectId}`;
       group.userData.sceneObjectId = objectId;
@@ -496,24 +549,39 @@ const renderFoundryAutomataContext = ({
       );
       mesh.position.z = -0.07;
       mesh.userData.sceneObjectId = objectId;
-      mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), edge));
+      if (edge) {
+        mesh.add(new THREE.LineSegments(
+          cachedThreeResource(
+            geometryCache,
+            `edges:${geometryKey}`,
+            () => new THREE.EdgesGeometry(geometry),
+            FOUNDRY_CACHE_MARKER,
+          ),
+          edge,
+        ));
+      }
       group.add(mesh);
       if (base.textureUrl) {
-        const artGeometry = new THREE.ShapeGeometry(shape);
-        const positions = artGeometry.getAttribute("position");
-        const uvs: number[] = [];
-        const width = Math.max(1, base.bounds.width);
-        const height = Math.max(1, base.bounds.height);
-        for (let index = 0; index < positions.count; index += 1) {
-          const local = sceneLocalFromFoundryGeometry(
-            positions.getX(index),
-            positions.getY(index),
-          );
-          uvs.push(local.x / width + 0.5, 0.5 - local.y / height);
-        }
-        artGeometry.setAttribute(
-          "uv",
-          new THREE.Float32BufferAttribute(uvs, 2),
+        const artGeometry = cachedThreeResource(
+          geometryCache,
+          `art:${geometryKey}`,
+          () => {
+            const next = new THREE.ShapeGeometry(shape, partTopology.curveSegments);
+            const positions = next.getAttribute("position");
+            const uvs: number[] = [];
+            const width = Math.max(1, base.bounds.width);
+            const height = Math.max(1, base.bounds.height);
+            for (let index = 0; index < positions.count; index += 1) {
+              const local = sceneLocalFromFoundryGeometry(
+                positions.getX(index),
+                positions.getY(index),
+              );
+              uvs.push(local.x / width + 0.5, 0.5 - local.y / height);
+            }
+            next.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+            return next;
+          },
+          FOUNDRY_CACHE_MARKER,
         );
         const art = new THREE.Mesh(
           artGeometry,
@@ -684,8 +752,8 @@ export const ThreeFoundryPreview = ({
   const renderDynamicRef = useRef<((frame: FoundryPlaybackFrame) => void) | null>(null);
   automataContextRef.current = automataContext;
   assemblySceneFrameRef.current = assemblySceneFrame;
-  const geometryCacheRef = useRef<Map<string, THREE.BufferGeometry>>(new Map());
-  const materialCacheRef = useRef<Map<string, THREE.Material>>(new Map());
+  const geometryCacheRef = useRef(sharedFoundryGeometryCache);
+  const materialCacheRef = useRef(sharedFoundryMaterialCache);
   const [rendererStatus, setRendererStatus] = useState<FoundryRendererStatus>("pending");
   const [physicsKernelRuntime, setPhysicsKernelRuntime] = useState<
     "idle" | "loading" | "ready" | "unavailable"
@@ -1427,9 +1495,9 @@ export const ThreeFoundryPreview = ({
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    let renderer: THREE.WebGLRenderer;
+    let rendererLease;
     try {
-      renderer = new THREE.WebGLRenderer({
+      rendererLease = acquireSharedWebGLRenderer({
         antialias: renderPolicy.antialias,
         alpha: true,
       });
@@ -1438,6 +1506,7 @@ export const ThreeFoundryPreview = ({
       setRendererStatus("unavailable");
       return;
     }
+    const renderer = rendererLease.renderer;
     setRendererPixelRatioCap(renderer, renderPolicy.pixelRatioCap);
     renderer.shadowMap.enabled = false;
     renderer.domElement.className = "foundry-three-canvas";
@@ -1507,16 +1576,22 @@ export const ThreeFoundryPreview = ({
       if (dynamicRoot instanceof THREE.Group)
         disposeFoundryAssemblyOverlayRuntime(dynamicRoot);
       disposeFoundryThreeObject(scene);
-      geometryCacheRef.current.forEach((geometry) => geometry.dispose());
-      materialCacheRef.current.forEach((material) => material.dispose());
-      geometryCacheRef.current.clear();
-      materialCacheRef.current.clear();
+      pruneUnusedThreeResourceCache(
+        geometryCacheRef.current,
+        new Set(),
+        renderPolicy.repeatedGeometry.maxGeometryCacheEntries,
+      );
+      pruneUnusedThreeResourceCache(
+        materialCacheRef.current,
+        new Set(),
+        renderPolicy.repeatedGeometry.maxMaterialCacheEntries,
+      );
       primitivePoolRef.current = null;
       renderer.domElement.removeEventListener("webglcontextlost", handleContextLost);
       renderer.domElement.removeEventListener("webglcontextrestored", handleContextRestored);
-      renderer.dispose();
       if (renderer.domElement.parentElement === host)
         host.removeChild(renderer.domElement);
+      rendererLease.release();
     };
   }, [renderPolicy]);
 
@@ -1703,6 +1778,9 @@ export const ThreeFoundryPreview = ({
       baseColor: renderPlan.base.color,
       simulationScale: simulation.scale,
       objectPool,
+      edgeGeometryEnabled: renderPolicy.partTopology.edgeGeometryEnabled,
+      bevelEnabled: renderPolicy.partTopology.bevelEnabled,
+      curveSegments: renderPolicy.partTopology.curveSegments,
     });
     renderFoundryDynamicLayers({
       mechanism,
@@ -1741,10 +1819,12 @@ export const ThreeFoundryPreview = ({
       root,
       context: activeAutomataContext,
       assemblySceneFrame: activeAssemblySceneFrame,
+      geometryCache: geometryCacheRef.current,
       materialCache: materialCacheRef.current,
       onLoaded: () => renderCamera(cameraStateRef.current),
       baseZ: framePinTopZ + 0.16,
       maxPathLinePoints: renderPolicy.interactiveDetail.maxPathLinePoints,
+      partTopology: renderPolicy.partTopology,
     });
     pruneFoundryResourceCaches(root);
 
