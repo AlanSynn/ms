@@ -1,36 +1,36 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-21T13:34:47.979Z",
+  "generatedAt": "2026-08-21T13:41:22.203Z",
   "basis": "static compressed production shell",
   "imageRecognitionRuntime": "absent",
   "entryJs": {
     "files": [
-      "assets/index-CYlMRidh.js",
-      "assets/App-CUxDWPtT.js"
+      "assets/index-DWVzOvq8.js",
+      "assets/App-CWRYfzDc.js"
     ],
-    "gzipBytes": 81550
+    "gzipBytes": 81555
   },
   "coreJs": {
     "basis": "entry plus recursive emitted static-import closure",
     "files": [
-      "assets/App-CUxDWPtT.js",
-      "assets/AppShell-Dn0H0U0J.js",
+      "assets/App-CWRYfzDc.js",
+      "assets/AppShell-CVpM4oMm.js",
       "assets/classroomContent-bGvikOLx.js",
-      "assets/createLucideIcon-CPr3xrhj.js",
+      "assets/createLucideIcon-B0mVokSQ.js",
       "assets/fabrication-Ce-i4zDG.js",
-      "assets/index-CYlMRidh.js",
-      "assets/mechanismFitWorkerClient-BBRSuGMC.js",
-      "assets/mechanismRecommendations-DFI7oXgq.js",
+      "assets/index-DWVzOvq8.js",
+      "assets/mechanismFitWorkerClient-9kRtLPGA.js",
+      "assets/mechanismRecommendations-8T2dco3Z.js",
       "assets/motion-DUyEu3NF.js",
       "assets/performanceAudit-DvFcPLLy.js",
       "assets/project-CJLYokjz.js",
-      "assets/sparkles-qwtDVjtv.js",
-      "assets/stageLayout-DZuSFzXh.js",
-      "assets/upload-BuZBy_YM.js",
-      "assets/useWorkspacePlaybackLoop-BYuO6S-s.js",
+      "assets/sparkles-BwlDfMwk.js",
+      "assets/stageLayout-BKHOfJfh.js",
+      "assets/upload-C70t4-8F.js",
+      "assets/useWorkspacePlaybackLoop-Dk4ZOdXE.js",
       "assets/viewport-D1Xm5WR1.js"
     ],
-    "gzipBytes": 147084,
+    "gzipBytes": 147105,
     "limitBytes": 450000,
     "passed": true
   },
@@ -38,39 +38,39 @@
     "assets": [
       {
         "file": "index.html",
-        "compressedBytes": 15135
+        "compressedBytes": 15137
       },
       {
-        "file": "assets/App-CUxDWPtT.js",
-        "compressedBytes": 19882
+        "file": "assets/App-CWRYfzDc.js",
+        "compressedBytes": 19886
       },
       {
-        "file": "assets/AppShell-Dn0H0U0J.js",
-        "compressedBytes": 7646
+        "file": "assets/AppShell-CVpM4oMm.js",
+        "compressedBytes": 7647
       },
       {
         "file": "assets/classroomContent-bGvikOLx.js",
         "compressedBytes": 14224
       },
       {
-        "file": "assets/createLucideIcon-CPr3xrhj.js",
-        "compressedBytes": 787
+        "file": "assets/createLucideIcon-B0mVokSQ.js",
+        "compressedBytes": 791
       },
       {
         "file": "assets/fabrication-Ce-i4zDG.js",
         "compressedBytes": 9815
       },
       {
-        "file": "assets/index-CYlMRidh.js",
-        "compressedBytes": 61668
+        "file": "assets/index-DWVzOvq8.js",
+        "compressedBytes": 61669
       },
       {
-        "file": "assets/mechanismFitWorkerClient-BBRSuGMC.js",
-        "compressedBytes": 1245
+        "file": "assets/mechanismFitWorkerClient-9kRtLPGA.js",
+        "compressedBytes": 1244
       },
       {
-        "file": "assets/mechanismRecommendations-DFI7oXgq.js",
-        "compressedBytes": 3189
+        "file": "assets/mechanismRecommendations-8T2dco3Z.js",
+        "compressedBytes": 3194
       },
       {
         "file": "assets/motion-DUyEu3NF.js",
@@ -85,20 +85,20 @@
         "compressedBytes": 19083
       },
       {
-        "file": "assets/sparkles-qwtDVjtv.js",
-        "compressedBytes": 285
+        "file": "assets/sparkles-BwlDfMwk.js",
+        "compressedBytes": 287
       },
       {
-        "file": "assets/stageLayout-DZuSFzXh.js",
-        "compressedBytes": 2275
+        "file": "assets/stageLayout-BKHOfJfh.js",
+        "compressedBytes": 2276
       },
       {
-        "file": "assets/upload-BuZBy_YM.js",
-        "compressedBytes": 193
+        "file": "assets/upload-C70t4-8F.js",
+        "compressedBytes": 196
       },
       {
-        "file": "assets/useWorkspacePlaybackLoop-BYuO6S-s.js",
-        "compressedBytes": 568
+        "file": "assets/useWorkspacePlaybackLoop-Dk4ZOdXE.js",
+        "compressedBytes": 569
       },
       {
         "file": "assets/viewport-D1Xm5WR1.js",
@@ -113,7 +113,7 @@
         "compressedBytes": 32183
       }
     ],
-    "compressedBytes": 208146,
+    "compressedBytes": 208169,
     "limitBytes": 1500000,
     "passed": true
   }
