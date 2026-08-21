@@ -1,0 +1,777 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-21T00:46:15.670Z",
+  "resultLabel": "6x CPU emulation",
+  "productionBuild": true,
+  "actualChromebookTested": false,
+  "environment": {
+    "browser": "chrome",
+    "viewport": {
+      "width": 1366,
+      "height": 768
+    },
+    "deviceScaleFactor": 1,
+    "cpuThrottlingRate": 6,
+    "network": {
+      "name": "bounded-classroom-wifi",
+      "latencyMs": 40,
+      "downloadBytesPerSecond": 1310720,
+      "uploadBytesPerSecond": 655360
+    }
+  },
+  "coldCycles": 1,
+  "measuredCycles": 3,
+  "coldSamples": [
+    {
+      "cycle": 0,
+      "from": "Character",
+      "to": "Path",
+      "nextPaintMs": 79,
+      "readyMs": 317,
+      "longTasksMs": [],
+      "liveResources": 100,
+      "contextsCreated": 1,
+      "geometryCacheSize": 0,
+      "materialCacheSize": 0
+    },
+    {
+      "cycle": 0,
+      "from": "Path",
+      "to": "Foundry",
+      "nextPaintMs": 33.80000001192093,
+      "readyMs": 436.19999998807907,
+      "longTasksMs": [
+        83,
+        70
+      ],
+      "liveResources": 64,
+      "contextsCreated": 1,
+      "geometryCacheSize": 10,
+      "materialCacheSize": 9
+    },
+    {
+      "cycle": 0,
+      "from": "Foundry",
+      "to": "Design",
+      "nextPaintMs": 31.69999998807907,
+      "readyMs": 375.7999999523163,
+      "longTasksMs": [
+        79,
+        71
+      ],
+      "liveResources": 227,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 0,
+      "from": "Design",
+      "to": "Blueprint",
+      "nextPaintMs": 24.30000001192093,
+      "readyMs": 224.69999998807907,
+      "longTasksMs": [],
+      "liveResources": 278,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 0,
+      "from": "Blueprint",
+      "to": "Assembly",
+      "nextPaintMs": 33.19999998807907,
+      "readyMs": 248.4000000357628,
+      "longTasksMs": [],
+      "liveResources": 184,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 0,
+      "from": "Assembly",
+      "to": "Character",
+      "nextPaintMs": 24.099999964237213,
+      "readyMs": 246.0999999642372,
+      "longTasksMs": [],
+      "liveResources": 258,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 0,
+      "from": "Character",
+      "to": "Options",
+      "nextPaintMs": 30.900000035762787,
+      "readyMs": 170.20000004768372,
+      "longTasksMs": [],
+      "liveResources": 175,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    }
+  ],
+  "samples": [
+    {
+      "cycle": 1,
+      "from": "Options",
+      "to": "Character",
+      "nextPaintMs": 18.400000035762787,
+      "readyMs": 244.10000002384186,
+      "longTasksMs": [],
+      "liveResources": 258,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 1,
+      "from": "Character",
+      "to": "Path",
+      "nextPaintMs": 49.69999998807907,
+      "readyMs": 217.39999997615814,
+      "longTasksMs": [],
+      "liveResources": 267,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 1,
+      "from": "Path",
+      "to": "Foundry",
+      "nextPaintMs": 27.69999998807907,
+      "readyMs": 242.10000002384186,
+      "longTasksMs": [],
+      "liveResources": 184,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 1,
+      "from": "Foundry",
+      "to": "Design",
+      "nextPaintMs": 27.5,
+      "readyMs": 259.5,
+      "longTasksMs": [],
+      "liveResources": 227,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 1,
+      "from": "Design",
+      "to": "Blueprint",
+      "nextPaintMs": 19.5,
+      "readyMs": 188.69999998807907,
+      "longTasksMs": [],
+      "liveResources": 278,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 1,
+      "from": "Blueprint",
+      "to": "Assembly",
+      "nextPaintMs": 30.700000047683716,
+      "readyMs": 180.10000002384186,
+      "longTasksMs": [],
+      "liveResources": 184,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 1,
+      "from": "Assembly",
+      "to": "Options",
+      "nextPaintMs": 20.5,
+      "readyMs": 104.30000001192093,
+      "longTasksMs": [],
+      "liveResources": 175,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 2,
+      "from": "Options",
+      "to": "Character",
+      "nextPaintMs": 17.100000023841858,
+      "readyMs": 215.5,
+      "longTasksMs": [],
+      "liveResources": 258,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 2,
+      "from": "Character",
+      "to": "Path",
+      "nextPaintMs": 33.799999952316284,
+      "readyMs": 186.29999995231628,
+      "longTasksMs": [],
+      "liveResources": 267,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 2,
+      "from": "Path",
+      "to": "Foundry",
+      "nextPaintMs": 29.100000023841858,
+      "readyMs": 252.4000000357628,
+      "longTasksMs": [],
+      "liveResources": 184,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 2,
+      "from": "Foundry",
+      "to": "Design",
+      "nextPaintMs": 31,
+      "readyMs": 269.30000001192093,
+      "longTasksMs": [],
+      "liveResources": 227,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 2,
+      "from": "Design",
+      "to": "Blueprint",
+      "nextPaintMs": 24.69999998807907,
+      "readyMs": 193.10000002384186,
+      "longTasksMs": [],
+      "liveResources": 278,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 2,
+      "from": "Blueprint",
+      "to": "Assembly",
+      "nextPaintMs": 31.100000023841858,
+      "readyMs": 186.80000001192093,
+      "longTasksMs": [],
+      "liveResources": 184,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 2,
+      "from": "Assembly",
+      "to": "Options",
+      "nextPaintMs": 20.900000035762787,
+      "readyMs": 111.10000002384186,
+      "longTasksMs": [],
+      "liveResources": 175,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 3,
+      "from": "Options",
+      "to": "Character",
+      "nextPaintMs": 17.599999964237213,
+      "readyMs": 219.19999998807907,
+      "longTasksMs": [],
+      "liveResources": 258,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 3,
+      "from": "Character",
+      "to": "Path",
+      "nextPaintMs": 33.5,
+      "readyMs": 173.19999998807907,
+      "longTasksMs": [],
+      "liveResources": 267,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 3,
+      "from": "Path",
+      "to": "Foundry",
+      "nextPaintMs": 26.30000001192093,
+      "readyMs": 232.19999998807907,
+      "longTasksMs": [],
+      "liveResources": 184,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 3,
+      "from": "Foundry",
+      "to": "Design",
+      "nextPaintMs": 24.900000035762787,
+      "readyMs": 227.80000001192093,
+      "longTasksMs": [],
+      "liveResources": 227,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 3,
+      "from": "Design",
+      "to": "Blueprint",
+      "nextPaintMs": 23.80000001192093,
+      "readyMs": 179.69999998807907,
+      "longTasksMs": [],
+      "liveResources": 278,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 3,
+      "from": "Blueprint",
+      "to": "Assembly",
+      "nextPaintMs": 27.5,
+      "readyMs": 171.39999997615814,
+      "longTasksMs": [],
+      "liveResources": 184,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    },
+    {
+      "cycle": 3,
+      "from": "Assembly",
+      "to": "Options",
+      "nextPaintMs": 25.5,
+      "readyMs": 114.30000001192093,
+      "longTasksMs": [],
+      "liveResources": 175,
+      "contextsCreated": 1,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20
+    }
+  ],
+  "coldLatencyMs": {
+    "nextPaint": {
+      "p50": 31.69999998807907,
+      "p95": 79,
+      "p99": 79
+    },
+    "ready": {
+      "p50": 248.4000000357628,
+      "p95": 436.19999998807907,
+      "p99": 436.19999998807907
+    },
+    "longTasks": {
+      "p50": 71,
+      "p95": 83,
+      "p99": 83
+    },
+    "longTaskMax": 83
+  },
+  "latencyMs": {
+    "nextPaint": {
+      "p50": 26.30000001192093,
+      "p95": 33.799999952316284,
+      "p99": 49.69999998807907
+    },
+    "ready": {
+      "p50": 193.10000002384186,
+      "p95": 259.5,
+      "p99": 269.30000001192093
+    },
+    "longTasks": {
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    }
+  },
+  "heap": {
+    "baselineBytes": 10266312,
+    "finalBytes": 13269741,
+    "growthBytes": 3003429,
+    "allowedGrowthBytes": 8388608,
+    "finalSamplesBytes": [
+      13445225,
+      13780541,
+      13269741
+    ]
+  },
+  "runtime": {
+    "initial": {
+      "probeSupport": {
+        "workers": true,
+        "imageBitmaps": true,
+        "objectUrls": true
+      },
+      "workers": {
+        "acquired": 1,
+        "released": 1,
+        "active": 0,
+        "peakActive": 1
+      },
+      "imageBitmaps": {
+        "acquired": 0,
+        "released": 0,
+        "active": 0,
+        "peakActive": 0
+      },
+      "objectUrls": {
+        "acquired": 0,
+        "released": 0,
+        "active": 0,
+        "peakActive": 0
+      }
+    },
+    "warmBaseline": {
+      "probeSupport": {
+        "workers": true,
+        "imageBitmaps": true,
+        "objectUrls": true
+      },
+      "workers": {
+        "acquired": 1,
+        "released": 1,
+        "active": 0,
+        "peakActive": 1
+      },
+      "imageBitmaps": {
+        "acquired": 0,
+        "released": 0,
+        "active": 0,
+        "peakActive": 0
+      },
+      "objectUrls": {
+        "acquired": 0,
+        "released": 0,
+        "active": 0,
+        "peakActive": 0
+      }
+    },
+    "final": {
+      "probeSupport": {
+        "workers": true,
+        "imageBitmaps": true,
+        "objectUrls": true
+      },
+      "workers": {
+        "acquired": 1,
+        "released": 1,
+        "active": 0,
+        "peakActive": 1
+      },
+      "imageBitmaps": {
+        "acquired": 0,
+        "released": 0,
+        "active": 0,
+        "peakActive": 0
+      },
+      "objectUrls": {
+        "acquired": 0,
+        "released": 0,
+        "active": 0,
+        "peakActive": 0
+      }
+    }
+  },
+  "webgl": {
+    "initial": {
+      "atMs": 1980.5999999642372,
+      "longTasks": [
+        74,
+        117,
+        417
+      ],
+      "contextsCreated": 1,
+      "contextsLost": 0,
+      "contextsRestored": 0,
+      "attachedCanvases": 1,
+      "geometryCacheSize": 0,
+      "materialCacheSize": 0,
+      "resources": {
+        "buffer": {
+          "created": 154,
+          "deleted": 0,
+          "live": 154,
+          "peakLive": 154
+        },
+        "texture": {
+          "created": 18,
+          "deleted": 0,
+          "live": 18,
+          "peakLive": 18
+        },
+        "program": {
+          "created": 5,
+          "deleted": 0,
+          "live": 5,
+          "peakLive": 5
+        },
+        "shader": {
+          "created": 10,
+          "deleted": 10,
+          "live": 0,
+          "peakLive": 2
+        },
+        "framebuffer": {
+          "created": 3,
+          "deleted": 0,
+          "live": 3,
+          "peakLive": 3
+        },
+        "renderbuffer": {
+          "created": 0,
+          "deleted": 0,
+          "live": 0,
+          "peakLive": 0
+        },
+        "vertexArray": {
+          "created": 79,
+          "deleted": 0,
+          "live": 79,
+          "peakLive": 79
+        },
+        "query": {
+          "created": 0,
+          "deleted": 0,
+          "live": 0,
+          "peakLive": 0
+        },
+        "sampler": {
+          "created": 0,
+          "deleted": 0,
+          "live": 0,
+          "peakLive": 0
+        },
+        "transformFeedback": {
+          "created": 0,
+          "deleted": 0,
+          "live": 0,
+          "peakLive": 0
+        },
+        "sync": {
+          "created": 0,
+          "deleted": 0,
+          "live": 0,
+          "peakLive": 0
+        }
+      },
+      "liveResources": 259
+    },
+    "warmBaseline": {
+      "atMs": 5241.099999964237,
+      "longTasks": [
+        74,
+        117,
+        417,
+        83,
+        70,
+        79,
+        71
+      ],
+      "contextsCreated": 1,
+      "contextsLost": 0,
+      "contextsRestored": 0,
+      "attachedCanvases": 0,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20,
+      "resources": {
+        "buffer": {
+          "created": 809,
+          "deleted": 669,
+          "live": 140,
+          "peakLive": 312
+        },
+        "texture": {
+          "created": 65,
+          "deleted": 60,
+          "live": 5,
+          "peakLive": 19
+        },
+        "program": {
+          "created": 29,
+          "deleted": 28,
+          "live": 1,
+          "peakLive": 9
+        },
+        "shader": {
+          "created": 58,
+          "deleted": 58,
+          "live": 0,
+          "peakLive": 2
+        },
+        "framebuffer": {
+          "created": 3,
+          "deleted": 0,
+          "live": 3,
+          "peakLive": 3
+        },
+        "renderbuffer": {
+          "created": 0,
+          "deleted": 0,
+          "live": 0,
+          "peakLive": 0
+        },
+        "vertexArray": {
+          "created": 378,
+          "deleted": 352,
+          "live": 26,
+          "peakLive": 114
+        },
+        "query": {
+          "created": 0,
+          "deleted": 0,
+          "live": 0,
+          "peakLive": 0
+        },
+        "sampler": {
+          "created": 0,
+          "deleted": 0,
+          "live": 0,
+          "peakLive": 0
+        },
+        "transformFeedback": {
+          "created": 0,
+          "deleted": 0,
+          "live": 0,
+          "peakLive": 0
+        },
+        "sync": {
+          "created": 0,
+          "deleted": 0,
+          "live": 0,
+          "peakLive": 0
+        }
+      },
+      "liveResources": 175
+    },
+    "final": {
+      "atMs": 12616.599999964237,
+      "longTasks": [
+        74,
+        117,
+        417,
+        83,
+        70,
+        79,
+        71
+      ],
+      "contextsCreated": 1,
+      "contextsLost": 0,
+      "contextsRestored": 0,
+      "attachedCanvases": 0,
+      "geometryCacheSize": 40,
+      "materialCacheSize": 20,
+      "resources": {
+        "buffer": {
+          "created": 2363,
+          "deleted": 2223,
+          "live": 140,
+          "peakLive": 312
+        },
+        "texture": {
+          "created": 198,
+          "deleted": 193,
+          "live": 5,
+          "peakLive": 19
+        },
+        "program": {
+          "created": 98,
+          "deleted": 97,
+          "live": 1,
+          "peakLive": 9
+        },
+        "shader": {
+          "created": 196,
+          "deleted": 196,
+          "live": 0,
+          "peakLive": 2
+        },
+        "framebuffer": {
+          "created": 3,
+          "deleted": 0,
+          "live": 3,
+          "peakLive": 3
+        },
+        "renderbuffer": {
+          "created": 0,
+          "deleted": 0,
+          "live": 0,
+          "peakLive": 0
+        },
+        "vertexArray": {
+          "created": 1198,
+          "deleted": 1172,
+          "live": 26,
+          "peakLive": 115
+        },
+        "query": {
+          "created": 0,
+          "deleted": 0,
+          "live": 0,
+          "peakLive": 0
+        },
+        "sampler": {
+          "created": 0,
+          "deleted": 0,
+          "live": 0,
+          "peakLive": 0
+        },
+        "transformFeedback": {
+          "created": 0,
+          "deleted": 0,
+          "live": 0,
+          "peakLive": 0
+        },
+        "sync": {
+          "created": 0,
+          "deleted": 0,
+          "live": 0,
+          "peakLive": 0
+        }
+      },
+      "liveResources": 175
+    },
+    "contextDelta": 0,
+    "cacheWarmupLiveResourceDelta": -84,
+    "warmLiveResourceDelta": 0,
+    "warmCycleEndLiveResources": [
+      175,
+      175,
+      175
+    ],
+    "warmCyclePlateauDelta": 0
+  },
+  "checks": {
+    "coldNextPaintP95": true,
+    "coldReadyP95": true,
+    "coldLongTaskMax": true,
+    "nextPaintP95": true,
+    "readyP95": true,
+    "longTaskP95": true,
+    "heapGrowth": true,
+    "workersReturned": true,
+    "canvasesReturned": true,
+    "resourcesReturned": true,
+    "resourcePlateau": true,
+    "contextCountStable": true,
+    "noContextLoss": true
+  },
+  "acceptance": true
+}

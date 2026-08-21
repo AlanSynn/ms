@@ -222,6 +222,7 @@ const packageJson = JSON.parse(read("package.json")) as { scripts: Record<string
 assert(packageJson.scripts["test:chromebook-audit"].startsWith("bun run build &&"), "acceptance runs a normal production build");
 assert(!packageJson.scripts["test:chromebook-audit"].includes("build:e2e"), "acceptance excludes diagnostic-build overhead");
 assert(packageJson.scripts["test:chromebook-audit"].includes("chromebook-features-audit.spec.ts"), "production-preview acceptance includes the M3 feature audit");
+assert(packageJson.scripts["test:chromebook-audit"].includes("chromebook-stage-switch-audit.spec.ts"), "production-preview acceptance includes repeated stage ownership checks");
 assert.equal(packageJson.scripts["test:chromebook-audit:real-ai"], undefined, "the removed image-recognition workload has no audit command");
 assert(!packageJson.scripts["test:chromebook-audit"].includes("chromebook-audit.spec.ts"), "the short per-feature audit is the primary gate");
 assert(packageJson.scripts["test:chromebook-audit:full"].includes("chromebook-audit.spec.ts"), "the full workflow and soak remain available separately");
@@ -230,6 +231,11 @@ assert(config.includes("channel: 'chrome'") && config.includes("--enable-precise
 assert(config.includes("reuseExistingServer: !process.env.CI && !auditEnabled"), "audit cannot reuse a stale preview server");
 const spec = read("tests/browser/chromebook-audit.spec.ts");
 const featureSpec = read("tests/browser/chromebook-features-audit.spec.ts");
+const stageSwitchSpec = read("tests/browser/chromebook-stage-switch-audit.spec.ts");
+const workflowRail = read("components/shell/WorkflowRail.tsx");
+assert(workflowRail.includes("workflow-stage-${item.id}"), "stage timing uses stable rail controls without accessibility-tree traversal overhead");
+const stageRouter = read("components/AppStageRouter.tsx");
+assert(stageRouter.includes("useDeferredStageMount") && stageRouter.includes("stage-transition-frame"), "stage navigation paints its response before mounting a heavy viewport");
 for (const stage of ["Path", "Foundry", "Design", "Blueprint", "Assembly"]) {
   assert(spec.includes(`measureStage(page, actions, \"${stage}\"`), `audit measures the ${stage} transition`);
 }
@@ -241,6 +247,17 @@ assert(featureSpec.includes("measureClickToNextPaint") && featureSpec.includes("
 assert(!featureSpec.includes("auditAiImport") && !featureSpec.includes("deterministic-ai-worker-boundary"), "the feature gate contains no removed image-recognition workload");
 assert(featureSpec.includes("waitForLifecycleBaseline") && featureSpec.includes("collectStableFeatureProbe"));
 assert(!featureSpec.includes("minimumObjectUrlCreations"), "the worker-owned GIF path gates URL leaks without requiring main-window URL creation");
+for (const stage of ["Path", "Foundry", "Design", "Blueprint", "Assembly", "Character", "Options"]) {
+  assert(stageSwitchSpec.includes(`\"${stage}\"`), `the short ownership audit revisits ${stage}`);
+}
+assert(stageSwitchSpec.includes("await runCycles(warmSequence, 1, 3, samples)"), "stage ownership is checked across repeated warm transitions");
+assert(stageSwitchSpec.includes("coldLongTaskMax") && stageSwitchSpec.includes("warmBaseline"));
+assert(stageSwitchSpec.includes("warmCycleEndLiveResources") && stageSwitchSpec.includes("resourcePlateau"));
+assert(stageSwitchSpec.includes("resourcesReturned") && stageSwitchSpec.includes("noContextLoss"));
+assert(
+  stageSwitchSpec.indexOf("await openWavingArm(page)") < stageSwitchSpec.indexOf("applyChromebookEmulation(page)"),
+  "the stage audit throttles only measured stage interactions",
+);
 const featureRunner = read("tests/browser/chromebookFeatureAuditRunner.ts");
 assert(featureRunner.includes("chromebook-feature-${report.feature.name}-audit.json"));
 assert(featureRunner.includes('"artifacts/chromebook-audit/features"'), "passed feature reports survive Playwright output cleanup");
@@ -258,6 +275,14 @@ assert(harness.includes("AuditedWorker") && harness.includes("trackedBitmaps") &
 assert(!harness.includes("value < 2_000"), "multi-second stalls remain visible to the frame gate");
 const foundry = read("components/stages/foundry/ThreeFoundryPreview.tsx");
 assert(foundry.includes("recordFoundryTopologyBuild"), "normal production rendering exposes topology work only to an injected audit sink");
+assert(foundry.includes("partTopology.edgeGeometryEnabled") && foundry.includes("partTopology.bevelEnabled"), "Foundry automata geometry follows the selected detail policy");
+const foundryPrimitives = read("components/stages/foundry/foundryThreePrimitives.ts");
+assert(foundryPrimitives.includes("edgeGeometryEnabled") && foundryPrimitives.includes("if (!material.edge) return"), "Balanced Foundry primitives skip decorative edge extraction");
+const threeResourceKit = read("utils/threeResourceKit.ts");
+assert(threeResourceKit.includes("acquireSharedWebGLRenderer") && threeResourceKit.includes("renderer.renderLists.dispose()"));
+assert(foundry.includes("acquireSharedWebGLRenderer") && foundry.includes("rendererLease.release()"));
+const puppet = read("components/ThreePuppetPreview.tsx");
+assert(puppet.includes("acquireSharedWebGLRenderer") && puppet.includes("rendererLease.release()"));
 const workflow = read("tests/browser/workflow.spec.ts");
 assert(workflow.includes("clickOptionalButton") && workflow.includes("is visible before its conditional click"));
 
