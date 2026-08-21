@@ -219,8 +219,13 @@ assert.equal(
 );
 
 const packageJson = JSON.parse(read("package.json")) as { scripts: Record<string, string> };
-assert(packageJson.scripts["test:chromebook-audit"].startsWith("bun run build &&"), "acceptance runs a normal production build");
-assert(!packageJson.scripts["test:chromebook-audit"].includes("build:e2e"), "acceptance excludes diagnostic-build overhead");
+for (const script of [
+  "test:chromebook-audit",
+  "test:chromebook-audit:quick",
+  "test:chromebook-audit:full",
+]) {
+  assert(packageJson.scripts[script].startsWith("bun run build:e2e &&"), `${script} runs the production diagnostics build required by retained-renderer probes`);
+}
 assert(packageJson.scripts["test:chromebook-audit"].includes("chromebook-features-audit.spec.ts"), "production-preview acceptance includes the M3 feature audit");
 assert(packageJson.scripts["test:chromebook-audit"].includes("chromebook-stage-switch-audit.spec.ts"), "production-preview acceptance includes repeated stage ownership checks");
 assert(packageJson.scripts["test:chromebook-audit"].includes("chromebook-simulation-audit.spec.ts"), "production-preview acceptance covers every animated classroom stage");
@@ -278,6 +283,7 @@ for (const interaction of [
   assert(interactionSpec.includes(`\"${interaction}\"`), `interaction audit measures ${interaction}`);
 }
 assert(interactionSpec.includes("measurePointerEventToNextPaint") && interactionSpec.includes("measureRangeUpdate") && interactionSpec.includes("measureSelectUpdate"));
+assert(interactionSpec.includes('toBeAttached({ timeout: 15_000 })'), "Path interaction diagnostics fail boundedly instead of waiting forever when the probe build is absent");
 assert(interactionSpec.includes('"part-add"') && interactionSpec.includes('"part-remove"') && interactionSpec.includes('"joint-commit"'), "Character interaction audit covers topology and joint manipulation");
 assert(interactionSpec.includes('"performance-fast"') && interactionSpec.includes('"undo"') && interactionSpec.includes('"redo"'), "Options interaction audit covers render policy and project history");
 assert(interactionAudit.includes("webglResourceGrowthBounded") && interactionAudit.includes("webglResourcePlateau") && interactionAudit.includes("puppetTopologyP95"));

@@ -37,6 +37,10 @@ const auditPathGestures = async (
   const visualBaseline = await readVisualProbe(page);
   const actions: FeatureActionAudit[] = [];
   const state = page.getByTestId("path-three-puppet-state");
+  await expect(
+    state,
+    "Path audit requires the production diagnostics probe",
+  ).toBeAttached({ timeout: 15_000 });
   type ScreenTarget = { id: string; x: number; y: number; visible: boolean };
   const targets = JSON.parse(
     await state.getAttribute("data-three-path-point-screen-targets") ?? "[]",
