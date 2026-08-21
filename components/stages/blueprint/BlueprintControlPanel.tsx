@@ -23,6 +23,8 @@ export const BlueprintControlPanel = ({
   goStage,
   validation,
   create,
+  packageStatus,
+  packageError,
   pkg,
   recipes,
   selectedRecipe,
@@ -32,6 +34,8 @@ export const BlueprintControlPanel = ({
   goStage: (stage: AppStage) => void;
   validation: BlueprintValidation;
   create: () => void;
+  packageStatus: "idle" | "running";
+  packageError?: string;
   pkg?: FabricationPackage;
   recipes: FabricationRecipe[];
   selectedRecipe?: FabricationRecipe;
@@ -96,9 +100,12 @@ export const BlueprintControlPanel = ({
             aria-label="Generate package"
             disabled={!!validation.errors.length}
             onClick={create}
+            aria-busy={packageStatus === "running"}
+            data-blueprint-package-worker="on-demand"
           >
-            Make files
+            {packageStatus === "running" ? "Cancel" : "Make files"}
           </button>
+          {packageError && <div className="error">{packageError}</div>}
           {pkg && (
             <div className="rounded-2xl bg-white p-3 text-sm text-slate-600 shadow-sm">
               <div className="font-bold text-slate-800">Files</div>

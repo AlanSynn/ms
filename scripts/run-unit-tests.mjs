@@ -14,6 +14,7 @@ const UNIT_TEST_FILES = [
   'b695-persistence.test.ts',
   'b695-playback.test.ts',
   'b695-study.test.ts',
+  'blueprint-package-worker.test.ts',
   'cadenced-playback-sampler.test.ts',
   'chromebook-audit-contract.test.ts',
   'foundry-handle-gesture.test.ts',

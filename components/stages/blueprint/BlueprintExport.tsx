@@ -1,10 +1,15 @@
-import React, { useState } from "react";
+import React, {
+  startTransition,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import type { AppStage, FabricationRecipe, ProjectAction, ProjectState } from "../../../types";
 import { FinalStudyArtifactGate } from "../../../hooks/useFinalStudyArtifact";
 import {
   buildBlueprintModel,
-  createBlueprintPackage,
 } from "../../../runtime/blueprint/BlueprintModel";
+import { createBlueprintPackageWorkerClient } from "../../../runtime/blueprint/blueprintPackageWorkerClient";
 import {
   EditorStageFrame,
   canvasPane,
@@ -34,11 +39,32 @@ export const BlueprintExport = ({
   goStage: (stage: AppStage) => void;
 }) => {
   const { validation, pkg, recipes } = buildBlueprintModel(project);
-  const create = () =>
-    dispatch({
-      type: "set_export",
-      fabricationPackage: createBlueprintPackage(project),
+  const packageClient = useMemo(() => createBlueprintPackageWorkerClient(), []);
+  const [packageStatus, setPackageStatus] = useState<"idle" | "running">("idle");
+  const [packageError, setPackageError] = useState<string>();
+  useEffect(() => () => packageClient.dispose(), [packageClient]);
+  const create = () => {
+    if (packageStatus === "running") {
+      packageClient.cancel();
+      setPackageStatus("idle");
+      return;
+    }
+    setPackageError(undefined);
+    setPackageStatus("running");
+    packageClient.request(project, {
+      complete: ({ fabricationPackage }) => {
+        setPackageStatus("idle");
+        startTransition(() => dispatch({
+          type: "set_export",
+          fabricationPackage,
+        }));
+      },
+      failed: (error) => {
+        setPackageStatus("idle");
+        setPackageError(error.message);
+      },
     });
+  };
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const selectedRecipe = selectBlueprintRecipe(recipes, selectedRecipeId, project.selectedMechanismId);
   return (
@@ -52,6 +78,8 @@ export const BlueprintExport = ({
             goStage={goStage}
             validation={validation}
             create={create}
+            packageStatus={packageStatus}
+            packageError={packageError}
             pkg={pkg}
             recipes={recipes}
             selectedRecipe={selectedRecipe}
@@ -82,7 +110,7 @@ export const BlueprintExport = ({
               initialLayers={{ skeleton: false }}
               onSelectMechanism={setSelectedRecipeId}
             />
-            {pkg && (
+            {pkg && __MOTIONSMITH_E2E_DIAGNOSTICS__ && (
               <pre hidden data-testid="blueprint-export-package-json">
                 {JSON.stringify(pkg)}
               </pre>
