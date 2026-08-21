@@ -14,6 +14,7 @@ export const CHROMEBOOK_FEATURE_NAMES = [
   "designControls",
   "projectImport",
   "characterPackageImport",
+  "blueprintPackage",
 ] as const;
 
 export type ChromebookFeatureName = (typeof CHROMEBOOK_FEATURE_NAMES)[number];
