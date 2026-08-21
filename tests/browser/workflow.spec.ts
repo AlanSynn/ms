@@ -3436,6 +3436,50 @@ test('Foundry M B C D drags stay local until one pointerup commit', async ({ pag
     .toBe(countBeforeCancel);
 });
 
+test('Shared inspector sliders keep pointer moves local until one canonical commit', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.goto('/');
+  await openFabricationReadyFourBar(page);
+  await page.getByRole('button', { name: /Mechanism Design/i }).click();
+  const slider = page.getByLabel('anchor X slider');
+  await expect(slider).toHaveAttribute('data-gesture-commit', 'pointerup');
+  await page.evaluate(() => {
+    (window as typeof window & {
+      __MOTIONSMITH_CHROMEBOOK_AUDIT__?: {
+        projectActionCounts?: Record<string, number>;
+      };
+    }).__MOTIONSMITH_CHROMEBOOK_AUDIT__ = { projectActionCounts: {} };
+  });
+  const upsertCount = () => page.evaluate(() => (
+    (window as typeof window & {
+      __MOTIONSMITH_CHROMEBOOK_AUDIT__?: {
+        projectActionCounts?: Record<string, number>;
+      };
+    }).__MOTIONSMITH_CHROMEBOOK_AUDIT__?.projectActionCounts?.upsert_mechanism ?? 0
+  ));
+  const valueBefore = await slider.inputValue();
+  await slider.dispatchEvent('pointerdown', { pointerId: 1, pointerType: 'mouse' });
+  await slider.evaluate((input: HTMLInputElement) => {
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      'value',
+    )?.set;
+    for (const value of ['32', '48', '64', '80']) {
+      valueSetter?.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  });
+  expect(await upsertCount(), 'slider pointermove has no ProjectAction').toBe(0);
+  await expect.poll(() => slider.inputValue(), {
+    message: 'slider draft paints before canonical commit',
+  }).not.toBe(valueBefore);
+  await slider.dispatchEvent('pointerup', { pointerId: 1, pointerType: 'mouse' });
+  await expect.poll(upsertCount, {
+    message: 'slider pointerup performs one canonical commit',
+  }).toBe(1);
+});
+
 test('Foundry supports CAD-style 3D camera presets and drag orbit', async ({ page }) => {
   await page.setViewportSize({ width: 901, height: 720 });
   await page.goto('/');
@@ -3643,13 +3687,31 @@ test('Mechanism Design cam profile edits update the integrated automata preview'
   await editor.scrollIntoViewIfNeeded();
   await expect(editor).toBeVisible();
   const before = await designRig.getAttribute('data-cam-profile');
+  await page.evaluate(() => {
+    (window as typeof window & {
+      __MOTIONSMITH_CHROMEBOOK_AUDIT__?: {
+        projectActionCounts?: Record<string, number>;
+      };
+    }).__MOTIONSMITH_CHROMEBOOK_AUDIT__ = { projectActionCounts: {} };
+  });
+  const upsertCount = () => page.evaluate(() => (
+    (window as typeof window & {
+      __MOTIONSMITH_CHROMEBOOK_AUDIT__?: {
+        projectActionCounts?: Record<string, number>;
+      };
+    }).__MOTIONSMITH_CHROMEBOOK_AUDIT__?.projectActionCounts?.upsert_mechanism ?? 0
+  ));
   const point = page.getByTestId('cam-profile-point-1');
   const box = await point.boundingBox();
   expect(box, 'Design cam profile point is draggable').toBeTruthy();
   await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
   await page.mouse.down();
   await page.mouse.move(box!.x + box!.width / 2, box!.y - 24);
+  expect(await upsertCount(), 'cam pointermove has no ProjectAction').toBe(0);
   await page.mouse.up();
+  await expect.poll(upsertCount, {
+    message: 'cam pointerup performs one canonical commit',
+  }).toBe(1);
   await expect.poll(async () => designRig.getAttribute('data-cam-profile'), { message: 'Design cam profile edits update the integrated Three automata data' }).not.toBe(before);
   await expect.poll(async () => Number(await designRig.getAttribute('data-three-dynamic-build-count')), { message: 'Design cam edit keeps a real rebuilt Three mechanism' }).toBeGreaterThan(0);
 });
