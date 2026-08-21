@@ -17,6 +17,13 @@ The build runs `scripts/check-no-image-recognition.mjs` before and after Vite. I
 
 Deployment is intentionally version-gated. Pushing to `main` does not deploy; only a tag that matches `package.json` deploys. The native Cloudflare Workers Builds Git integration for Worker `ms` must remain disconnected so it cannot publish directly from a branch.
 
+Before tagging, open Worker `ms` in the Cloudflare dashboard, select **Settings
+-> Builds**, and disconnect the Git repository. GitHub Actions is the only
+release publisher. Also open **Web Analytics**, manage `motionsmith.org`, and
+set **Automatic setup** to **Disable** (or delete that Web Analytics site).
+Otherwise Cloudflare injects `static.cloudflareinsights.com` and `/cdn-cgi/rum`
+into the checked static shell. `bun run test:cloudflare-live` rejects both.
+
 ```bash
 # after committing the release
 VERSION=$(bun -p "require('./package.json').version")
@@ -46,6 +53,7 @@ Before a teacher-facing web release:
 - Tag must be `v<package.json version>`; the workflow must reject mismatched tags.
 - The primary artifact must use `VITE_BASE_PATH=/` for `https://motionsmith.org/`; the mirror must use `VITE_BASE_PATH=/ms/` for `https://alansynn.com/ms/`.
 - Cloudflare Worker `ms` must use the `motionsmith.org` custom domain, and native branch-triggered Workers Builds must remain disconnected.
+- Cloudflare Web Analytics automatic setup must be disabled for `motionsmith.org`; the live gate must observe no injected analytics beacon or RUM request.
 - `bun run test:no-image-recognition` must pass; no ONNX model, ORT/WASM recognition runtime, inference worker, or cache worker may exist in `dist/`.
 - Opening Foundry must not request the optional Rapier chunk; only the explicit `Push` diagnostic may load it.
 - Runtime HTML must not load CDN scripts, import maps, or external `https://` assets.

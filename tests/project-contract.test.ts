@@ -843,6 +843,7 @@ assert.equal(tauriConfig.build.beforeBuildCommand, 'bun run build:tauri-frontend
 assert(deploymentDocs.includes('bun install --frozen-lockfile') && !deploymentDocs.includes('npm '), 'deployment docs use Bun commands');
 assert(deploymentDocs.includes('Classroom release checklist') && deploymentDocs.includes('v<package.json version>') && deploymentDocs.includes('VITE_BASE_PATH=/') && deploymentDocs.includes('VITE_BASE_PATH=/ms/'), 'deployment docs include the root and /ms classroom release checklist');
 assert(deploymentDocs.includes('native Cloudflare Workers Builds') && deploymentDocs.includes('must remain disconnected'), 'deployment docs prohibit branch-triggered Cloudflare production bypasses');
+assert(deploymentDocs.includes('Web Analytics') && deploymentDocs.includes('Automatic setup') && deploymentDocs.includes('test:cloudflare-live'), 'deployment docs record the external Cloudflare RUM setting required by the live classroom gate');
 assert(deploymentDocs.includes('no `/api/` requests') && deploymentDocs.includes('Teacher pack workflow') && deploymentDocs.includes('no account, no upload'), 'deployment docs lock classroom release to static local-first teacher-pack flow');
 assert(macosDocs.includes('bun run build:exe') && !macosDocs.includes('npm '), 'macOS distribution docs use Bun commands');
 assert(agentsContract.includes('three` + Rapier WASM'), 'AGENTS.md records the selected high-performance 3D physics stack');
