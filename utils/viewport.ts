@@ -3,7 +3,6 @@ import { CanvasViewport } from '../types';
 export const MIN_CANVAS_ZOOM = 0.25;
 export const MAX_CANVAS_ZOOM = 4;
 export const DEFAULT_CANVAS_VIEWPORT: CanvasViewport = { offset: { x: 0, y: 0 }, zoom: 1 };
-export const WEBGL_PIXEL_RATIO_CAP = 1.5;
 
 export const clampCanvasZoom = (zoom: number) => Math.max(MIN_CANVAS_ZOOM, Math.min(MAX_CANVAS_ZOOM, zoom));
 

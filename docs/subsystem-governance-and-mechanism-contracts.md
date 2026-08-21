@@ -580,7 +580,7 @@ The current M3 implementation work treats UI stages as adapters over the shared 
 - These UI corrections are still a transitional adapter layer. The remaining M3/M4 goal is to make Foundry, Design, Blueprint, physics overlays, and exporters consume one `MechanismSnapshot` / fabrication-plan facade instead of stage-local mechanism semantics.
 - Current risk: `components/stages/foundry/ThreeFoundryPreview.tsx` and `components/stages/foundry/foundryPreviewStacks.ts` still contain mechanism-type branches for renderer glue, pin points, z planes, and gear/planetary presentation. Those branches are temporary debt unless they only project already-derived shared contracts into DOM/Three objects.
 - Current M3 slice 3 correction: Foundry fitted preview/sweep sampling is centralized in `utils/mechanismPreview.ts`, and physics overlay derivation is centralized in `PhysicsSession` via `buildFoundryPhysicsOverlay`; stage code may project/display those vectors but must not reimplement fitting, velocity, force, friction, or constraint math.
-- Current M3 slice 3 correction: shared WebGL preview surfaces use `WEBGL_PIXEL_RATIO_CAP` from `utils/viewport.ts` so high-DPI displays do not multiply renderer cost independently per component.
+- Current renderer correction: `utils/renderPerformancePolicy.ts` is the sole DPR authority. Shared WebGL previews recompute the selected preset against device DPR, an 8-million-pixel viewport budget, and the context's maximum renderbuffer dimension on host or window resize.
 
 ## 10. Migration plan
 

@@ -39,7 +39,8 @@ import { createMechanismFitContext, createSceneMechanismFitContext, fitMechanism
 import { buildMechanismRecommendations, fitMechanismToTargetPath, fitRecommendedMechanismToSheet } from '../utils/mechanismRecommendations';
 import { buildAutomataSceneModel } from '../utils/automataSceneModel';
 import { buildDesignAutomataProjection } from '../utils/designAutomataProjection';
-import { WEBGL_PIXEL_RATIO_CAP, canvasPanOffset, canvasViewBoxForViewport, zoomCanvasViewportAtPoint } from '../utils/viewport';
+import { canvasPanOffset, canvasViewBoxForViewport, zoomCanvasViewportAtPoint } from '../utils/viewport';
+import { resolveRenderPerformancePolicy } from '../utils/renderPerformancePolicy';
 import { cachedThreeResource, clearThreeGroup, disposeThreeObjectGraph, setRendererPixelRatioCap } from '../utils/threeResourceKit';
 import { APP_COMMANDS, APP_MENU_GROUPS, commandById, commandIdForKeyboardEvent, validateAppCommandRegistry } from '../utils/appCommands';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_KERNEL_IMPORT, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, physicsKernelCapability, runRapierFrictionProbe } from '../utils/physicsKernel';
@@ -3486,10 +3487,32 @@ assert(threeResourceKitText.includes('export const cachedThreeResource') && thre
 
   const previousWindow = (globalThis as { window?: unknown }).window;
   try {
-    Object.defineProperty(globalThis, 'window', { configurable: true, value: { devicePixelRatio: WEBGL_PIXEL_RATIO_CAP + 10 } });
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: { devicePixelRatio: 10 } });
     let pixelRatio = 0;
-    setRendererPixelRatioCap({ setPixelRatio: (value: number) => { pixelRatio = value; } } as unknown as THREE.WebGLRenderer);
-    assert.equal(pixelRatio, WEBGL_PIXEL_RATIO_CAP, 'shared Three pixel-ratio helper caps device pixel ratio');
+    const renderbufferContext = {
+      MAX_RENDERBUFFER_SIZE: 0x84e8,
+      getParameter: () => 8192,
+    };
+    setRendererPixelRatioCap({
+      getContext: () => renderbufferContext,
+      getPixelRatio: () => pixelRatio,
+      setPixelRatio: (value: number) => { pixelRatio = value; },
+    } as unknown as THREE.WebGLRenderer, resolveRenderPerformancePolicy('balanced'), {
+      width: 1366,
+      height: 768,
+    });
+    assert.equal(pixelRatio, 0.5, 'shared Three pixel-ratio helper applies the selected render policy');
+
+    setRendererPixelRatioCap({
+      capabilities: { maxTextureSize: 2048 },
+      getContext: () => { throw new Error('context lost'); },
+      getPixelRatio: () => pixelRatio,
+      setPixelRatio: (value: number) => { pixelRatio = value; },
+    } as unknown as THREE.WebGLRenderer, resolveRenderPerformancePolicy('high'), {
+      width: 2000,
+      height: 1000,
+    });
+    assert.equal(pixelRatio, 2048 / 2000, 'lost-context fallback keeps the drawing buffer within a conservative renderer capability');
   } finally {
     if (previousWindow === undefined) {
       delete (globalThis as { window?: unknown }).window;
@@ -3727,7 +3750,23 @@ const foundryCardSimulation = fitMechanismSimulationWithContext(foundryCardMecha
 assert.deepEqual(foundryCardSimulation.pathPoints, foundryCardContext.pathPoints, 'Foundry card previews can reuse the shared fit context path instead of direct per-card resampling');
 assert(foundry3dText.includes('buildFoundryPhysicsOverlay') && physicsSessionText.includes('export const buildFoundryPhysicsOverlay'), 'Foundry force/velocity/constraint overlay math lives in PhysicsSession, not the React stage');
 assert(foundry3dText.includes('const range = useMemo(') && foundry3dText.includes('sampleFeasibleRange(landedFoundry, gestureFoundry ? 24 : 96)') && foundry3dText.includes('[gestureFoundry, landedFoundry]'), 'Foundry feasible-range sampling is memoized and uses a reduced direct-manipulation sample before the full pointerup validation');
-assert(renderPerformancePolicyText.includes('interface RenderPerformancePolicy') && renderPerformancePolicyText.includes("preset: 'balanced'") && !renderPerformancePolicyText.includes('navigator') && threeFoundryPreviewText.includes('resolveRenderPerformancePolicy') && foundry3dText.includes('resolveRenderPerformancePolicy'), 'persisted performance presets drive both Three renderers through one deterministic policy without User-Agent branching');
+assert(
+  renderPerformancePolicyText.includes('interface RenderPerformancePolicy') &&
+  renderPerformancePolicyText.includes("preset: 'balanced'") &&
+  renderPerformancePolicyText.includes("preset: 'high'") &&
+  renderPerformancePolicyText.includes('pixelRatioCap: 2') &&
+  !renderPerformancePolicyText.includes('navigator') &&
+  optionsText.includes('<option value="high">High resolution</option>') &&
+  threePreviewText.includes('resolveRenderPerformancePolicy') &&
+  threePreviewText.includes('setRendererPixelRatioCap(renderer, renderPolicy, { width, height })') &&
+  threePreviewText.includes("window.addEventListener('resize', resize)") &&
+  threePreviewText.includes("window.removeEventListener('resize', resize)") &&
+  threeFoundryPreviewText.includes('resolveRenderPerformancePolicy') &&
+  threeFoundryPreviewText.includes('setRendererPixelRatioCap(renderer, renderPolicy, { width, height })') &&
+  threeFoundryPreviewText.includes('window.addEventListener("resize", resize)') &&
+  threeFoundryPreviewText.includes('window.removeEventListener("resize", resize)'),
+  'Options exposes the persisted High resolution preset and both Three viewer engines apply its deterministic DPR, antialias, overlay, cadence, and detail policy without User-Agent branching',
+);
 assert(threePreviewText.includes("setRendererStatus('restoring')") && threePreviewText.includes("setRendererStatus('unavailable')") && threeFoundryPreviewText.includes('setRendererStatus("restoring")') && threeFoundryPreviewText.includes('setRendererStatus("unavailable")') && webglRecoverySpecText.includes('WEBGL_lose_context') && webglRecoverySpecText.includes('WebGL unavailable'), 'Character and Foundry keep controls mounted across unavailable/lost WebGL and production browser coverage restores the same scene');
 assert(!threePreviewText.includes('loadRapierPhysicsKernel') && threePreviewText.includes('deferred-to-foundry') && threeFoundryPreviewText.includes('if (!showForces) return;') && threeFoundryPreviewText.includes('loadRapierPhysicsKernel'), 'Character, Path, and ordinary Foundry entry avoid Rapier; explicit Foundry physics diagnostics own the lazy contact-validation load');
 assert(threePreviewText.includes("const PUPPET_CAMERA_PRESETS: Viewer3DCameraPreset[] = ['front', 'iso']"), 'puppet viewer toolbar exposes only the fixed 2D and orbitable 3D modes');
@@ -3757,7 +3796,7 @@ assert(pathEditorText.includes('setPathViewMode("2d")'), 'Starting free-path dra
 assert(indexText.includes('bottom: calc(var(--ms-bottom-bars-height) + 10px)') && !indexText.includes('--ms-status-bar-height'), 'character import status dock floats 10px above the bottom status area instead of covering the canvas');
 assert(indexText.includes('.stage-player-row { position: absolute;') && appUiText.includes('data-testid="workspace-player-drag-handle"'), 'shared animation dock is an overlay with a draggable handle instead of a layout row');
 assert(foundry3dText.includes('data-three-pixel-ratio-cap') && threePreviewText.includes('data-three-pixel-ratio-cap'), '3D previews expose the pixel-ratio cap for browser performance checks');
-assert.equal(WEBGL_PIXEL_RATIO_CAP, 1.5, 'WebGL pixel-ratio cap avoids high-DPI overdraw while preserving sharp CAD-style previews');
+assert(!viewportText.includes('WEBGL_PIXEL_RATIO_CAP') && renderPerformancePolicyText.includes('RENDER_VIEWPORT_PIXEL_BUDGET'), 'render policy is the sole DPR authority and bounds high-DPI viewport allocation');
 assert(!foundry3dText.includes('starShape'), 'Foundry sandbox no longer carries saw-tooth star gears');
 assert(!foundry3dText.includes('teeth * 2'), 'Foundry sandbox no longer carries sparse saw-tooth gear implementation');
 assert(mechanismParamPolicyText.includes('if (key === "gearRatio") return false'), 'Foundry hides stale gear-ratio controls when physical pitch radii define rotation');
