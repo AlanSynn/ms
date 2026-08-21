@@ -207,7 +207,10 @@ const designWorkflowSource = readFileSync(
 const openMount = componentSource.indexOf(
   "return <OpenMechanismRecommendationSheet",
 );
-assert(openMount >= 0 && componentSource.includes('hidden={!isOpen}'));
+assert(
+  openMount >= 0 && componentSource.includes("if (!props.isOpen) return null;"),
+  "the closed sheet does not mount the component that prepares recommendation input",
+);
 assert(
   !componentSource.includes("buildMechanismRecommendations("),
   "the React sheet never invokes recommendation fitting on the main thread",

@@ -113,6 +113,8 @@ export type AutosaveBase = {
 };
 
 export const AUTOSAVE_FORMAT_VERSION = 1 as const;
+export const AUTOSAVE_SNAPSHOT_MAX_BYTES = 6 * 1024 * 1024;
+export const AUTOSAVE_JOURNAL_MAX_BYTES = 8 * 1024 * 1024;
 let autosaveSequence = 0;
 export const autosaveWriterId = `tab-${Date.now()}-${++autosaveSequence}`;
 

@@ -1,4 +1,10 @@
-import { startTransition, type Dispatch, type SetStateAction } from "react";
+import {
+  startTransition,
+  useEffect,
+  useMemo,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import type {
   AppStage,
   CanvasViewport,
@@ -15,9 +21,8 @@ import {
   createEmptyProject,
   createLessonProject,
   createSampleProject,
-  downloadText,
+  downloadBlob,
   resetProjectToLessonBaseline,
-  serializeProject,
 } from "../utils/project";
 import { isMechanismTypeEnabled } from "../utils/mechanismTemplates";
 import {
@@ -27,6 +32,8 @@ import {
   writeWorkspaceLayoutSnapshot,
 } from "../utils/projectPersistence";
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT } from "../utils/viewport";
+import { createPortableProjectBlob } from "../runtime/persistence/projectDownloadJob";
+import { createProjectDownloadWorkerClient } from "../runtime/persistence/projectDownloadWorkerClient";
 
 const APP_STAGE_IDS: AppStage[] = [
   "character",
@@ -77,8 +84,11 @@ type UseAppProjectCommandsOptions = {
 
 export type AppProjectCommands = {
   commandHandlers: AppCommandHandlerMap;
-  openClassroomLesson: (lessonId: string) => void;
-  openSampleProject: () => void;
+  openClassroomLesson: (
+    lessonId: string,
+    preparedProject?: ProjectState,
+  ) => void;
+  openSampleProject: (preparedProject?: ProjectState) => void;
 };
 
 export const useAppProjectCommands = ({
@@ -102,12 +112,39 @@ export const useAppProjectCommands = ({
   openProjectPicker,
   goStage,
 }: UseAppProjectCommandsOptions): AppProjectCommands => {
+  const projectDownloadClient = useMemo(
+    () => createProjectDownloadWorkerClient(),
+    [],
+  );
+  useEffect(
+    () => () => projectDownloadClient.dispose(),
+    [projectDownloadClient],
+  );
   const downloadProjectSnapshot = (suffix: string, status: string) => {
-    downloadText(
-      projectSnapshotFileName(project.metadata.name, suffix),
-      serializeProject(project),
-    );
-    setCommandStatus(status);
+    const filename = projectSnapshotFileName(project.metadata.name, suffix);
+    const finish = (blob: Blob) => {
+      try {
+        downloadBlob(filename, blob);
+        setCommandStatus(status);
+      } catch (error) {
+        setCommandStatus(
+          `Project save failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    };
+    projectDownloadClient.request(project, {
+      complete: finish,
+      unavailable: () => {
+        try {
+          finish(createPortableProjectBlob(project));
+        } catch (error) {
+          setCommandStatus(
+            `Project save failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      },
+      failed: (error) => setCommandStatus(`Project save failed: ${error.message}`),
+    });
   };
 
   const foundryPreviewFromProject = (lessonProject: ProjectState) => {
@@ -155,13 +192,16 @@ export const useAppProjectCommands = ({
     });
   };
 
-  const openClassroomLesson = (lessonId: string) => {
+  const openClassroomLesson = (
+    lessonId: string,
+    preparedProject?: ProjectState,
+  ) => {
     const lesson = classroomLessonById(lessonId);
     if (!lesson || !isMechanismTypeEnabled(lesson.mechanismType)) {
       setCommandStatus("Lesson unavailable");
       return;
     }
-    const lessonProjectBase = createLessonProject(lesson.id);
+    const lessonProjectBase = preparedProject ?? createLessonProject(lesson.id);
     const lessonProject = {
       ...lessonProjectBase,
       settings: {
@@ -173,9 +213,9 @@ export const useAppProjectCommands = ({
     setCommandStatus(`${lesson.outcome ?? lessonProject.metadata.name} ready`);
   };
 
-  const openSampleProject = () => {
+  const openSampleProject = (preparedProject?: ProjectState) => {
     setPendingCharacter(null);
-    setProject(createSampleProject(), { resetHistory: true });
+    setProject(preparedProject ?? createSampleProject(), { resetHistory: true });
     setShowGettingStarted(false);
     setStage("character");
   };

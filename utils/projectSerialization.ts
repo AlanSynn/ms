@@ -2,8 +2,13 @@ import type { ProjectState } from "../types";
 
 export const APP_STATE_VERSION = 1;
 
+export const projectForPersistence = ({
+  lastExport: _lastExport,
+  ...project
+}: ProjectState): ProjectState => project;
+
 const versionedProject = (project: ProjectState) => ({
-  ...project,
+  ...projectForPersistence(project),
   version: APP_STATE_VERSION,
 });
 

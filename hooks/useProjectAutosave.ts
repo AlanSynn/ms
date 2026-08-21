@@ -56,6 +56,7 @@ export const createAutosaveLifecycleDisposal = (
 
 export type ProjectAutosaveOptions = {
   suspended?: boolean;
+  recoveredBaseline?: ProjectState;
   onFailure?: (status: string) => void;
 };
 
@@ -134,12 +135,15 @@ export const useProjectAutosave = (
       transaction.cancel();
       return;
     }
-    if (project === initialProjectRef.current) return;
+    if (
+      project === initialProjectRef.current ||
+      project === options.recoveredBaseline
+    ) return;
     // Accepted ProjectState updates only enqueue the latest value. Worker
     // preparation and the eventual journal write remain outside the gesture
     // and playback hot path.
     transaction.accept(project);
-  }, [project, transaction]);
+  }, [options.recoveredBaseline, project, transaction]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !project.settings.autosave) {

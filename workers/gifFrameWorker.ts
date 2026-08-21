@@ -16,7 +16,7 @@ type GifWorkerRequest =
   | {
       type: 'load';
       generationId: number;
-      buffer: ArrayBuffer;
+      file: File;
       limits?: TrackingMediaLimits;
     }
   | { type: 'frame'; generationId: number; requestId: number; index: number }
@@ -309,13 +309,20 @@ const load = async (request: Extract<GifWorkerRequest, { type: 'load' }>) => {
   release();
   generationId = request.generationId;
   activeLimits = request.limits ?? DEFAULT_TRACKING_MEDIA_LIMITS;
-  if (request.buffer.byteLength > TRACKING_GIF_MAX_COMPRESSED_BYTES) {
+  if (request.file.size > TRACKING_GIF_MAX_COMPRESSED_BYTES) {
     throw new Error('GIF files must be 32MB or smaller.');
   }
-  const metadata = scanTrackingGifMetadata(new Uint8Array(request.buffer));
+  const buffer = await request.file.arrayBuffer();
+  if (request.generationId !== generationId) return;
+  if (buffer.byteLength > TRACKING_GIF_MAX_COMPRESSED_BYTES) {
+    throw new Error('GIF files must be 32MB or smaller.');
+  }
+  const metadata = scanTrackingGifMetadata(new Uint8Array(buffer));
   assertTrackingGifDecodeInput(metadata);
-  const nativeReady = await tryInitializeNativeDecoder(request.buffer, metadata);
-  if (!nativeReady) await initializeBoundedFallback(request.buffer, metadata);
+  const nativeReady = await tryInitializeNativeDecoder(buffer, metadata);
+  if (request.generationId !== generationId) return;
+  if (!nativeReady) await initializeBoundedFallback(buffer, metadata);
+  if (request.generationId !== generationId) return;
   if (!plan) throw new Error('GIF decoder did not produce a playback plan');
   worker.postMessage({ type: 'ready', generationId, plan });
 };
@@ -333,13 +340,18 @@ worker.onmessage = (event) => {
   if (!request) return;
   if (request.type === 'dispose') {
     if (request.generationId === generationId) {
+      generationId = -1;
       release();
       worker.close();
     }
     return;
   }
   if (request.type === 'load') {
-    void load(request).catch((error) => reportError(request.generationId, error));
+    void load(request).catch((error) => {
+      if (request.generationId === generationId) {
+        reportError(request.generationId, error);
+      }
+    });
     return;
   }
   if (request.generationId !== generationId) return;

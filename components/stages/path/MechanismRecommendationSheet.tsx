@@ -419,8 +419,9 @@ const OpenMechanismRecommendationSheet = ({
   );
 };
 
-export const MechanismRecommendationSheet = ({
-  ...props
-}: MechanismRecommendationSheetProps) => {
+export const MechanismRecommendationSheet = (
+  props: MechanismRecommendationSheetProps,
+) => {
+  if (!props.isOpen) return null;
   return <OpenMechanismRecommendationSheet {...props} />;
 };

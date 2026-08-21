@@ -2,6 +2,8 @@ import type { ProjectState } from "../types";
 import { serializeProjectCompact } from "./projectSerialization";
 import {
   AUTOSAVE_FORMAT_VERSION,
+  AUTOSAVE_JOURNAL_MAX_BYTES,
+  AUTOSAVE_SNAPSHOT_MAX_BYTES,
   AUTOSAVE_STORAGE_KEYS,
   LEGACY_STORAGE_KEYS,
   autosaveBase,
@@ -232,6 +234,13 @@ export const commitAutosaveSnapshot = (
   plan: PreparedAutosaveSnapshot,
   storage?: AutosaveStorage,
 ): AutosaveWriteResult => {
+  if (plan.bytes > AUTOSAVE_SNAPSHOT_MAX_BYTES) {
+    return failedWrite(
+      "serialization",
+      "autosave exceeds the 6 MB classroom memory budget",
+      plan.transactionId,
+    );
+  }
   let target: AutosaveStorage;
   let before: AutosaveJournalSnapshot | undefined;
   try {
@@ -258,7 +267,13 @@ export const commitAutosaveSnapshot = (
     }
 
     const write = (retainPrevious: boolean): AutosaveWriteResult => {
-      const keepsPrevious = retainPrevious && journal.current !== null;
+      const currentBytes = journal.current === null
+        ? 0
+        : byteLength(journal.current);
+      const keepsPrevious =
+        retainPrevious &&
+        journal.current !== null &&
+        currentBytes + plan.bytes <= AUTOSAVE_JOURNAL_MAX_BYTES;
       const metadata = metadataFor(
         base,
         plan.serialized,

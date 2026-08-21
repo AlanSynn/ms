@@ -1,7 +1,12 @@
 import { strict as assert } from "node:assert";
-import { createEmptyProject } from "../utils/project";
+import {
+  createDefaultSceneObject,
+  createEmptyProject,
+  loadProjectSnapshot,
+} from "../utils/project";
 import {
   AUTOSAVE_STORAGE_KEYS,
+  AUTOSAVE_SNAPSHOT_MAX_BYTES,
   byteLength,
   fingerprint,
   type AutosaveStorage,
@@ -18,11 +23,29 @@ import {
 } from "../utils/projectSerialization";
 import {
   createAutosaveTransaction,
+  createBrowserAutosavePreparationDriver,
   type AutosaveIdleBoundary,
   type AutosavePreparationCallbacks,
   type AutosavePreparationDriver,
+  type AutosaveWorkerPort,
 } from "../runtime/persistence/autosaveTransaction";
 import type { ProjectState } from "../types";
+import {
+  PROJECT_HISTORY_BYTE_BUDGET,
+  PROJECT_HISTORY_LIMIT,
+  boundProjectHistory,
+  createProjectHistoryEntry,
+  estimateExclusiveHistoryBytes,
+} from "../runtime/persistence/projectHistoryPolicy";
+import { createFabricationPackage } from "../utils/fabrication";
+import { createFabricationReadyFourBarProject } from "./fixtures/fabricationProject";
+import { createPortableProjectBlob } from "../runtime/persistence/projectDownloadJob";
+import {
+  createProjectDownloadWorkerClient,
+  type ProjectDownloadFrameScheduler,
+  type ProjectDownloadWorkerPort,
+  type ProjectDownloadWorkerRequest,
+} from "../runtime/persistence/projectDownloadWorkerClient";
 
 const memoryStorage = (): AutosaveStorage & { values: Map<string, string> } => {
   const values = new Map<string, string>();
@@ -139,6 +162,29 @@ const projectA = createEmptyProject();
 const projectB = createEmptyProject();
 
 {
+  const sharedTexture = `data:image/png;base64,${"a".repeat(512 * 1024)}`;
+  const older = { stable: { texture: sharedTexture }, changed: { x: 1 } };
+  const successor = { stable: older.stable, changed: { x: 2 } };
+  assert(
+    estimateExclusiveHistoryBytes(older, successor) < 1024,
+    "history accounting skips structurally shared image data",
+  );
+  assert(
+    estimateExclusiveHistoryBytes(
+      { texture: `data:image/png;base64,${"a".repeat(5 * 1024 * 1024)}` },
+      { texture: "" },
+    ) > PROJECT_HISTORY_BYTE_BUDGET,
+    "a replaced multi-megabyte data URL exceeds the retained-memory budget",
+  );
+  const entries = Array.from({ length: PROJECT_HISTORY_LIMIT + 8 }, (_, index) =>
+    createProjectHistoryEntry({ value: index }, { value: index + 1 }),
+  );
+  const bounded = boundProjectHistory(entries, [], "past");
+  assert.equal(bounded.past.length, PROJECT_HISTORY_LIMIT);
+  assert(bounded.retainedBytes <= PROJECT_HISTORY_BYTE_BUDGET);
+}
+
+{
   const fixture = transactionFixture();
   fixture.transaction.accept(projectA);
   fixture.transaction.accept(projectB);
@@ -215,6 +261,19 @@ const projectB = createEmptyProject();
 }
 
 {
+  const storage = memoryStorage();
+  const oversized = createEmptyProject();
+  oversized.metadata.name = "x".repeat(6 * 1024 * 1024 + 1);
+  const write = writeAutosaveSnapshot(oversized, storage);
+  assert.equal(write.status, "failed", "oversized autosave never reaches localStorage");
+  if (write.status === "failed") {
+    assert.equal(write.reason, "serialization");
+    assert.match(write.error, /6 MB classroom memory budget/);
+  }
+  assert.equal(storage.values.has(AUTOSAVE_STORAGE_KEYS.autosave), false);
+}
+
+{
   const unicode = "ASCII · café · \uD55C\uAE00 · 🤖";
   assert.equal(byteLength(unicode), Buffer.byteLength(unicode, "utf8"));
   assert.equal(fingerprint(unicode), fingerprint(unicode));
@@ -222,6 +281,171 @@ const projectB = createEmptyProject();
     serializeProjectCompact(projectA).length < serializeProject(projectA).length,
     "autosave uses the same schema without portable-file whitespace",
   );
+}
+
+{
+  const project = createFabricationReadyFourBarProject();
+  const object = {
+    ...createDefaultSceneObject("block", "large-raster-object"),
+    textureUrl:
+      `data:image/png;base64,serialization-raster-marker-${"a".repeat(4 * 1024 * 1024)}`,
+  };
+  project.sceneObjects = { [object.id]: object };
+  project.sceneObjectOrder = [object.id];
+  const lastExport = createFabricationPackage(project);
+  const exportedProject = { ...project, lastExport };
+  assert(
+    JSON.stringify(exportedProject).length > AUTOSAVE_SNAPSHOT_MAX_BYTES,
+    "the fixture proves canonical artwork plus generated files exceed autosave",
+  );
+
+  const compact = serializeProjectCompact(exportedProject);
+  const portable = serializeProject(exportedProject);
+  for (const serialized of [compact, portable]) {
+    const parsed = JSON.parse(serialized) as ProjectState;
+    assert.equal(parsed.lastExport, undefined, "transient generated files are not persisted");
+    assert.equal(
+      serialized.split("serialization-raster-marker-").length - 1,
+      1,
+      "the canonical scene raster is serialized exactly once",
+    );
+    assert(
+      byteLength(serialized) < AUTOSAVE_SNAPSHOT_MAX_BYTES,
+      "a 4 MB canonical raster stays inside the autosave snapshot budget",
+    );
+    const restored = loadProjectSnapshot(parsed);
+    assert.equal(restored.metadata.id, project.metadata.id);
+    assert.equal(restored.sceneObjects[object.id].textureUrl, object.textureUrl);
+    assert.equal(restored.mechanisms.length, project.mechanisms.length);
+    assert.equal(restored.selectedMechanismId, project.selectedMechanismId);
+  }
+
+  const posted: unknown[] = [];
+  let terminated = 0;
+  const fakeWorker: AutosaveWorkerPort = {
+    onmessage: null,
+    onerror: null,
+    postMessage: (message) => posted.push(message),
+    terminate: () => {
+      terminated += 1;
+    },
+  };
+  const preparation = createBrowserAutosavePreparationDriver(() => fakeWorker);
+  preparation.start(exportedProject, 1, {
+    ready: () => assert.fail("fake worker should not complete"),
+    failed: (error) => assert.fail(String(error)),
+  });
+  const postedProject = (posted[0] as { project: ProjectState }).project;
+  assert.equal(
+    postedProject.lastExport,
+    undefined,
+    "autosave removes generated files before the structured clone",
+  );
+  assert.equal(
+    postedProject.sceneObjects[object.id].textureUrl,
+    object.textureUrl,
+    "autosave worker input retains canonical scene artwork",
+  );
+  preparation.dispose();
+  assert.equal(terminated, 1, "disposing autosave releases the injected worker");
+
+  const directBlob = createPortableProjectBlob(exportedProject);
+  assert.match(directBlob.type, /^application\/json(?:;|$)/);
+  const directSnapshot = JSON.parse(await directBlob.text()) as ProjectState;
+  assert.equal(directSnapshot.lastExport, undefined);
+  assert.equal(directSnapshot.sceneObjects[object.id].textureUrl, object.textureUrl);
+
+  const frames = new Map<number, FrameRequestCallback>();
+  let nextFrame = 1;
+  const frameScheduler: ProjectDownloadFrameScheduler = {
+    requestFrame: (callback) => {
+      const handle = nextFrame++;
+      frames.set(handle, callback);
+      return handle;
+    },
+    cancelFrame: (handle) => {
+      frames.delete(handle);
+    },
+  };
+  const flushFrame = () => {
+    const entry = frames.entries().next().value as
+      | [number, FrameRequestCallback]
+      | undefined;
+    assert(entry, "portable save scheduled a frame");
+    frames.delete(entry[0]);
+    entry[1](performance.now());
+  };
+  type FakeDownloadWorker = ProjectDownloadWorkerPort & {
+    posted: ProjectDownloadWorkerRequest[];
+    terminated: number;
+  };
+  const downloadWorkers: FakeDownloadWorker[] = [];
+  const downloadClient = createProjectDownloadWorkerClient(() => {
+    const worker: FakeDownloadWorker = {
+      onmessage: null,
+      onmessageerror: null,
+      onerror: null,
+      posted: [],
+      terminated: 0,
+      postMessage(message) {
+        this.posted.push(message);
+      },
+      terminate() {
+        this.terminated += 1;
+      },
+    };
+    downloadWorkers.push(worker);
+    return worker;
+  }, frameScheduler);
+  const completedBlobs: Blob[] = [];
+  const downloadCallbacks = {
+    complete: (blob: Blob) => completedBlobs.push(blob),
+    unavailable: () => assert.fail("fake worker is available"),
+    failed: (error: Error) => assert.fail(error.message),
+  };
+  const firstGeneration = downloadClient.request(exportedProject, downloadCallbacks);
+  assert.equal(downloadWorkers.length, 0, "portable save waits for two paints");
+  flushFrame();
+  flushFrame();
+  assert.equal(downloadWorkers.length, 1);
+  assert.equal(downloadWorkers[0].posted[0].project.lastExport, undefined);
+  assert.equal(
+    downloadWorkers[0].posted[0].project.sceneObjects[object.id].textureUrl,
+    object.textureUrl,
+  );
+  const staleHandler = downloadWorkers[0].onmessage;
+  const secondGeneration = downloadClient.request(project, downloadCallbacks);
+  assert.equal(downloadWorkers[0].terminated, 1, "new Save cancels the older worker");
+  flushFrame();
+  flushFrame();
+  staleHandler?.({
+    data: { type: "result", generationId: firstGeneration, blob: directBlob },
+  } as MessageEvent);
+  assert.equal(completedBlobs.length, 0, "superseded Save cannot download");
+  const secondBlob = createPortableProjectBlob(project);
+  downloadWorkers[1].onmessage?.({
+    data: { type: "result", generationId: secondGeneration, blob: secondBlob },
+  } as MessageEvent);
+  assert.deepEqual(completedBlobs, [secondBlob]);
+  assert.equal(downloadWorkers[1].terminated, 1, "completed Save releases its worker");
+
+  let unavailable = 0;
+  const fallbackClient = createProjectDownloadWorkerClient(
+    () => {
+      throw new Error("Worker unavailable");
+    },
+    frameScheduler,
+  );
+  fallbackClient.request(project, {
+    complete: () => assert.fail("fallback does not produce a worker result"),
+    unavailable: () => {
+      unavailable += 1;
+    },
+    failed: (error) => assert.fail(error.message),
+  });
+  flushFrame();
+  flushFrame();
+  assert.equal(unavailable, 1, "no-worker fallback begins after two paints");
 }
 
 {

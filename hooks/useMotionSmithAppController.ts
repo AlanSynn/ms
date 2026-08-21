@@ -13,7 +13,6 @@ import {
 import { isMechanismTypeEnabled } from "../utils/mechanismTemplates";
 import { DEFAULT_CANVAS_VIEWPORT } from "../utils/viewport";
 import { classroomAssessmentKeyFromSearch } from "../utils/classroomContent";
-import { readAutosaveProject } from "../utils/projectPersistence";
 import { workflowStatusFor } from "../utils/workflowStatus";
 import { createStageNavigator } from "../utils/appStageNavigation";
 import { buildAppStageRouterProps } from "../utils/appStageRouterProps";
@@ -25,6 +24,7 @@ import { useAppPathActions } from "./useAppPathActions";
 import { useAppProjectCommands } from "./useAppProjectCommands";
 import { useModalInertEffect } from "./useModalInertEffect";
 import { useProjectAutosave } from "./useProjectAutosave";
+import { useColdAutosaveRecovery } from "./useColdAutosaveRecovery";
 import { useProjectHistory } from "./useProjectHistory";
 import { useWorkspacePlaybackLoop } from "./useWorkspacePlaybackLoop";
 import { useWorkspacePlayerDock } from "./useWorkspacePlayerDock";
@@ -65,17 +65,6 @@ const writeGettingStartedHiddenForSession = (hidden: boolean) => {
   }
 };
 
-const createInitialProject = () => {
-  if (typeof window === "undefined") return createEmptyProject();
-  try {
-    const initialProject = createEmptyProject();
-    const restored = readAutosaveProject(initialProject);
-    return restored.status === "loaded" ? restored.project : initialProject;
-  } catch {
-    return createEmptyProject();
-  }
-};
-
 export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   const {
     project,
@@ -83,7 +72,8 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     dispatch,
     undoProject: undoProjectHistory,
     redoProject: redoProjectHistory,
-  } = useProjectHistory(createInitialProject);
+  } = useProjectHistory(createEmptyProject);
+  const autosaveRecovery = useColdAutosaveRecovery({ project, setProject });
   const [stage, setStage] = useState<AppStage>("character");
   const [showGettingStarted, setShowGettingStarted] = useState(
     () => !readGettingStartedHiddenForSession(),
@@ -112,14 +102,22 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   const projectInputRef = useRef<HTMLInputElement>(null);
   const appShellRef = useRef<HTMLDivElement>(null);
   const assessmentQueryApplied = useRef(false);
-  useProjectAutosave(project, { onFailure: setCommandStatus });
+  useProjectAutosave(project, {
+    suspended: autosaveRecovery.pending,
+    recoveredBaseline: autosaveRecovery.recoveredBaseline,
+    onFailure: setCommandStatus,
+  });
 
   useEffect(() => {
     playbackClock.setPhase(angle);
   }, [angle, playbackClock]);
 
   useEffect(() => {
-    if (assessmentQueryApplied.current || typeof window === "undefined") return;
+    if (
+      autosaveRecovery.pending ||
+      assessmentQueryApplied.current ||
+      typeof window === "undefined"
+    ) return;
     assessmentQueryApplied.current = true;
     const assessmentKey = classroomAssessmentKeyFromSearch(
       window.location.search,
@@ -133,7 +131,11 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
         settings: { classroomAssessmentKey: assessmentKey },
       });
     }
-  }, [dispatch, project.settings.classroomAssessmentKey]);
+  }, [
+    autosaveRecovery.pending,
+    dispatch,
+    project.settings.classroomAssessmentKey,
+  ]);
 
   const goStage = createStageNavigator({
     project,

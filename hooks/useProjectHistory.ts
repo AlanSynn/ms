@@ -2,13 +2,16 @@ import { useState, type SetStateAction } from "react";
 import type { ProjectAction, ProjectState } from "../types";
 import { applyProjectAction, projectSelfCheck } from "../utils/project";
 import { recordProjectAction } from "../utils/performanceAudit";
-
-const PROJECT_HISTORY_LIMIT = 80;
+import {
+  boundProjectHistory,
+  createProjectHistoryEntry,
+  type ProjectHistoryEntry,
+} from "../runtime/persistence/projectHistoryPolicy";
 
 type ProjectHistoryState = {
   present: ProjectState;
-  past: ProjectState[];
-  future: ProjectState[];
+  past: ProjectHistoryEntry<ProjectState>[];
+  future: ProjectHistoryEntry<ProjectState>[];
 };
 
 type SetProjectOptions = {
@@ -43,15 +46,18 @@ export const useProjectHistory = (createInitialProject: () => ProjectState) => {
           : update;
       if (next === prev.present) return prev;
       if (options.resetHistory) return { present: next, past: [], future: [] };
-      if (options.history)
+      if (options.history) {
+        const bounded = boundProjectHistory(
+          [...prev.past, createProjectHistoryEntry(prev.present, next)],
+          [],
+          "past",
+        );
         return {
           present: next,
-          past: [
-            ...prev.past.slice(-(PROJECT_HISTORY_LIMIT - 1)),
-            prev.present,
-          ],
-          future: [],
+          past: bounded.past,
+          future: bounded.future,
         };
+      }
       return { ...prev, present: next };
     });
   };
@@ -67,11 +73,16 @@ export const useProjectHistory = (createInitialProject: () => ProjectState) => {
     if (!projectHistory.past.length) return false;
     setProjectHistory((prev) => {
       if (!prev.past.length) return prev;
-      const previous = prev.past[prev.past.length - 1];
+      const previous = prev.past[prev.past.length - 1].project;
+      const bounded = boundProjectHistory(
+        prev.past.slice(0, -1),
+        [createProjectHistoryEntry(prev.present, previous), ...prev.future],
+        "future",
+      );
       return {
         present: previous,
-        past: prev.past.slice(0, -1),
-        future: [prev.present, ...prev.future].slice(0, PROJECT_HISTORY_LIMIT),
+        past: bounded.past,
+        future: bounded.future,
       };
     });
     return true;
@@ -81,11 +92,17 @@ export const useProjectHistory = (createInitialProject: () => ProjectState) => {
     if (!projectHistory.future.length) return false;
     setProjectHistory((prev) => {
       if (!prev.future.length) return prev;
-      const [next, ...future] = prev.future;
+      const [nextEntry, ...future] = prev.future;
+      const next = nextEntry.project;
+      const bounded = boundProjectHistory(
+        [...prev.past, createProjectHistoryEntry(prev.present, next)],
+        future,
+        "past",
+      );
       return {
         present: next,
-        past: [...prev.past.slice(-(PROJECT_HISTORY_LIMIT - 1)), prev.present],
-        future,
+        past: bounded.past,
+        future: bounded.future,
       };
     });
     return true;

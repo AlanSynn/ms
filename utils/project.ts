@@ -119,11 +119,12 @@ export const buildSkeleton = (joints: StandardJoint[]): StandardSkeleton => {
     const bones: [string, string][] = [];
     const rootJointIds: string[] = [];
     const jointMap: Record<string, string> = {};
+    const jointIds = new Set(joints.map(item => item.id));
 
     joints.forEach(j => {
         map[j.id] = { ...j, bendDirection: j.bendDirection ?? 1 };
         jointMap[j.name.replaceAll(' ', '_')] = j.id;
-        if (j.parentId && joints.some(other => other.id === j.parentId)) {
+        if (j.parentId && jointIds.has(j.parentId)) {
             bones.push([j.parentId, j.id]);
             hierarchy[j.parentId] = [...(hierarchy[j.parentId] ?? []), j.id];
         } else {
@@ -1838,8 +1839,7 @@ export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
 
 export const loadProjectSnapshot = (raw: unknown): ProjectState => migrateProjectSnapshot(raw);
 
-export const downloadText = (filename: string, text: string, type = 'application/json') => {
-    const blob = new Blob([text], { type });
+export const downloadBlob = (filename: string, blob: Blob) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -1849,6 +1849,9 @@ export const downloadText = (filename: string, text: string, type = 'application
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 };
+
+export const downloadText = (filename: string, text: string, type = 'application/json') =>
+    downloadBlob(filename, new Blob([text], { type }));
 
 export const projectSelfCheck = () => {
     const sample = createSampleProject();

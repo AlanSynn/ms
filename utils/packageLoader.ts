@@ -3,6 +3,7 @@ import { buildSkeleton, createProjectFromCharacterPackage } from './project';
 import { isUsableContourPoints } from './partGeometry';
 import { clampNumber, finiteNumber, sanitizeHexColor } from './sanitize';
 import {
+    PROJECT_IMPORT_LIMITS,
     validateCharacterPackageFiles,
 } from '../runtime/import/projectImportPolicy';
 
@@ -95,6 +96,51 @@ const resolveAsset = (assets: Record<string, string>, path: unknown) => {
     return assets[normPath(path)] ?? assets[basename(path)];
 };
 
+type CharacterPackageAssetFile = Pick<File, 'name' | 'size'> & {
+    webkitRelativePath?: string;
+};
+
+/**
+ * Count image bytes as they will be repeated in ProjectState, not only once per
+ * selected file. A shared image referenced by several parts is serialized once
+ * for every texture/mask property, so unique-file totals alone are not a safe
+ * persistence bound.
+ */
+export const validateCharacterPackageAssetReferences = <
+    T extends CharacterPackageAssetFile,
+>(partsInfo: unknown, assetFiles: readonly T[]) => {
+    const info = asDict(partsInfo);
+    const rawParts = asDict(asDict(info.character).parts ?? info.parts);
+    const partEntries = Object.entries(rawParts);
+    if (partEntries.length > PROJECT_IMPORT_LIMITS.parts) {
+        throw new Error(`Parts exceeds the classroom limit of ${PROJECT_IMPORT_LIMITS.parts}.`);
+    }
+    const assets = new Map<string, T>();
+    for (const file of assetFiles) {
+        const key = normPath(file.webkitRelativePath || file.name);
+        assets.set(key, file);
+        assets.set(basename(key), file);
+    }
+    const referencedFile = (path: unknown) => {
+        if (typeof path !== 'string' || !path) return undefined;
+        return assets.get(normPath(path)) ?? assets.get(basename(path));
+    };
+    let referencedBytes = 0;
+    for (const [id, value] of partEntries) {
+        const part = asDict(value);
+        const explicitTexture = part.texture_path ?? part.image_path;
+        const texture = referencedFile(
+            typeof explicitTexture === 'string' ? explicitTexture : `${id}.png`,
+        );
+        const mask = referencedFile(part.mask_path);
+        referencedBytes += (texture?.size ?? 0) + (mask?.size ?? 0);
+        if (referencedBytes > PROJECT_IMPORT_LIMITS.packageTotalAssetBytes) {
+            throw new Error('Character package image references exceed the 3 MB classroom limit.');
+        }
+    }
+    return referencedBytes;
+};
+
 const contourPointsFromPartInfo = (part: Dict): Point[] | undefined => {
     const raw = part.contour_points ?? part.contourPoints ?? part.outline_points ?? part.outlinePoints;
     const points = Array.isArray(raw) ? raw.flatMap(point => {
@@ -134,6 +180,9 @@ export const createProjectFromPackageData = (
     const height = finiteNumber(cfg.height, 1);
     const rawSkeleton = skeletonEntriesFromConfig(cfg);
     if (!rawSkeleton.length) throw new Error('char_cfg.yaml missing skeleton/joints');
+    if (rawSkeleton.length > PROJECT_IMPORT_LIMITS.joints) {
+        throw new Error(`Joints exceeds the classroom limit of ${PROJECT_IMPORT_LIMITS.joints}.`);
+    }
 
     const joints: StandardJoint[] = rawSkeleton.flatMap(j => {
         const id = String(j.name || j.id || '').trim();
@@ -221,6 +270,11 @@ export const loadCharacterPackage = async (files: File[] | FileList) => {
     const cfgFile = find('char_cfg.yaml') ?? find('char_cfg.yml') ?? find('char_cfg.json');
     if (!partsFile) throw new Error('Missing parts_info.json in selected package files');
     if (!cfgFile) throw new Error('Missing char_cfg.yaml in selected package files');
+    const partsInfo = JSON.parse(await partsFile.text());
+    const charCfg = cfgFile.name.endsWith('.json')
+        ? JSON.parse(await cfgFile.text())
+        : parseCharConfig(await cfgFile.text());
+    validateCharacterPackageAssetReferences(partsInfo, assetFiles);
     const assets: Record<string, string> = {};
     for (const file of assetFiles) {
         const key = normPath((file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name);
@@ -229,8 +283,8 @@ export const loadCharacterPackage = async (files: File[] | FileList) => {
         assets[basename(key)] = url;
     }
     return createProjectFromPackageData(
-        JSON.parse(await partsFile.text()),
-        cfgFile.name.endsWith('.json') ? JSON.parse(await cfgFile.text()) : parseCharConfig(await cfgFile.text()),
+        partsInfo,
+        charCfg,
         assets,
         basename((cfgFile as File & { webkitRelativePath?: string }).webkitRelativePath || cfgFile.name).replace(/\.[^.]+$/, '')
     );

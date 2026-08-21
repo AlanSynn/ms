@@ -1,4 +1,5 @@
 import type { ProjectState } from "../../types";
+import { projectForPersistence } from "../../utils/projectSerialization";
 
 export type AutosaveSerializedSnapshot = {
   serialized: string;
@@ -95,17 +96,34 @@ type AutosaveWorkerResponse =
   | ({ id: number; generation: number; type: "prepared" } & AutosaveSerializedSnapshot)
   | { id: number; generation: number; type: "error"; message: string };
 
+export type AutosaveWorkerPort = {
+  onmessage: ((event: MessageEvent<AutosaveWorkerResponse>) => void) | null;
+  onerror: ((event: ErrorEvent) => void) | null;
+  postMessage: (message: unknown) => void;
+  terminate: () => void;
+};
+
+export type AutosaveWorkerFactory = () => AutosaveWorkerPort;
+
+const browserAutosaveWorkerFactory: AutosaveWorkerFactory = () =>
+  new Worker(
+    new URL("./autosaveWorker.ts", import.meta.url),
+    { type: "module", name: "motionsmith-autosave" },
+  );
+
 /**
  * Lazily create one module Worker for ProjectState serialization. A worker is
  * created only after an accepted edit reaches the idle boundary; no boot path
  * can instantiate it. Request ids and queue generations both reject stale
  * responses before any prepared bytes reach the journal.
  */
-export const createBrowserAutosavePreparationDriver = (): AutosavePreparationDriver<
+export const createBrowserAutosavePreparationDriver = (
+  workerFactory: AutosaveWorkerFactory = browserAutosaveWorkerFactory,
+): AutosavePreparationDriver<
   ProjectState,
   AutosaveSerializedSnapshot
 > => {
-  let worker: Worker | undefined;
+  let worker: AutosaveWorkerPort | undefined;
   let nextRequestId = 1;
   let active:
     | {
@@ -126,15 +144,15 @@ export const createBrowserAutosavePreparationDriver = (): AutosavePreparationDri
     generation: number,
     callbacks: AutosavePreparationCallbacks<AutosaveSerializedSnapshot>,
   ) => {
-    if (typeof Worker === "undefined") {
+    if (
+      typeof Worker === "undefined" &&
+      workerFactory === browserAutosaveWorkerFactory
+    ) {
       callbacks.failed(new Error("This browser cannot prepare autosave bytes."));
       return;
     }
     try {
-      worker ??= new Worker(
-        new URL("./autosaveWorker.ts", import.meta.url),
-        { type: "module", name: "motionsmith-autosave" },
-      );
+      worker ??= workerFactory();
     } catch (error) {
       callbacks.failed(error);
       return;
@@ -164,7 +182,11 @@ export const createBrowserAutosavePreparationDriver = (): AutosavePreparationDri
       current?.callbacks.failed(new Error("Autosave preparation worker failed."));
     };
     try {
-      worker.postMessage({ id, generation, project });
+      worker.postMessage({
+        id,
+        generation,
+        project: projectForPersistence(project),
+      });
     } catch (error) {
       const current = active;
       terminate();

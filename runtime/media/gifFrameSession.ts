@@ -22,7 +22,7 @@ type WorkerLike = Pick<
 
 export type GifFrameSessionOptions = {
   generationId: number;
-  buffer: ArrayBuffer;
+  file: File;
   onReady: (plan: TrackingGifPlan) => void;
   onFrame: (index: number, bitmap: ImageBitmap) => void;
   onError: (message: string) => void;
@@ -42,7 +42,7 @@ const defaultWorker = (): WorkerLike =>
 
 export const createGifFrameSession = ({
   generationId,
-  buffer,
+  file,
   onReady,
   onFrame,
   onError,
@@ -96,7 +96,7 @@ export const createGifFrameSession = ({
     if (queuedIndex !== null) {
       const nextIndex = queuedIndex;
       queuedIndex = null;
-      sendFrameRequest(nextIndex);
+      if (nextIndex !== message.index) sendFrameRequest(nextIndex);
     }
   };
   const handleError = (event: ErrorEvent) => {
@@ -106,10 +106,7 @@ export const createGifFrameSession = ({
   worker.addEventListener('message', handleMessage as EventListener);
   worker.addEventListener('error', handleError as EventListener);
   try {
-    worker.postMessage(
-      { type: 'load', generationId, buffer, limits },
-      [buffer],
-    );
+    worker.postMessage({ type: 'load', generationId, file, limits });
   } catch (error) {
     worker.removeEventListener('message', handleMessage as EventListener);
     worker.removeEventListener('error', handleError as EventListener);

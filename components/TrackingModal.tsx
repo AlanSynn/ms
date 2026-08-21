@@ -5,7 +5,10 @@ import type { Point, ProjectState } from '../types';
 import { createGifFrameSession, type GifFrameSession } from '../runtime/media/gifFrameSession';
 import {
     fitTrackingMediaDimensions,
+    assertTrackingVideoFile,
+    assertTrackingVideoMetadata,
     TRACKING_GIF_MAX_COMPRESSED_BYTES,
+    TRACKING_MANUAL_MAX_POINTS,
     TRACKING_MEDIA_MAX_FPS,
     type TrackingGifPlan,
 } from '../runtime/media/trackingMediaPolicy';
@@ -123,6 +126,21 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
         releaseMedia();
         const generationId = ++mediaGenerationRef.current;
         const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
+        if (isGif) {
+            if (file.size > TRACKING_GIF_MAX_COMPRESSED_BYTES) {
+                setError('Failed to load media: GIF files must be 32MB or smaller.');
+                if (fileInputRef.current) fileInputRef.current.value = '';
+                return;
+            }
+        } else {
+            try {
+                assertTrackingVideoFile(file);
+            } catch (error) {
+                setError(`Failed to load media: ${error instanceof Error ? error.message : String(error)}`);
+                if (fileInputRef.current) fileInputRef.current.value = '';
+                return;
+            }
+        }
         const url = isGif ? `gif-worker:${generationId}` : URL.createObjectURL(file);
         if (!isGif) objectUrlRef.current = url;
         setVideoState(prev => ({
@@ -137,15 +155,10 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
 
         try {
             if (isGif) {
-                if (file.size > TRACKING_GIF_MAX_COMPRESSED_BYTES) {
-                    throw new Error('GIF files must be 32MB or smaller.');
-                }
-                const arrayBuffer = await file.arrayBuffer();
-                if (generationId !== mediaGenerationRef.current) return;
                 let session: GifFrameSession;
                 session = createGifFrameSession({
                     generationId,
-                    buffer: arrayBuffer,
+                    file,
                     onReady: plan => {
                         if (generationId !== mediaGenerationRef.current) return;
                         gifPlanRef.current = plan;
@@ -194,39 +207,49 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
                 gifSessionRef.current = session;
             } else {
                 const video = document.createElement('video');
-                video.preload = 'metadata';
-                video.src = url;
+                try {
+                    video.preload = 'metadata';
+                    video.src = url;
 
-                await new Promise<void>((resolve, reject) => {
-                    video.onloadedmetadata = () => resolve();
-                    video.onerror = () => reject(new Error('Failed to load video'));
-                });
+                    await new Promise<void>((resolve, reject) => {
+                        video.onloadedmetadata = () => resolve();
+                        video.onerror = () => reject(new Error('Failed to load video'));
+                    });
 
-                if (generationId !== mediaGenerationRef.current) return;
-                const duration = Math.max(1 / mediaLimits.maxFramesPerSecond, video.duration);
-                const totalFrames = Math.max(1, Math.min(
-                    mediaLimits.maxFrames,
-                    Math.ceil(duration * mediaLimits.maxFramesPerSecond),
-                ));
-                const fps = Math.max(1, Math.min(mediaLimits.maxFramesPerSecond, totalFrames / duration));
-                const dimensions = fitTrackingMediaDimensions(
-                    video.videoWidth || 640,
-                    video.videoHeight || 480,
-                    mediaLimits.maxEdgePx,
-                );
+                    if (generationId !== mediaGenerationRef.current) return;
+                    assertTrackingVideoMetadata({
+                        width: video.videoWidth,
+                        height: video.videoHeight,
+                        durationSeconds: video.duration,
+                    });
+                    const duration = Math.max(1 / mediaLimits.maxFramesPerSecond, video.duration);
+                    const totalFrames = Math.max(1, Math.min(
+                        mediaLimits.maxFrames,
+                        Math.ceil(duration * mediaLimits.maxFramesPerSecond),
+                    ));
+                    const fps = Math.max(1, Math.min(mediaLimits.maxFramesPerSecond, totalFrames / duration));
+                    const dimensions = fitTrackingMediaDimensions(
+                        video.videoWidth,
+                        video.videoHeight,
+                        mediaLimits.maxEdgePx,
+                    );
 
-                setVideoState({
-                    url,
-                    currentFrame: 0,
-                    totalFrames,
-                    fps,
-                    width: dimensions.width,
-                    height: dimensions.height,
-                    isLoading: false,
-                    isGif: false
-                });
-                updateTimeline(0, totalFrames, fps);
-                video.remove();
+                    setVideoState({
+                        url,
+                        currentFrame: 0,
+                        totalFrames,
+                        fps,
+                        width: dimensions.width,
+                        height: dimensions.height,
+                        isLoading: false,
+                        isGif: false
+                    });
+                    updateTimeline(0, totalFrames, fps);
+                } finally {
+                    video.removeAttribute('src');
+                    video.load();
+                    video.remove();
+                }
             }
         } catch (err) {
             if (generationId !== mediaGenerationRef.current) return;
@@ -419,6 +442,10 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
             // Start dragging existing point
             setDraggingManualPoint(pointIndex);
         } else {
+            if (manualPoints.length >= TRACKING_MANUAL_MAX_POINTS) {
+                setError(`Trace points are limited to ${TRACKING_MANUAL_MAX_POINTS}.`);
+                return;
+            }
             // Add new point
             setManualPoints(prev => [...prev, coords]);
         }

@@ -3,6 +3,10 @@ export const TRACKING_MEDIA_MAX_FPS = 30;
 export const TRACKING_MEDIA_MAX_SAMPLED_FRAMES = 600;
 export const TRACKING_GIF_MAX_IN_FLIGHT_FRAMES = 1;
 export const TRACKING_GIF_MAX_COMPRESSED_BYTES = 32 * 1024 * 1024;
+export const TRACKING_VIDEO_MAX_COMPRESSED_BYTES = 48 * 1024 * 1024;
+export const TRACKING_VIDEO_MAX_SOURCE_PIXELS = 1920 * 1080;
+export const TRACKING_VIDEO_MAX_DURATION_SECONDS = 60;
+export const TRACKING_MANUAL_MAX_POINTS = 128;
 export const TRACKING_GIF_FALLBACK_MAX_RAW_FRAMES =
   TRACKING_MEDIA_MAX_SAMPLED_FRAMES;
 
@@ -39,6 +43,41 @@ export type TrackingGifReplayWindow = {
   start: number;
   end: number;
   decodeFrames: number;
+};
+
+export const assertTrackingVideoFile = (file: Pick<File, "size">) => {
+  if (file.size > TRACKING_VIDEO_MAX_COMPRESSED_BYTES) {
+    throw new Error("Videos must be 48MB or smaller.");
+  }
+};
+
+export const assertTrackingVideoMetadata = ({
+  width,
+  height,
+  durationSeconds,
+}: {
+  width: number;
+  height: number;
+  durationSeconds: number;
+}) => {
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width < 1 ||
+    height < 1
+  ) {
+    throw new Error("Video dimensions are invalid.");
+  }
+  if (width * height > TRACKING_VIDEO_MAX_SOURCE_PIXELS) {
+    throw new Error("Videos must be 1080p or smaller.");
+  }
+  if (
+    !Number.isFinite(durationSeconds) ||
+    durationSeconds <= 0 ||
+    durationSeconds > TRACKING_VIDEO_MAX_DURATION_SECONDS
+  ) {
+    throw new Error("Videos must be 60 seconds or shorter.");
+  }
 };
 
 export const assertTrackingGifDecodeInput = (
