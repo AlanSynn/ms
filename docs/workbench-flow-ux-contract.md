@@ -45,7 +45,7 @@ Rules:
 
 | Stage | Left pane | Center canvas | Right inspector | Primary buttons | Help keys | Current gaps to track |
 |---|---|---|---|---|---|---|
-| Getting Started | Starter tiles and import choices in modal | none; releases to Character | none | Guide, Starter rig, Character file, Open full project | none | Keep result-first; do not add videos/manuals here. |
+| Getting Started | Two starter tiles and paired file actions in modal | none; releases to Character | none | Guide, Starter rig; Character file beside Open full project below | none | Keep result-first; do not add videos/manuals here. |
 | Character | Getting Started, Load character file, Add object, Open full project, parts/objects, ownership/reset | character/scene-object workbench and selection handles | selected part/object/skeleton inspector | Getting Started, Load character file, Add object, Open full project | `character.loadCharacterFile`, `character.loadObjectFile` | Character is correct creation owner. Keep rig creation here; remove creation controls from later tabs. |
 | Path | motion target, Draw/Clear, Open/Closed, Smoothness, Trace/Play/Reset in More | path drawing/editing, character/object target preview, 2D/3D view | selected path/target, IK start/handle, bend | Draw, Clear path, Open, Closed, Trace, Reset | `path.draw`, `path.smoothness`, `path.trace` | Path no longer owns rig creation controls; default path topology stays closed unless explicitly changed. |
 | Foundry | target summary, Fit path, Pick anchor, Use mechanism, mechanism templates | Foundry physical preview, user path, mechanism path, camera/layer/play controls | sensemaking first, view controls, opacity/explode, selected mechanism params | Fit path, Pick anchor, Use mechanism | `foundry.fitPath`, `viewer.layers` | Center is dense but acceptable. Mechanism cards must stay front-view Foundry-derived, not separate drawings. |
@@ -59,7 +59,7 @@ Rules:
 
 Facts verified from code and tests on 2026-07-05:
 
-- The compact Getting Started dialog exposes `Guide`, `Starter rig`, `Character file`, and secondary `Open full project` actions. Recognition starters are not shipped.
+- The compact Getting Started dialog exposes only `Guide` and `Starter rig` as primary tiles. It pairs `Character file` beside `Open full project` as secondary actions below. Recognition starters are not shipped.
 - The three-pane shell is implemented through `EditorStageFrame` surfaces with `stage-left-pane`, `stage-canvas-pane`, and `stage-right-inspector` browser contracts.
 - Character owns source creation: character package load, ordinary scene-object image load, starter entry, rig/body-part edits, and lesson reset.
 - Path owns motion target selection, draw/clear, open/closed topology, smoothing, trace import, path visibility/enabled state, and path point editing; it no longer owns rig creation.

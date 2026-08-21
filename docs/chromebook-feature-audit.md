@@ -116,8 +116,8 @@ See the
 
 ## Production bundle and image-recognition exclusion
 
-The ordinary static production build contains 393,538 compressed bytes of core
-JavaScript against the 450,000-byte limit and 454,579 compressed bytes in the
+The ordinary static production build contains 393,510 compressed bytes of core
+JavaScript against the 450,000-byte limit and 454,568 compressed bytes in the
 initial shell against the 1,500,000-byte limit. Optional worker and Rapier
 chunks are excluded from those initial-request totals.
 

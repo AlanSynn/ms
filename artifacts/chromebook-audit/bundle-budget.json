@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-21T03:28:53.773Z",
+  "generatedAt": "2026-08-21T08:04:31.602Z",
   "basis": "static compressed production shell",
   "imageRecognitionRuntime": "absent",
   "coreJs": {
     "files": [
-      "assets/index-EM_SqBU1.js",
-      "assets/App-CW7Hk1iE.js"
+      "assets/index-T44EPzHY.js",
+      "assets/App-DleDoCGO.js"
     ],
-    "gzipBytes": 393538,
+    "gzipBytes": 393510,
     "limitBytes": 450000,
     "passed": true
   },
@@ -16,15 +16,15 @@
     "assets": [
       {
         "file": "index.html",
-        "compressedBytes": 15114
+        "compressedBytes": 15131
       },
       {
-        "file": "assets/index-EM_SqBU1.js",
+        "file": "assets/index-T44EPzHY.js",
         "compressedBytes": 61293
       },
       {
-        "file": "assets/App-CW7Hk1iE.js",
-        "compressedBytes": 332245
+        "file": "assets/App-DleDoCGO.js",
+        "compressedBytes": 332217
       },
       {
         "file": "fonts/manrope-800-latin.woff2",
@@ -35,7 +35,7 @@
         "compressedBytes": 32183
       }
     ],
-    "compressedBytes": 454579,
+    "compressedBytes": 454568,
     "limitBytes": 1500000,
     "passed": true
   }

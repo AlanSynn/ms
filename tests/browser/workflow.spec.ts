@@ -493,6 +493,51 @@ test('Character tab owns separate scene objects and later tabs only render them'
   expectCleanPage(pageErrors, consoleErrors);
 });
 
+test('Getting Started keeps file imports beside each other below two starter tiles', async ({ page }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  await page.goto('/');
+  await waitForBootLoader(page);
+  const dialog = page.getByTestId('getting-started-dialog');
+  const gallery = dialog.getByTestId('getting-started-gallery');
+  const fileActions = dialog.getByTestId('getting-started-file-actions');
+  const characterFileAction = fileActions.getByTestId('getting-started-open-character');
+  const fullProjectAction = fileActions.getByTestId('getting-started-open-project');
+
+  await expect(gallery.locator('.template-tile')).toHaveCount(2);
+  await expect(gallery.getByTestId('getting-started-card-guided')).toBeVisible();
+  await expect(gallery.getByTestId('getting-started-card-humanoid')).toBeVisible();
+  await expect(gallery).not.toContainText('Character file');
+  await expect(characterFileAction).toBeVisible();
+  await expect(fullProjectAction).toBeVisible();
+
+  const characterFileBox = await characterFileAction.boundingBox();
+  const fullProjectBox = await fullProjectAction.boundingBox();
+  expect(characterFileBox, 'Character file secondary action has a layout box').toBeTruthy();
+  expect(fullProjectBox, 'Open full project secondary action has a layout box').toBeTruthy();
+  expect(Math.abs(characterFileBox!.y - fullProjectBox!.y), 'file actions share one desktop row').toBeLessThan(2);
+  expect(characterFileBox!.x, 'Character file sits before Open full project').toBeLessThan(fullProjectBox!.x);
+
+  const characterChooserPromise = page.waitForEvent('filechooser');
+  await characterFileAction.click();
+  const characterChooser = await characterChooserPromise;
+  expect(characterChooser.isMultiple()).toBe(true);
+  await characterChooser.setFiles([]);
+
+  const projectChooserPromise = page.waitForEvent('filechooser');
+  await fullProjectAction.click();
+  const projectChooser = await projectChooserPromise;
+  expect(projectChooser.isMultiple()).toBe(false);
+  await projectChooser.setFiles([]);
+
+  expectCleanPage(pageErrors, consoleErrors);
+});
+
 test('Getting Started guided project opens a real editable lesson', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
@@ -867,7 +912,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(guidePreview.locator('svg')).toHaveAttribute('data-motion-preview', 'character-path');
   await expect(starterGallery).toContainText('Guide');
   await expect(starterGallery).toContainText('Starter rig');
-  await expect(starterGallery).toContainText('Character file');
+  await expect(starterGallery).not.toContainText('Character file');
   await expect(starterGallery).not.toContainText('Image');
   await expect(starterGallery).not.toContainText('Girl');
   await expect(starterGallery).not.toContainText('Boy');
@@ -879,9 +924,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(starterGallery).toContainText('Start with a simple body.');
   await expect(starterGallery).toContainText('Move arms or legs');
   await expect(starterGallery).toContainText('Add a path next');
-  await expect(starterGallery).toContainText('Open editable parts and joints.');
-  await expect(starterGallery).toContainText('Edit the parts');
-  await expect(starterGallery).toContainText('Draw a path');
+  await expect(gettingStarted.getByTestId('getting-started-file-actions')).toContainText('Character file');
+  await expect(gettingStarted.getByTestId('getting-started-file-actions')).toContainText('Open full project');
   await gettingStarted.getByTestId('getting-started-card-guided').click();
   await expect(gettingStarted).toContainText('Pick a project.');
   const guidedLibrary = gettingStarted.getByTestId('guided-project-library');
@@ -910,15 +954,16 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(gettingStarted).toContainText('Start.');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Guide');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Starter rig');
-  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Character file');
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Character file');
+  await expect(gettingStarted.getByTestId('getting-started-file-actions')).toContainText('Character file');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Image');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Girl');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Boy');
   await expect(gettingStarted).toContainText('Open full project');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Package');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Humanoid');
-  await expect(gettingStarted.getByTestId('getting-started-gallery').locator('.template-tile')).toHaveCount(3);
-  await expect(gettingStarted.getByTestId('getting-started-gallery').locator('.template-icon-slot')).toHaveCount(3);
+  await expect(gettingStarted.getByTestId('getting-started-gallery').locator('.template-tile')).toHaveCount(2);
+  await expect(gettingStarted.getByTestId('getting-started-gallery').locator('.template-icon-slot')).toHaveCount(2);
   await expect(gettingStarted.getByTestId('getting-started-gallery').locator('.starter-thumb')).toHaveCount(0);
   await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Local browser processing');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('rigging');

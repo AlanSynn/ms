@@ -175,14 +175,12 @@ const GuidedLessonMotionPreview = ({ lessonId, project }: { lessonId: string; pr
 
 const starterCopy = {
     guide: 'Pick a working motion project.',
-    humanoid: 'Start with a simple body.',
-    character: 'Open editable parts and joints.'
+    humanoid: 'Start with a simple body.'
 } as const;
 
 const starterCues = {
     guide: ['Edit one move', 'Ready to build'],
-    humanoid: ['Move arms or legs', 'Add a path next'],
-    character: ['Edit the parts', 'Draw a path']
+    humanoid: ['Move arms or legs', 'Add a path next']
 } as const;
 
 const StarterCues = ({ items }: { items: readonly string[] }) => (
@@ -276,29 +274,26 @@ export const GettingStartedDialog = ({ guidedLessons, hideForSession, onLesson, 
                         <StarterCues items={starterCues.humanoid} />
                         <b><Sparkles size={16}/> Start</b>
                     </button>
-                    <button type="button" className="template-tile cursor-pointer" data-testid="getting-started-card-character" aria-label="Open character file" onClick={() => packageInputRef.current?.click()}>
-                        <span className="template-icon-slot"><FileJson size={18}/></span>
-                        <strong>Character file</strong>
-                        <small>{starterCopy.character}</small>
-                        <StarterCues items={starterCues.character} />
-                        <b><Upload size={16}/> Open</b>
-                    </button>
-                    <input ref={packageInputRef} data-testid="getting-started-package-input" hidden type="file" multiple accept=".json,.yaml,.yml,image/png,image/jpeg,image/webp,image/svg+xml" onChange={e => {
-                        const files = e.currentTarget.files ? Array.from(e.currentTarget.files) : [];
-                        e.currentTarget.value = '';
-                        if (files.length) onPackage(files);
-                    }}/>
                 </div>
                 <div className="getting-started-foot">
                     <label className="flex items-center gap-2 text-sm font-bold text-slate-600" data-testid="getting-started-hide-session">
                         <input type="checkbox" checked={hideForSession} onChange={event => onHideForSessionChange(event.currentTarget.checked)}/>
                         Don&apos;t show again this session
                     </label>
-                    <button type="button" className="btn-secondary cursor-pointer" onClick={() => importInputRef.current?.click()}><Upload size={16}/> Open full project</button><input ref={importInputRef} data-testid="getting-started-import-input" hidden type="file" accept="application/json,.json" onChange={e => {
-                    const file = e.currentTarget.files?.[0];
-                    e.currentTarget.value = '';
-                    if (file) onImport(file);
-                    }}/>
+                    <div className="getting-started-file-actions" data-testid="getting-started-file-actions">
+                        <button type="button" className="btn-secondary cursor-pointer" data-testid="getting-started-open-character" onClick={() => packageInputRef.current?.click()}><FileJson size={16}/> Character file</button>
+                        <input ref={packageInputRef} data-testid="getting-started-package-input" hidden type="file" multiple accept=".json,.yaml,.yml,image/png,image/jpeg,image/webp,image/svg+xml" onChange={e => {
+                            const files = e.currentTarget.files ? Array.from(e.currentTarget.files) : [];
+                            e.currentTarget.value = '';
+                            if (files.length) onPackage(files);
+                        }}/>
+                        <button type="button" className="btn-secondary cursor-pointer" data-testid="getting-started-open-project" onClick={() => importInputRef.current?.click()}><Upload size={16}/> Open full project</button>
+                        <input ref={importInputRef} data-testid="getting-started-import-input" hidden type="file" accept="application/json,.json" onChange={e => {
+                            const file = e.currentTarget.files?.[0];
+                            e.currentTarget.value = '';
+                            if (file) onImport(file);
+                        }}/>
+                    </div>
                 </div>
             </>}
         </section>
