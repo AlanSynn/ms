@@ -18,6 +18,7 @@
     "test:chromebook-audit:quick": "bun run build:e2e && env -u NO_COLOR CHROMEBOOK_AUDIT=1 CHROMEBOOK_AUDIT_ENFORCE=0 CHROMEBOOK_PLAYBACK_AUDIT_MS=5000 CHROMEBOOK_SIMULATION_AUDIT_MS=3000 PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=5174 playwright test tests/browser/chromebook-audit-instrumentation.spec.ts tests/browser/classroom-entry-performance.spec.ts tests/browser/chromebook-features-audit.spec.ts tests/browser/chromebook-import-audit.spec.ts tests/browser/chromebook-export-audit.spec.ts tests/browser/chromebook-interaction-audit.spec.ts tests/browser/chromebook-playback-audit.spec.ts tests/browser/chromebook-simulation-audit.spec.ts tests/browser/chromebook-stage-switch-audit.spec.ts --workers=1",
     "test:bundle-budget": "bun scripts/check-browser-bundle.mjs",
     "test:no-image-recognition": "bun scripts/check-no-image-recognition.mjs --all",
+    "test:cloudflare-live": "bun scripts/check-cloudflare-classroom.mjs",
     "build:dmg": "bun scripts/with-rustup-cargo.mjs tauri build --bundles dmg",
     "test:browser": "bun run build:e2e && env -u NO_COLOR PLAYWRIGHT_SERVER=preview playwright test",
     "build:tauri-frontend": "tsc && bun scripts/check-no-image-recognition.mjs --source && vite build --base ./ && bun scripts/check-no-image-recognition.mjs --dist"

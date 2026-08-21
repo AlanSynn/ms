@@ -818,6 +818,8 @@ assert(deployWorkflowText.includes('actions/upload-pages-artifact@v5') && deploy
 assert(deployWorkflowText.includes('needs: [build, deploy-pages]') && deployWorkflowText.includes('cloudflare/wrangler-action@v4'), 'Cloudflare publishes only after the checked build and GitHub Pages mirror succeed');
 assert(deployWorkflowText.includes('wranglerVersion: 4.112.0') && deployWorkflowText.includes('command: deploy --config wrangler.jsonc'), 'Cloudflare deployment pins the locally verified Wrangler version and checked configuration');
 assert(deployWorkflowText.includes('CLOUDFLARE_API_TOKEN') && deployWorkflowText.includes('CLOUDFLARE_ACCOUNT_ID') && deployWorkflowText.includes('name: cloudflare-production'), 'Cloudflare deployment uses repository secrets inside the protected production environment');
+assert(deployWorkflowText.includes('Verify motionsmith.org classroom deployment') && deployWorkflowText.includes('bun run test:cloudflare-live'), 'the tag workflow verifies the live Cloudflare site only after deployment');
+assert(packageJson.scripts['test:cloudflare-live'] === 'bun scripts/check-cloudflare-classroom.mjs', 'the live classroom deployment gate has a deterministic package command');
 assert.equal(wranglerConfig.name, 'ms', 'Wrangler targets the existing Cloudflare Worker service');
 assert.equal(wranglerConfig.workers_dev, false, 'classroom releases do not expose a parallel workers.dev production URL');
 assert.deepEqual(wranglerConfig.assets, { directory: './dist', not_found_handling: 'single-page-application' }, 'Cloudflare serves the checked static dist with SPA navigation fallback');
