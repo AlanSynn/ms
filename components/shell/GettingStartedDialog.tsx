@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 import { FileJson, Sparkles, Upload } from 'lucide-react';
 import type { BodyPartLayer, MechanismConfig, Point, ProjectState } from '../../types';
 import { pathFromPoints, sceneToSvg } from '../../utils/coordinates';
@@ -100,7 +100,7 @@ const starterRigPreviewProject = (): ProjectState => {
 };
 
 const GuidedLessonMotionPreview = ({ lessonId, project }: { lessonId: string; project: ProjectState | null }) => {
-    const visibleParts = project?.partOrder
+    const allVisibleParts = project?.partOrder
         .map(id => project.parts[id])
         .filter((part): part is BodyPartLayer => Boolean(part) && part.visible !== false) ?? [];
     const selectedPath = project?.selectedPathId ? project.paths[project.selectedPathId] : Object.values(project?.paths ?? {})[0];
@@ -108,7 +108,27 @@ const GuidedLessonMotionPreview = ({ lessonId, project }: { lessonId: string; pr
     const tracePoints = selectedPath?.points?.length ? selectedPath.points : generatedPath;
     const svgPoints: Point[] = [];
     const focusPoints: Point[] = [];
-    const highlightedPartIds = new Set([selectedPath?.partId, project?.selectedPartId].filter(Boolean));
+    const highlightedPartIds = new Set(
+        [selectedPath?.partId, project?.selectedPartId]
+            .filter((id): id is string => Boolean(id))
+    );
+    const previewPartIds = new Set(highlightedPartIds);
+    const preferredPreviewParts = [
+        'torso',
+        'head',
+        'left_arm_upper',
+        'right_arm_upper',
+        'left_leg_upper',
+        'right_leg_upper'
+    ];
+    for (const id of preferredPreviewParts) {
+        if (allVisibleParts.some(part => part.id === id)) previewPartIds.add(id);
+    }
+    for (const part of allVisibleParts) {
+        if (previewPartIds.size >= 8) break;
+        previewPartIds.add(part.id);
+    }
+    const visibleParts = allVisibleParts.filter(part => previewPartIds.has(part.id));
     const parts = visibleParts.map(part => {
         const landmarks = partLandmarkLocalPoints(part, project?.skeleton);
         const outline = fabricablePartOutlinePoints(part, landmarks);
@@ -192,8 +212,8 @@ const StarterCues = ({ items }: { items: readonly string[] }) => (
 export const GettingStartedDialog = ({ guidedLessons, hideForSession, onLesson, onSample, onPackage, onImport, onHideForSessionChange, onClose }: {
     guidedLessons: readonly GuidedLessonTile[];
     hideForSession: boolean;
-    onLesson: (lessonId: string) => void;
-    onSample: () => void;
+    onLesson: (lessonId: string, preparedProject?: ProjectState) => void;
+    onSample: (preparedProject?: ProjectState) => void;
     onPackage: (files: File[]) => void;
     onImport: (file: File) => void;
     onHideForSessionChange: (hidden: boolean) => void;
@@ -203,14 +223,44 @@ export const GettingStartedDialog = ({ guidedLessons, hideForSession, onLesson, 
     const packageInputRef = useRef<HTMLInputElement>(null);
     const importInputRef = useRef<HTMLInputElement>(null);
     const [showGuided, setShowGuided] = useState(false);
-    const previewProjects = useMemo(
-        () => showGuided
-            ? Object.fromEntries(guidedLessons.map(lesson => [lesson.id, lessonPreviewProject(lesson.id)]))
-            : {},
-        [guidedLessons, showGuided]
-    );
+    const [previewProjects, setPreviewProjects] = useState<Record<string, ProjectState | null>>({});
     const starterRigPreview = useMemo(starterRigPreviewProject, []);
     useEffect(() => { dialogRef.current?.focus(); }, []);
+    useEffect(() => {
+        if (!showGuided) return;
+        let cancelled = false;
+        let index = 0;
+        let idleHandle = 0;
+        let timeoutHandle = 0;
+        const host = window as typeof window & {
+            requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+            cancelIdleCallback?: (handle: number) => void;
+        };
+        const buildNext = () => {
+            if (cancelled || index >= guidedLessons.length) return;
+            const lesson = guidedLessons[index++];
+            const prepared = lessonPreviewProject(lesson.id);
+            startTransition(() => setPreviewProjects(current => ({
+                ...current,
+                [lesson.id]: prepared
+            })));
+            scheduleNext();
+        };
+        const scheduleNext = () => {
+            if (cancelled || index >= guidedLessons.length) return;
+            if (host.requestIdleCallback) {
+                idleHandle = host.requestIdleCallback(buildNext, { timeout: 1_500 });
+            } else {
+                timeoutHandle = window.setTimeout(buildNext, 160);
+            }
+        };
+        timeoutHandle = window.setTimeout(scheduleNext, 250);
+        return () => {
+            cancelled = true;
+            if (idleHandle) host.cancelIdleCallback?.(idleHandle);
+            if (timeoutHandle) window.clearTimeout(timeoutHandle);
+        };
+    }, [guidedLessons, showGuided]);
     const trapDialogFocus = (event: React.KeyboardEvent) => {
         if (event.key === 'Escape') {
             event.preventDefault();
@@ -247,7 +297,7 @@ export const GettingStartedDialog = ({ guidedLessons, hideForSession, onLesson, 
                 <button type="button" className="btn-secondary" onClick={showGuided ? () => setShowGuided(false) : onClose}>{showGuided ? 'Starters' : 'Close'}</button>
             </div>
             {showGuided ? <div className="guided-project-library" data-testid="guided-project-library">
-                {guidedLessons.map(lesson => <button key={lesson.id} type="button" className="template-tile primary guided-project-card" data-testid={`guided-project-card-${lesson.id}`} aria-label={`${lesson.actionLabel}: ${lesson.outcome}`} data-change-cue={lesson.changeCue} data-build-cue={lesson.buildCue} data-direct-translation={lesson.sensemaking?.directTranslation ?? ''} data-evidence-cue={lesson.sensemaking?.evidenceCue ?? ''} data-expected-answer={lesson.sensemaking?.expectedAnswer ?? ''} data-clip-slot={lesson.sensemaking?.clipSlot ?? ''} onClick={() => onLesson(lesson.id)}>
+                {guidedLessons.map(lesson => <button key={lesson.id} type="button" className="template-tile primary guided-project-card" data-testid={`guided-project-card-${lesson.id}`} aria-label={`${lesson.actionLabel}: ${lesson.outcome}`} data-change-cue={lesson.changeCue} data-build-cue={lesson.buildCue} data-direct-translation={lesson.sensemaking?.directTranslation ?? ''} data-evidence-cue={lesson.sensemaking?.evidenceCue ?? ''} data-expected-answer={lesson.sensemaking?.expectedAnswer ?? ''} data-clip-slot={lesson.sensemaking?.clipSlot ?? ''} onClick={() => onLesson(lesson.id, previewProjects[lesson.id] ?? undefined)}>
                     <GuidedLessonMotionPreview lessonId={lesson.id} project={previewProjects[lesson.id]} />
                     <strong>{lesson.outcome}</strong>
                     <span className="guided-card-cues" aria-hidden="true">
@@ -267,7 +317,7 @@ export const GettingStartedDialog = ({ guidedLessons, hideForSession, onLesson, 
                         <StarterCues items={starterCues.guide} />
                         <b><Sparkles size={16}/> Open</b>
                     </button>
-                    <button type="button" className="template-tile primary" data-testid="getting-started-card-humanoid" aria-label="Open starter rig" onClick={onSample}>
+                    <button type="button" className="template-tile primary" data-testid="getting-started-card-humanoid" aria-label="Open starter rig" onClick={() => onSample(starterRigPreview)}>
                         <span className="template-icon-slot"><Sparkles size={18}/></span>
                         <strong>Starter rig</strong>
                         <small>{starterCopy.humanoid}</small>

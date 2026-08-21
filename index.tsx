@@ -1,5 +1,4 @@
 import React from 'react';
-import { flushSync } from 'react-dom';
 import ReactDOM from 'react-dom/client';
 
 const rootElement = document.getElementById('root');
@@ -15,16 +14,13 @@ const releaseBootLoader = () => {
 
 void import('./App')
   .then(({ default: App }) => {
-    flushSync(() => {
-      root.render(
-        <React.StrictMode>
-          <App />
-        </React.StrictMode>,
-      );
-    });
-    // AI cache preparation is scheduled by the mounted shell, never used as
-    // the condition for releasing the editor.
-    releaseBootLoader();
+    root.render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>,
+    );
+    // Release only after React has had one frame to schedule the editor shell.
+    window.requestAnimationFrame(releaseBootLoader);
   })
   .catch((error: unknown) => {
     rootElement.textContent = 'MotionSmith could not open. Reload to try again.';

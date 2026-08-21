@@ -1,8 +1,11 @@
 import {
+  lazy,
   startTransition,
+  Suspense,
   useEffect,
   useMemo,
   useRef,
+  useState,
   type Dispatch,
   type SetStateAction,
 } from "react";
@@ -17,7 +20,7 @@ import type {
 import { type ClassroomLessonTemplate, uid } from "../../../utils/project";
 import { createSceneObjectImageWorkerClient } from "../../../runtime/import/sceneObjectImageWorkerClient";
 import { CanvasZoomToolbar } from "../../AppShell";
-import { ThreePuppetPreview } from "../../ThreePuppetPreview";
+import { DeferredThreePuppetPreview } from "../../DeferredThreePuppetPreview";
 import {
   EditorStageFrame,
   StageLeftSummary,
@@ -26,15 +29,38 @@ import {
   workflowPane,
 } from "../stageLayout";
 import { CharacterImportControls } from "./CharacterImportControls";
-import {
-  CharacterImportReviewBoundary,
-  CharacterImportStatusDock,
-} from "./CharacterImportOverlays";
 import { CharacterLessonOwnership } from "./CharacterLessonOwnership";
-import { CharacterSetupPanel } from "./CharacterSetupPanel";
-import { SceneObjectInspector } from "./SceneObjectInspector";
 import { ContextHelp } from "../../ui/ContextHelp";
 import type { CharacterImportProgressStore } from "../../../runtime/import/characterImportProgressStore";
+
+const loadCharacterImportOverlays = () => import("./CharacterImportOverlays");
+const CharacterImportReviewBoundary = lazy(async () => ({
+  default: (await loadCharacterImportOverlays()).CharacterImportReviewBoundary,
+}));
+const CharacterImportStatusDock = lazy(async () => ({
+  default: (await loadCharacterImportOverlays()).CharacterImportStatusDock,
+}));
+const CharacterSetupPanel = lazy(async () => ({
+  default: (await import("./CharacterSetupPanel")).CharacterSetupPanel,
+}));
+const SceneObjectInspector = lazy(async () => ({
+  default: (await import("./SceneObjectInspector")).SceneObjectInspector,
+}));
+
+const CharacterInspectorPlaceholder = ({
+  name,
+}: {
+  name: string;
+}) => (
+  <section
+    className="character-setup-panel"
+    data-testid="character-setup-panel"
+    aria-busy="true"
+  >
+    <div className="section-title">Part</div>
+    <div className="mt-1 text-sm font-extrabold text-slate-800">{name}</div>
+  </section>
+);
 
 export const CharacterSelection = ({
   project,
@@ -72,11 +98,30 @@ export const CharacterSelection = ({
   const packageInputRef = useRef<HTMLInputElement>(null);
   const objectInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const [toolsReady, setToolsReady] = useState(false);
   const objectImageClient = useMemo(
     () => createSceneObjectImageWorkerClient(),
     [],
   );
   useEffect(() => () => objectImageClient.dispose(), [objectImageClient]);
+  useEffect(() => {
+    const host = window as typeof window & {
+      requestIdleCallback?: (
+        callback: () => void,
+        options?: { timeout: number },
+      ) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    if (host.requestIdleCallback) {
+      const handle = host.requestIdleCallback(
+        () => setToolsReady(true),
+        { timeout: 900 },
+      );
+      return () => host.cancelIdleCallback?.(handle);
+    }
+    const handle = window.setTimeout(() => setToolsReady(true), 250);
+    return () => window.clearTimeout(handle);
+  }, []);
   const partPanelProject = project;
   const partPanelDisabled = false;
   const editableParts = partPanelProject.partOrder
@@ -287,7 +332,7 @@ export const CharacterSelection = ({
                   viewport={viewport}
                   setViewport={setViewport}
                 />
-                <ThreePuppetPreview
+                <DeferredThreePuppetPreview
                   project={project}
                   skeleton={project.skeleton}
                   mechanisms={[]}
@@ -305,18 +350,30 @@ export const CharacterSelection = ({
             ),
             inspector: inspectorPane(
               <div className="stage-pane-stack character-inspector">
-                {selectedSceneObject && !partPanelDisabled ? (
-                  <SceneObjectInspector
-                    object={selectedSceneObject}
-                    dispatch={dispatch}
-                  />
+                {toolsReady ? (
+                  <Suspense fallback={
+                    <CharacterInspectorPlaceholder
+                      name={selectedSceneObject?.name ?? selectedEditablePart?.name ?? "No part"}
+                    />
+                  }>
+                    {selectedSceneObject && !partPanelDisabled ? (
+                      <SceneObjectInspector
+                        object={selectedSceneObject}
+                        dispatch={dispatch}
+                      />
+                    ) : (
+                      <CharacterSetupPanel
+                        selectedEditablePart={selectedEditablePart}
+                        partPanelProject={partPanelProject}
+                        partPanelDisabled={partPanelDisabled}
+                        project={project}
+                        dispatch={dispatch}
+                      />
+                    )}
+                  </Suspense>
                 ) : (
-                  <CharacterSetupPanel
-                    selectedEditablePart={selectedEditablePart}
-                    partPanelProject={partPanelProject}
-                    partPanelDisabled={partPanelDisabled}
-                    project={project}
-                    dispatch={dispatch}
+                  <CharacterInspectorPlaceholder
+                    name={selectedSceneObject?.name ?? selectedEditablePart?.name ?? "No part"}
                   />
                 )}
               </div>,
@@ -324,15 +381,19 @@ export const CharacterSelection = ({
           }}
         />
       </section>
-      <CharacterImportStatusDock
-        project={project}
-        progressStore={characterImportProgress}
-      />
-      <CharacterImportReviewBoundary
-        progressStore={characterImportProgress}
-        onAccept={onAccept}
-        onDiscard={onDiscard}
-      />
+      {toolsReady && (
+        <Suspense fallback={null}>
+          <CharacterImportStatusDock
+            project={project}
+            progressStore={characterImportProgress}
+          />
+          <CharacterImportReviewBoundary
+            progressStore={characterImportProgress}
+            onAccept={onAccept}
+            onDiscard={onDiscard}
+          />
+        </Suspense>
+      )}
     </>
   );
 };

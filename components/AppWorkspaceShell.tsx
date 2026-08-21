@@ -1,4 +1,10 @@
-import type { ReactNode, RefObject } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { Download, Upload } from "lucide-react";
 
 import { AppStageRouter, type AppStageRouterProps } from "./AppStageRouter";
@@ -12,11 +18,15 @@ import {
   WorkflowStatusStrip,
   type GuidedLessonTile,
 } from "./AppShell";
-import { TrackingModal } from "./TrackingModal";
 import motionSmithIconUrl from "../src-tauri/icons/icon.png?url";
 import type { AppStage, Point, ProjectState } from "../types";
 import type { AppCommandHandlerMap } from "../utils/appCommands";
 import type { WorkflowStatus } from "../utils/workflowStatus";
+
+const loadTrackingModal = () => import("./TrackingModal");
+const TrackingModal = lazy(async () => ({
+  default: (await loadTrackingModal()).TrackingModal,
+}));
 
 export type AppWorkspaceShellProps = {
   themeClass: string;
@@ -34,8 +44,8 @@ export type AppWorkspaceShellProps = {
   showGettingStarted: boolean;
   hideGettingStartedThisSession: boolean;
   guidedLessons: readonly GuidedLessonTile[];
-  onLesson: (lessonId: string) => void;
-  onSample: () => void;
+  onLesson: (lessonId: string, preparedProject?: ProjectState) => void;
+  onSample: (preparedProject?: ProjectState) => void;
   onPackage: (files: FileList | File[]) => void | Promise<void>;
   onImport: (file: File) => void | Promise<void>;
   onHideGettingStartedThisSessionChange: (hidden: boolean) => void;
@@ -89,6 +99,26 @@ export const AppWorkspaceShell = ({
 }: AppWorkspaceShellProps) => {
   const stageMeta = STAGES.find((item) => item.id === stage);
   const playerDock: ReactNode = stageRouterProps.playerDock;
+
+  useEffect(() => {
+    if (stage !== "path" || showTracking) return;
+    const host = window as typeof window & {
+      requestIdleCallback?: (
+        callback: () => void,
+        options?: { timeout: number },
+      ) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    if (host.requestIdleCallback) {
+      const handle = host.requestIdleCallback(
+        () => void loadTrackingModal(),
+        { timeout: 2_000 },
+      );
+      return () => host.cancelIdleCallback?.(handle);
+    }
+    const handle = window.setTimeout(() => void loadTrackingModal(), 500);
+    return () => window.clearTimeout(handle);
+  }, [showTracking, stage]);
 
   return (
     <main
@@ -169,7 +199,11 @@ export const AppWorkspaceShell = ({
             }
           />
 
-          <AppStageRouter {...stageRouterProps} playerDock={playerDock} />
+          <AppStageRouter
+            {...stageRouterProps}
+            playerDock={playerDock}
+            suspendStageContent={showGettingStarted}
+          />
           <WorkflowStatusStrip {...workflowStatus} />
           <footer className="status-bar" data-testid="status-bar">
             <span>{commandStatus}</span>
@@ -190,12 +224,16 @@ export const AppWorkspaceShell = ({
       )}
       {showShortcuts && <ShortcutHelpDialog onClose={onCloseShortcuts} />}
       {showAbout && <AboutDialog onClose={onCloseAbout} />}
-      <TrackingModal
-        isOpen={showTracking}
-        onClose={onCloseTracking}
-        onTransfer={onTransferTracking}
-        performancePreset={project.settings.performancePreset}
-      />
+      {showTracking && (
+        <Suspense fallback={null}>
+          <TrackingModal
+            isOpen
+            onClose={onCloseTracking}
+            onTransfer={onTransferTracking}
+            performancePreset={project.settings.performancePreset}
+          />
+        </Suspense>
+      )}
     </main>
   );
 };

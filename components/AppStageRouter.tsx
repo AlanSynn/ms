@@ -1,12 +1,11 @@
-import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
-
-import { AssemblyGuide } from "./stages/assembly/AssemblyGuide";
-import { BlueprintExport } from "./stages/blueprint/BlueprintExport";
-import { CharacterSelection } from "./stages/character/CharacterSelection";
-import { MechanismFoundry } from "./stages/foundry/MechanismFoundry";
-import { MechanismDesign } from "./stages/mechanism/MechanismDesign";
-import { Options } from "./stages/options/Options";
-import { PathEditor } from "./stages/path/PathEditor";
+import {
+  Suspense,
+  useEffect,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import type {
   AppStage,
   BodyPartLayer,
@@ -22,6 +21,18 @@ import type {
 import type { ClassroomLessonTemplate } from "../utils/project";
 import type { PlaybackClock } from "../runtime/playback/externalPlaybackClock";
 import type { CharacterImportProgressStore } from "../runtime/import/characterImportProgressStore";
+import {
+  loadCharacterStage,
+  preloadNextClassroomStage,
+  resolveAssemblyStage,
+  resolveBlueprintStage,
+  resolveCharacterStage,
+  resolveDesignStage,
+  resolveFoundryStage,
+  resolveOptionsStage,
+  resolvePathStage,
+} from "./classroomStageModules";
+import { preloadThreeFoundryPreview } from "./stages/foundry/DeferredThreeFoundryPreview";
 
 export type AppStageRouterProps = {
   editorStage: AppStage;
@@ -84,26 +95,49 @@ export type AppStageRouterProps = {
   assemblyPlaying: boolean;
   setAssemblyPlaying: Dispatch<SetStateAction<boolean>>;
   setAssemblyStepCount: Dispatch<SetStateAction<number>>;
+  suspendStageContent?: boolean;
 };
 
-const useDeferredStageMount = (editorStage: AppStage) => {
-  const [mountedStage, setMountedStage] = useState(editorStage);
+const useDeferredStageMount = (
+  editorStage: AppStage,
+  suspendStageContent: boolean,
+) => {
+  const [mountedStage, setMountedStage] = useState<AppStage | null>(() =>
+    suspendStageContent ? null : editorStage,
+  );
   useEffect(() => {
+    if (suspendStageContent) {
+      if (mountedStage !== null) setMountedStage(null);
+      return;
+    }
     if (mountedStage === editorStage) return;
-    let firstFrame = 0;
     let secondFrame = 0;
-    firstFrame = window.requestAnimationFrame(() => {
+    const firstFrame = window.requestAnimationFrame(() => {
       secondFrame = window.requestAnimationFrame(() => {
         setMountedStage(editorStage);
       });
     });
     return () => {
       window.cancelAnimationFrame(firstFrame);
-      window.cancelAnimationFrame(secondFrame);
+      if (secondFrame) window.cancelAnimationFrame(secondFrame);
     };
-  }, [editorStage, mountedStage]);
-  return mountedStage === editorStage ? editorStage : null;
+  }, [editorStage, mountedStage, suspendStageContent]);
+  return !suspendStageContent && mountedStage === editorStage
+    ? editorStage
+    : null;
 };
+
+const StageTransitionFrame = () => (
+  <div
+    className="editor-stage-frame stage-transition-frame"
+    data-testid="stage-transition-frame"
+    aria-busy="true"
+  >
+    <aside className="stage-left-pane workspace" />
+    <section className="stage-canvas-pane canvas-workspace" />
+    <aside className="stage-right-inspector workspace" />
+  </div>
+);
 
 export const AppStageRouter = ({
   editorStage,
@@ -157,23 +191,61 @@ export const AppStageRouter = ({
   assemblyPlaying,
   setAssemblyPlaying,
   setAssemblyStepCount,
+  suspendStageContent = false,
 }: AppStageRouterProps) => {
-  const mountedStage = useDeferredStageMount(editorStage);
+  const AssemblyGuide = resolveAssemblyStage();
+  const BlueprintExport = resolveBlueprintStage();
+  const CharacterSelection = resolveCharacterStage();
+  const MechanismFoundry = resolveFoundryStage();
+  const MechanismDesign = resolveDesignStage();
+  const Options = resolveOptionsStage();
+  const PathEditor = resolvePathStage();
+  const mountedStage = useDeferredStageMount(
+    editorStage,
+    suspendStageContent,
+  );
+
+  useEffect(() => {
+    if (!suspendStageContent || editorStage !== "character") return;
+    // Warm only the small Character adapter. Loading every stage or the Three
+    // renderer here competes with the student's first click on slow CPUs.
+    void loadCharacterStage().catch(() => undefined);
+  }, [editorStage, suspendStageContent]);
+
+  useEffect(() => {
+    if (suspendStageContent || mountedStage === null) return;
+    // Warm only the likely next adapter once the current stage is idle. This
+    // avoids an all-stage parse burst competing with direct manipulation and
+    // keeps worker, media, physics, and export chunks strictly on demand.
+    const host = window as typeof window & {
+      requestIdleCallback?: (
+        callback: () => void,
+        options?: { timeout: number },
+      ) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    const warmNextStage = () => {
+      void preloadNextClassroomStage(mountedStage).catch(() => undefined);
+      if (mountedStage === "character" || mountedStage === "path") {
+        void preloadThreeFoundryPreview().catch(() => undefined);
+      }
+    };
+    if (host.requestIdleCallback) {
+      const handle = host.requestIdleCallback(warmNextStage, { timeout: 1_000 });
+      return () => host.cancelIdleCallback?.(handle);
+    }
+    const handle = window.setTimeout(warmNextStage, 250);
+    return () => window.clearTimeout(handle);
+  }, [mountedStage, suspendStageContent]);
+
   return <div
     className="stage-body editor-workbench relative min-h-0 flex-1 overflow-hidden p-7"
     data-testid="shared-workbench"
   >
     {mountedStage === null && (
-      <div
-        className="editor-stage-frame stage-transition-frame"
-        data-testid="stage-transition-frame"
-        aria-busy="true"
-      >
-        <aside className="stage-left-pane workspace" />
-        <section className="stage-canvas-pane canvas-workspace" />
-        <aside className="stage-right-inspector workspace" />
-      </div>
+      <StageTransitionFrame />
     )}
+    <Suspense fallback={mountedStage === null ? null : <StageTransitionFrame />}>
     {mountedStage === "character" && (
       <CharacterSelection
         project={project}
@@ -273,6 +345,7 @@ export const AppStageRouter = ({
     {mountedStage === "options" && (
       <Options project={project} dispatch={dispatch} goStage={goStage} />
     )}
+    </Suspense>
     {playerDock && (
       <div
         className="stage-player-row"
