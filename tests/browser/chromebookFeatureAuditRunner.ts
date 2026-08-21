@@ -69,7 +69,18 @@ export const runChromebookFeatureAudit = async ({
   workload = "production-feature",
   audit,
 }: RunChromebookFeatureAuditOptions) => {
-  const context = await browser.newContext({
+  const baseURL = testInfo.project.use.baseURL;
+  if (typeof baseURL !== "string") {
+    throw new Error("Chromebook feature audit requires a preview base URL");
+  }
+  const auditBrowser = await browser.browserType().launch({
+    channel: "chrome",
+    headless: true,
+    args: ["--enable-precise-memory-info"],
+  });
+  const context = await auditBrowser.newContext({
+    baseURL,
+    acceptDownloads: true,
     viewport: CHROMEBOOK_AUDIT_ENVIRONMENT.viewport,
     screen: CHROMEBOOK_AUDIT_ENVIRONMENT.viewport,
     deviceScaleFactor: CHROMEBOOK_AUDIT_ENVIRONMENT.deviceScaleFactor,
@@ -118,7 +129,7 @@ export const runChromebookFeatureAudit = async ({
         workload,
         environment: {
           browser: "chrome",
-          browserVersion: browser.version(),
+          browserVersion: auditBrowser.version(),
           userAgent: runtimeEnvironment.userAgent,
           viewport: CHROMEBOOK_AUDIT_ENVIRONMENT.viewport,
           deviceScaleFactor: runtimeEnvironment.deviceScaleFactor,
@@ -148,5 +159,6 @@ export const runChromebookFeatureAudit = async ({
     }
   } finally {
     await context.close().catch(() => undefined);
+    await auditBrowser.close().catch(() => undefined);
   }
 };

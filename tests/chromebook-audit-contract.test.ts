@@ -313,6 +313,7 @@ assert(
   "short feature audits prepare the fixture before throttling the measured action",
 );
 assert(featureRunner.includes('throttlingScope: "feature-action"'), "feature reports disclose their throttling scope");
+assert(featureRunner.includes('browser.browserType().launch({') && featureRunner.includes('channel: "chrome"') && featureRunner.includes('await auditBrowser.close()'), "each short feature audit owns and closes an isolated branded-Chrome process");
 const harness = read("tests/browser/chromebookAuditHarness.ts");
 assert(harness.includes("Emulation.setCPUThrottlingRate"));
 assert(harness.includes("Network.emulateNetworkConditions"));
