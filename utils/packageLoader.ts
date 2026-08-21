@@ -100,15 +100,9 @@ type CharacterPackageAssetFile = Pick<File, 'name' | 'size'> & {
     webkitRelativePath?: string;
 };
 
-/**
- * Count image bytes as they will be repeated in ProjectState, not only once per
- * selected file. A shared image referenced by several parts is serialized once
- * for every texture/mask property, so unique-file totals alone are not a safe
- * persistence bound.
- */
-export const validateCharacterPackageAssetReferences = <
+export const characterPackageReferencedAssetFiles = <
     T extends CharacterPackageAssetFile,
->(partsInfo: unknown, assetFiles: readonly T[]) => {
+>(partsInfo: unknown, assetFiles: readonly T[]): T[] => {
     const info = asDict(partsInfo);
     const rawParts = asDict(asDict(info.character).parts ?? info.parts);
     const partEntries = Object.entries(rawParts);
@@ -125,15 +119,29 @@ export const validateCharacterPackageAssetReferences = <
         if (typeof path !== 'string' || !path) return undefined;
         return assets.get(normPath(path)) ?? assets.get(basename(path));
     };
-    let referencedBytes = 0;
-    for (const [id, value] of partEntries) {
+    return partEntries.flatMap(([id, value]) => {
         const part = asDict(value);
         const explicitTexture = part.texture_path ?? part.image_path;
         const texture = referencedFile(
             typeof explicitTexture === 'string' ? explicitTexture : `${id}.png`,
         );
         const mask = referencedFile(part.mask_path);
-        referencedBytes += (texture?.size ?? 0) + (mask?.size ?? 0);
+        return [texture, mask].filter((file): file is T => Boolean(file));
+    });
+};
+
+/**
+ * Count image bytes as they will be repeated in ProjectState, not only once per
+ * selected file. A shared image referenced by several parts is serialized once
+ * for every texture/mask property, so unique-file totals alone are not a safe
+ * persistence bound.
+ */
+export const validateCharacterPackageAssetReferences = <
+    T extends CharacterPackageAssetFile,
+>(partsInfo: unknown, assetFiles: readonly T[]) => {
+    let referencedBytes = 0;
+    for (const file of characterPackageReferencedAssetFiles(partsInfo, assetFiles)) {
+        referencedBytes += file.size;
         if (referencedBytes > PROJECT_IMPORT_LIMITS.packageTotalAssetBytes) {
             throw new Error('Character package image references exceed the 3 MB classroom limit.');
         }

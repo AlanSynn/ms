@@ -1,13 +1,21 @@
 import type { ProjectState } from "../../types";
-import { loadCharacterPackage } from "../../utils/packageLoader";
+import {
+  characterPackageReferencedAssetFiles,
+  loadCharacterPackage,
+} from "../../utils/packageLoader";
 import { loadProjectSnapshot } from "../../utils/project";
 import {
   validateProjectImportFile,
+  validateCharacterPackageFiles,
   validateProjectImportShape,
 } from "./projectImportPolicy";
 import { autosaveByteLength } from "../../utils/autosaveFingerprint";
 import { AUTOSAVE_SNAPSHOT_MAX_BYTES } from "../../utils/projectAutosaveFormat";
 import { serializeProjectCompact } from "../../utils/projectSerialization";
+import {
+  validateCharacterPackageRasterFiles,
+  validateProjectRasterSources,
+} from "./projectRasterImportPolicy";
 
 export type ProjectImportInput =
   | { kind: "project"; file: File }
@@ -43,7 +51,22 @@ export const validateCharacterPackageProjectPersistence = (
 
 export const runProjectImportJob = async (input: ProjectImportInput) => {
   if (input.kind === "character-package") {
+    const { assets } = validateCharacterPackageFiles(input.files);
+    const partsFile = input.files.find((file) =>
+      file.name.split(/[\\/]/).pop() === "parts_info.json"
+      || (file as File & { webkitRelativePath?: string }).webkitRelativePath
+        ?.replaceAll("\\", "/")
+        .endsWith("/parts_info.json")
+    );
+    if (!partsFile) {
+      throw new Error("Missing parts_info.json in selected package files");
+    }
+    const partsInfo = JSON.parse(await partsFile.text());
+    await validateCharacterPackageRasterFiles(
+      characterPackageReferencedAssetFiles(partsInfo, assets),
+    );
     const project = await loadCharacterPackage(input.files);
+    validateProjectRasterSources(project);
     validateCharacterPackageProjectPersistence(project);
     return {
       project,
@@ -53,6 +76,7 @@ export const runProjectImportJob = async (input: ProjectImportInput) => {
   validateProjectImportFile(input.file);
   const raw = JSON.parse(await input.file.text());
   validateProjectImportShape(raw);
+  validateProjectRasterSources(raw);
   return {
     project: loadProjectSnapshot(raw),
     sourceName: input.file.name,
