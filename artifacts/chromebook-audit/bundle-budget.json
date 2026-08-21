@@ -1,36 +1,36 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-21T13:41:22.203Z",
+  "generatedAt": "2026-08-21T14:45:08.757Z",
   "basis": "static compressed production shell",
   "imageRecognitionRuntime": "absent",
   "entryJs": {
     "files": [
-      "assets/index-DWVzOvq8.js",
-      "assets/App-CWRYfzDc.js"
+      "assets/index-x3HeaC9U.js",
+      "assets/App-C4sZXU_X.js"
     ],
-    "gzipBytes": 81555
+    "gzipBytes": 81544
   },
   "coreJs": {
     "basis": "entry plus recursive emitted static-import closure",
     "files": [
-      "assets/App-CWRYfzDc.js",
-      "assets/AppShell-CVpM4oMm.js",
+      "assets/App-C4sZXU_X.js",
+      "assets/AppShell-BBuaZnl3.js",
       "assets/classroomContent-bGvikOLx.js",
-      "assets/createLucideIcon-B0mVokSQ.js",
+      "assets/createLucideIcon-CtltyBLo.js",
       "assets/fabrication-Ce-i4zDG.js",
-      "assets/index-DWVzOvq8.js",
-      "assets/mechanismFitWorkerClient-9kRtLPGA.js",
-      "assets/mechanismRecommendations-8T2dco3Z.js",
+      "assets/index-x3HeaC9U.js",
+      "assets/mechanismFitWorkerClient-D77L5wY7.js",
+      "assets/mechanismRecommendations-CIS6QGr6.js",
       "assets/motion-DUyEu3NF.js",
       "assets/performanceAudit-DvFcPLLy.js",
       "assets/project-CJLYokjz.js",
-      "assets/sparkles-BwlDfMwk.js",
-      "assets/stageLayout-BKHOfJfh.js",
-      "assets/upload-C70t4-8F.js",
-      "assets/useWorkspacePlaybackLoop-Dk4ZOdXE.js",
+      "assets/sparkles-CVGGkVV5.js",
+      "assets/stageLayout-Ckuh8APd.js",
+      "assets/upload-CyIPiRdk.js",
+      "assets/useWorkspacePlaybackLoop-BypO7u0_.js",
       "assets/viewport-D1Xm5WR1.js"
     ],
-    "gzipBytes": 147105,
+    "gzipBytes": 147074,
     "limitBytes": 450000,
     "passed": true
   },
@@ -38,39 +38,39 @@
     "assets": [
       {
         "file": "index.html",
-        "compressedBytes": 15137
+        "compressedBytes": 15129
       },
       {
-        "file": "assets/App-CWRYfzDc.js",
-        "compressedBytes": 19886
+        "file": "assets/App-C4sZXU_X.js",
+        "compressedBytes": 19879
       },
       {
-        "file": "assets/AppShell-CVpM4oMm.js",
-        "compressedBytes": 7647
+        "file": "assets/AppShell-BBuaZnl3.js",
+        "compressedBytes": 7643
       },
       {
         "file": "assets/classroomContent-bGvikOLx.js",
         "compressedBytes": 14224
       },
       {
-        "file": "assets/createLucideIcon-B0mVokSQ.js",
-        "compressedBytes": 791
+        "file": "assets/createLucideIcon-CtltyBLo.js",
+        "compressedBytes": 787
       },
       {
         "file": "assets/fabrication-Ce-i4zDG.js",
         "compressedBytes": 9815
       },
       {
-        "file": "assets/index-DWVzOvq8.js",
-        "compressedBytes": 61669
+        "file": "assets/index-x3HeaC9U.js",
+        "compressedBytes": 61665
       },
       {
-        "file": "assets/mechanismFitWorkerClient-9kRtLPGA.js",
-        "compressedBytes": 1244
+        "file": "assets/mechanismFitWorkerClient-D77L5wY7.js",
+        "compressedBytes": 1242
       },
       {
-        "file": "assets/mechanismRecommendations-8T2dco3Z.js",
-        "compressedBytes": 3194
+        "file": "assets/mechanismRecommendations-CIS6QGr6.js",
+        "compressedBytes": 3192
       },
       {
         "file": "assets/motion-DUyEu3NF.js",
@@ -85,19 +85,19 @@
         "compressedBytes": 19083
       },
       {
-        "file": "assets/sparkles-BwlDfMwk.js",
-        "compressedBytes": 287
+        "file": "assets/sparkles-CVGGkVV5.js",
+        "compressedBytes": 284
       },
       {
-        "file": "assets/stageLayout-BKHOfJfh.js",
-        "compressedBytes": 2276
+        "file": "assets/stageLayout-Ckuh8APd.js",
+        "compressedBytes": 2274
       },
       {
-        "file": "assets/upload-C70t4-8F.js",
-        "compressedBytes": 196
+        "file": "assets/upload-CyIPiRdk.js",
+        "compressedBytes": 193
       },
       {
-        "file": "assets/useWorkspacePlaybackLoop-Dk4ZOdXE.js",
+        "file": "assets/useWorkspacePlaybackLoop-BypO7u0_.js",
         "compressedBytes": 569
       },
       {
@@ -113,7 +113,7 @@
         "compressedBytes": 32183
       }
     ],
-    "compressedBytes": 208169,
+    "compressedBytes": 208130,
     "limitBytes": 1500000,
     "passed": true
   }
