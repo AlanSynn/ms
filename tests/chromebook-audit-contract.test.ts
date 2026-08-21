@@ -268,11 +268,19 @@ for (const stage of ["path", "design", "assembly"]) {
   assert(simulationSpec.includes(`\"${stage}\"`), `simulation audit measures ${stage} playback`);
 }
 assert(simulationSpec.includes("collectPlaybackAudit") && simulationSpec.includes("forbiddenRuntimeRequests"));
-for (const interaction of ["pathGestures", "foundryGestures", "designControls"]) {
+for (const interaction of [
+  "pathGestures",
+  "foundryGestures",
+  "designControls",
+  "characterControls",
+  "optionsHistory",
+]) {
   assert(interactionSpec.includes(`\"${interaction}\"`), `interaction audit measures ${interaction}`);
 }
-assert(interactionSpec.includes("measurePointerEventToNextPaint") && interactionSpec.includes("measureRangeUpdate"));
-assert(interactionAudit.includes("webglResourceGrowthBounded") && interactionAudit.includes("puppetTopologyP95"));
+assert(interactionSpec.includes("measurePointerEventToNextPaint") && interactionSpec.includes("measureRangeUpdate") && interactionSpec.includes("measureSelectUpdate"));
+assert(interactionSpec.includes('"part-add"') && interactionSpec.includes('"part-remove"') && interactionSpec.includes('"joint-commit"'), "Character interaction audit covers topology and joint manipulation");
+assert(interactionSpec.includes('"performance-fast"') && interactionSpec.includes('"undo"') && interactionSpec.includes('"redo"'), "Options interaction audit covers render policy and project history");
+assert(interactionAudit.includes("webglResourceGrowthBounded") && interactionAudit.includes("webglResourcePlateau") && interactionAudit.includes("puppetTopologyP95"));
 for (const importFeature of [
   "projectImport",
   "characterPackageImport",

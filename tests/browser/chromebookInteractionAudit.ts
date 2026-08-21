@@ -22,7 +22,9 @@ import {
 export type InteractionName =
   | "pathGestures"
   | "foundryGestures"
-  | "designControls";
+  | "designControls"
+  | "characterControls"
+  | "optionsHistory";
 
 export type VisualProbe = {
   reactCommits: number;
@@ -42,6 +44,8 @@ export type InteractionAudit = FeatureAudit & {
     geometryCacheDelta: number;
     materialCacheDelta: number;
     reactCommitDelta: number;
+    plateauLiveResourceDelta?: number;
+    plateauLiveResourceDeltas?: number[];
     puppetTopologyLatencyMs: ReturnType<typeof percentiles>;
   };
 };
@@ -106,6 +110,7 @@ export const buildInteractionAudit = (
   visualBaseline: VisualProbe,
   visualFinal: VisualProbe,
   limits: InteractionVisualLimits,
+  plateauSamples: Array<{ baseline: VisualProbe; final: VisualProbe }> = [],
 ): InteractionAudit => {
   const base = buildChromebookFeatureAudit(name, actions, baseline, final, {
     minimumWorkerCreations: 0,
@@ -113,6 +118,9 @@ export const buildInteractionAudit = (
   });
   const puppetTopologyLatencyMs = percentiles(
     actions.flatMap((action) => action.puppetTopologyDurationsMs),
+  );
+  const plateauLiveResourceDeltas = plateauSamples.map(
+    (sample) => liveResources(sample.final) - liveResources(sample.baseline),
   );
   const visual = {
     baseline: visualBaseline,
@@ -127,6 +135,12 @@ export const buildInteractionAudit = (
     materialCacheDelta:
       visualFinal.foundryMaterialCacheSize - visualBaseline.foundryMaterialCacheSize,
     reactCommitDelta: visualFinal.reactCommits - visualBaseline.reactCommits,
+    plateauLiveResourceDelta: plateauLiveResourceDeltas.length
+      ? Math.max(...plateauLiveResourceDeltas)
+      : undefined,
+    plateauLiveResourceDeltas: plateauLiveResourceDeltas.length
+      ? plateauLiveResourceDeltas
+      : undefined,
     puppetTopologyLatencyMs,
   };
   const visualChecks: Record<string, AcceptanceCheck> = {
@@ -160,6 +174,13 @@ export const buildInteractionAudit = (
       observed: puppetTopologyLatencyMs.p95,
       limit: 50,
     },
+    ...(plateauLiveResourceDeltas.length ? {
+      webglResourcePlateau: {
+        passed: (visual.plateauLiveResourceDelta ?? 0) <= 0,
+        observed: visual.plateauLiveResourceDelta ?? 0,
+        limit: 0,
+      },
+    } : {}),
   };
   const acceptance = { ...base.acceptance, ...visualChecks };
   const passed = Object.entries(acceptance)
@@ -237,6 +258,27 @@ export const measureRangeUpdate = (
   )?.set;
   const startedAt = performance.now();
   setter?.call(input, String(next));
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  return new Promise<FeatureNextPaintTiming>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve({
+      startedAt,
+      nextPaintMs: performance.now() - startedAt,
+    })));
+  });
+}, value);
+
+export const measureSelectUpdate = (
+  select: Locator,
+  value: string,
+): Promise<FeatureNextPaintTiming> => select.evaluate((element, next) => {
+  const input = element as HTMLSelectElement;
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLSelectElement.prototype,
+    "value",
+  )?.set;
+  const startedAt = performance.now();
+  setter?.call(input, next);
   input.dispatchEvent(new Event("input", { bubbles: true }));
   input.dispatchEvent(new Event("change", { bubbles: true }));
   return new Promise<FeatureNextPaintTiming>((resolve) => {

@@ -12,6 +12,7 @@ import {
   finishAction,
   measurePointerEventToNextPaint,
   measureRangeUpdate,
+  measureSelectUpdate,
   openStage,
   openWavingArm,
   readVisualProbe,
@@ -19,6 +20,14 @@ import {
 } from "./chromebookInteractionAudit";
 
 const ENABLED = process.env.CHROMEBOOK_AUDIT === "1";
+
+const settleTopologyFrames = (page: Page) => page.evaluate(
+  () => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    ));
+  }),
+);
 
 const auditPathGestures = async (
   page: Page,
@@ -220,6 +229,182 @@ const auditDesignControls = async (
   );
 };
 
+const auditCharacterControls = async (
+  page: Page,
+  client: CDPSession,
+): Promise<InteractionAudit> => {
+  const baseline = await collectStableFeatureProbe(page, client);
+  const visualBaseline = await readVisualProbe(page);
+  const actions: FeatureActionAudit[] = [];
+  const part = page.getByTestId("character-part-item-right_arm_lower");
+  actions.push(await finishAction(page, "part-select", 1, () =>
+    measureClickToNextPaint(part),
+    () => expect(part).toHaveAttribute("aria-pressed", "true"),
+  ));
+
+  const panel = page.getByTestId("character-setup-panel");
+  const partX = panel.getByLabel("X number").first();
+  const nextPartX = Number(await partX.inputValue()) + 4;
+  actions.push(await finishAction(page, "part-position", 2, () =>
+    measureRangeUpdate(partX, nextPartX),
+    () => expect(partX).toHaveValue(String(nextPartX)),
+  ));
+
+  const summary = page.getByTestId("character-workflow-summary");
+  const addLayer = panel.getByRole("button", { name: "Add layer" });
+  actions.push(await finishAction(page, "part-add", 3, () =>
+    measureClickToNextPaint(addLayer),
+    () => expect(summary).toContainText("15 parts"),
+  ));
+  const removeLayer = panel.getByRole("button", { name: "Remove layer" });
+  actions.push(await finishAction(page, "part-remove", 4, () =>
+    measureClickToNextPaint(removeLayer),
+    () => expect(summary).toContainText("14 parts"),
+  ));
+  await settleTopologyFrames(page);
+  const warmedLayerVisual = await readVisualProbe(page);
+  actions.push(await finishAction(page, "part-add-repeat", 5, () =>
+    measureClickToNextPaint(addLayer),
+    () => expect(summary).toContainText("15 parts"),
+  ));
+  const repeatedRemove = panel.getByRole("button", { name: "Remove layer" });
+  actions.push(await finishAction(page, "part-remove-repeat", 6, () =>
+    measureClickToNextPaint(repeatedRemove),
+    () => expect(summary).toContainText("14 parts"),
+  ));
+  await settleTopologyFrames(page);
+  const repeatedLayerVisual = await readVisualProbe(page);
+
+  const jointX = panel.getByLabel("Joint X slider");
+  const currentJointX = Number(await jointX.inputValue());
+  const nextJointX = currentJointX + 2;
+  actions.push(await finishAction(page, "joint-down", 7, () =>
+    measurePointerEventToNextPaint(page, "pointerdown", () =>
+      jointX.dispatchEvent("pointerdown", { pointerId: 1, pointerType: "mouse" })),
+  ));
+  actions.push(await finishAction(page, "joint-draft", 7, () =>
+    measureRangeUpdate(jointX, nextJointX),
+    () => expect(jointX).toHaveValue(String(nextJointX)),
+  ));
+  actions.push(await finishAction(page, "joint-commit", 7, () =>
+    measurePointerEventToNextPaint(page, "pointerup", () =>
+      jointX.dispatchEvent("pointerup", { pointerId: 1, pointerType: "mouse" })),
+  ));
+  await settleTopologyFrames(page);
+  const warmedJointVisual = await readVisualProbe(page);
+  const repeatedJointX = nextJointX + 2;
+  actions.push(await finishAction(page, "joint-down-repeat", 8, () =>
+    measurePointerEventToNextPaint(page, "pointerdown", () =>
+      jointX.dispatchEvent("pointerdown", { pointerId: 2, pointerType: "mouse" })),
+  ));
+  actions.push(await finishAction(page, "joint-draft-repeat", 8, () =>
+    measureRangeUpdate(jointX, repeatedJointX),
+    () => expect(jointX).toHaveValue(String(repeatedJointX)),
+  ));
+  actions.push(await finishAction(page, "joint-commit-repeat", 8, () =>
+    measurePointerEventToNextPaint(page, "pointerup", () =>
+      jointX.dispatchEvent("pointerup", { pointerId: 2, pointerType: "mouse" })),
+  ));
+  const foldLeft = panel.getByRole("button", { name: "Fold left" });
+  actions.push(await finishAction(page, "joint-fold", 9, () =>
+    measureClickToNextPaint(foldLeft),
+    () => expect(foldLeft).toHaveClass(/active/),
+  ));
+
+  const final = await finalProbes(page, client, baseline);
+  return buildInteractionAudit(
+    "characterControls",
+    actions,
+    baseline,
+    final.feature,
+    visualBaseline,
+    final.visual,
+    {
+      maxTopologyBuilds: 0,
+      maxLiveResourceGrowth: 8,
+      maxGeometryCacheGrowth: 0,
+      maxMaterialCacheGrowth: 0,
+    },
+    [
+      { baseline: warmedLayerVisual, final: repeatedLayerVisual },
+      { baseline: warmedJointVisual, final: final.visual },
+    ],
+  );
+};
+
+const auditOptionsHistory = async (
+  page: Page,
+  client: CDPSession,
+): Promise<InteractionAudit> => {
+  const baseline = await collectStableFeatureProbe(page, client);
+  const visualBaseline = await readVisualProbe(page);
+  const actions: FeatureActionAudit[] = [];
+
+  const performancePreset = page.getByLabel("Performance preset");
+  actions.push(await finishAction(page, "performance-fast", 1, () =>
+    measureSelectUpdate(performancePreset, "fast"),
+    () => expect(performancePreset).toHaveValue("fast"),
+  ));
+
+  const speed = page.getByLabel("Animation speed slider");
+  const nextSpeed = Math.min(5, Number(await speed.inputValue()) + 0.2);
+  actions.push(await finishAction(page, "speed-down", 2, () =>
+    measurePointerEventToNextPaint(page, "pointerdown", () =>
+      speed.dispatchEvent("pointerdown", { pointerId: 1, pointerType: "mouse" })),
+  ));
+  actions.push(await finishAction(page, "speed-draft", 2, () =>
+    measureRangeUpdate(speed, nextSpeed),
+    () => expect(speed).toHaveValue(String(nextSpeed)),
+  ));
+  actions.push(await finishAction(page, "speed-commit", 2, () =>
+    measurePointerEventToNextPaint(page, "pointerup", () =>
+      speed.dispatchEvent("pointerup", { pointerId: 1, pointerType: "mouse" })),
+  ));
+
+  const toolbar = page.getByLabel("Show toolbar");
+  actions.push(await finishAction(page, "toolbar-hide", 3, () =>
+    measureClickToNextPaint(toolbar),
+    () => expect(page.getByTestId("quick-toolbar")).toHaveCount(0),
+  ));
+
+  const commandBar = page.getByTestId("top-command-bar");
+  await commandBar.getByText("Edit", { exact: true }).click();
+  const undo = commandBar.getByRole("button", { name: "Undo", exact: true });
+  actions.push(await finishAction(page, "undo", 4, () =>
+    measureClickToNextPaint(undo),
+    async () => {
+      await expect(toolbar).toBeChecked();
+      await expect(page.getByTestId("quick-toolbar")).toBeVisible();
+    },
+  ));
+
+  await commandBar.getByText("Edit", { exact: true }).click();
+  const redo = commandBar.getByRole("button", { name: "Redo", exact: true });
+  actions.push(await finishAction(page, "redo", 5, () =>
+    measureClickToNextPaint(redo),
+    async () => {
+      await expect(toolbar).not.toBeChecked();
+      await expect(page.getByTestId("quick-toolbar")).toHaveCount(0);
+    },
+  ));
+
+  const final = await finalProbes(page, client, baseline);
+  return buildInteractionAudit(
+    "optionsHistory",
+    actions,
+    baseline,
+    final.feature,
+    visualBaseline,
+    final.visual,
+    {
+      maxTopologyBuilds: 0,
+      maxLiveResourceGrowth: 0,
+      maxGeometryCacheGrowth: 0,
+      maxMaterialCacheGrowth: 0,
+    },
+  );
+};
+
 test.describe("Chromebook direct interaction audit", () => {
   test.skip(!ENABLED, "run with CHROMEBOOK_AUDIT=1 against a production preview");
 
@@ -269,6 +454,49 @@ test.describe("Chromebook direct interaction audit", () => {
         await expect(page.getByLabel("anchor X slider")).toBeVisible();
       },
       audit: auditDesignControls,
+    });
+  });
+
+  test("Character parts and joints stay responsive and resource-bounded", async ({ browser }, testInfo) => {
+    test.setTimeout(0);
+    await runChromebookFeatureAudit({
+      browser,
+      testInfo,
+      name: "characterControls",
+      workload: "production-interaction",
+      prepare: async (page) => {
+        await openWavingArm(page);
+        await page.getByTestId("workflow-stage-options").click();
+        await expect(page.locator('[data-stage="options"]')).toBeVisible();
+        const autosave = page.getByLabel("Enable autosave");
+        if (await autosave.isChecked()) await autosave.uncheck();
+        await page.getByTestId("workflow-stage-character").click();
+        await expect(page.locator('[data-stage="character"]')).toBeVisible();
+        await page.getByText("Edit skeleton", { exact: true }).click();
+        await page.getByLabel("Edit joint").selectOption("right_hand");
+        await expect(page.getByLabel("Joint X slider")).toBeEnabled();
+      },
+      audit: auditCharacterControls,
+    });
+  });
+
+  test("Options and history stay responsive without resource growth", async ({ browser }, testInfo) => {
+    test.setTimeout(0);
+    await runChromebookFeatureAudit({
+      browser,
+      testInfo,
+      name: "optionsHistory",
+      workload: "production-interaction",
+      prepare: async (page) => {
+        await openWavingArm(page);
+        await page.getByTestId("workflow-stage-options").click();
+        await expect(page.locator('[data-stage="options"]')).toBeVisible();
+        const autosave = page.getByLabel("Enable autosave");
+        if (await autosave.isChecked()) await autosave.uncheck();
+        const toolbar = page.getByLabel("Show toolbar");
+        if (!await toolbar.isChecked()) await toolbar.check();
+      },
+      audit: auditOptionsHistory,
     });
   });
 });

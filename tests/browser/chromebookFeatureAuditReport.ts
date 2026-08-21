@@ -12,6 +12,8 @@ export const CHROMEBOOK_FEATURE_NAMES = [
   "pathGestures",
   "foundryGestures",
   "designControls",
+  "characterControls",
+  "optionsHistory",
   "projectImport",
   "characterPackageImport",
   "sceneObjectImage",
