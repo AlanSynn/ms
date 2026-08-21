@@ -4388,7 +4388,7 @@ test('Command menu and shared canvas zoom persist across workflow stages', async
   await page.getByRole('button', { name: 'About MotionSmith…' }).click();
   await expect(page.getByTestId('about-dialog')).toBeVisible();
   await expect(page.getByTestId('about-dialog')).toContainText('Local only.');
-  await expect(page.getByTestId('about-dialog')).toContainText('/ms/ static web');
+  await expect(page.getByTestId('about-dialog')).toContainText('classroom static web');
   await expect(page.getByTestId('about-dialog')).toContainText('browser autosave');
   await page.getByTestId('about-dialog').getByRole('button', { name: 'Close' }).click();
   await expect(page.getByTestId('about-dialog')).toHaveCount(0);

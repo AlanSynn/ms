@@ -11,7 +11,7 @@ This file is the project-level rulebook for future agents. If older docs or UI c
 MotionSmith is a tinkerable workbench, not a reading-heavy tutorial. Users should learn the workflow by touching the character, joints, paths, mechanisms, and playback controls directly.
 
 - Product scope is local-first browser/Tauri. Do not add backend/API server, cloud DB, auth/RBAC, billing, team accounts, realtime collaboration, hosted asset storage, server inference, or server export jobs unless the user explicitly reopens server scope.
-- Classroom web release is the static GitHub Pages app at `https://alansynn.com/ms/` with `VITE_BASE_PATH=/ms/`; do not add accounts, uploads, rosters, dashboards, analytics, or cloud sync language for classroom support.
+- Classroom web release is the static Cloudflare Worker app at `https://motionsmith.org/` with `VITE_BASE_PATH=/`; `https://alansynn.com/ms/` remains a GitHub Pages mirror built with `VITE_BASE_PATH=/ms/`. Do not add accounts, uploads, rosters, dashboards, analytics, or cloud sync language for classroom support.
 - When a full-stack feature gap needs a server, document it as excluded local-first scope instead of building a fake client-only substitute.
 - Local persistence must be named honestly: browser autosave, local snapshot download, portable project copy. Do not label downloads as cloud save/sync.
 - Image recognition is excluded from the classroom and Tauri builds. Use guided starters and explicit local character packages; do not add a local model, remote inference, or mock AI surface unless the user explicitly reopens that scope.
@@ -159,8 +159,8 @@ Before claiming completion, run the smallest checks that prove the changed contr
 
 ## 10. Release and deployment contract
 
-- GitHub Pages is the only hosted web release path for now: publish the static app at `https://alansynn.com/ms/` with `VITE_BASE_PATH=/ms/`.
-- Deploy only from version tags matching `v<package.json version>`; do not restore branch-push or manual workflow deploys.
+- Cloudflare Worker `ms` is the primary hosted classroom path: publish the static root build at `https://motionsmith.org/` with `VITE_BASE_PATH=/`. Keep `https://alansynn.com/ms/` as the GitHub Pages mirror built separately with `VITE_BASE_PATH=/ms/`.
+- Deploy both hosted artifacts only from the same version tag matching `v<package.json version>`; do not restore branch-push or manual workflow deploys. Keep the native Cloudflare Workers Builds Git integration disconnected so a `main` push cannot bypass the tag gate.
 - Keep release versions aligned across `package.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json` before tagging.
-- The `github-pages` environment must allow `v*.*.*` tags only. Do not re-enable `main` branch deployment unless the release policy is explicitly changed.
+- The `cloudflare-production` and `github-pages` environments must allow `v*.*.*` tags only. Do not re-enable `main` branch deployment unless the release policy is explicitly changed.
 - Do not add a Pages `CNAME` file for this project page; the repo lives under the already-routed `/ms/` path.

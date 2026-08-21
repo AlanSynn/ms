@@ -139,9 +139,9 @@ Blueprint export, and project round trip. These checks preserve data and
 recovery behavior, but their full-workflow wall time is not part of the primary
 performance gate.
 
-The classroom branch does not deploy. GitHub Pages remains version-tag-only;
-the performance workflows cannot publish, and the production exclusion check
-must pass before any future tagged artifact can be uploaded.
+Classroom releases remain version-tag-only for both the Cloudflare root site and
+the GitHub Pages mirror. Performance workflows cannot publish, and the
+production exclusion check must pass before either tagged artifact is uploaded.
 
 ## Evidence boundaries
 
