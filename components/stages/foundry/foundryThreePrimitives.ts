@@ -626,7 +626,7 @@ export const createFoundryThreePrimitiveFactory = ({
   };
   const addPin = (point: Point, centerZ: number, lengthZ: number) => {
     const p = to3(point, centerZ);
-    const geometryKey = `pin:${holeR.toFixed(3)}:${lengthZ.toFixed(3)}`;
+    const geometryKey = `pin-unit:${holeR.toFixed(3)}`;
     const { object: pin } = objectPool.acquire("pin", geometryKey, () =>
       new THREE.Mesh(
         cachedGeometry(
@@ -635,7 +635,7 @@ export const createFoundryThreePrimitiveFactory = ({
             new THREE.CylinderGeometry(
               holeR * 0.8,
               holeR * 0.8,
-              lengthZ,
+              1,
               20,
             ),
         ),
@@ -643,6 +643,7 @@ export const createFoundryThreePrimitiveFactory = ({
       ),
     );
     pin.rotation.x = Math.PI / 2;
+    pin.scale.set(1, Math.max(0.001, lengthZ), 1);
     pin.position.copy(p);
   };
   const addPath = (points: Point[], z: number, mat: THREE.Material) => {

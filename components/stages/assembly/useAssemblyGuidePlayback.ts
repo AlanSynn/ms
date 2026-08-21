@@ -61,13 +61,12 @@ export const useAssemblyGuidePlayback = ({
         stepProgressRef.current + Math.min(120, Math.max(0, elapsedMs)) / 1400;
       if (next >= 1) {
         stepProgressRef.current = 0;
-        setStepIndex((index) => (index >= activeStepCount - 1 ? 0 : index + 1));
         return 0;
       }
       stepProgressRef.current = next;
       return next * Math.PI * 2;
     },
-    [activeStepCount, playing, setStepIndex],
+    [activeStepCount, playing],
   );
 
   useWorkspacePlaybackLoop({
