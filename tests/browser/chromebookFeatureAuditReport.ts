@@ -14,6 +14,7 @@ export const CHROMEBOOK_FEATURE_NAMES = [
   "designControls",
   "projectImport",
   "characterPackageImport",
+  "sceneObjectImage",
   "blueprintPackage",
 ] as const;
 

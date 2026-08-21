@@ -69,9 +69,14 @@ type BrowserFileSeed = {
 
 const armSupersedingImport = (
   page: Page,
-  inputTestId: "project-file-input" | "blank-package-input",
+  inputTestId:
+    | "project-file-input"
+    | "blank-package-input"
+    | "scene-object-image-input",
   files: BrowserFileSeed[],
-) => page.evaluate(({ inputTestId, files }) => {
+  workerName = "motionsmith-project-import",
+  workerRequestType = "import",
+) => page.evaluate(({ inputTestId, files, workerName, workerRequestType }) => {
   const input = document.querySelector<HTMLInputElement>(
     `[data-testid="${inputTestId}"]`,
   );
@@ -84,8 +89,8 @@ const armSupersedingImport = (
   const supersede = (event: Event) => {
     const detail = (event as CustomEvent<{ name?: string; type?: string }>).detail;
     if (
-      detail?.name !== "motionsmith-project-import" ||
-      detail.type !== "import"
+      detail?.name !== workerName ||
+      detail.type !== workerRequestType
     ) return;
     window.removeEventListener(
       "motionsmith:chromebook-worker-request",
@@ -101,7 +106,7 @@ const armSupersedingImport = (
     "motionsmith:chromebook-worker-request",
     supersede,
   );
-}, { inputTestId, files });
+}, { inputTestId, files, workerName, workerRequestType });
 
 const textSeed = (name: string, mimeType: string, text: string): BrowserFileSeed => ({
   name,
@@ -126,6 +131,20 @@ const packageSeeds = (): BrowserFileSeed[] => [
     base64: readFileSync(join(FIXTURE_ROOT, "body.png")).toString("base64"),
   },
 ];
+
+const objectPngSeed = (): BrowserFileSeed => ({
+  name: "body.png",
+  mimeType: "image/png",
+  base64: readFileSync(join(FIXTURE_ROOT, "body.png")).toString("base64"),
+});
+
+const largeObjectSvgPayload = () => ({
+  name: "superseded-prop.svg",
+  mimeType: "image/svg+xml",
+  buffer: Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="8000" height="1000" viewBox="0 0 8000 1000"><!--${"x".repeat(384 * 1024)}--><rect width="8000" height="1000" fill="#8b5cf6"/></svg>`,
+  ),
+});
 
 const openWavingArm = async (page: Page) => {
   const dialog = page.getByTestId("getting-started-dialog");
@@ -250,6 +269,59 @@ const auditCharacterPackageImport = async (
   );
 };
 
+const auditSceneObjectImage = async (
+  page: Page,
+  client: CDPSession,
+): Promise<FeatureAudit> => {
+  await expect.poll(() => activeWorkers(page), {
+    message: "object artwork begins after prior disposable workers settle",
+  }).toBe(0);
+  const baseline = await collectStableFeatureProbe(page, client);
+  const input = page.getByTestId("scene-object-image-input");
+  const actions: FeatureActionAudit[] = [];
+
+  await armSupersedingImport(
+    page,
+    "scene-object-image-input",
+    [objectPngSeed()],
+    "motionsmith-scene-object-image",
+    "create-object",
+  );
+  const completedBefore = await readFeatureRuntimeProbe(page);
+  const completedTiming = await measureExternalActionToNextPaint(
+    page,
+    () => input.setInputFiles(largeObjectSvgPayload()),
+  );
+  await expect(input).toHaveAttribute("data-audit-superseded-on-dispatch", "true");
+  await expect(page.getByTestId("character-workflow-summary")).toContainText(
+    "1 objects",
+  );
+  const inspector = page.getByTestId("scene-object-inspector");
+  await expect(inspector).toContainText("body");
+  await expect(inspector).toContainText("body.png");
+  const jobCompletionMs = await elapsedFeatureTime(page, completedTiming);
+  await waitForLifecycleBaseline(page, baseline.lifecycle);
+  actions.push(await finishFeatureAction(page, {
+    label: "object-artwork-supersede-raster-complete",
+    cycle: 1,
+    outcome: "completed",
+    timing: completedTiming,
+    before: completedBefore,
+    jobCompletionMs,
+  }));
+
+  return buildChromebookFeatureAudit(
+    "sceneObjectImage",
+    actions,
+    baseline,
+    await finalProbe(page, client, baseline),
+    {
+      minimumWorkerCreations: 2,
+      requireCompletedCycle: true,
+    },
+  );
+};
+
 test.describe("Chromebook bounded import audit", () => {
   test.skip(!ENABLED, "run with CHROMEBOOK_AUDIT=1 against a production preview");
   test.describe.configure({ mode: "serial" });
@@ -259,6 +331,10 @@ test.describe("Chromebook bounded import audit", () => {
     {
       name: "characterPackageImport" as const,
       audit: auditCharacterPackageImport,
+    },
+    {
+      name: "sceneObjectImage" as const,
+      audit: auditSceneObjectImage,
     },
   ]) {
     test(`${auditCase.name} stays responsive and releases superseded files`, async ({

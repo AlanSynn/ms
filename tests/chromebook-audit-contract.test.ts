@@ -273,10 +273,15 @@ for (const interaction of ["pathGestures", "foundryGestures", "designControls"])
 }
 assert(interactionSpec.includes("measurePointerEventToNextPaint") && interactionSpec.includes("measureRangeUpdate"));
 assert(interactionAudit.includes("webglResourceGrowthBounded") && interactionAudit.includes("puppetTopologyP95"));
-for (const importFeature of ["projectImport", "characterPackageImport"]) {
+for (const importFeature of [
+  "projectImport",
+  "characterPackageImport",
+  "sceneObjectImage",
+]) {
   assert(importSpec.includes(`"${importFeature}"`), `import audit measures ${importFeature}`);
 }
 assert(importSpec.includes("12 * 1024 * 1024") && importSpec.includes("Buffer.alloc(5 * 1024 * 1024"), "import audit exercises supersession while large bounded files are still owned");
+assert(importSpec.includes('"x".repeat(384 * 1024)') && importSpec.includes('object-artwork-supersede-raster-complete'), "object artwork audit supersedes a large bounded vector and completes a real bounded raster decode");
 assert(importSpec.includes("minimumWorkerCreations: 2") && importSpec.includes("waitForLifecycleBaseline"), "import audit requires worker cancellation and final ownership return");
 assert(importSpec.includes("FORBIDDEN_RUNTIME") && importSpec.includes("forbiddenRequests"), "local import audit blocks recognition and physics downloads");
 assert(auditHarness.includes("longTaskEntries") && auditHarness.includes("actionStartedAt") && auditHarness.includes("entry.startTime + entry.duration"), "feature Long Tasks are clipped to the measured action window so file-injection setup is not attributed to app work");
