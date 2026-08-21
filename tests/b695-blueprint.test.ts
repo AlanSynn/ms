@@ -5,6 +5,13 @@ import {
   buildBlueprintModel,
   createBlueprintPackage,
 } from '../runtime/blueprint/BlueprintModel';
+import { SCENE_PX_PER_MM } from '../utils/coordinates';
+import {
+  fabricablePartOutlinePoints,
+  partLandmarkLocalPoints,
+  partOutlineBounds,
+  pointInsideOutline,
+} from '../utils/partGeometry';
 
 const project = createFabricationReadyFourBarProject();
 const firstModel = buildBlueprintModel(project);
@@ -53,10 +60,50 @@ assert.equal(
   0,
   'compacted classroom STL has no open mesh edges',
 );
+const firstPart = project.parts[project.partOrder.find((id) => project.parts[id]?.visible)!];
+assert(firstPart, 'fixture has a visible character plate');
+const firstLandmarks = partLandmarkLocalPoints(firstPart, project.skeleton);
+const firstOutline = fabricablePartOutlinePoints(firstPart, firstLandmarks);
+const firstHole = firstLandmarks.find((point) =>
+  pointInsideOutline(point, firstOutline, 0.5),
+);
+assert(firstHole, 'fixture has a joint hole in its first character plate');
+const firstBounds = partOutlineBounds(firstOutline);
+const holeMm = {
+  x: (firstHole.x - firstBounds.minX) / SCENE_PX_PER_MM,
+  y: (firstHole.y - firstBounds.minY) / SCENE_PX_PER_MM,
+};
+const pointInTriangle = (
+  point: [number, number],
+  triangle: Array<[number, number, number]>,
+) => {
+  const sign = (a: [number, number], b: [number, number], c: [number, number]) =>
+    (a[0] - c[0]) * (b[1] - c[1]) - (b[0] - c[0]) * (a[1] - c[1]);
+  const vertices2d = triangle.map(([x, y]) => [x, y] as [number, number]);
+  const signs = [
+    sign(point, vertices2d[0], vertices2d[1]),
+    sign(point, vertices2d[1], vertices2d[2]),
+    sign(point, vertices2d[2], vertices2d[0]),
+  ];
+  return !(signs.some((value) => value < -1e-6) && signs.some((value) => value > 1e-6));
+};
+const numericTriangles = Array.from({ length: vertices.length / 3 }, (_, index) =>
+  vertices.slice(index * 3, index * 3 + 3).map((vertex) =>
+    vertex.split(/\s+/).map(Number) as [number, number, number],
+  ),
+);
+assert.equal(
+  numericTriangles.some((triangle) =>
+    triangle.every((vertex) => Math.abs(vertex[2] - 2.4) < 1e-6) &&
+    pointInTriangle([holeMm.x, holeMm.y], triangle),
+  ),
+  false,
+  'compacted classroom STL keeps a physical void at a joint-hole center',
+);
 assert(vertices.length / 3 < 20_000, 'compacted classroom STL stays below 20k facets');
 assert(
-  Buffer.byteLength(firstPackage.customPartsStl) < 2_500_000,
-  'compacted classroom STL stays below 2.5 MB without dropping plate or hole surfaces',
+  Buffer.byteLength(firstPackage.customPartsStl) < 1_300_000,
+  'compacted classroom STL stays below 1.3 MB without dropping plate or hole surfaces',
 );
 
 console.log('b695 Blueprint cache contract passed');

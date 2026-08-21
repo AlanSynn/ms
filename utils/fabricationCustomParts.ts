@@ -53,7 +53,7 @@ const stlNum = (value: number) => Number.isFinite(value) ? Number(value.toFixed(
 export const makeCustomPartsStl = (project: ProjectState) => {
     const thicknessMm = 2.4;
     const holeRadiusMm = Math.max(0.5, project.settings.physicalKit.holeDiameterMm / 2);
-    const cellMm = Math.max(1.5, Math.min(2.5, holeRadiusMm));
+    const cellMm = Math.max(1.5, Math.min(2.75, holeRadiusMm * 1.375));
     const facets: string[] = [];
     const vertex = (x: number, y: number, z: number) => `      vertex ${stlNum(x)} ${stlNum(y)} ${stlNum(z)}`;
     const tri = (a: [number, number, number], b: [number, number, number], c: [number, number, number]) => {

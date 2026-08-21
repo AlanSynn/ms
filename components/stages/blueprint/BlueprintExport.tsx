@@ -67,6 +67,9 @@ export const BlueprintExport = ({
   };
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const selectedRecipe = selectBlueprintRecipe(recipes, selectedRecipeId, project.selectedMechanismId);
+  const exposePackageDiagnostics = __MOTIONSMITH_E2E_DIAGNOSTICS__ && !(
+    window as Window & { __MOTIONSMITH_CHROMEBOOK_AUDIT__?: unknown }
+  ).__MOTIONSMITH_CHROMEBOOK_AUDIT__;
   return (
     <EditorStageFrame
       stage="blueprint"
@@ -110,7 +113,7 @@ export const BlueprintExport = ({
               initialLayers={{ skeleton: false }}
               onSelectMechanism={setSelectedRecipeId}
             />
-            {pkg && __MOTIONSMITH_E2E_DIAGNOSTICS__ && (
+            {pkg && exposePackageDiagnostics && (
               <pre hidden data-testid="blueprint-export-package-json">
                 {JSON.stringify(pkg)}
               </pre>

@@ -16,7 +16,7 @@ const project = createFabricationReadyFourBarProject();
 const pkg = runBlueprintPackageJob(project);
 assert(pkg.svg.startsWith("<svg"));
 assert(pkg.customPartsStl.startsWith("solid motionsmith_custom_parts"));
-assert(Buffer.byteLength(pkg.customPartsStl) < 2_500_000);
+assert(Buffer.byteLength(pkg.customPartsStl) < 1_300_000);
 
 class FakeWorker implements BlueprintPackageWorkerPort {
   onmessage: ((event: MessageEvent<BlueprintPackageWorkerResponse>) => void) | null = null;
