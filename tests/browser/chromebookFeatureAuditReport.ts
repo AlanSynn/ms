@@ -4,6 +4,7 @@ import {
   type AcceptanceCheck,
   type Percentiles,
 } from "./chromebookAuditReport";
+import type { ChromebookAuditProvenance } from "./chromebookAuditProvenance";
 
 export const CHROMEBOOK_FEATURE_NAMES = [
   "recommend",
@@ -60,7 +61,10 @@ export type FeatureActionAudit = {
   label: string;
   cycle: number;
   outcome: "completed" | "cancelled";
+  eventTaskEndMs?: number;
+  firstRafMs?: number;
   nextPaintMs: number;
+  renderSubmissionOffsetsMs?: number[];
   settleMs: number;
   jobCompletionMs?: number;
   longTasks: {
@@ -112,11 +116,12 @@ export type FeatureAudit = {
 };
 
 export type ChromebookFeatureAuditReport = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   generatedAt: string;
   resultLabel: "6x CPU emulation";
   productionBuild: true;
   actualChromebookTested: false;
+  provenance: ChromebookAuditProvenance;
   runtimeProbe: "browser-api-ownership-v1";
   workload: "production-feature" | "production-interaction";
   environment: {
@@ -200,8 +205,9 @@ export const buildChromebookFeatureAudit = (
     ? Math.max(...finalSamplesBytes) - Math.min(...finalSamplesBytes)
     : 0;
   const heapStable =
-    !heapSupported ||
-    (finalSamplesBytes.length >= 3 && tailRangeBytes <= allowedGrowthBytes);
+    heapSupported &&
+    finalSamplesBytes.length >= 3 &&
+    tailRangeBytes <= allowedGrowthBytes;
   const checks: Record<string, AcceptanceCheck> = {
     nextPaintP95: {
       passed: actions.length > 0 && nextPaintLatencyMs.p95 <= thresholds.nextPaintP95Ms,
@@ -226,6 +232,11 @@ export const buildChromebookFeatureAudit = (
     objectUrlProbeSupported: {
       passed: baseline.lifecycle.probeSupport.objectUrls,
       observed: baseline.lifecycle.probeSupport.objectUrls,
+      limit: true,
+    },
+    heapSupported: {
+      passed: heapSupported,
+      observed: heapSupported,
       limit: true,
     },
     workersReturnedToBaseline: {
@@ -285,14 +296,14 @@ export const buildChromebookFeatureAudit = (
       limit: requirements.requireCancelledCycle ? ">=1" : ">=0",
     },
     heapBounded: {
-      passed: !heapSupported || growthBytes <= allowedGrowthBytes,
+      passed: heapSupported && growthBytes <= allowedGrowthBytes,
       observed: growthBytes,
-      limit: heapSupported ? allowedGrowthBytes : "unsupported-recorded",
+      limit: heapSupported ? allowedGrowthBytes : "supported heap required",
     },
     heapStable: {
       passed: heapStable,
       observed: tailRangeBytes,
-      limit: heapSupported ? allowedGrowthBytes : "unsupported-recorded",
+      limit: heapSupported ? allowedGrowthBytes : "supported heap required",
     },
   };
   const passed = Object.values(checks).every((check) => check.passed);

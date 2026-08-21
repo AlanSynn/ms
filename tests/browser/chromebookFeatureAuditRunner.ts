@@ -18,6 +18,7 @@ import {
   applyChromebookEmulation,
   installChromebookAuditInstrumentation,
 } from "./chromebookAuditHarness";
+import { collectChromebookAuditProvenance } from "./chromebookAuditProvenance";
 
 const ENFORCE = process.env.CHROMEBOOK_AUDIT_ENFORCE !== "0";
 const OUTPUT = process.env.CHROMEBOOK_FEATURE_AUDIT_OUTPUT
@@ -33,8 +34,14 @@ type RunChromebookFeatureAuditOptions = {
   audit: (page: Page, client: CDPSession) => Promise<FeatureAudit>;
 };
 
-const externalOutputPath = (name: ChromebookFeatureName) => {
-  if (OUTPUT.includes("{feature}")) return OUTPUT.replace("{feature}", name);
+const externalOutputPath = (
+  name: ChromebookFeatureName,
+  repeatEachIndex: number,
+) => {
+  const templated = OUTPUT
+    .replace("{feature}", name)
+    .replace("{repeat}", String(repeatEachIndex));
+  if (templated !== OUTPUT) return templated;
   if (extname(OUTPUT).toLowerCase() === ".json") {
     return `${OUTPUT.slice(0, -5)}-${name}.json`;
   }
@@ -55,7 +62,10 @@ const writeReport = async (
     path: testOutput,
     contentType: "application/json",
   });
-  const externalOutput = externalOutputPath(report.feature.name);
+  const externalOutput = externalOutputPath(
+    report.feature.name,
+    testInfo.repeatEachIndex,
+  );
   await mkdir(dirname(externalOutput), { recursive: true });
   await writeFile(externalOutput, json, "utf8");
 };
@@ -120,11 +130,12 @@ export const runChromebookFeatureAudit = async ({
       expect(feature.name).toBe(name);
       const passed = feature.acceptance.passed.passed;
       const report: ChromebookFeatureAuditReport = {
-        schemaVersion: 1,
+        schemaVersion: 2,
         generatedAt: new Date().toISOString(),
         resultLabel: "6x CPU emulation",
         productionBuild: true,
         actualChromebookTested: false,
+        provenance: await collectChromebookAuditProvenance(baseURL),
         runtimeProbe: "browser-api-ownership-v1",
         workload,
         environment: {

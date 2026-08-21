@@ -1,14 +1,36 @@
 {
-  "schemaVersion": 1,
-  "generatedAt": "2026-08-21T09:23:43.035Z",
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-21T12:07:02.509Z",
   "basis": "static compressed production shell",
   "imageRecognitionRuntime": "absent",
-  "coreJs": {
+  "entryJs": {
     "files": [
-      "assets/index-C7vJROLj.js",
-      "assets/App-ClMcTw5j.js"
+      "assets/index-BcQJzY05.js",
+      "assets/App-tsq9iaa2.js"
     ],
-    "gzipBytes": 390850,
+    "gzipBytes": 81547
+  },
+  "coreJs": {
+    "basis": "entry plus recursive emitted static-import closure",
+    "files": [
+      "assets/App-tsq9iaa2.js",
+      "assets/AppShell-BQIJumFI.js",
+      "assets/classroomContent-bGvikOLx.js",
+      "assets/createLucideIcon-BamKUaNr.js",
+      "assets/fabrication-Ce-i4zDG.js",
+      "assets/index-BcQJzY05.js",
+      "assets/mechanismFitWorkerClient-UPOXythk.js",
+      "assets/mechanismRecommendations-B0ifljeW.js",
+      "assets/motion-DUyEu3NF.js",
+      "assets/performanceAudit-DvFcPLLy.js",
+      "assets/project-CJLYokjz.js",
+      "assets/sparkles-DPuFH3yB.js",
+      "assets/stageLayout-BB-iNSci.js",
+      "assets/upload-pgvB8Ycz.js",
+      "assets/useWorkspacePlaybackLoop-h56emdYs.js",
+      "assets/viewport-Dqi8_YxM.js"
+    ],
+    "gzipBytes": 147095,
     "limitBytes": 450000,
     "passed": true
   },
@@ -16,15 +38,71 @@
     "assets": [
       {
         "file": "index.html",
-        "compressedBytes": 15131
+        "compressedBytes": 15136
       },
       {
-        "file": "assets/index-C7vJROLj.js",
-        "compressedBytes": 61293
+        "file": "assets/App-tsq9iaa2.js",
+        "compressedBytes": 19881
       },
       {
-        "file": "assets/App-ClMcTw5j.js",
-        "compressedBytes": 329557
+        "file": "assets/AppShell-BQIJumFI.js",
+        "compressedBytes": 7627
+      },
+      {
+        "file": "assets/classroomContent-bGvikOLx.js",
+        "compressedBytes": 14224
+      },
+      {
+        "file": "assets/createLucideIcon-BamKUaNr.js",
+        "compressedBytes": 791
+      },
+      {
+        "file": "assets/fabrication-Ce-i4zDG.js",
+        "compressedBytes": 9815
+      },
+      {
+        "file": "assets/index-BcQJzY05.js",
+        "compressedBytes": 61666
+      },
+      {
+        "file": "assets/mechanismFitWorkerClient-UPOXythk.js",
+        "compressedBytes": 1243
+      },
+      {
+        "file": "assets/mechanismRecommendations-B0ifljeW.js",
+        "compressedBytes": 3208
+      },
+      {
+        "file": "assets/motion-DUyEu3NF.js",
+        "compressedBytes": 5740
+      },
+      {
+        "file": "assets/performanceAudit-DvFcPLLy.js",
+        "compressedBytes": 255
+      },
+      {
+        "file": "assets/project-CJLYokjz.js",
+        "compressedBytes": 19083
+      },
+      {
+        "file": "assets/sparkles-DPuFH3yB.js",
+        "compressedBytes": 286
+      },
+      {
+        "file": "assets/stageLayout-BB-iNSci.js",
+        "compressedBytes": 2276
+      },
+      {
+        "file": "assets/upload-pgvB8Ycz.js",
+        "compressedBytes": 194
+      },
+      {
+        "file": "assets/useWorkspacePlaybackLoop-h56emdYs.js",
+        "compressedBytes": 570
+      },
+      {
+        "file": "assets/viewport-Dqi8_YxM.js",
+        "compressedBytes": 236
       },
       {
         "file": "fonts/manrope-800-latin.woff2",
@@ -35,7 +113,7 @@
         "compressedBytes": 32183
       }
     ],
-    "compressedBytes": 451908,
+    "compressedBytes": 208158,
     "limitBytes": 1500000,
     "passed": true
   }

@@ -40,6 +40,8 @@ export type InteractionAudit = FeatureAudit & {
     final: VisualProbe;
     liveResourceDelta: number;
     contextDelta: number;
+    contextLossDelta: number;
+    contextRestoreDelta: number;
     topologyBuildDelta: number;
     geometryCacheDelta: number;
     materialCacheDelta: number;
@@ -128,6 +130,10 @@ export const buildInteractionAudit = (
     liveResourceDelta: liveResources(visualFinal) - liveResources(visualBaseline),
     contextDelta:
       visualFinal.webgl.contextsCreated - visualBaseline.webgl.contextsCreated,
+    contextLossDelta:
+      visualFinal.webgl.contextsLost - visualBaseline.webgl.contextsLost,
+    contextRestoreDelta:
+      visualFinal.webgl.contextsRestored - visualBaseline.webgl.contextsRestored,
     topologyBuildDelta:
       visualFinal.foundryTopologyBuilds - visualBaseline.foundryTopologyBuilds,
     geometryCacheDelta:
@@ -147,6 +153,16 @@ export const buildInteractionAudit = (
     webglContextsStable: {
       passed: visual.contextDelta <= 0,
       observed: visual.contextDelta,
+      limit: 0,
+    },
+    webglContextLossAbsent: {
+      passed: visual.contextLossDelta === 0,
+      observed: visual.contextLossDelta,
+      limit: 0,
+    },
+    webglContextRestorationAbsent: {
+      passed: visual.contextRestoreDelta === 0,
+      observed: visual.contextRestoreDelta,
       limit: 0,
     },
     foundryTopologyBounded: {
@@ -206,6 +222,8 @@ export const measurePointerEventToNextPaint = async (
       __MOTIONSMITH_POINTER_PAINT__?: {
         sequence: number;
         startedAt?: number;
+        eventTaskEndMs?: number;
+        firstRafMs?: number;
         nextPaintMs?: number;
       };
     };
@@ -213,12 +231,22 @@ export const measurePointerEventToNextPaint = async (
     target.__MOTIONSMITH_POINTER_PAINT__ = { sequence: next };
     document.addEventListener(type, () => {
       const startedAt = performance.now();
-      requestAnimationFrame(() => requestAnimationFrame(() => {
+      queueMicrotask(() => {
         const current = target.__MOTIONSMITH_POINTER_PAINT__;
         if (!current || current.sequence !== next) return;
-        current.startedAt = startedAt;
-        current.nextPaintMs = performance.now() - startedAt;
-      }));
+        current.eventTaskEndMs = performance.now() - startedAt;
+      });
+      requestAnimationFrame(() => {
+        const current = target.__MOTIONSMITH_POINTER_PAINT__;
+        if (!current || current.sequence !== next) return;
+        current.firstRafMs = performance.now() - startedAt;
+        requestAnimationFrame(() => {
+          const latest = target.__MOTIONSMITH_POINTER_PAINT__;
+          if (!latest || latest.sequence !== next) return;
+          latest.startedAt = startedAt;
+          latest.nextPaintMs = performance.now() - startedAt;
+        });
+      });
     }, { capture: true, once: true });
     return next;
   }, eventType);
@@ -235,6 +263,8 @@ export const measurePointerEventToNextPaint = async (
       __MOTIONSMITH_POINTER_PAINT__?: {
         sequence: number;
         startedAt?: number;
+        eventTaskEndMs?: number;
+        firstRafMs?: number;
         nextPaintMs?: number;
       };
     }).__MOTIONSMITH_POINTER_PAINT__;
@@ -243,7 +273,12 @@ export const measurePointerEventToNextPaint = async (
       current.startedAt === undefined ||
       current.nextPaintMs === undefined
     ) throw new Error("Pointer paint timing was not delivered");
-    return { startedAt: current.startedAt, nextPaintMs: current.nextPaintMs };
+    return {
+      startedAt: current.startedAt,
+      eventTaskEndMs: current.eventTaskEndMs,
+      firstRafMs: current.firstRafMs,
+      nextPaintMs: current.nextPaintMs,
+    };
   }, sequence);
 };
 

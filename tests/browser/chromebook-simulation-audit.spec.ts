@@ -15,6 +15,7 @@ import {
   installChromebookAuditInstrumentation,
   measureClickToNextPaint,
 } from "./chromebookAuditHarness";
+import { collectChromebookAuditProvenance } from "./chromebookAuditProvenance";
 
 const ENABLED = process.env.CHROMEBOOK_AUDIT === "1";
 const ENFORCE = process.env.CHROMEBOOK_AUDIT_ENFORCE !== "0";
@@ -47,6 +48,25 @@ const prepareStage = async (page: Page, stage: SimulationStage) => {
   await page.getByTestId(`workflow-stage-${stage}`).click();
   await expect(page.locator(`[data-stage="${stage}"]`)).toBeVisible();
   await expect(page.locator(stageCanvas[stage])).toBeVisible();
+  if (stage === "path") {
+    await expect(page.getByTestId("path-three-puppet-state")).toHaveAttribute(
+      "data-three-topology-ready",
+      "true",
+    );
+  }
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+  const dock = page.getByTestId("workspace-player-dock");
+  const play = dock.getByRole("button", { name: "Play", exact: true });
+  await play.click();
+  const pause = dock.getByRole("button", { name: "Pause", exact: true });
+  await expect(pause).toBeVisible();
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    window.setTimeout(resolve, 750);
+  }));
+  await pause.click();
+  await expect(play).toBeVisible();
   await page.evaluate(() => new Promise<void>((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   }));
@@ -117,15 +137,20 @@ for (const stage of ["path", "design", "assembly"] as const) {
           const forbiddenRuntimeRequests = featureRequests.filter((url) =>
             /rapier|onnx|ort-wasm|u2net|character-segmentation/i.test(url)
           );
+          const baseURL = testInfo.project.use.baseURL;
+          if (typeof baseURL !== "string") {
+            throw new Error("Chromebook simulation audit requires a preview base URL");
+          }
           const report: ChromebookPlaybackAuditReport & {
             networkRequests: string[];
             forbiddenRuntimeRequests: string[];
           } = {
-            schemaVersion: 1,
+            schemaVersion: 2,
             generatedAt: new Date().toISOString(),
             resultLabel: "6x CPU emulation",
             productionBuild: true,
             actualChromebookTested: false,
+            provenance: await collectChromebookAuditProvenance(baseURL),
             workload: `${stage}-playback`,
             environment: {
               ...CHROMEBOOK_AUDIT_ENVIRONMENT,

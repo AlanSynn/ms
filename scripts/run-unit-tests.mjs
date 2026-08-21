@@ -6,6 +6,7 @@ const TEST_DIRECTORY = resolve(process.cwd(), 'tests');
 const UNIT_TEST_FILES = [
   'assembly-guide-model.test.ts',
   'automata-scene-runtime.test.ts',
+  'autosave-recovery-worker.test.ts',
   'b695-blueprint.test.ts',
   'b695-diagnostics.test.ts',
   'b695-fit.test.ts',

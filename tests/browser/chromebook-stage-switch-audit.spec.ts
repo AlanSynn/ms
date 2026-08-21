@@ -14,6 +14,7 @@ import {
   measureClickToNextPaint,
   readFeatureRuntimeProbe,
 } from "./chromebookAuditHarness";
+import { collectChromebookAuditProvenance } from "./chromebookAuditProvenance";
 
 const ENABLED = process.env.CHROMEBOOK_AUDIT === "1";
 const ENFORCE = process.env.CHROMEBOOK_AUDIT_ENFORCE !== "0";
@@ -37,8 +38,10 @@ type StageSample = {
   to: StageName;
   nextPaintMs: number;
   readyMs: number;
+  ownershipSettledMs: number;
   longTasksMs: number[];
   liveResources: number;
+  liveResourcesByKind: Record<string, number>;
   contextsCreated: number;
   geometryCacheSize: number;
   materialCacheSize: number;
@@ -97,6 +100,76 @@ const readStageProbe = (page: Page) => page.evaluate(() => {
     ),
   };
 });
+
+type StageProbe = Awaited<ReturnType<typeof readStageProbe>>;
+
+const stageResourceSignature = (probe: StageProbe) => JSON.stringify({
+  attachedCanvases: probe.attachedCanvases,
+  contextsCreated: probe.contextsCreated,
+  contextsLost: probe.contextsLost,
+  contextsRestored: probe.contextsRestored,
+  geometryCacheSize: probe.geometryCacheSize,
+  materialCacheSize: probe.materialCacheSize,
+  resources: Object.fromEntries(
+    Object.entries(probe.resources)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([kind, resource]) => [kind, resource]),
+  ),
+});
+
+const readSettledStageProbe = async (
+  page: Page,
+  stage: StageName,
+): Promise<StageProbe> => {
+  let previousSignature: string | undefined;
+  let consecutiveStableFrames = 0;
+  let latest: StageProbe | undefined;
+  await expect.poll(async () => {
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve());
+    }));
+    latest = await readStageProbe(page);
+    const signature = stageResourceSignature(latest);
+    consecutiveStableFrames = signature === previousSignature
+      ? consecutiveStableFrames + 1
+      : 0;
+    previousSignature = signature;
+    return consecutiveStableFrames;
+  }, {
+    message: `${stage} WebGL ownership reaches a stable frame boundary`,
+    intervals: [0],
+  }).toBeGreaterThanOrEqual(2);
+  if (!latest) throw new Error(`${stage} ownership probe was not collected`);
+  return latest;
+};
+
+const waitForStageContent = async (page: Page, stage: StageName) => {
+  if (stage === "Character" || stage === "Path" || stage === "Blueprint") {
+    const prefix = stage === "Character"
+      ? "character"
+      : stage === "Path"
+        ? "path"
+        : "blueprint";
+    const state = page.getByTestId(`${prefix}-three-puppet-state`);
+    await expect(state).toHaveAttribute("data-three-topology-ready", "true");
+    await expect(page.locator("canvas.three-puppet-canvas")).toBeVisible();
+    return;
+  }
+  if (stage === "Foundry" || stage === "Design" || stage === "Assembly") {
+    await expect(page.locator("canvas.foundry-three-canvas")).toBeVisible();
+    await expect.poll(async () => Number(
+      await page.getByTestId("foundry-camera-rig")
+        .getAttribute("data-three-render-submissions") ?? 0,
+    ), {
+      message: `${stage} submits its first Three frame`,
+      intervals: [0],
+    }).toBeGreaterThan(0);
+    return;
+  }
+  await expect(
+    page.locator("canvas.three-puppet-canvas, canvas.foundry-three-canvas"),
+  ).toHaveCount(0);
+};
 
 test.describe("Chromebook stage-switch audit", () => {
   test.skip(!ENABLED, "run with CHROMEBOOK_AUDIT=1 against a production preview");
@@ -165,23 +238,29 @@ test.describe("Chromebook stage-switch audit", () => {
           const timing = await measureClickToNextPaint(button);
           await expect(page.locator(`[data-stage="${stageId[next]}"]`))
             .toBeVisible();
-          await page.evaluate(() => new Promise<void>((resolve) => {
-            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-          }));
-          const ready = await readStageProbe(page);
+          await waitForStageContent(page, next);
+          const contentReady = await readStageProbe(page);
+          const ownershipSettled = await readSettledStageProbe(page, next);
           target.push({
             cycle,
             from: current,
             to: next,
             nextPaintMs: timing.nextPaintMs,
-            readyMs: ready.atMs - timing.startedAt,
-            longTasksMs: ready.longTasks.slice(longTaskOffset),
-            liveResources: ready.liveResources,
-            contextsCreated: ready.contextsCreated,
-            geometryCacheSize: ready.geometryCacheSize,
-            materialCacheSize: ready.materialCacheSize,
+            readyMs: contentReady.atMs - timing.startedAt,
+            ownershipSettledMs: ownershipSettled.atMs - timing.startedAt,
+            longTasksMs: ownershipSettled.longTasks.slice(longTaskOffset),
+            liveResources: ownershipSettled.liveResources,
+            liveResourcesByKind: Object.fromEntries(
+              Object.entries(ownershipSettled.resources).map(([kind, resource]) => [
+                kind,
+                resource.live,
+              ]),
+            ),
+            contextsCreated: ownershipSettled.contextsCreated,
+            geometryCacheSize: ownershipSettled.geometryCacheSize,
+            materialCacheSize: ownershipSettled.materialCacheSize,
           });
-          longTaskOffset = ready.longTasks.length;
+          longTaskOffset = ownershipSettled.longTasks.length;
           current = next;
         }
         }
@@ -190,18 +269,21 @@ test.describe("Chromebook stage-switch audit", () => {
       const coldSamples: StageSample[] = [];
       await runCycles(coldSequence, 0, 1, coldSamples);
       const warmRuntime = await collectStableFeatureProbe(page, client);
-      const warmBaseline = await readStageProbe(page);
+      const warmBaseline = await readSettledStageProbe(page, "Options");
       longTaskOffset = warmBaseline.longTasks.length;
 
       const samples: StageSample[] = [];
       await runCycles(warmSequence, 1, 3, samples);
 
       const finalRuntime = await collectStableFeatureProbe(page, client);
-      const final = await readStageProbe(page);
+      const final = await readSettledStageProbe(page, "Options");
       const coldNextPaint = percentiles(
         coldSamples.map((sample) => sample.nextPaintMs),
       );
       const coldReady = percentiles(coldSamples.map((sample) => sample.readyMs));
+      const coldOwnershipSettled = percentiles(
+        coldSamples.map((sample) => sample.ownershipSettledMs),
+      );
       const coldLongTaskDurations = coldSamples.flatMap(
         (sample) => sample.longTasksMs,
       );
@@ -209,20 +291,68 @@ test.describe("Chromebook stage-switch audit", () => {
       const coldLongTaskMax = Math.max(0, ...coldLongTaskDurations);
       const nextPaint = percentiles(samples.map((sample) => sample.nextPaintMs));
       const ready = percentiles(samples.map((sample) => sample.readyMs));
+      const ownershipSettled = percentiles(
+        samples.map((sample) => sample.ownershipSettledMs),
+      );
       const longTasks = percentiles(samples.flatMap((sample) => sample.longTasksMs));
       const warmCycleEndLiveResources = samples
         .filter((sample) => sample.to === "Options")
         .map((sample) => sample.liveResources);
+      const warmCycleEndResourceLive = samples
+        .filter((sample) => sample.to === "Options")
+        .map((sample) => sample.liveResourcesByKind);
       const firstWarmCycleLiveResources =
         warmCycleEndLiveResources[0] ?? warmBaseline.liveResources;
       const lastWarmCycleLiveResources =
         warmCycleEndLiveResources.at(-1) ?? final.liveResources;
+      const resourceKinds = [...new Set([
+        ...Object.keys(warmBaseline.resources),
+        ...Object.keys(final.resources),
+        ...warmCycleEndResourceLive.flatMap((resources) =>
+          Object.keys(resources)
+        ),
+      ])].sort();
+      const warmBaselineResourceLive = Object.fromEntries(
+        resourceKinds.map((kind) => [
+          kind,
+          warmBaseline.resources[kind]?.live ?? 0,
+        ]),
+      );
+      const finalResourceLive = Object.fromEntries(
+        resourceKinds.map((kind) => [kind, final.resources[kind]?.live ?? 0]),
+      );
+      const resourcePeakGrowthByKind = Object.fromEntries(
+        resourceKinds.map((kind) => [
+          kind,
+          Math.max(
+            0,
+            ...warmCycleEndResourceLive.map((resources) =>
+              (resources[kind] ?? 0) - (warmBaselineResourceLive[kind] ?? 0)
+            ),
+          ),
+        ]),
+      );
+      const resourcesReturned = resourceKinds.every((kind) =>
+        (finalResourceLive[kind] ?? 0) <=
+          (warmBaselineResourceLive[kind] ?? 0)
+      );
+      const resourcePlateau = Object.values(resourcePeakGrowthByKind)
+        .every((growth) => growth <= 0);
       const baselineHeap = initialRuntime.heapBytes ?? 0;
       const finalHeap = finalRuntime.heapBytes ?? baselineHeap;
+      const finalHeapSamples = finalRuntime.heapSamplesBytes ?? [];
+      const heapSupported =
+        initialRuntime.heapBytes !== undefined &&
+        warmRuntime.heapBytes !== undefined &&
+        finalRuntime.heapBytes !== undefined &&
+        finalHeapSamples.length >= 3;
       const heapAllowance = Math.max(
         CHROMEBOOK_ACCEPTANCE_THRESHOLDS.heapGrowthFloorBytes,
         baselineHeap * CHROMEBOOK_ACCEPTANCE_THRESHOLDS.heapGrowthRatio,
       );
+      const heapTailRange = heapSupported
+        ? Math.max(...finalHeapSamples) - Math.min(...finalHeapSamples)
+        : 0;
       const checks = {
         coldNextPaintP95:
           coldNextPaint.p95 <= CHROMEBOOK_ACCEPTANCE_THRESHOLDS.interactionP95Ms,
@@ -232,24 +362,35 @@ test.describe("Chromebook stage-switch audit", () => {
         nextPaintP95: nextPaint.p95 <= CHROMEBOOK_ACCEPTANCE_THRESHOLDS.interactionP95Ms,
         readyP95: ready.p95 <= CHROMEBOOK_ACCEPTANCE_THRESHOLDS.tabSwitchP95Ms,
         longTaskP95: longTasks.p95 <= 50,
-        heapGrowth: finalHeap - baselineHeap <= heapAllowance,
+        heapSupported,
+        heapGrowth: heapSupported && finalHeap - baselineHeap <= heapAllowance,
+        heapStable: heapSupported && heapTailRange <= heapAllowance,
         workersReturned:
           finalRuntime.lifecycle.workers.active === warmRuntime.lifecycle.workers.active,
         canvasesReturned:
           final.attachedCanvases === warmBaseline.attachedCanvases,
-        resourcesReturned:
-          final.liveResources <= firstWarmCycleLiveResources,
-        resourcePlateau:
-          lastWarmCycleLiveResources <= firstWarmCycleLiveResources,
+        resourcesReturned,
+        resourcePlateau,
+        geometryCacheStable:
+          final.geometryCacheSize <= warmBaseline.geometryCacheSize,
+        materialCacheStable:
+          final.materialCacheSize <= warmBaseline.materialCacheSize,
         contextCountStable: final.contextsCreated === initial.contextsCreated,
         noContextLoss: final.contextsLost === initial.contextsLost,
+        noContextRestoration:
+          final.contextsRestored === initial.contextsRestored,
       };
+      const baseURL = testInfo.project.use.baseURL;
+      if (typeof baseURL !== "string") {
+        throw new Error("Chromebook stage audit requires a preview base URL");
+      }
       const report = {
-        schemaVersion: 1,
+        schemaVersion: 2,
         generatedAt: new Date().toISOString(),
         resultLabel: "6x CPU emulation",
         productionBuild: true,
         actualChromebookTested: false,
+        provenance: await collectChromebookAuditProvenance(baseURL),
         environment: CHROMEBOOK_AUDIT_ENVIRONMENT,
         coldCycles: 1,
         measuredCycles: 3,
@@ -258,16 +399,19 @@ test.describe("Chromebook stage-switch audit", () => {
         coldLatencyMs: {
           nextPaint: coldNextPaint,
           ready: coldReady,
+          ownershipSettled: coldOwnershipSettled,
           longTasks: coldLongTasks,
           longTaskMax: coldLongTaskMax,
         },
-        latencyMs: { nextPaint, ready, longTasks },
+        latencyMs: { nextPaint, ready, ownershipSettled, longTasks },
         heap: {
+          supported: heapSupported,
           baselineBytes: baselineHeap,
           finalBytes: finalHeap,
           growthBytes: finalHeap - baselineHeap,
           allowedGrowthBytes: heapAllowance,
-          finalSamplesBytes: finalRuntime.heapSamplesBytes ?? [],
+          finalSamplesBytes: finalHeapSamples,
+          tailRangeBytes: heapTailRange,
         },
         runtime: {
           initial: initialRuntime.lifecycle,
@@ -279,11 +423,18 @@ test.describe("Chromebook stage-switch audit", () => {
           warmBaseline,
           final,
           contextDelta: final.contextsCreated - initial.contextsCreated,
+          contextLossDelta: final.contextsLost - initial.contextsLost,
+          contextRestoreDelta:
+            final.contextsRestored - initial.contextsRestored,
           cacheWarmupLiveResourceDelta:
             warmBaseline.liveResources - initial.liveResources,
           warmLiveResourceDelta:
             final.liveResources - warmBaseline.liveResources,
           warmCycleEndLiveResources,
+          warmBaselineResourceLive,
+          warmCycleEndResourceLive,
+          finalResourceLive,
+          resourcePeakGrowthByKind,
           warmCyclePlateauDelta:
             lastWarmCycleLiveResources - firstWarmCycleLiveResources,
         },

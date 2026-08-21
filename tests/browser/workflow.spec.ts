@@ -509,6 +509,7 @@ test('Getting Started keeps file imports beside each other below two starter til
   const characterFileAction = fileActions.getByTestId('getting-started-open-character');
   const fullProjectAction = fileActions.getByTestId('getting-started-open-project');
 
+  await expect(page.getByTestId('character-three-puppet'), 'Getting Started does not mount a hidden Character WebGL scene').toHaveCount(0);
   await expect(gallery.locator('.template-tile')).toHaveCount(2);
   await expect(gallery.getByTestId('getting-started-card-guided')).toBeVisible();
   await expect(gallery.getByTestId('getting-started-card-humanoid')).toBeVisible();
@@ -534,6 +535,9 @@ test('Getting Started keeps file imports beside each other below two starter til
   const projectChooser = await projectChooserPromise;
   expect(projectChooser.isMultiple()).toBe(false);
   await projectChooser.setFiles([]);
+
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await expect(page.getByTestId('character-three-puppet'), 'Character WebGL mounts only after the starter surface closes').toBeVisible();
 
   expectCleanPage(pageErrors, consoleErrors);
 });
@@ -1422,8 +1426,17 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   expect(cutSheetPdfText.slice(0, 5)).toBe('%PDF-');
   expect(cutSheetPdfText).toContain('Cut sheet');
 
-  expect(exportedPackage.customPartsStl).toContain('solid motionsmith_custom_parts');
-  expect(exportedPackage.customPartsStl).toContain('facet normal');
+  expect(exportedPackage.customPartsStl, 'ordinary package state does not retain the optional STL').toBe('');
+  const [stlDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Download character STL' }).click()
+  ]);
+  expect(stlDownload.suggestedFilename()).toMatch(/custom-parts\.stl$/);
+  const stlPath = await stlDownload.path();
+  expect(stlPath, 'STL download path').toBeTruthy();
+  const stlText = await readFile(stlPath!, 'utf8');
+  expect(stlText).toContain('solid motionsmith_custom_parts');
+  expect(stlText).toContain('facet normal');
 
   const [svgDownload] = await Promise.all([
     page.waitForEvent('download'),
@@ -1599,6 +1612,11 @@ test('animation performance: Foundry playback stays responsive without runaway T
   await expect(foundryRig).toHaveAttribute('data-render-antialias', 'off');
   await expect(foundryRig).toHaveAttribute('data-repeated-geometry-policy', 'pool-and-instance');
   await expect(foundryRig).toHaveAttribute('data-three-pixel-ratio-cap', '0.63');
+  await expect(
+    foundryRig,
+    'capture the retained-scene baseline only after its first deferred topology build',
+  ).toHaveAttribute('data-three-dynamic-build-count', /[1-9]\d*/);
+  await expect(foundryRig).toHaveAttribute('data-three-renderer-geometry-count', /[1-9]\d*/);
 
   const dynamicBuildsBefore = Number(await foundryRig.getAttribute('data-three-dynamic-build-count') ?? '0');
   const geometryCacheBefore = Number(await foundryRig.getAttribute('data-three-geometry-cache-size') ?? '0');
@@ -3088,7 +3106,7 @@ test('Trace lazily streams bounded GIF frames and releases them on close', async
   await expect(modal).toBeVisible();
   await expect(modal).toHaveAttribute(
     'data-media-policy',
-    'max-900px-24fps-240-samples-one-bitmap',
+    'max-800px-20fps-180-samples-one-bitmap',
   );
   expect(gifWorkerRequests, 'opening Trace does not load the GIF decoder').toEqual([]);
 
@@ -3105,11 +3123,11 @@ test('Trace lazily streams bounded GIF frames and releases them on close', async
   const canvas = modal.locator('canvas');
   await expect(canvas).toBeVisible();
   await expect.poll(async () => Number(await canvas.getAttribute('width'))).toBeGreaterThan(1);
-  expect(Number(await canvas.getAttribute('width'))).toBe(900);
-  expect(Number(await canvas.getAttribute('height'))).toBe(450);
+  expect(Number(await canvas.getAttribute('width'))).toBe(800);
+  expect(Number(await canvas.getAttribute('height'))).toBe(400);
   const timeline = modal.locator('input[type="range"]');
   await expect(timeline).toBeVisible();
-  expect(Number(await timeline.getAttribute('max'))).toBe(239);
+  expect(Number(await timeline.getAttribute('max'))).toBe(179);
   await expect(canvas).toHaveAttribute('data-gif-delivered-frame', '0');
   const frameLabel = modal.getByText(/^Frame \d+ \/ \d+$/).first();
   const lastFrame = Number(await timeline.getAttribute('max'));
@@ -3149,6 +3167,38 @@ test('Trace lazily streams bounded GIF frames and releases them on close', async
   await page.getByRole('button', { name: 'Trace', exact: true }).click();
   await expect(page.getByTestId('tracking-modal')).toContainText('Browse');
   expect(gifWorkerRequests).toHaveLength(1);
+  expect(pageErrors).toEqual([]);
+});
+
+test('Trace bounds classroom video decode and releases the media element on close', async ({ page }) => {
+  const pageErrors: string[] = [];
+  const gifWorkerRequests: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('request', request => {
+    if (request.url().includes('gifFrameWorker')) gifWorkerRequests.push(request.url());
+  });
+
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByTestId('novice-path-panel').getByText('More', { exact: true }).click();
+  await page.getByRole('button', { name: 'Trace', exact: true }).click();
+  const modal = page.getByTestId('tracking-modal');
+  await expect(modal).toBeVisible();
+  const chooser = page.waitForEvent('filechooser');
+  await modal.getByRole('button', { name: 'Load Media', exact: true }).click();
+  await (await chooser).setFiles(join(process.cwd(), 'ref', 'vid.mp4'));
+
+  const canvas = modal.locator('canvas');
+  await expect(canvas).toBeVisible();
+  await expect(canvas).toHaveAttribute('width', '800');
+  await expect(canvas).toHaveAttribute('height', '450');
+  const timeline = modal.locator('input[type="range"]');
+  await expect(timeline).toBeVisible();
+  expect(Number(await timeline.getAttribute('max'))).toBeLessThan(180);
+  expect(gifWorkerRequests, 'MP4 metadata and playback do not load the GIF decoder').toEqual([]);
+
+  await modal.getByRole('button', { name: 'Close trace' }).click();
+  await expect(modal).toHaveCount(0);
   expect(pageErrors).toEqual([]);
 });
 

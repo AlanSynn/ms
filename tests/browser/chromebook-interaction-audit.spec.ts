@@ -65,6 +65,10 @@ const auditPathGestures = async (
   actions.push(await finishAction(page, "path-draw-mode", 2, () =>
     measureClickToNextPaint(draw),
   ));
+  await expect(page.getByTestId("free-draw-status")).toHaveAttribute(
+    "data-selected-point",
+    "none",
+  );
   const canvas = page.getByTestId("path-three-puppet-canvas");
   const box = await canvas.boundingBox();
   if (!box) throw new Error("Path gesture audit has no canvas bounds");

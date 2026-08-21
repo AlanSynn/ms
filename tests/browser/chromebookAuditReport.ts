@@ -1,3 +1,5 @@
+import type { ChromebookAuditProvenance } from "./chromebookAuditProvenance";
+
 export const CHROMEBOOK_AUDIT_ENVIRONMENT = {
   browser: "chrome",
   viewport: { width: 1366, height: 768 },
@@ -68,12 +70,20 @@ export type ActionLatency = {
 };
 
 export type PlaybackAudit = {
+  frameSource: "webgl-clear-submission";
   durationMs: number;
   frameCount: number;
   frameIntervalMs: Percentiles;
   framesOver50: number;
   framesOver50Percent: number;
   framesOver200: number;
+  eventLoopRaf: {
+    sampleCount: number;
+    intervalMs: Percentiles;
+    intervalsOver50: number;
+    intervalsOver50Percent: number;
+    intervalsOver200: number;
+  };
   longTasks: { count: number; totalMs: number; maxMs: number };
   browserEventLatencyMs: Percentiles;
   reactCommits: number;
@@ -92,6 +102,8 @@ export type PlaybackAudit = {
     after: WebGLAuditSnapshot;
     liveResourceDelta: number;
     contextDelta: number;
+    contextLossDelta: number;
+    contextRestoreDelta: number;
     topologyBuildDelta: number;
     geometryCacheDelta: number;
     materialCacheDelta: number;
@@ -104,12 +116,17 @@ export type AcceptanceCheck = {
   limit: number | boolean | string;
 };
 
+export type ChromebookAcceptance = Record<string, AcceptanceCheck> & {
+  passed: AcceptanceCheck;
+};
+
 export type ChromebookAuditReport = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   generatedAt: string;
   resultLabel: "6x CPU emulation";
   productionBuild: true;
   actualChromebookTested: false;
+  provenance: ChromebookAuditProvenance;
   environment: typeof CHROMEBOOK_AUDIT_ENVIRONMENT & {
     browserVersion: string;
     userAgent: string;
@@ -128,11 +145,12 @@ export type ChromebookAuditReport = {
 };
 
 export type ChromebookPlaybackAuditReport = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   generatedAt: string;
   resultLabel: "6x CPU emulation";
   productionBuild: true;
   actualChromebookTested: false;
+  provenance: ChromebookAuditProvenance;
   workload:
     | "foundry-playback"
     | "path-playback"
@@ -167,19 +185,24 @@ export const percentiles = (values: readonly number[]): Percentiles => ({
 export const evaluateChromebookPlaybackAcceptance = (
   playback: PlaybackAudit,
   interactionLatencyMs: Percentiles,
-) => {
+): ChromebookAcceptance => {
   const limit = CHROMEBOOK_ACCEPTANCE_THRESHOLDS;
   const checks: Record<string, AcceptanceCheck> = {
+    actualRenderTelemetry: { passed: playback.frameSource === "webgl-clear-submission", observed: playback.frameSource === "webgl-clear-submission", limit: true },
+    renderSubmissionsObserved: { passed: playback.frameCount >= 2, observed: playback.frameCount, limit: ">=2" },
     frameP50: { passed: playback.frameIntervalMs.p50 <= limit.frameP50Ms, observed: playback.frameIntervalMs.p50, limit: limit.frameP50Ms },
     frameP95: { passed: playback.frameIntervalMs.p95 <= limit.frameP95Ms, observed: playback.frameIntervalMs.p95, limit: limit.frameP95Ms },
     frameP99: { passed: playback.frameIntervalMs.p99 <= limit.frameP99Ms, observed: playback.frameIntervalMs.p99, limit: limit.frameP99Ms },
     framesOver50: { passed: playback.framesOver50Percent <= limit.framesOver50Percent, observed: playback.framesOver50Percent, limit: limit.framesOver50Percent },
     framesOver200: { passed: playback.framesOver200 <= limit.framesOver200, observed: playback.framesOver200, limit: limit.framesOver200 },
     interactionLatency: { passed: interactionLatencyMs.p95 <= limit.interactionP95Ms, observed: interactionLatencyMs.p95, limit: limit.interactionP95Ms },
-    heapStable: { passed: playback.heap.stable, observed: playback.heap.stable, limit: true },
+    heapSupported: { passed: playback.heap.supported, observed: playback.heap.supported, limit: true },
+    heapStable: { passed: playback.heap.supported && playback.heap.stable, observed: playback.heap.stable, limit: true },
     reactPlaybackCommits: { passed: playback.reactCommits <= limit.reactPlaybackCommits, observed: playback.reactCommits, limit: limit.reactPlaybackCommits },
     webglResourcesStable: { passed: playback.webgl.liveResourceDelta <= 0, observed: playback.webgl.liveResourceDelta, limit: 0 },
     webglContextsStable: { passed: playback.webgl.contextDelta <= 0, observed: playback.webgl.contextDelta, limit: 0 },
+    webglContextLossAbsent: { passed: playback.webgl.contextLossDelta === 0, observed: playback.webgl.contextLossDelta, limit: 0 },
+    webglContextRestorationAbsent: { passed: playback.webgl.contextRestoreDelta === 0, observed: playback.webgl.contextRestoreDelta, limit: 0 },
     geometryCacheStable: { passed: playback.webgl.geometryCacheDelta <= 0, observed: playback.webgl.geometryCacheDelta, limit: 0 },
     materialCacheStable: { passed: playback.webgl.materialCacheDelta <= 0, observed: playback.webgl.materialCacheDelta, limit: 0 },
     persistentTopology: { passed: playback.webgl.topologyBuildDelta <= 0, observed: playback.webgl.topologyBuildDelta, limit: 0 },
@@ -193,7 +216,7 @@ export const evaluateChromebookAcceptance = (
   actionLatencyMs: Percentiles,
   tabSwitchLatencyMs: Percentiles,
   forbiddenImageRecognitionRequestCount: number,
-) => {
+): ChromebookAcceptance => {
   const playbackAcceptance = evaluateChromebookPlaybackAcceptance(
     playback,
     actionLatencyMs,

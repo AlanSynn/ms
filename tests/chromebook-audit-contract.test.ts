@@ -16,6 +16,7 @@ import {
   type FeatureActionAudit,
   type FeatureRuntimeProbe,
 } from "./browser/chromebookFeatureAuditReport";
+import { staticImportSpecifiers } from "../scripts/browser-bundle-graph.mjs";
 
 const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 
@@ -30,14 +31,29 @@ assert.equal(CHROMEBOOK_ACCEPTANCE_THRESHOLDS.framesOver200, 0);
 assert.equal(CHROMEBOOK_FEATURE_ACCEPTANCE_THRESHOLDS.nextPaintP95Ms, 100);
 assert.equal(CHROMEBOOK_FEATURE_ACCEPTANCE_THRESHOLDS.mainThreadLongTaskP95Ms, 50);
 assert.equal(percentile([40, 10, 30, 20], 0.95), 40, "percentiles use deterministic nearest-rank ordering");
+assert.deepEqual(
+  staticImportSpecifiers(
+    'import{a}from"./static-a.js";import"./static-b.js";const load=()=>import("./dynamic.js");',
+  ),
+  ["./static-a.js", "./static-b.js"],
+  "bundle closure includes emitted static imports but excludes lazy stage imports",
+);
 
 const passingPlayback: PlaybackAudit = {
+  frameSource: "webgl-clear-submission",
   durationMs: 600_000,
   frameCount: 18_000,
   frameIntervalMs: { p50: 32, p95: 40, p99: 70 },
   framesOver50: 100,
   framesOver50Percent: 0.56,
   framesOver200: 0,
+  eventLoopRaf: {
+    sampleCount: 36_000,
+    intervalMs: { p50: 16, p95: 17, p99: 18 },
+    intervalsOver50: 0,
+    intervalsOver50Percent: 0,
+    intervalsOver200: 0,
+  },
   longTasks: { count: 0, totalMs: 0, maxMs: 0 },
   browserEventLatencyMs: { p50: 0, p95: 0, p99: 0 },
   reactCommits: 0,
@@ -56,6 +72,8 @@ const passingPlayback: PlaybackAudit = {
     after: { contextsCreated: 1, contextsLost: 0, contextsRestored: 0, attachedCanvases: 1, resources: {} },
     liveResourceDelta: 0,
     contextDelta: 0,
+    contextLossDelta: 0,
+    contextRestoreDelta: 0,
     topologyBuildDelta: 0,
     geometryCacheDelta: 0,
     materialCacheDelta: 0,
@@ -102,6 +120,53 @@ assert.equal(
   false,
   "geometry growth during steady playback fails acceptance",
 );
+const frozenPlaybackAcceptance = evaluateChromebookPlaybackAcceptance(
+  {
+    ...passingPlayback,
+    frameCount: 0,
+    frameIntervalMs: { p50: 0, p95: 0, p99: 0 },
+    framesOver50: 0,
+    framesOver50Percent: 0,
+  },
+  { p50: 10, p95: 20, p99: 20 },
+);
+assert.equal(
+  frozenPlaybackAcceptance.passed.passed,
+  false,
+  "a frozen renderer cannot pass on a healthy host rAF loop",
+);
+assert.equal(frozenPlaybackAcceptance.renderSubmissionsObserved.passed, false);
+const contextRecoveryDuringPlayback = evaluateChromebookPlaybackAcceptance(
+  {
+    ...passingPlayback,
+    webgl: {
+      ...passingPlayback.webgl,
+      after: {
+        ...passingPlayback.webgl.after,
+        contextsLost: 1,
+        contextsRestored: 1,
+      },
+      contextLossDelta: 1,
+      contextRestoreDelta: 1,
+    },
+  },
+  { p50: 10, p95: 20, p99: 20 },
+);
+assert.equal(contextRecoveryDuringPlayback.passed.passed, false);
+assert.equal(contextRecoveryDuringPlayback.webglContextLossAbsent.passed, false);
+assert.equal(
+  contextRecoveryDuringPlayback.webglContextRestorationAbsent.passed,
+  false,
+);
+const unsupportedPlaybackHeap = evaluateChromebookPlaybackAcceptance(
+  {
+    ...passingPlayback,
+    heap: { ...passingPlayback.heap, supported: false, stable: true },
+  },
+  { p50: 10, p95: 20, p99: 20 },
+);
+assert.equal(unsupportedPlaybackHeap.passed.passed, false);
+assert.equal(unsupportedPlaybackHeap.heapSupported.passed, false);
 
 const featureProbe = (
   acquired: number,
@@ -195,6 +260,20 @@ assert.equal(
   false,
   "heap support requires three post-GC stabilization samples",
 );
+const unsupportedFeature = buildChromebookFeatureAudit(
+  "recommend",
+  featureActions,
+  { ...featureBaseline, heapBytes: undefined },
+  { ...featureFinal, heapBytes: undefined, heapSamplesBytes: [] },
+  {
+    minimumWorkerCreations: 2,
+    requireCompletedCycle: true,
+    requireCancelledCycle: true,
+  },
+);
+assert.equal(unsupportedFeature.acceptance.passed.passed, false);
+assert.equal(unsupportedFeature.acceptance.heapSupported.passed, false);
+assert.equal(unsupportedFeature.acceptance.heapBounded.passed, false);
 const leakingFeature = buildChromebookFeatureAudit(
   "recommend",
   featureActions,
@@ -232,9 +311,13 @@ assert(packageJson.scripts["test:chromebook-audit"].includes("chromebook-simulat
 assert(packageJson.scripts["test:chromebook-audit"].includes("chromebook-interaction-audit.spec.ts"), "production-preview acceptance covers direct classroom manipulation");
 assert(packageJson.scripts["test:chromebook-audit"].includes("chromebook-import-audit.spec.ts"), "production-preview acceptance covers bounded project and character imports");
 assert(packageJson.scripts["test:chromebook-audit"].includes("chromebook-export-audit.spec.ts"), "production-preview acceptance covers Blueprint package generation");
+assert(packageJson.scripts["test:chromebook-audit"].includes("chromebook-audit-instrumentation.spec.ts"), "production-preview acceptance includes adversarial audit-probe coverage");
 assert.equal(packageJson.scripts["test:chromebook-audit:real-ai"], undefined, "the removed image-recognition workload has no audit command");
 assert(!packageJson.scripts["test:chromebook-audit"].includes("chromebook-audit.spec.ts"), "the short per-feature audit is the primary gate");
 assert(packageJson.scripts["test:chromebook-audit:full"].includes("chromebook-audit.spec.ts"), "the full workflow and soak remain available separately");
+const bundleBudget = read("scripts/check-browser-bundle.mjs");
+assert(bundleBudget.includes("collectStaticImportClosure") && bundleBudget.includes("entryJsGzipBytes"), "core bundle enforcement follows the emitted static-import closure while reporting entry-only size");
+assert(bundleBudget.includes("schemaVersion: 2"), "the bundle report version identifies static-closure semantics");
 const config = read("playwright.config.ts");
 assert(config.includes("channel: 'chrome'") && config.includes("--enable-precise-memory-info"));
 assert(config.includes("reuseExistingServer: !process.env.CI && !auditEnabled"), "audit cannot reuse a stale preview server");
@@ -269,6 +352,20 @@ assert(stageSwitchSpec.includes("await runCycles(warmSequence, 1, 3, samples)"),
 assert(stageSwitchSpec.includes("coldLongTaskMax") && stageSwitchSpec.includes("warmBaseline"));
 assert(stageSwitchSpec.includes("warmCycleEndLiveResources") && stageSwitchSpec.includes("resourcePlateau"));
 assert(stageSwitchSpec.includes("resourcesReturned") && stageSwitchSpec.includes("noContextLoss"));
+assert(stageSwitchSpec.includes("heapSupported") && stageSwitchSpec.includes("noContextRestoration"));
+assert(
+  stageSwitchSpec.includes("waitForStageContent") &&
+    stageSwitchSpec.includes("data-three-topology-ready") &&
+    stageSwitchSpec.includes("data-three-render-submissions"),
+  "stage readiness waits for the application renderer instead of the host rAF alone",
+);
+assert(
+  stageSwitchSpec.includes("readSettledStageProbe") &&
+    stageSwitchSpec.includes("resourcePeakGrowthByKind") &&
+    stageSwitchSpec.includes("warmBaselineResourceLive") &&
+    stageSwitchSpec.includes("ownershipSettledMs"),
+  "stage resource gates compare identity-aware per-kind ownership at settled same-stage boundaries",
+);
 for (const stage of ["path", "design", "assembly"]) {
   assert(simulationSpec.includes(`\"${stage}\"`), `simulation audit measures ${stage} playback`);
 }
@@ -320,6 +417,8 @@ assert(harness.includes("Network.emulateNetworkConditions"));
 assert(harness.includes('type: "longtask"') && harness.includes('type: "event"'));
 assert(harness.includes("__REACT_DEVTOOLS_GLOBAL_HOOK__") && harness.includes("resourceMethods"));
 assert(harness.includes("AuditedWorker") && harness.includes("trackedBitmaps") && harness.includes("activeObjectUrls"));
+assert(harness.includes("webglFrameSubmissions") && harness.includes('frameSource: "webgl-clear-submission"'), "playback intervals come from real GL clear submissions");
+assert(harness.includes("const tracked = new WeakSet<object>()") && harness.includes("!released.has"), "WebGL deletion accounting is identity-aware");
 assert(!harness.includes("value < 2_000"), "multi-second stalls remain visible to the frame gate");
 const foundry = read("components/stages/foundry/ThreeFoundryPreview.tsx");
 assert(foundry.includes("recordFoundryTopologyBuild"), "normal production rendering exposes topology work only to an injected audit sink");

@@ -33,6 +33,7 @@ type BrowserAuditState = {
   foundryGeometryCacheSize: number;
   foundryMaterialCacheSize: number;
   puppetTopologyDurations: number[];
+  webglFrameSubmissions: number[];
   externalFileAction: {
     sequence: number;
     startedAt: number;
@@ -54,6 +55,7 @@ export const installChromebookAuditInstrumentation = async (context: BrowserCont
       foundryGeometryCacheSize: 0,
       foundryMaterialCacheSize: 0,
       puppetTopologyDurations: [],
+      webglFrameSubmissions: [],
       externalFileAction: { sequence: 0, startedAt: 0 },
       runtime: {
         probeSupport: {
@@ -288,10 +290,13 @@ export const installChromebookAuditInstrumentation = async (context: BrowserCont
         const remove = gl[deleteName];
         if (typeof create !== "function" || typeof remove !== "function") continue;
         resources[kind] ??= { created: 0, deleted: 0, live: 0, peakLive: 0 };
+        const tracked = new WeakSet<object>();
+        const released = new WeakSet<object>();
         try {
           gl[createName] = function (this: unknown, ...args: unknown[]) {
             const value = Reflect.apply(create, this, args);
             if (value) {
+              tracked.add(value as object);
               const count = resources[kind];
               count.created += 1;
               count.live += 1;
@@ -300,7 +305,14 @@ export const installChromebookAuditInstrumentation = async (context: BrowserCont
             return value;
           };
           gl[deleteName] = function (this: unknown, ...args: unknown[]) {
-            if (args[0]) {
+            const value = args[0];
+            if (
+              value !== null &&
+              (typeof value === "object" || typeof value === "function") &&
+              tracked.has(value as object) &&
+              !released.has(value as object)
+            ) {
+              released.add(value as object);
               const count = resources[kind];
               count.deleted += 1;
               count.live = Math.max(0, count.live - 1);
@@ -309,6 +321,17 @@ export const installChromebookAuditInstrumentation = async (context: BrowserCont
           };
         } catch {
           // A read-only browser method leaves renderer.info and topology probes available.
+        }
+      }
+      const clear = gl.clear;
+      if (typeof clear === "function") {
+        try {
+          gl.clear = function (this: unknown, ...args: unknown[]) {
+            state.webglFrameSubmissions.push(performance.now());
+            return Reflect.apply(clear, this, args);
+          };
+        } catch {
+          // Missing GL submission telemetry is an explicit playback failure.
         }
       }
     };
@@ -437,6 +460,8 @@ export const measureAction = async (
 
 export type FeatureNextPaintTiming = {
   startedAt: number;
+  eventTaskEndMs?: number;
+  firstRafMs?: number;
   nextPaintMs: number;
 };
 
@@ -448,15 +473,20 @@ export const measureClickToNextPaint = async (
   return control.evaluate((element: HTMLElement) => {
     const startedAt = performance.now();
     element.click();
+    let eventTaskEndMs: number | undefined;
+    queueMicrotask(() => { eventTaskEndMs = performance.now() - startedAt; });
     return new Promise<FeatureNextPaintTiming>((resolve) => {
-      requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const firstRafMs = performance.now() - startedAt;
         requestAnimationFrame(() =>
           resolve({
             startedAt,
+            eventTaskEndMs,
+            firstRafMs,
             nextPaintMs: performance.now() - startedAt,
           }),
-        ),
-      );
+        );
+      });
     });
   });
 };
@@ -621,6 +651,9 @@ export const finishFeatureAction = async (
           ))
           .filter((duration) => duration > 0),
         puppetTopologyDurations: state.puppetTopologyDurations.slice(puppetTopologyOffset),
+        renderSubmissionOffsetsMs: state.webglFrameSubmissions
+          .filter((submittedAt) => submittedAt >= actionStartedAt)
+          .map((submittedAt) => submittedAt - actionStartedAt),
       };
     },
     {
@@ -634,7 +667,10 @@ export const finishFeatureAction = async (
     label: input.label,
     cycle: input.cycle,
     outcome: input.outcome,
+    eventTaskEndMs: input.timing.eventTaskEndMs,
+    firstRafMs: input.timing.firstRafMs,
     nextPaintMs: input.timing.nextPaintMs,
+    renderSubmissionOffsetsMs: result.renderSubmissionOffsetsMs,
     settleMs,
     jobCompletionMs: input.jobCompletionMs,
     longTasks: {
@@ -688,21 +724,34 @@ export const collectPlaybackAudit = async (page: Page, durationMs: number): Prom
     const heapTimer = window.setInterval(() => {
       if (memory) heap.push(memory.usedJSHeapSize);
     }, Math.min(5_000, Math.max(250, durationMs / 20)));
-    const intervals: number[] = [];
+    const beforeFrameSubmissions = state?.webglFrameSubmissions.length ?? 0;
+    const eventLoopIntervals: number[] = [];
     const start = performance.now();
     let previous = start;
     await new Promise<void>((resolve) => {
       const tick = (time: number) => {
-        intervals.push(time - previous);
+        eventLoopIntervals.push(time - previous);
         previous = time;
         if (time - start >= durationMs) resolve();
         else requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
     });
+    const end = performance.now();
     clearInterval(heapTimer);
     if (memory) heap.push(memory.usedJSHeapSize);
-    const validIntervals = intervals.filter((value) => value > 0);
+    const frameSubmissions = (state?.webglFrameSubmissions ?? [])
+      .slice(beforeFrameSubmissions)
+      .filter((time) => time >= start && time <= end);
+    const submissionIntervals: number[] = [];
+    let priorSubmission = start;
+    for (const submission of frameSubmissions) {
+      submissionIntervals.push(submission - priorSubmission);
+      priorSubmission = submission;
+    }
+    submissionIntervals.push(end - priorSubmission);
+    const validIntervals = submissionIntervals.filter((value) => value > 0);
+    const validEventLoopIntervals = eventLoopIntervals.filter((value) => value > 0);
     const longTasks = (state?.longTasks ?? []).slice(beforeLongTasks);
     const eventDurations = (state?.eventDurations ?? []).slice(beforeEvents);
     const firstBytes = heap[0] ?? 0;
@@ -713,12 +762,23 @@ export const collectPlaybackAudit = async (page: Page, durationMs: number): Prom
     const after = snapshotWebGL();
     const framesOver50 = validIntervals.filter((value) => value > 50).length;
     return {
-      durationMs: performance.now() - start,
-      frameCount: validIntervals.length,
+      frameSource: "webgl-clear-submission" as const,
+      durationMs: end - start,
+      frameCount: frameSubmissions.length,
       frameIntervalMs: measurePercentiles(validIntervals),
       framesOver50,
       framesOver50Percent: validIntervals.length ? framesOver50 / validIntervals.length * 100 : 100,
       framesOver200: validIntervals.filter((value) => value > 200).length,
+      eventLoopRaf: {
+        sampleCount: validEventLoopIntervals.length,
+        intervalMs: measurePercentiles(validEventLoopIntervals),
+        intervalsOver50: validEventLoopIntervals.filter((value) => value > 50).length,
+        intervalsOver50Percent: validEventLoopIntervals.length
+          ? validEventLoopIntervals.filter((value) => value > 50).length /
+            validEventLoopIntervals.length * 100
+          : 100,
+        intervalsOver200: validEventLoopIntervals.filter((value) => value > 200).length,
+      },
       longTasks: {
         count: longTasks.length,
         totalMs: longTasks.reduce((sum, value) => sum + value, 0),
@@ -741,6 +801,8 @@ export const collectPlaybackAudit = async (page: Page, durationMs: number): Prom
         after,
         liveResourceDelta: liveResources(after) - liveResources(before),
         contextDelta: after.contextsCreated - before.contextsCreated,
+        contextLossDelta: after.contextsLost - before.contextsLost,
+        contextRestoreDelta: after.contextsRestored - before.contextsRestored,
         topologyBuildDelta: probeNumber("foundryTopologyBuilds") - beforeTopology,
         geometryCacheDelta: probeNumber("foundryGeometryCacheSize") - beforeGeometry,
         materialCacheDelta: probeNumber("foundryMaterialCacheSize") - beforeMaterial,

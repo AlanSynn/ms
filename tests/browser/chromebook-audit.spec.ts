@@ -17,6 +17,7 @@ import {
   measureAction,
   measureBoot,
 } from "./chromebookAuditHarness";
+import { collectChromebookAuditProvenance } from "./chromebookAuditProvenance";
 
 const ENABLED = process.env.CHROMEBOOK_AUDIT === "1";
 const ENFORCE = process.env.CHROMEBOOK_AUDIT_ENFORCE !== "0";
@@ -192,12 +193,17 @@ test.describe("Chromebook workflow audit", () => {
       tabSwitchLatencyMs,
       forbiddenImageRecognitionRequests.length,
     );
+    const baseURL = testInfo.project.use.baseURL;
+    if (typeof baseURL !== "string") {
+      throw new Error("Chromebook workflow audit requires a preview base URL");
+    }
     const report: ChromebookAuditReport = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       generatedAt: new Date().toISOString(),
       resultLabel: "6x CPU emulation",
       productionBuild: true,
       actualChromebookTested: false,
+      provenance: await collectChromebookAuditProvenance(baseURL),
       environment: {
         ...CHROMEBOOK_AUDIT_ENVIRONMENT,
         browserVersion: browser.version(),
