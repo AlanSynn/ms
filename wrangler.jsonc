@@ -1,0 +1,15 @@
+{
+  "name": "ms",
+  "compatibility_date": "2026-08-21",
+  "workers_dev": false,
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  },
+  "routes": [
+    {
+      "pattern": "motionsmith.org",
+      "custom_domain": true
+    }
+  ]
+}

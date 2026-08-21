@@ -18,7 +18,7 @@ if (studySummaryEnabled && e2eDiagnosticsEnabled) {
 }
 
 export default defineConfig(() => {
-  // Use relative paths for Tauri; allow GitHub Pages project paths for web builds.
+  // Use relative paths for Tauri; build the classroom root and Pages mirror separately.
   const isTauri = process.env.TAURI_PLATFORM !== undefined;
   const webBase = process.env.VITE_BASE_PATH ?? '/';
 

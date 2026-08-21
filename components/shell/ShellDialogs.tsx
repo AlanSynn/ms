@@ -43,7 +43,7 @@ export const AboutDialog = ({ onClose }: { onClose: () => void }) => <div classN
     </div>
     <div className="shortcut-help-grid">
       <div className="shortcut-help-row"><span>Version</span><kbd>v{APP_VERSION}</kbd></div>
-      <div className="shortcut-help-row"><span>Release</span><kbd>/ms/ static web</kbd></div>
+      <div className="shortcut-help-row"><span>Release</span><kbd>classroom static web</kbd></div>
       <div className="shortcut-help-row"><span>Data</span><kbd>browser autosave · files</kbd></div>
       <div className="shortcut-help-row"><span>Project</span><kbd>MotionSmith</kbd></div>
     </div>
