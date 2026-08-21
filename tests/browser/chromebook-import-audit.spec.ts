@@ -164,6 +164,21 @@ const openWavingArm = async (page: Page) => {
 const activeWorkers = async (page: Page) =>
   (await readFeatureRuntimeProbe(page)).lifecycle.workers.active;
 
+const waitForPuppetTopologyPlateau = async (page: Page) => {
+  let previous = -1;
+  let stableSamples = 0;
+  await expect.poll(async () => {
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    }));
+    const current = (await readFeatureRuntimeProbe(page)).puppetTopologyCount;
+    stableSamples = current === previous ? stableSamples + 1 : 0;
+    previous = current;
+    return stableSamples;
+  }, { message: "import begins after initial character topology reaches a plateau" })
+    .toBeGreaterThanOrEqual(2);
+};
+
 const finalProbe = async (
   page: Page,
   client: CDPSession,
@@ -180,6 +195,7 @@ const auditProjectImport = async (
   await expect.poll(() => activeWorkers(page), {
     message: "project import begins after prior disposable workers settle",
   }).toBe(0);
+  await waitForPuppetTopologyPlateau(page);
   const baseline = await collectStableFeatureProbe(page, client);
   const input = page.getByTestId("project-file-input");
   const actions: FeatureActionAudit[] = [];
@@ -230,6 +246,7 @@ const auditCharacterPackageImport = async (
   await expect.poll(() => activeWorkers(page), {
     message: "package import begins after prior disposable workers settle",
   }).toBe(0);
+  await waitForPuppetTopologyPlateau(page);
   const baseline = await collectStableFeatureProbe(page, client);
   const input = page.getByTestId("blank-package-input");
   const actions: FeatureActionAudit[] = [];
@@ -276,6 +293,7 @@ const auditSceneObjectImage = async (
   await expect.poll(() => activeWorkers(page), {
     message: "object artwork begins after prior disposable workers settle",
   }).toBe(0);
+  await waitForPuppetTopologyPlateau(page);
   const baseline = await collectStableFeatureProbe(page, client);
   const input = page.getByTestId("scene-object-image-input");
   const actions: FeatureActionAudit[] = [];

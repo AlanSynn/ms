@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { Buffer } from 'node:buffer';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { CLASSROOM_LESSONS, createLessonProject, serializeProject } from '../../utils/project';
 import { serializeProjectCompact } from '../../utils/projectSerialization';
 import { ENABLED_MECHANISM_TYPES, isMechanismTypeEnabled } from '../../utils/mechanismTemplates';
@@ -541,7 +541,7 @@ test('Getting Started guided project opens a real editable lesson', async ({ pag
   await expect(page.getByTestId('character-three-puppet-state')).toHaveAttribute('data-three-mechanism-count', '0');
   await expect(page.getByTestId('character-three-puppet-toggle-mechanisms')).toHaveCount(0);
   await expect(page.getByTestId('status-bar')).toContainText('Make a hand wave ready');
-  await page.getByRole('button', { name: /Foundry/i }).click();
+  await clickStage(page, 'Foundry');
   const foundryInspector = page.getByTestId('stage-right-inspector');
   await expect(foundryInspector.getByTestId('foundry-visible-sensemaking')).toContainText('Crank turns');
   await expect(foundryInspector.getByTestId('foundry-visible-sensemaking')).toHaveAttribute('data-sensemaking-evidence', 'driver crank turns and rocker swings');
@@ -703,6 +703,9 @@ const importProjectFile = async (page: Page, projectPath: string, targetStage: '
   } else {
     await page.getByTestId('project-file-input').setInputFiles(projectPath);
   }
+  await expect(page.getByTestId('status-bar')).toContainText(
+    `Loaded project ${basename(projectPath)}`,
+  );
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
   if (targetStage === 'character') {
     await page.getByRole('button', { name: /^Character$/i }).click();
@@ -1060,7 +1063,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   // Blueprint handoff so this test exercises an actually buildable mechanism.
   await openFabricationReadyFourBar(page);
 
-  await page.getByRole('button', { name: /Foundry/i }).click();
+  await clickStage(page, 'Foundry');
   await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
   await expect(page.getByTestId('foundry-camera-readout')).toContainText('3D Isometric');
   await expect(page.getByTestId('foundry-three-canvas')).toBeVisible();
@@ -4754,6 +4757,7 @@ test('Simplified shared canvas stays non-destructive and exports blueprint', asy
   await expect(page.getByTestId('blueprint-canvas-preview')).toBeVisible();
   await page.getByRole('button', { name: /Generate package/i }).click();
   await expect(page.getByTestId('blueprint-detail-preview')).toContainText('Build spot');
+  await expect(page.getByTestId('blueprint-export-package-json')).toBeAttached();
   await expect(page.getByTestId('blueprint-three-puppet-canvas')).toBeVisible();
   await expect(page.getByTestId('blueprint-three-puppet-state')).toHaveAttribute('data-camera-preset', 'front');
   await expect(page.getByRole('button', { name: 'Metadata', exact: true })).toHaveCount(0);

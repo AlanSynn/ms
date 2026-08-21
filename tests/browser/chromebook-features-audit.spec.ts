@@ -262,16 +262,36 @@ const auditTraceGif = async (
   const actions: FeatureActionAudit[] = [];
 
   const cancelledModal = await openTrace(page);
+  await cancelledModal.evaluate((modal) => {
+    const cancelOnDispatch = (event: Event) => {
+      const detail = (event as CustomEvent<{ type?: string }>).detail;
+      if (detail?.type !== "load") return;
+      window.removeEventListener(
+        "motionsmith:chromebook-worker-request",
+        cancelOnDispatch,
+      );
+      requestAnimationFrame(() => {
+        document.documentElement.dataset.auditTraceCancelledOnDispatch = "true";
+        (modal.querySelector(
+          'button[aria-label="Close trace"]',
+        ) as HTMLButtonElement | null)?.click();
+      });
+    };
+    window.addEventListener(
+      "motionsmith:chromebook-worker-request",
+      cancelOnDispatch,
+    );
+  });
   const cancelledBefore = await readFeatureRuntimeProbe(page);
   const cancelledInput = cancelledModal.locator('input[type="file"]');
   const cancelledTiming = await measureExternalActionToNextPaint(
     page,
     () => cancelledInput.setInputFiles(GIF_FIXTURE),
   );
-  await expect.poll(() => workerActive(page), {
-    message: "Trace owns its GIF decoder worker before close",
-  }).toBeGreaterThan(baseline.lifecycle.workers.active);
-  await cancelledModal.getByRole("button", { name: "Close trace" }).click();
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-audit-trace-cancelled-on-dispatch",
+    "true",
+  );
   await expect(cancelledModal).toHaveCount(0);
   await waitForLifecycleBaseline(page, baseline.lifecycle);
   actions.push(await finishFeatureAction(page, {
@@ -356,7 +376,14 @@ test.describe("Chromebook M3 feature audit", () => {
       name: "traceGif",
       prepare: async (page) => {
         await openWavingArm(page);
+        await page.getByTestId("workflow-stage-options").click();
+        await expect(page.locator('[data-stage="options"]')).toBeVisible();
+        const autosave = page.getByLabel("Enable autosave");
+        if (await autosave.isChecked()) await autosave.uncheck();
         await goToStage(page, "Path");
+        await expect.poll(() => workerActive(page), {
+          message: "Trace begins after unrelated autosave work settles",
+        }).toBe(0);
       },
       audit: auditTraceGif,
     });

@@ -100,6 +100,10 @@ const auditBlueprintPackage = async (
   await expect(
     page.getByRole("button", { name: "Download PDF cut sheet default" }),
   ).toBeVisible();
+  await expect(
+    page.getByTestId("blueprint-export-package-json"),
+    "memory audit does not retain a diagnostic copy of the package JSON",
+  ).toHaveCount(0);
   await expect(create).toContainText("Make files");
   const jobCompletionMs = await elapsedFeatureTime(page, completedTiming);
   await waitForLifecycleBaseline(page, baseline.lifecycle);
