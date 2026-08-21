@@ -13,6 +13,11 @@ import {
   type ProjectImportWorkerResponse,
 } from "../runtime/import/projectImportJob";
 import {
+  PROJECT_RASTER_IMPORT_LIMITS,
+  validateCharacterPackageRasterFiles,
+  validateProjectRasterSources,
+} from "../runtime/import/projectRasterImportPolicy";
+import {
   createProjectImportWorkerClient,
   type ProjectImportFrameScheduler,
   type ProjectImportWorkerPort,
@@ -28,6 +33,25 @@ import {
   createProjectFromPackageData,
   validateCharacterPackageAssetReferences,
 } from "../utils/packageLoader";
+
+const pngBytes = (
+  width: number,
+  height: number,
+  totalBytes = 25,
+  marker = 0,
+) => {
+  const bytes = Buffer.alloc(Math.max(25, totalBytes));
+  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(bytes, 0);
+  bytes.writeUInt32BE(13, 8);
+  bytes.write("IHDR", 12, "ascii");
+  bytes.writeUInt32BE(width, 16);
+  bytes.writeUInt32BE(height, 20);
+  bytes[24] = marker;
+  return bytes;
+};
+
+const pngHeaderDataUrl = (width: number, height: number, marker = 0) =>
+  `data:image/png;base64,${pngBytes(width, height, 25, marker).toString("base64")}`;
 
 assert.throws(
   () => validateProjectImportFile({
@@ -129,6 +153,91 @@ assert.equal(imported.sourceName, "sample.motionsmith.json");
 assert.equal(imported.project.partOrder.length, sample.partOrder.length);
 assert.equal(imported.project.mechanisms.length, sample.mechanisms.length);
 
+const sharedRasterUrl = pngHeaderDataUrl(2_000, 2_000);
+assert.deepEqual(
+  validateProjectRasterSources({
+    parts: {
+      first: { textureUrl: sharedRasterUrl, maskUrl: sharedRasterUrl },
+      second: { textureUrl: sharedRasterUrl },
+    },
+    sceneObjects: {
+      prop: { textureUrl: sharedRasterUrl },
+    },
+  }),
+  { uniqueSourceCount: 1, totalSourcePixels: 4_000_000 },
+  "one embedded source shared by parts, masks, and objects consumes the raster budget once",
+);
+assert.throws(
+  () => validateProjectRasterSources({
+    parts: {
+      first: { textureUrl: pngHeaderDataUrl(2_000, 2_000, 1) },
+      second: { textureUrl: pngHeaderDataUrl(2_000, 2_000, 2) },
+      third: { textureUrl: pngHeaderDataUrl(1, 1, 3) },
+    },
+  }),
+  /combined 8 megapixel classroom texture limit/,
+  "distinct artwork cannot exceed the aggregate decoded-pixel budget",
+);
+assert.throws(
+  () => validateProjectRasterSources({
+    parts: { body: { textureUrl: pngHeaderDataUrl(8_192, 8_192) } },
+  }),
+  /2048 px or 4 megapixel classroom texture limit/,
+  "a tiny compressed header cannot admit an 8192 by 8192 texture",
+);
+assert.throws(
+  () => validateProjectRasterSources({
+    parts: { body: { textureUrl: "data:image/png;base64,AAAA" } },
+  }),
+  /dimensions could not be read safely/,
+  "unknown raster headers are rejected before browser image decode",
+);
+assert.equal(PROJECT_RASTER_IMPORT_LIMITS.maxSourceEdge, 2_048);
+assert.equal(PROJECT_RASTER_IMPORT_LIMITS.maxAggregateSourcePixels, 8_000_000);
+
+const sharedPackageConfig = {
+  width: 100,
+  height: 100,
+  joints: { root: { position: [50, 50] } },
+};
+const sharedHeader = pngBytes(160, 220);
+const sharedPackageFile = new File([sharedHeader], "shared.png", {
+  type: "image/png",
+});
+assert.deepEqual(
+  await validateCharacterPackageRasterFiles([
+    sharedPackageFile,
+    sharedPackageFile,
+  ]),
+  { uniqueSourceCount: 1, totalSourcePixels: 160 * 220 },
+  "one shared package file is scanned and charged once",
+);
+
+const unsafeHeader = pngBytes(8_192, 8_192);
+await assert.rejects(
+  runProjectImportJob({
+    kind: "character-package",
+    files: [
+      new File([JSON.stringify({
+        parts: {
+          body: {
+            name: "Body",
+            roi: [0, 0, 50, 50],
+            texture_path: "body.png",
+            anchor_joint_id: "root",
+          },
+        },
+      })], "parts_info.json", { type: "application/json" }),
+      new File([JSON.stringify(sharedPackageConfig)], "char_cfg.json", {
+        type: "application/json",
+      }),
+      new File([unsafeHeader], "body.png", { type: "image/png" }),
+    ],
+  }),
+  /2048 px or 4 megapixel classroom texture limit/,
+  "the character-package worker blocks an unsafe compressed raster before returning ProjectState",
+);
+
 const boundaryParts = {
   parts: {
     body: {
@@ -171,12 +280,18 @@ const boundaryProject = createProjectFromPackageData(
   boundaryParts,
   boundaryConfig,
   {
-    "body.png": `data:image/png;base64,${Buffer.alloc(
+    "body.png": `data:image/png;base64,${pngBytes(
+      1_600,
+      1_000,
       PROJECT_IMPORT_LIMITS.packageAssetBytes,
+      1,
     ).toString("base64")}`,
-    "hand.png": `data:image/png;base64,${Buffer.alloc(
+    "hand.png": `data:image/png;base64,${pngBytes(
+      1_200,
+      1_000,
       PROJECT_IMPORT_LIMITS.packageTotalAssetBytes -
         PROJECT_IMPORT_LIMITS.packageAssetBytes,
+      2,
     ).toString("base64")}`,
   },
   "boundary-package",
