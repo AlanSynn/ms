@@ -58,7 +58,7 @@ import {
   cachedThreeResource,
   collectThreeObjectResourceUsage,
   pruneUnusedThreeResourceCache,
-  setRendererPixelRatioCap,
+  resizeRendererToPerformancePolicy,
 } from "../../../utils/threeResourceKit";
 import { recordFoundryTopologyBuild } from "../../../utils/performanceAudit";
 import { resolveRenderPerformancePolicy } from "../../../utils/renderPerformancePolicy";
@@ -1580,8 +1580,7 @@ export const ThreeFoundryPreview = ({
       const width = Math.max(1, host.clientWidth);
       const height = Math.max(1, host.clientHeight);
       onProjectionSizeChange({ width, height });
-      setRendererPixelRatioCap(renderer, renderPolicy, { width, height });
-      renderer.setSize(width, height, false);
+      resizeRendererToPerformancePolicy(renderer, renderPolicy, { width, height });
       cam.aspect = width / height;
       cam.updateProjectionMatrix();
       renderCamera(cameraStateRef.current);

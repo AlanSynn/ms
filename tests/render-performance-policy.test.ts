@@ -55,14 +55,22 @@ assert.deepEqual(
   {
     pixelRatioCap: high.pixelRatioCap,
     antialias: high.antialias,
+    targetFramesPerSecond: high.targetFramesPerSecond,
     overlayQuality: high.overlayQuality,
+    partTopology: high.partTopology,
+    interactiveDetail: high.interactiveDetail,
+    repeatedGeometry: high.repeatedGeometry,
   },
   {
     pixelRatioCap: 2,
-    antialias: true,
-    overlayQuality: 'full',
+    antialias: balanced.antialias,
+    targetFramesPerSecond: balanced.targetFramesPerSecond,
+    overlayQuality: balanced.overlayQuality,
+    partTopology: balanced.partTopology,
+    interactiveDetail: balanced.interactiveDetail,
+    repeatedGeometry: balanced.repeatedGeometry,
   },
-  'High explicitly opts capable hardware into native high-DPI rendering and full overlays',
+  'High raises resolution without silently increasing cadence, MSAA, scene detail, media, or cache work',
 );
 
 const effectiveRatio = (
@@ -83,9 +91,13 @@ assert.equal(
   'Balanced keeps its Chromebook DPR cap at the acceptance viewport',
 );
 assert.equal(
-  effectiveRatio(high),
+  effectiveRatio(high, { viewportWidth: 624, viewportHeight: 610 }),
   2,
-  'High reaches native 2x rendering when the viewport and GPU limits permit it',
+  'High reaches native 2x rendering in the Chromebook workbench viewport',
+);
+assert(
+  effectiveRatio(high) < 2,
+  'a full-window canvas remains inside the conservative rendered-pixel budget',
 );
 assert.equal(
   effectiveRatio(high, { devicePixelRatio: 1.25 }),
@@ -112,11 +124,11 @@ assert(
 assert.equal(
   effectiveRatio(high, {
     devicePixelRatio: 3,
-    viewportWidth: 3000,
+    viewportWidth: 2000,
     viewportHeight: 1000,
-    maxRenderbufferDimension: 4096,
+    maxRenderbufferDimension: 2048,
   }),
-  4096 / 3000,
+  2048 / 2000,
   'the effective ratio keeps both drawing-buffer dimensions within WebGL limits',
 );
 
@@ -140,28 +152,30 @@ policies.forEach((policy) => {
 
 assert.equal(fast.partTopology.bevelEnabled, false);
 assert.equal(balanced.partTopology.edgeGeometryEnabled, false);
-assert.equal(high.partTopology.bevelEnabled, true);
-assert.equal(high.partTopology.edgeGeometryEnabled, true);
+assert.equal(high.partTopology.bevelEnabled, false);
+assert.equal(high.partTopology.edgeGeometryEnabled, false);
 assert(fast.partTopology.curveSegments <= balanced.partTopology.curveSegments);
-assert(balanced.partTopology.curveSegments < high.partTopology.curveSegments);
+assert.equal(balanced.partTopology.curveSegments, high.partTopology.curveSegments);
 
 assert(fast.pixelRatioCap <= balanced.pixelRatioCap && balanced.pixelRatioCap < high.pixelRatioCap);
-assert(fast.targetFramesPerSecond < balanced.targetFramesPerSecond && balanced.targetFramesPerSecond < high.targetFramesPerSecond);
-assert(fast.minOverlayIntervalMs > balanced.minOverlayIntervalMs && balanced.minOverlayIntervalMs > high.minOverlayIntervalMs);
+assert(fast.targetFramesPerSecond < balanced.targetFramesPerSecond);
+assert.equal(balanced.targetFramesPerSecond, high.targetFramesPerSecond);
+assert(fast.minOverlayIntervalMs > balanced.minOverlayIntervalMs);
+assert.equal(balanced.minOverlayIntervalMs, high.minOverlayIntervalMs);
 assert(fast.repeatedGeometry.maxPoolEntries < balanced.repeatedGeometry.maxPoolEntries);
-assert(balanced.repeatedGeometry.maxPoolEntries < high.repeatedGeometry.maxPoolEntries);
+assert.equal(balanced.repeatedGeometry.maxPoolEntries, high.repeatedGeometry.maxPoolEntries);
 assert(fast.interactiveDetail.mechanismTraceSamples < balanced.interactiveDetail.mechanismTraceSamples);
-assert(balanced.interactiveDetail.mechanismTraceSamples < high.interactiveDetail.mechanismTraceSamples);
+assert.equal(balanced.interactiveDetail.mechanismTraceSamples, high.interactiveDetail.mechanismTraceSamples);
 assert(fast.interactiveDetail.maxPathLinePoints < balanced.interactiveDetail.maxPathLinePoints);
-assert(balanced.interactiveDetail.maxPathLinePoints < high.interactiveDetail.maxPathLinePoints);
+assert.equal(balanced.interactiveDetail.maxPathLinePoints, high.interactiveDetail.maxPathLinePoints);
 assert(fast.interactiveDetail.maxPathHandles < balanced.interactiveDetail.maxPathHandles);
-assert(balanced.interactiveDetail.maxPathHandles < high.interactiveDetail.maxPathHandles);
+assert.equal(balanced.interactiveDetail.maxPathHandles, high.interactiveDetail.maxPathHandles);
 assert(fast.interactiveDetail.overlayPointStride > balanced.interactiveDetail.overlayPointStride);
-assert(balanced.interactiveDetail.overlayPointStride > high.interactiveDetail.overlayPointStride);
+assert.equal(balanced.interactiveDetail.overlayPointStride, high.interactiveDetail.overlayPointStride);
 assert(fast.interactiveDetail.maxMediaEdgePx < balanced.interactiveDetail.maxMediaEdgePx);
-assert(balanced.interactiveDetail.maxMediaEdgePx < high.interactiveDetail.maxMediaEdgePx);
+assert.equal(balanced.interactiveDetail.maxMediaEdgePx, high.interactiveDetail.maxMediaEdgePx);
 assert(fast.interactiveDetail.maxMediaFrames < balanced.interactiveDetail.maxMediaFrames);
-assert(balanced.interactiveDetail.maxMediaFrames < high.interactiveDetail.maxMediaFrames);
+assert.equal(balanced.interactiveDetail.maxMediaFrames, high.interactiveDetail.maxMediaFrames);
 
 assert.strictEqual(
   resolveRenderPerformancePolicy('balanced'),

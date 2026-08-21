@@ -28,7 +28,7 @@ import {
   disposeMarkedThreeMaterials,
   disposeThreeObjectGraph,
   pruneUnusedThreeResourceCache,
-  setRendererPixelRatioCap,
+  resizeRendererToPerformancePolicy,
 } from '../utils/threeResourceKit';
 import { resolveRenderPerformancePolicy } from '../utils/renderPerformancePolicy';
 import { recordPuppetTopologyBuild } from '../utils/performanceAudit';
@@ -45,6 +45,10 @@ import {
   updatePuppetJointHardwareInstances,
   type PuppetJointHardwareInstances,
 } from '../runtime/render/puppetJointHardware';
+import {
+  recordViewerDragDistance,
+  VIEWER_CLICK_MAX_DISTANCE_PX,
+} from '../runtime/render/viewerDragDistance';
 
 const VIEW_SCALE = 35;
 const FABRICATION_LINKAGE_WIDTH_3D = Math.max(0.16, (FABRICATION_LINKAGE_WIDTH_MM * SCENE_PX_PER_MM) / VIEW_SCALE);
@@ -802,7 +806,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
   const [cameraPreset, setCameraPreset] = useState<Viewer3DCameraPreset>(() => initialCameraPreset ?? 'iso');
   const [cameraOrbit, setCameraOrbit] = useState(() => cameraOrbitFromPreset(initialCameraPreset ?? 'iso'));
   const [isViewerDragging, setIsViewerDragging] = useState(false);
-  const viewerDragRef = useRef<{ pointerId: number; button: number; x: number; y: number; yaw: number; pitch: number; offset: Point; mode: 'orbit' | 'pan' | 'select' | 'draw' | 'path-point' } | null>(null);
+  const viewerDragRef = useRef<{ pointerId: number; button: number; x: number; y: number; maxDistance: number; yaw: number; pitch: number; offset: Point; mode: 'orbit' | 'pan' | 'select' | 'draw' | 'path-point' } | null>(null);
   const [visibleLayers, setVisibleLayers] = useState(() => ({ ...DEFAULT_PUPPET_VIEWER_LAYERS, ...(initialLayers ?? {}) }));
   useEffect(() => {
     if (!initialCameraPreset) return;
@@ -1189,8 +1193,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     const resize = () => {
       const width = Math.max(1, host.clientWidth);
       const height = Math.max(1, host.clientHeight);
-      setRendererPixelRatioCap(renderer, renderPolicy, { width, height });
-      renderer.setSize(width, height, false);
+      resizeRendererToPerformancePolicy(renderer, renderPolicy, { width, height });
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       render();
@@ -2175,6 +2178,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
         button: event.button,
         x: event.clientX,
         y: event.clientY,
+        maxDistance: 0,
         yaw: cameraOrbit.yaw,
         pitch: cameraOrbit.pitch,
         offset: viewport?.offset ?? { x: 0, y: 0 },
@@ -2195,6 +2199,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
         button: event.button,
         x: event.clientX,
         y: event.clientY,
+        maxDistance: 0,
         yaw: cameraOrbit.yaw,
         pitch: cameraOrbit.pitch,
         offset: viewport?.offset ?? { x: 0, y: 0 },
@@ -2214,6 +2219,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
           button: event.button,
           x: event.clientX,
           y: event.clientY,
+          maxDistance: 0,
           yaw: cameraOrbit.yaw,
           pitch: cameraOrbit.pitch,
           offset: viewport?.offset ?? { x: 0, y: 0 },
@@ -2233,6 +2239,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
       button: event.button,
       x: event.clientX,
       y: event.clientY,
+      maxDistance: 0,
       yaw: cameraOrbit.yaw,
       pitch: cameraOrbit.pitch,
       offset: viewport?.offset ?? { x: 0, y: 0 },
@@ -2246,6 +2253,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
   const handleViewerPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     const start = viewerDragRef.current;
     if (!start || start.pointerId !== event.pointerId) return;
+    recordViewerDragDistance(start, event.clientX, event.clientY);
     if (start.mode === 'select') {
       event.stopPropagation();
       onSelectOnlyPointerMove?.(event);
@@ -2378,7 +2386,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
   const finishViewerDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     const start = viewerDragRef.current;
     if (start?.pointerId !== event.pointerId) return;
-    const moved = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+    const moved = recordViewerDragDistance(start, event.clientX, event.clientY);
     viewerDragRef.current = null;
     setIsViewerDragging(false);
     if (start.mode === 'draw') {
@@ -2393,14 +2401,14 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     }
     if (start.mode === 'select') {
       event.stopPropagation();
-      if (moved < 4 && start.button === 0 && event.type === 'pointerup') pickViewerTarget(event);
+      if (moved < VIEWER_CLICK_MAX_DISTANCE_PX && start.button === 0 && event.type === 'pointerup') pickViewerTarget(event);
       if (event.type === 'pointercancel') onSelectOnlyPointerCancel?.(event);
       else onSelectOnlyPointerUp?.(event);
       if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
       return;
     }
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-    if (moved < 4 && event.type === 'pointerup') pickViewerTarget(event);
+    if (moved < VIEWER_CLICK_MAX_DISTANCE_PX && event.type === 'pointerup') pickViewerTarget(event);
   };
 
   const activeCamera = VIEWER3D_CAMERA_PRESETS[cameraPreset];

@@ -1946,9 +1946,9 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await expect(page.getByTestId('design-canvas')).toHaveCount(0);
   const highPerformanceRig = page.getByTestId('design-shared-foundry-preview').getByTestId('foundry-camera-rig');
   await expect(highPerformanceRig).toHaveAttribute('data-render-performance-preset', 'high');
-  await expect(highPerformanceRig).toHaveAttribute('data-render-antialias', 'on');
-  await expect(highPerformanceRig).toHaveAttribute('data-render-overlay-quality', 'full');
-  await expect(highPerformanceRig).toHaveAttribute('data-three-animation-commit-ms', '16.7');
+  await expect(highPerformanceRig).toHaveAttribute('data-render-antialias', 'off');
+  await expect(highPerformanceRig).toHaveAttribute('data-render-overlay-quality', 'balanced');
+  await expect(highPerformanceRig).toHaveAttribute('data-three-animation-commit-ms', '25.0');
   await expect(highPerformanceRig).toHaveAttribute('data-three-pixel-ratio-cap', '2.00');
   await expect.poll(
     () => canvasBackingPixelRatio(page.getByTestId('design-shared-foundry-preview').getByTestId('foundry-three-canvas')),

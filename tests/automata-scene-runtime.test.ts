@@ -29,11 +29,11 @@ const hash = (value: unknown) =>
     .digest('hex');
 
 const expectedHashes = new Map<number, string>([
-  [0, '3ff22df1685766d68050a1931d34c4f0d16c89a4eda0273cc0f3a2caef03dd72'],
-  [0.37, '875e01dd65ac6938e9ba36522ff9f470b8904cbc6b023e9cbc0a98842bd9667c'],
-  [1.2, 'f28116f9c8c2bff506fd27a8ea015b5a4103aa9732a9b4f2e3db3b3862e54735'],
-  [3.14, '8b26c750b246a810647156512b953143be864bd09aa843389a86ca5d635ad5ab'],
-  [5.9, 'e57aaa9e1065c535d888f63666d0ca0aae6b806f68ca4f70eebbc230b9cbe4df'],
+  [0, '9b7d95cb02c37503479d3aceb49523c5fb6d7a11680c524c61653f909eb2eef7'],
+  [0.37, '53964403bfa8eda2dcd0e481b63892d1fd68d4ae0f4b80dce60af6e0f38f4951'],
+  [1.2, '459fd066f12bf94d58d72311b52fb1504801c4dac52d004124837b227b03c779'],
+  [3.14, 'f388ffa1561dbcbaa58ef760fb89fc857d6b3593bc363d8b5c9f93d1a9c4b1d7'],
+  [5.9, '3c7c14e32a464a284933d3ddab74102ae9b5a65b4004531ea173e29ece30873e'],
 ]);
 
 const fixtureProject = createFabricationReadyFourBarProject();
@@ -116,10 +116,10 @@ const balancedModel = sampleAutomataSceneRuntime(
 );
 const highModel = samples.find((sample) => sample.angle === 1.2)?.model;
 assert(balancedModel.foundryPreview && highModel?.foundryPreview);
-assert(
-  balancedModel.foundryPreview.pointTraces.every((trace, index) =>
-    trace.points.length < (highModel.foundryPreview?.pointTraces[index]?.points.length ?? 0)),
-  'Balanced reduces phase-invariant preview trace density',
+assert.deepEqual(
+  balancedModel.foundryPreview.pointTraces.map((trace) => trace.points.length),
+  highModel.foundryPreview.pointTraces.map((trace) => trace.points.length),
+  'High resolution preserves the Balanced phase-invariant trace workload',
 );
 assert.equal(
   hash(balancedModel.foundryPreview.physicalSimulation.state),

@@ -5,7 +5,9 @@ export type RenderPerformancePreset = AppSettings['performancePreset'];
 export type RenderOverlayQuality = 'reduced' | 'balanced' | 'full';
 
 // Bound the drawing-buffer area independently of CSS viewport size and DPR.
-export const RENDER_VIEWPORT_PIXEL_BUDGET = 8_000_000;
+// Four million pixels keeps the high-resolution classroom viewport at native
+// DPR 2 while avoiding desktop-sized backing stores on memory-limited GPUs.
+export const RENDER_VIEWPORT_PIXEL_BUDGET = 4_000_000;
 
 export interface RepeatedGeometryPolicy {
   readonly strategy: 'pool-and-instance';
@@ -149,30 +151,33 @@ const RENDER_PERFORMANCE_POLICIES: Readonly<Record<RenderPerformancePreset, Rend
   high: definePolicy({
     preset: 'high',
     pixelRatioCap: 2,
-    antialias: true,
-    targetFramesPerSecond: 60,
-    overlayQuality: 'full',
-    minOverlayIntervalMs: 1000 / 30,
+    // High is deliberately resolution-only. Increasing cadence, MSAA,
+    // topology, media, and cache budgets at the same time makes the setting
+    // unpredictable on classroom hardware and hides the cost of DPR itself.
+    antialias: false,
+    targetFramesPerSecond: 40,
+    overlayQuality: 'balanced',
+    minOverlayIntervalMs: 1000 / 15,
     partTopology: {
-      bevelEnabled: true,
-      edgeGeometryEnabled: true,
-      curveSegments: 6,
+      bevelEnabled: false,
+      edgeGeometryEnabled: false,
+      curveSegments: 2,
     },
     interactiveDetail: {
-      mechanismTraceSamples: 96,
-      maxPathLinePoints: 1000,
-      maxPathHandles: 1000,
-      overlayPointStride: 1,
-      maxMediaEdgePx: 1280,
-      maxMediaFrames: 600,
-      maxMediaFramesPerSecond: 30,
+      mechanismTraceSamples: 32,
+      maxPathLinePoints: 128,
+      maxPathHandles: 48,
+      overlayPointStride: 4,
+      maxMediaEdgePx: 800,
+      maxMediaFrames: 180,
+      maxMediaFramesPerSecond: 20,
     },
     repeatedGeometry: {
       strategy: 'pool-and-instance',
       instancingThreshold: 2,
-      maxPoolEntries: 512,
-      maxGeometryCacheEntries: 96,
-      maxMaterialCacheEntries: 48,
+      maxPoolEntries: 192,
+      maxGeometryCacheEntries: 40,
+      maxMaterialCacheEntries: 20,
     },
   }),
 });

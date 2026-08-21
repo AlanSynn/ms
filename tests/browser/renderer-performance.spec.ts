@@ -77,6 +77,18 @@ test('retained Three scenes batch the grid and submit one render per camera move
   ).toBe(characterBeforeMove + 1);
   await page.mouse.up();
 
+  await page.mouse.move(characterStart.x, characterStart.y);
+  await page.mouse.down();
+  await page.mouse.move(characterStart.x + 72, characterStart.y + 20);
+  await page.mouse.move(characterStart.x, characterStart.y);
+  await page.mouse.up();
+  await page.getByTestId('workflow-stage-path').click();
+  await expect(page.locator('[data-stage="path"]')).toBeVisible();
+  await expect(
+    page.getByTestId('path-three-puppet-state'),
+    'a closed-loop camera drag cannot become a click that clears the selected motion path',
+  ).toHaveAttribute('data-path-preview', 'shown');
+
   await page.getByTestId('workflow-stage-foundry').click();
   await expect(page.locator('[data-stage="foundry"]')).toBeVisible();
   const preview = page.getByTestId('foundry-preview');
