@@ -1,18 +1,16 @@
 import {
   startTransition,
   useEffect,
+  useMemo,
   useRef,
 } from "react";
 import type { AppStage, ProjectAction, ProjectState } from "../types";
-import {
-  downloadText,
-  loadProjectSnapshot,
-} from "../utils/project";
-import { loadCharacterPackage } from "../utils/packageLoader";
+import { downloadText } from "../utils/project";
 import {
   createCharacterImportProgressStore,
   type CharacterImportProgressStore,
 } from "../runtime/import/characterImportProgressStore";
+import { createProjectImportWorkerClient } from "../runtime/import/projectImportWorkerClient";
 
 type SetProjectOptions = {
   history?: boolean;
@@ -41,11 +39,13 @@ export const useAppCharacterImportActions = ({
   const fallbackProgressRef = useRef<CharacterImportProgressStore | null>(null);
   fallbackProgressRef.current ??= createCharacterImportProgressStore();
   const progressStore = characterImportProgress ?? fallbackProgressRef.current;
+  const importClient = useMemo(() => createProjectImportWorkerClient(), []);
 
   useEffect(() => () => {
+    importClient.dispose();
     progressStore.publishProgress(null);
     progressStore.publishPending(null);
-  }, [progressStore]);
+  }, [importClient, progressStore]);
 
   const queueCharacterReview = (next: ProjectState, summary: string) => {
     progressStore.publishProgress({
@@ -64,7 +64,7 @@ export const useAppCharacterImportActions = ({
   };
 
 
-  const importCharacterPackage = async (files: FileList | File[]) => {
+  const importCharacterPackage = (files: FileList | File[]) => {
     dispatch({
       type: "set_processing",
       processing: {
@@ -73,45 +73,55 @@ export const useAppCharacterImportActions = ({
         progress: 20,
       },
     });
-    try {
-      queueCharacterReview(await loadCharacterPackage(files), "Ready to use.");
-    } catch (error) {
-      dispatch({
-        type: "set_processing",
-        processing: {
-          stage: "error",
-          message: "Couldn’t load character",
-          progress: 0,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-      setStage("character");
-    }
+    importClient.requestCharacterPackage(files, {
+      complete: ({ project: next }) =>
+        queueCharacterReview(next, "Ready to use."),
+      failed: (error) => {
+        dispatch({
+          type: "set_processing",
+          processing: {
+            stage: "error",
+            message: "Couldn’t load character",
+            progress: 0,
+            error: error.message,
+          },
+        });
+        setStage("character");
+      },
+    });
   };
 
-  const importProject = async (file: File) => {
-    try {
-      const raw = JSON.parse(await file.text());
-      setProject(loadProjectSnapshot(raw), { resetHistory: true });
-      setCommandStatus(`Loaded project ${file.name}`);
-      setShowGettingStarted(false);
-      setStage("path");
-    } catch (error) {
-      dispatch({
-        type: "set_processing",
-        processing: {
-          stage: "error",
-          message: "Project import failed",
-          progress: 0,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-      setCommandStatus(
-        `Project import failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      setShowGettingStarted(false);
-      setStage("character");
-    }
+  const importProject = (file: File) => {
+    dispatch({
+      type: "set_processing",
+      processing: {
+        stage: "loading-model",
+        message: "Loading project…",
+        progress: 20,
+      },
+    });
+    importClient.requestProject(file, {
+      complete: ({ project: next }) => startTransition(() => {
+        setProject(next, { resetHistory: true });
+        setCommandStatus(`Loaded project ${file.name}`);
+        setShowGettingStarted(false);
+        setStage("path");
+      }),
+      failed: (error) => {
+        dispatch({
+          type: "set_processing",
+          processing: {
+            stage: "error",
+            message: "Project import failed",
+            progress: 0,
+            error: error.message,
+          },
+        });
+        setCommandStatus(`Project import failed: ${error.message}`);
+        setShowGettingStarted(false);
+        setStage("character");
+      },
+    });
   };
 
   const editCharacterParts = () => {

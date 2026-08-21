@@ -25,6 +25,7 @@ const UNIT_TEST_FILES = [
   'no-image-recognition-runtime.test.ts',
   'path-gesture-draft.test.ts',
   'project-contract.test.ts',
+  'project-import-worker.test.ts',
   'render-performance-policy.test.ts',
   'three-resource-retention.test.ts',
   'tracking-media-policy.test.ts',

@@ -2,6 +2,9 @@ import { BodyPartLayer, Point, StandardJoint } from '../types';
 import { buildSkeleton, createProjectFromCharacterPackage } from './project';
 import { isUsableContourPoints } from './partGeometry';
 import { clampNumber, finiteNumber, sanitizeHexColor } from './sanitize';
+import {
+    validateCharacterPackageFiles,
+} from '../runtime/import/projectImportPolicy';
 
 type Dict = Record<string, unknown>;
 
@@ -212,18 +215,19 @@ const dataUrl = (file: File) => new Promise<string>((resolve, reject) => {
 
 export const loadCharacterPackage = async (files: File[] | FileList) => {
     const list = Array.from(files);
+    const { assets: assetFiles } = validateCharacterPackageFiles(list);
     const find = (name: string) => list.find(file => basename(file.name) === name || normPath((file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name).endsWith(`/${name}`));
     const partsFile = find('parts_info.json');
     const cfgFile = find('char_cfg.yaml') ?? find('char_cfg.yml') ?? find('char_cfg.json');
     if (!partsFile) throw new Error('Missing parts_info.json in selected package files');
     if (!cfgFile) throw new Error('Missing char_cfg.yaml in selected package files');
     const assets: Record<string, string> = {};
-    await Promise.all(list.filter(file => !/\.(json|ya?ml)$/i.test(file.name)).map(async file => {
+    for (const file of assetFiles) {
         const key = normPath((file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name);
         const url = await dataUrl(file);
         assets[key] = url;
         assets[basename(key)] = url;
-    }));
+    }
     return createProjectFromPackageData(
         JSON.parse(await partsFile.text()),
         cfgFile.name.endsWith('.json') ? JSON.parse(await cfgFile.text()) : parseCharConfig(await cfgFile.text()),
