@@ -102,7 +102,7 @@ const sharedFoundryMaterialCache = new Map<string, THREE.Material>();
 const foundryTopologyPointKey = (points: readonly Point[]) =>
   points.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(";");
 
-type ThreeFoundryPreviewProps = {
+export type ThreeFoundryPreviewProps = {
   mechanism: MechanismConfig;
   performancePreset: ProjectState["settings"]["performancePreset"];
   simulation: MechanismPreviewSimulation;
@@ -151,6 +151,7 @@ type ThreeFoundryPreviewProps = {
   assemblySceneFrame?: FoundryAssemblySceneFrame;
   viewerTab?: Viewer3DTabKey;
   automataContext?: FoundryAutomataContext;
+  deferMechanismTopology?: boolean;
   children: React.ReactNode;
 };
 
@@ -736,6 +737,7 @@ export const ThreeFoundryPreview = ({
   assemblySceneFrame,
   viewerTab = "foundry",
   automataContext,
+  deferMechanismTopology = false,
   children,
 }: ThreeFoundryPreviewProps) => {
   const renderPolicy = resolveRenderPerformancePolicy(performancePreset);
@@ -750,8 +752,11 @@ export const ThreeFoundryPreview = ({
   const automataContextRef = useRef<FoundryAutomataContext | undefined>(automataContext);
   const assemblySceneFrameRef = useRef<FoundryAssemblySceneFrame | undefined>(assemblySceneFrame);
   const renderDynamicRef = useRef<((frame: FoundryPlaybackFrame) => void) | null>(null);
+  const playbackSampleRef = useRef(playback?.sample);
+  const renderSubmissionCountRef = useRef(0);
   automataContextRef.current = automataContext;
   assemblySceneFrameRef.current = assemblySceneFrame;
+  playbackSampleRef.current = playback?.sample;
   const geometryCacheRef = useRef(sharedFoundryGeometryCache);
   const materialCacheRef = useRef(sharedFoundryMaterialCache);
   const [rendererStatus, setRendererStatus] = useState<FoundryRendererStatus>("pending");
@@ -763,18 +768,26 @@ export const ThreeFoundryPreview = ({
   const isGearTrain =
     mechanism.type === "gear" || mechanism.type === "gear_linkage";
   const isPlanetaryGear = mechanism.type === "planetary_gear";
-  const gearRadii = isGearTrain
-    ? gearTrainPitchRadii(mechanism)
-    : mechanism.type === "planetary_gear"
-      ? planetaryGearRadii(mechanism)
-      : [mechanism.crankLength, mechanism.rockerLength];
-  const gearCenters = isGearTrain
-    ? fittedGearTrainCenters(
-        gearRadii,
-        simulation.state.p1,
-        simulation.state.p2,
-      )
-    : [];
+  const gearRadii = useMemo(
+    () =>
+      isGearTrain
+        ? gearTrainPitchRadii(mechanism)
+        : mechanism.type === "planetary_gear"
+          ? planetaryGearRadii(mechanism)
+          : [mechanism.crankLength, mechanism.rockerLength],
+    [isGearTrain, mechanism],
+  );
+  const gearCenters = useMemo(
+    () =>
+      isGearTrain
+        ? fittedGearTrainCenters(
+            gearRadii,
+            simulation.state.p1,
+            simulation.state.p2,
+          )
+        : [],
+    [gearRadii, isGearTrain, simulation.state.p1, simulation.state.p2],
+  );
   const planetaryConvention =
     mechanism.type === "planetary_gear"
       ? planetaryGearConventionForMechanism(mechanism)
@@ -1260,6 +1273,17 @@ export const ThreeFoundryPreview = ({
     cam.lookAt(foundryCameraTarget(view));
     renderer.render(scene, cam);
     if (!E2E_DIAGNOSTICS || !stateRef.current) return;
+    renderSubmissionCountRef.current += 1;
+    stateRef.current.dataset.threeRenderSubmissions = String(
+      renderSubmissionCountRef.current,
+    );
+    stateRef.current.dataset.threeRenderCalls = String(renderer.info.render.calls);
+    stateRef.current.dataset.threeRendererGeometryCount = String(
+      renderer.info.memory.geometries,
+    );
+    stateRef.current.dataset.threeRendererTextureCount = String(
+      renderer.info.memory.textures,
+    );
     const rect = renderer.domElement.getBoundingClientRect();
     const projectWorld = (point: THREE.Vector3) => {
       const projected = point.clone().project(cam);
@@ -1565,7 +1589,6 @@ export const ThreeFoundryPreview = ({
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(host);
-    renderCamera(cameraStateRef.current);
     return () => {
       ro.disconnect();
       sceneRef.current = null;
@@ -1596,7 +1619,9 @@ export const ThreeFoundryPreview = ({
   }, [renderPolicy]);
 
   useEffect(() => {
+    const previousCamera = cameraStateRef.current;
     cameraStateRef.current = camera;
+    if (previousCamera === camera) return;
     renderCamera(camera);
   }, [camera]);
 
@@ -1781,6 +1806,7 @@ export const ThreeFoundryPreview = ({
       edgeGeometryEnabled: renderPolicy.partTopology.edgeGeometryEnabled,
       bevelEnabled: renderPolicy.partTopology.bevelEnabled,
       curveSegments: renderPolicy.partTopology.curveSegments,
+      deferBarTopologyChanges: deferMechanismTopology,
     });
     renderFoundryDynamicLayers({
       mechanism,
@@ -1986,7 +2012,6 @@ export const ThreeFoundryPreview = ({
   renderDynamicRef.current = renderDynamicScene;
 
   useEffect(() => {
-    if (playback) return;
     const frame = requestAnimationFrame(() => {
       renderDynamicRef.current?.({
         simulation,
@@ -2016,19 +2041,23 @@ export const ThreeFoundryPreview = ({
     pathPoints,
     localSpacerZForPin,
     automataContext,
-    playback,
+    renderPolicy,
+    deferMechanismTopology,
   ]);
 
+  const playbackClock = playback?.clock;
+  const playbackMinFrameIntervalMs =
+    playback?.minFrameIntervalMs ?? renderPolicy.minRenderIntervalMs;
   useEffect(() => {
-    if (!playback) return;
+    if (!playbackClock) return;
     return subscribeCadencedPlaybackSampler({
-      clock: playback.clock,
-      sample: playback.sample,
-      minFrameIntervalMs:
-        playback.minFrameIntervalMs ?? renderPolicy.minRenderIntervalMs,
+      clock: playbackClock,
+      sample: (phase) => playbackSampleRef.current?.(phase),
+      minFrameIntervalMs: playbackMinFrameIntervalMs,
+      sampleInitial: false,
       apply: (frame) => renderDynamicRef.current?.(frame),
     });
-  }, [playback, renderPolicy.minRenderIntervalMs]);
+  }, [playbackClock, playbackMinFrameIntervalMs]);
 
   return (
     <div

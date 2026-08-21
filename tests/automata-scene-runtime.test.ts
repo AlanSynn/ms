@@ -4,7 +4,9 @@ import { createHash } from 'node:crypto';
 import {
   buildAutomataSceneModel,
   createAutomataSceneRuntime,
+  reuseAutomataSceneRuntime,
   sampleAutomataSceneRuntime,
+  sampleReusableAutomataSceneRuntime,
 } from '../utils/automataSceneModel';
 import { createFabricationReadyFourBarProject } from './fixtures/fabricationProject';
 
@@ -41,6 +43,24 @@ const project = {
 };
 const mechanism = project.mechanisms[0];
 assert(mechanism, 'fixture exposes a fabrication-ready four-bar mechanism');
+
+const retainedRuntime = reuseAutomataSceneRuntime(project, mechanism, 'design-live');
+assert.strictEqual(
+  reuseAutomataSceneRuntime(project, mechanism, 'design-live'),
+  retainedRuntime,
+  'unchanged ProjectState and mechanism references reuse derived scene runtime across tab mounts',
+);
+assert.notStrictEqual(
+  reuseAutomataSceneRuntime({ ...project }, mechanism, 'design-live'),
+  retainedRuntime,
+  'a new immutable ProjectState revision receives a fresh scene runtime',
+);
+const retainedSample = sampleReusableAutomataSceneRuntime(retainedRuntime, 0.37);
+assert.strictEqual(
+  sampleReusableAutomataSceneRuntime(retainedRuntime, 0.37),
+  retainedSample,
+  'identical phase samples reuse the bounded derived scene result',
+);
 
 const runtime = createAutomataSceneRuntime(project, mechanism, 'design-live');
 const samples = [...expectedHashes.keys()].map((angle) => ({

@@ -160,7 +160,6 @@ export const PathEditor = ({
     if (!drawMode || pathLocked) return;
     const seed = !freeDraftRef.current?.length;
     if (seed) {
-      setSelectedPoint(null);
       setIsFreeDrawing(true);
     }
     appendFreePoint(point, seed);
@@ -283,6 +282,7 @@ export const PathEditor = ({
   const togglePathDrawing = () => {
     setPathViewMode("2d");
     if (drawMode) stopDrawing();
+    else setSelectedPoint(null);
     setDrawMode(!drawMode);
   };
   const pathMechanism = selectedPath

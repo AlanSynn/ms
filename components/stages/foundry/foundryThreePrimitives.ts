@@ -49,6 +49,7 @@ type FoundryThreePrimitiveFactoryOptions = {
   edgeGeometryEnabled: boolean;
   bevelEnabled: boolean;
   curveSegments: number;
+  deferBarTopologyChanges?: boolean;
 };
 
 export const createFoundryThreePrimitiveFactory = ({
@@ -64,6 +65,7 @@ export const createFoundryThreePrimitiveFactory = ({
   edgeGeometryEnabled,
   bevelEnabled,
   curveSegments,
+  deferBarTopologyChanges = false,
 }: FoundryThreePrimitiveFactoryOptions) => {
   const topologyDetailKey = `${bevelEnabled ? "bevel" : "flat"}:${curveSegments}`;
   const radialSegments = Math.max(12, curveSegments * 4);
@@ -283,33 +285,49 @@ export const createFoundryThreePrimitiveFactory = ({
     );
     const outlineLen = templateLen + barW;
     const geometryKey = `bar:${linkageSpec.key}:${kit.gridPitchMm}:${outlineLen.toFixed(3)}:${barW.toFixed(3)}:${thickness.toFixed(3)}`;
-    const { object: group } = objectPool.acquire("bar", geometryKey, () => {
-      const next = new THREE.Group();
-      const mesh = new THREE.Mesh(
-        cachedGeometry(geometryKey, () => {
-          const shape = roundedRectShape(outlineLen, barW);
-          shape.holes.push(...holeXs.map((x) => circularHole(x, 0)));
-          return new THREE.ExtrudeGeometry(shape, {
-            depth: thickness,
-            bevelEnabled,
-            bevelSize: 0.025,
-            bevelThickness: 0.018,
-            bevelSegments: 1,
-            curveSegments,
-            steps: 1,
-          });
-        }),
-        mat,
-      );
-      markPrimaryMaterial(mesh);
-      mesh.position.z = -thickness / 2;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      addEdges(mesh, geometryKey);
-      next.add(mesh);
-      holeXs.forEach((x) => addHoleRing(next, x, 0, 0));
-      return next;
-    });
+    const { object: group } = objectPool.acquire(
+      "bar",
+      geometryKey,
+      () => {
+        const next = new THREE.Group();
+        next.userData.foundryBarTemplateLength = templateLen;
+        const mesh = new THREE.Mesh(
+          cachedGeometry(geometryKey, () => {
+            const shape = roundedRectShape(outlineLen, barW);
+            shape.holes.push(...holeXs.map((x) => circularHole(x, 0)));
+            return new THREE.ExtrudeGeometry(shape, {
+              depth: thickness,
+              bevelEnabled,
+              bevelSize: 0.025,
+              bevelThickness: 0.018,
+              bevelSegments: 1,
+              curveSegments,
+              steps: 1,
+            });
+          }),
+          mat,
+        );
+        markPrimaryMaterial(mesh);
+        mesh.position.z = -thickness / 2;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        addEdges(mesh, geometryKey);
+        next.add(mesh);
+        holeXs.forEach((x) => addHoleRing(next, x, 0, 0));
+        return next;
+      },
+      { reuseOnTopologyMismatch: deferBarTopologyChanges },
+    );
+    const retainedTemplateLength = Number(
+      group.userData.foundryBarTemplateLength,
+    );
+    group.scale.set(
+      Number.isFinite(retainedTemplateLength) && retainedTemplateLength > 0
+        ? templateLen / retainedTemplateLength
+        : 1,
+      1,
+      1,
+    );
     updatePrimaryMaterial(group, mat);
     group.position.set((av.x + bv.x) / 2, (av.y + bv.y) / 2, z);
     group.rotation.z = Math.atan2(dy, dx);

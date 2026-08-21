@@ -85,6 +85,15 @@ export type AutomataSceneRuntime = {
     warnings: Record<string, string[]>;
 };
 
+type ProjectAutomataRuntimeCache = {
+    byMechanism: WeakMap<MechanismConfig, Partial<Record<AutomataSceneMode, AutomataSceneRuntime>>>;
+    withoutMechanism: Partial<Record<AutomataSceneMode, AutomataSceneRuntime>>;
+};
+
+const automataRuntimeCache = new WeakMap<ProjectState, ProjectAutomataRuntimeCache>();
+const automataSampleCache = new WeakMap<AutomataSceneRuntime, Map<number, AutomataSceneModel>>();
+const AUTOMATA_SAMPLE_CACHE_LIMIT = 4;
+
 export const createAutomataSceneRuntime = (
     project: ProjectState,
     mechanism: MechanismConfig | undefined,
@@ -129,6 +138,32 @@ export const createAutomataSceneRuntime = (
         featureIssues: feature.validate(normalizedMechanism),
         warnings: mechanismBindingWarnings(project, mechanisms),
     };
+};
+
+export const reuseAutomataSceneRuntime = (
+    project: ProjectState,
+    mechanism: MechanismConfig | undefined,
+    mode: AutomataSceneMode = 'design-live'
+): AutomataSceneRuntime => {
+    let projectCache = automataRuntimeCache.get(project);
+    if (!projectCache) {
+        projectCache = {
+            byMechanism: new WeakMap(),
+            withoutMechanism: {},
+        };
+        automataRuntimeCache.set(project, projectCache);
+    }
+    if (!mechanism) {
+        return projectCache.withoutMechanism[mode] ??=
+            createAutomataSceneRuntime(project, undefined, mode);
+    }
+    let mechanismCache = projectCache.byMechanism.get(mechanism);
+    if (!mechanismCache) {
+        mechanismCache = {};
+        projectCache.byMechanism.set(mechanism, mechanismCache);
+    }
+    return mechanismCache[mode] ??=
+        createAutomataSceneRuntime(project, mechanism, mode);
 };
 
 export const sampleAutomataSceneRuntime = (
@@ -197,13 +232,38 @@ export const sampleAutomataSceneRuntime = (
     };
 };
 
+export const sampleReusableAutomataSceneRuntime = (
+    runtime: AutomataSceneRuntime,
+    angle: number,
+): AutomataSceneModel => {
+    let cache = automataSampleCache.get(runtime);
+    if (!cache) {
+        cache = new Map();
+        automataSampleCache.set(runtime, cache);
+    }
+    const cached = cache.get(angle);
+    if (cached) {
+        cache.delete(angle);
+        cache.set(angle, cached);
+        return cached;
+    }
+    const sampled = sampleAutomataSceneRuntime(runtime, angle);
+    cache.set(angle, sampled);
+    while (cache.size > AUTOMATA_SAMPLE_CACHE_LIMIT) {
+        const oldest = cache.keys().next().value;
+        if (oldest === undefined) break;
+        cache.delete(oldest);
+    }
+    return sampled;
+};
+
 export const buildAutomataSceneModel = (
     project: ProjectState,
     mechanism: MechanismConfig | undefined,
     angle: number,
     mode: AutomataSceneMode = 'design-live'
 ): AutomataSceneModel =>
-    sampleAutomataSceneRuntime(
-        createAutomataSceneRuntime(project, mechanism, mode),
+    sampleReusableAutomataSceneRuntime(
+        reuseAutomataSceneRuntime(project, mechanism, mode),
         angle
     );

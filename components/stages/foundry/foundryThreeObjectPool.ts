@@ -10,6 +10,10 @@ export type FoundryPooledObject<T extends THREE.Object3D> = {
   created: boolean;
 };
 
+type FoundryPoolAcquireOptions = {
+  reuseOnTopologyMismatch?: boolean;
+};
+
 /**
  * Reuses semantic draw slots in call order. Foundry recipes emit the same
  * primitive order while a mechanism plays, so transforms and visibility can
@@ -34,13 +38,17 @@ export class FoundryThreeObjectPool {
     kind: string,
     topologyKey: string,
     create: () => T,
+    { reuseOnTopologyMismatch = false }: FoundryPoolAcquireOptions = {},
   ): FoundryPooledObject<T> {
     const index = this.cursors.get(kind) ?? 0;
     this.cursors.set(kind, index + 1);
     const bucket = this.slots.get(kind) ?? [];
     if (!this.slots.has(kind)) this.slots.set(kind, bucket);
     const existing = bucket[index];
-    if (existing?.topologyKey === topologyKey) {
+    if (
+      existing &&
+      (existing.topologyKey === topologyKey || reuseOnTopologyMismatch)
+    ) {
       existing.object.visible = true;
       return { object: existing.object as T, created: false };
     }

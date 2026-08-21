@@ -10,6 +10,7 @@ export type CadencedPlaybackSamplerOptions<Frame> = {
   sample: (phase: number) => Frame | undefined;
   minFrameIntervalMs: number;
   apply: (frame: Frame, time: number, forced: boolean) => void;
+  sampleInitial?: boolean;
 };
 
 export const subscribeCadencedPlaybackSampler = <Frame>({
@@ -17,6 +18,7 @@ export const subscribeCadencedPlaybackSampler = <Frame>({
   sample,
   minFrameIntervalMs,
   apply,
+  sampleInitial = true,
 }: CadencedPlaybackSamplerOptions<Frame>) => {
   let lastSampleTime = Number.NEGATIVE_INFINITY;
   const sampleAt = (phase: number, time: number, forced: boolean) => {
@@ -44,7 +46,7 @@ export const subscribeCadencedPlaybackSampler = <Frame>({
     apply(frame, time, forced);
   };
 
-  sampleAt(clock.getPhase(), 0, true);
+  if (sampleInitial) sampleAt(clock.getPhase(), 0, true);
   return clock.subscribe((clockFrame: PlaybackClockFrame) => {
     if (!clockFrame.phaseChanged && clockFrame.elapsedMs !== 0) return;
     sampleAt(

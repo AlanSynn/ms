@@ -1,7 +1,7 @@
 import React from "react";
 
 import { CanvasZoomToolbar } from "../../AppShell";
-import { ThreePuppetPreview } from "../../ThreePuppetPreview";
+import { DeferredThreePuppetPreview } from "../../DeferredThreePuppetPreview";
 import type {
   CanvasViewport,
   Point,
@@ -90,7 +90,7 @@ export const PathCanvasPane = ({
         3D
       </button>
     </div>
-    <ThreePuppetPreview
+    <DeferredThreePuppetPreview
       project={project}
       animatedParts={pathPreview?.parts ?? {}}
       animatedSceneObjects={pathPreview?.sceneObjects ?? {}}

@@ -4,11 +4,22 @@ import * as THREE from 'three';
 
 import { FoundryThreeObjectPool } from '../components/stages/foundry/foundryThreeObjectPool';
 import {
+  createFoundryThreePrimitiveFactory,
+  disposeFoundryThreeObject,
+} from '../components/stages/foundry/foundryThreePrimitives';
+import {
+  cachedThreeResource,
   collectThreeObjectResourceUsage,
   disposeThreeObjectGraph,
   pruneUnusedThreeResourceCache,
 } from '../utils/threeResourceKit';
 import { scheduleIncrementalTopologyBuild } from '../runtime/render/incrementalTopologyBuild';
+import {
+  createPuppetCutHoleRingInstances,
+  createPuppetJointHardwareInstances,
+  puppetJointIdForInstance,
+  updatePuppetJointHardwareInstances,
+} from '../runtime/render/puppetJointHardware';
 import {
   createPartArtMaterial,
   disposePartArtMaterial,
@@ -20,6 +31,8 @@ import {
   preparePuppetPartTopology,
 } from '../runtime/render/puppetPartTopology';
 import type { BodyPartLayer, StandardSkeleton } from '../types';
+import { defaultPhysicalKit } from '../utils/coordinates';
+import { createDefaultMechanism } from '../utils/project';
 
 const root = new THREE.Group();
 const disposed: string[] = [];
@@ -82,6 +95,99 @@ pool.endFrame();
 assert.notStrictEqual(replacement, first, 'topology mismatch replaces the semantic slot');
 assert(disposed.includes('first'), 'topology replacement disposes the old Object3D');
 
+const gesturePoolRoot = new THREE.Group();
+const gestureGeometryCache = new Map<string, THREE.BufferGeometry>();
+const gestureMaterialCache = new Map<string, THREE.Material>();
+const gesturePool = new FoundryThreeObjectPool(
+  gesturePoolRoot,
+  disposeFoundryThreeObject,
+  32,
+);
+const gestureMechanism = createDefaultMechanism('4bar', 'gesture-render-retention');
+const gestureBarMaterial = new THREE.MeshBasicMaterial();
+const createGesturePrimitives = (deferBarTopologyChanges: boolean) =>
+  createFoundryThreePrimitiveFactory({
+    geometryCache: gestureGeometryCache,
+    materialCache: gestureMaterialCache,
+    mechanism: gestureMechanism,
+    kit: defaultPhysicalKit(),
+    color: '#2563eb',
+    rigOpacity: 1,
+    baseColor: '#f1f5f9',
+    simulationScale: 1,
+    objectPool: gesturePool,
+    edgeGeometryEnabled: false,
+    bevelEnabled: false,
+    curveSegments: 2,
+    deferBarTopologyChanges,
+  });
+gesturePool.beginFrame();
+createGesturePrimitives(false).addBar(
+  { x: 0, y: 0 },
+  { x: 100, y: 0 },
+  0,
+  gestureBarMaterial,
+  3,
+);
+gesturePool.endFrame();
+const retainedGestureBar = gesturePoolRoot.children[0];
+const gestureRevisionBeforeDraft = gesturePool.topologyRevision;
+const gestureGeometryBeforeDraft = gestureGeometryCache.size;
+
+gesturePool.beginFrame();
+createGesturePrimitives(true).addBar(
+  { x: 0, y: 0 },
+  { x: 132, y: 0 },
+  0,
+  gestureBarMaterial,
+  3,
+);
+gesturePool.endFrame();
+assert.strictEqual(
+  gesturePoolRoot.children[0],
+  retainedGestureBar,
+  'a direct-manipulation draft retains the committed bar Object3D',
+);
+assert.equal(
+  gesturePool.topologyRevision,
+  gestureRevisionBeforeDraft,
+  'a direct-manipulation draft does not report topology work',
+);
+assert.equal(
+  gestureGeometryCache.size,
+  gestureGeometryBeforeDraft,
+  'a direct-manipulation draft does not add length-specific geometry',
+);
+assert(
+  retainedGestureBar.scale.x > 1,
+  'the retained bar follows the draft endpoints through a transient transform',
+);
+
+gesturePool.beginFrame();
+createGesturePrimitives(false).addBar(
+  { x: 0, y: 0 },
+  { x: 132, y: 0 },
+  0,
+  gestureBarMaterial,
+  3,
+);
+gesturePool.endFrame();
+assert.notStrictEqual(
+  gesturePoolRoot.children[0],
+  retainedGestureBar,
+  'the committed length change installs its fabrication topology once',
+);
+assert.equal(
+  gesturePool.topologyRevision,
+  gestureRevisionBeforeDraft + 1,
+  'only the committed length change increments topology revision',
+);
+assert.equal(
+  gestureGeometryCache.size,
+  gestureGeometryBeforeDraft + 1,
+  'only the committed bar adds one length-specific geometry',
+);
+
 const usedGeometry = new THREE.BoxGeometry(1, 1, 1);
 const staleGeometry = new THREE.SphereGeometry(1);
 const usedMaterial = new THREE.MeshBasicMaterial();
@@ -124,6 +230,66 @@ assert.equal(staleMaterialDisposals, 1, 'evicted material is disposed exactly on
 usedGeometry.dispose();
 usedMaterial.dispose();
 
+const retainedAcrossMountsCache = new Map<string, THREE.BufferGeometry>();
+let retainedAcrossMountsDisposals = 0;
+const retainedAcrossMountsGeometry = cachedThreeResource(
+  retainedAcrossMountsCache,
+  'puppet-part-plate:stable-topology',
+  () => {
+    const geometry = new THREE.BoxGeometry(1, 1, 0.22);
+    geometry.addEventListener('dispose', () => {
+      retainedAcrossMountsDisposals += 1;
+    });
+    return geometry;
+  },
+  'sharedFabricationGeometry',
+);
+const retainedMountRoot = new THREE.Group();
+retainedMountRoot.add(new THREE.Mesh(
+  retainedAcrossMountsGeometry,
+  new THREE.MeshBasicMaterial(),
+));
+disposeThreeObjectGraph(retainedMountRoot, {
+  keepGeometry: (geometry) =>
+    Boolean(geometry.userData.sharedFabricationGeometry),
+});
+assert.equal(
+  retainedAcrossMountsDisposals,
+  0,
+  'a released puppet scene leaves shared part topology alive for the next mount',
+);
+assert.strictEqual(
+  cachedThreeResource(
+    retainedAcrossMountsCache,
+    'puppet-part-plate:stable-topology',
+    () => {
+      throw new Error('a warm puppet mount must reuse retained part topology');
+    },
+    'sharedFabricationGeometry',
+  ),
+  retainedAcrossMountsGeometry,
+  'the next puppet mount receives the same geometry object',
+);
+assert.equal(
+  pruneUnusedThreeResourceCache(
+    retainedAcrossMountsCache,
+    new Set(),
+    1,
+  ),
+  0,
+  'the idle retention budget keeps a bounded warm topology entry',
+);
+assert.equal(
+  pruneUnusedThreeResourceCache(
+    retainedAcrossMountsCache,
+    new Set(),
+    0,
+  ),
+  1,
+  'reducing the idle budget evicts and disposes retained topology',
+);
+assert.equal(retainedAcrossMountsDisposals, 1);
+
 const instancedGeometry = new THREE.BoxGeometry(1, 1, 1);
 const instancedMaterial = new THREE.MeshBasicMaterial();
 const instanced = new THREE.InstancedMesh(
@@ -143,6 +309,116 @@ assert.equal(
   1,
   'graph cleanup releases InstancedMesh-owned matrix and color buffers',
 );
+
+const hardwareGeometry = new THREE.BoxGeometry(1, 1, 1);
+const washerGeometry = new THREE.TorusGeometry(1, 0.1, 4, 8);
+const hardwareMaterial = new THREE.MeshBasicMaterial();
+const washerMaterial = new THREE.MeshBasicMaterial();
+const jointHardware = createPuppetJointHardwareInstances({
+  jointIds: ['root', 'tip'],
+  pinGeometry: hardwareGeometry,
+  washerGeometry,
+  pinMaterial: hardwareMaterial,
+  washerMaterial,
+});
+updatePuppetJointHardwareInstances({
+  hardware: jointHardware,
+  joints: [
+    { id: 'root', position: { x: 35, y: -70 } },
+    { id: 'tip', position: { x: 105, y: 140 } },
+  ],
+  viewScale: 35,
+  pinZ: 0.35,
+  washerZ: 0.55,
+  isVisible: (jointId) => jointId === 'root',
+});
+assert.equal(jointHardware.pins.count, 2, 'one pin draw object retains every joint instance');
+assert.equal(jointHardware.washers.count, 2, 'one washer draw object retains every joint instance');
+assert.equal(
+  puppetJointIdForInstance(jointHardware.pins, 1),
+  'tip',
+  'an instanced raycast index preserves direct joint selection',
+);
+assert.equal(
+  puppetJointIdForInstance(new THREE.Group(), 0),
+  undefined,
+  'non-instanced scene objects cannot masquerade as joint hardware',
+);
+const visiblePinMatrix = new THREE.Matrix4();
+jointHardware.pins.getMatrixAt(0, visiblePinMatrix);
+const visiblePinPosition = new THREE.Vector3();
+const visiblePinRotation = new THREE.Quaternion();
+const visiblePinScale = new THREE.Vector3();
+visiblePinMatrix.decompose(
+  visiblePinPosition,
+  visiblePinRotation,
+  visiblePinScale,
+);
+assert.deepEqual(
+  visiblePinPosition.toArray().map((value) => Number(value.toFixed(3))),
+  [1, -2, 0.35],
+  'instanced pin transforms retain canonical joint coordinates and depth',
+);
+assert.deepEqual(
+  visiblePinScale.toArray().map((value) => Number(value.toFixed(3))),
+  [1, 1, 1],
+  'visible joint hardware retains fabrication scale',
+);
+const expectedPinRotation = new THREE.Quaternion().setFromAxisAngle(
+  new THREE.Vector3(1, 0, 0),
+  Math.PI / 2,
+);
+assert(
+  Math.abs(visiblePinRotation.dot(expectedPinRotation)) > 0.999,
+  'instanced pins retain the original front-view cylinder orientation',
+);
+const visibleWasherMatrix = new THREE.Matrix4();
+jointHardware.washers.getMatrixAt(0, visibleWasherMatrix);
+assert.deepEqual(
+  new THREE.Vector3()
+    .setFromMatrixPosition(visibleWasherMatrix)
+    .toArray()
+    .map((value) => Number(value.toFixed(3))),
+  [1, -2, 0.55],
+  'instanced washers retain their fabrication layer depth',
+);
+const hiddenPinMatrix = new THREE.Matrix4();
+jointHardware.pins.getMatrixAt(1, hiddenPinMatrix);
+assert.equal(hiddenPinMatrix.elements[0], 0, 'inactive assembly pins collapse without a new mesh');
+assert.equal(hiddenPinMatrix.elements[5], 0, 'inactive assembly pins have no visible y extent');
+assert.equal(hiddenPinMatrix.elements[10], 0, 'inactive assembly pins have no visible z extent');
+
+const ringGeometry = new THREE.TorusGeometry(0.11, 0.014, 4, 8);
+const ringMaterial = new THREE.MeshBasicMaterial();
+const rings = createPuppetCutHoleRingInstances({
+  partId: 'plate-a',
+  holes: [{ x: 35, y: 70 }, { x: -35, y: 0 }],
+  viewScale: 35,
+  z: 0.26,
+  geometry: ringGeometry,
+  material: ringMaterial,
+});
+assert.equal(rings.count, 2, 'all part holes share one retained ring draw object');
+assert.equal(rings.userData.partId, 'plate-a', 'instanced rings preserve part picking ownership');
+const secondRingMatrix = new THREE.Matrix4();
+rings.getMatrixAt(1, secondRingMatrix);
+assert.deepEqual(
+  new THREE.Vector3()
+    .setFromMatrixPosition(secondRingMatrix)
+    .toArray()
+    .map((value) => Number(value.toFixed(3))),
+  [-1, 0, 0.26],
+  'each cut-hole ring keeps its fabrication-local placement',
+);
+hardwareGeometry.dispose();
+washerGeometry.dispose();
+hardwareMaterial.dispose();
+washerMaterial.dispose();
+jointHardware.pins.dispose();
+jointHardware.washers.dispose();
+ringGeometry.dispose();
+ringMaterial.dispose();
+rings.dispose();
 
 const scheduledFrames = new Map<number, () => void>();
 let nextFrameHandle = 1;
@@ -199,6 +475,38 @@ runNextFrame();
 assert(!builtItems.includes('delayed'), 'an initial delay frame separates topology from the React commit and first render');
 runNextFrame();
 assert(builtItems.includes('delayed'), 'topology starts after its declared initial frame delay');
+
+const batchedItems: string[] = [];
+let virtualFrameTime = 0;
+let batchedCompletionCount = 0;
+scheduleIncrementalTopologyBuild(
+  ['a', 'b', 'c', 'd', 'e'],
+  (item) => {
+    batchedItems.push(item);
+    virtualFrameTime += 4;
+  },
+  {
+    scheduler,
+    maxItemsPerFrame: 4,
+    frameBudgetMs: 9,
+    now: () => virtualFrameTime,
+    onComplete: () => { batchedCompletionCount += 1; },
+  },
+);
+runNextFrame();
+assert.deepEqual(
+  batchedItems,
+  ['a', 'b', 'c'],
+  'a topology frame batches cheap work but stops after crossing its time budget',
+);
+assert.equal(batchedCompletionCount, 0, 'budgeted work does not complete early');
+runNextFrame();
+assert.deepEqual(
+  batchedItems,
+  ['a', 'b', 'c', 'd', 'e'],
+  'the next frame finishes the bounded topology batch',
+);
+assert.equal(batchedCompletionCount, 1, 'the final bounded batch completes once');
 
 let bitmapLoad: ((bitmap: ImageBitmap) => void) | undefined;
 let bitmapLoaderAborts = 0;

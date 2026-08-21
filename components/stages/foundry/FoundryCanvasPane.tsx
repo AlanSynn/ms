@@ -25,7 +25,7 @@ import {
   type FoundryParamHandle,
   type FoundryParamHandleId,
 } from "./FoundryOverlayLayer";
-import { ThreeFoundryPreview } from "./ThreeFoundryPreview";
+import { DeferredThreeFoundryPreview } from "./DeferredThreeFoundryPreview";
 import type { FoundryPlaybackFrame } from "./ThreeFoundryPreview";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 
@@ -306,7 +306,7 @@ export const FoundryCanvasPane = ({
       onResetPreview={onResetPreview}
       onPhaseChange={onPhaseChange}
     />
-    <ThreeFoundryPreview
+    <DeferredThreeFoundryPreview
       mechanism={landedFoundry}
       performancePreset={performancePreset}
       simulation={selectedPhysicalSimulation}
@@ -344,6 +344,7 @@ export const FoundryCanvasPane = ({
       onPointerCancel={onPointerCancel}
       onWheel={onWheel}
       onProjectionSizeChange={onProjectionSizeChange}
+      deferMechanismTopology={gestureActive}
     >
       {userPathD && (
         <svg
@@ -395,7 +396,7 @@ export const FoundryCanvasPane = ({
           minFrameIntervalMs: renderPolicy.minOverlayIntervalMs,
         }}
       />
-    </ThreeFoundryPreview>
+    </DeferredThreeFoundryPreview>
     <div hidden data-testid="foundry-toolbar-state">
       Toolbar: {foundryPlaying ? "playing" : "paused"} · grid{" "}
       {showFoundryGrid ? "shown" : "hidden"} · user path{" "}

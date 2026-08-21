@@ -40,6 +40,9 @@ export const loadRapierPhysicsKernel = async (): Promise<RapierModule> => {
     rapierModulePromise = import('@dimforge/rapier3d-compat').then(async module => {
       await initRapierCompat(module);
       return module;
+    }).catch(error => {
+      rapierModulePromise = null;
+      throw error;
     });
   }
   return rapierModulePromise;

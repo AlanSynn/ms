@@ -15,9 +15,18 @@ export const scheduleIncrementalTopologyBuild = <Item>(
     scheduler?: TopologyFrameScheduler;
     onComplete?: () => void;
     initialDelayFrames?: number;
+    maxItemsPerFrame?: number;
+    frameBudgetMs?: number;
+    now?: () => number;
   } = {},
 ) => {
   const scheduler = options.scheduler ?? browserFrameScheduler;
+  const maxItemsPerFrame = Math.max(
+    1,
+    Math.floor(options.maxItemsPerFrame ?? 1),
+  );
+  const frameBudgetMs = Math.max(0, options.frameBudgetMs ?? Infinity);
+  const now = options.now ?? (() => performance.now());
   let cancelled = false;
   let frameHandle: number | undefined;
   let nextIndex = 0;
@@ -40,10 +49,16 @@ export const scheduleIncrementalTopologyBuild = <Item>(
       return;
     }
 
-    const index = nextIndex;
-    nextIndex += 1;
-    build(items[index], index);
-    if (cancelled) return;
+    const startedAt = now();
+    let builtThisFrame = 0;
+    while (nextIndex < items.length && builtThisFrame < maxItemsPerFrame) {
+      const index = nextIndex;
+      nextIndex += 1;
+      build(items[index], index);
+      builtThisFrame += 1;
+      if (cancelled) return;
+      if (now() - startedAt >= frameBudgetMs) break;
+    }
 
     if (nextIndex < items.length) {
       scheduleStep();

@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { MechanismConfig, Point, ProjectAction, ProjectState } from "../../../types";
 import {
   FOUNDRY_OVERLAY_SIZE,
@@ -11,14 +11,12 @@ import {
   type FoundryViewPreset,
 } from "../../../utils/foundryCamera";
 import {
-  createAutomataSceneRuntime,
-  sampleAutomataSceneRuntime,
+  reuseAutomataSceneRuntime,
+  sampleReusableAutomataSceneRuntime,
 } from "../../../utils/automataSceneModel";
 import { pointsToSvgPath } from "../../../utils/mechanismPreview";
-import {
-  ThreeFoundryPreview,
-  type FoundryPlaybackFrame,
-} from "../foundry/ThreeFoundryPreview";
+import { DeferredThreeFoundryPreview } from "../foundry/DeferredThreeFoundryPreview";
+import type { FoundryPlaybackFrame } from "../foundry/ThreeFoundryPreview";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 
 type DesignFoundryPreviewProps = {
@@ -60,6 +58,7 @@ export const DesignFoundryPreview = React.memo(({
   const [isOrbiting, setIsOrbiting] = useState(false);
   const [isZooming, setIsZooming] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
+  const [characterLayerReady, setCharacterLayerReady] = useState(false);
   const orbitStartRef = useRef<{
     pointerId: number;
     x: number;
@@ -71,17 +70,23 @@ export const DesignFoundryPreview = React.memo(({
     mode: "orbit" | "zoom" | "pan";
   } | null>(null);
 
+  useEffect(() => {
+    setCharacterLayerReady(false);
+    const handle = window.setTimeout(() => setCharacterLayerReady(true), 120);
+    return () => window.clearTimeout(handle);
+  }, [mechanism, project]);
+
   const sceneRuntime = useMemo(
-    () => createAutomataSceneRuntime(project, mechanism, "design-live"),
+    () => reuseAutomataSceneRuntime(project, mechanism, "design-live"),
     [mechanism, project],
   );
   const sceneModel = useMemo(
-    () => sampleAutomataSceneRuntime(sceneRuntime, angle),
+    () => sampleReusableAutomataSceneRuntime(sceneRuntime, angle),
     [angle, sceneRuntime],
   );
   const automataContext = useMemo(
     () =>
-      sceneModel.mechanism
+      characterLayerReady && sceneModel.mechanism
         ? {
             project,
             animatedParts: sceneModel.animatedParts,
@@ -93,29 +98,31 @@ export const DesignFoundryPreview = React.memo(({
             showSkeleton: false,
           }
         : undefined,
-    [project, sceneModel],
+    [characterLayerReady, project, sceneModel],
   );
   const showUserPath = showTrace && showUserPathPreview;
   const showMechanismPath = showTrace && showMechanismPathPreview;
   const playbackSample = useMemo(
     () => (phase: number): FoundryPlaybackFrame | undefined => {
-      const frame = sampleAutomataSceneRuntime(sceneRuntime, phase);
+      const frame = sampleReusableAutomataSceneRuntime(sceneRuntime, phase);
       if (!frame.foundryPreview || !frame.mechanism) return undefined;
       return {
         simulation: frame.foundryPreview.physicalSimulation,
-        automataContext: {
-          project,
-          animatedParts: frame.animatedParts,
-          animatedSceneObjects: frame.animatedSceneObjects,
-          geometrySkeleton: project.skeleton,
-          skeleton: frame.skeleton,
-          paths: [],
-          showCharacter: true,
-          showSkeleton: false,
-        },
+        automataContext: characterLayerReady
+          ? {
+              project,
+              animatedParts: frame.animatedParts,
+              animatedSceneObjects: frame.animatedSceneObjects,
+              geometrySkeleton: project.skeleton,
+              skeleton: frame.skeleton,
+              paths: [],
+              showCharacter: true,
+              showSkeleton: false,
+            }
+          : undefined,
       };
     },
-    [project, sceneRuntime],
+    [characterLayerReady, project, sceneRuntime],
   );
   const userPathD = useMemo(() => {
     if (!showUserPath || !sceneModel.foundryPreview?.userPathPoints.length) return "";
@@ -315,7 +322,7 @@ export const DesignFoundryPreview = React.memo(({
           Mech path
         </button>
       </div>
-      <ThreeFoundryPreview
+      <DeferredThreeFoundryPreview
         mechanism={sceneModel.foundryPreview.mechanism}
         performancePreset={project.settings.performancePreset}
         simulation={sceneModel.foundryPreview.physicalSimulation}
@@ -384,7 +391,7 @@ export const DesignFoundryPreview = React.memo(({
             />
           </svg>
         )}
-      </ThreeFoundryPreview>
+      </DeferredThreeFoundryPreview>
     </section>
   );
 });

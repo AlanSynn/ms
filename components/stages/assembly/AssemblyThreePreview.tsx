@@ -1,17 +1,15 @@
 import React, { useMemo, useRef, useState } from "react";
 
-import {
-  ThreeFoundryPreview,
-  type FoundryPlaybackFrame,
-} from "../foundry/ThreeFoundryPreview";
+import { DeferredThreeFoundryPreview } from "../foundry/DeferredThreeFoundryPreview";
+import type { FoundryPlaybackFrame } from "../foundry/ThreeFoundryPreview";
 import type {
   MechanismConfig,
   Point,
   ProjectState,
 } from "../../../types";
 import {
-  createAutomataSceneRuntime,
-  sampleAutomataSceneRuntime,
+  reuseAutomataSceneRuntime,
+  sampleReusableAutomataSceneRuntime,
 } from "../../../utils/automataSceneModel";
 import {
   FOUNDRY_OVERLAY_SIZE,
@@ -192,11 +190,11 @@ export const AssemblyCharacterThreePreview = ({
   const angle = step.phase === "test-character" ? progress * Math.PI * 2 : 0;
   const mechanism = assemblyMechanismForProject(project);
   const sceneRuntime = useMemo(
-    () => createAutomataSceneRuntime(project, mechanism, "assembly-live"),
+    () => reuseAutomataSceneRuntime(project, mechanism, "assembly-live"),
     [mechanism, project],
   );
   const sceneModel = useMemo(
-    () => sampleAutomataSceneRuntime(sceneRuntime, angle),
+    () => sampleReusableAutomataSceneRuntime(sceneRuntime, angle),
     [angle, sceneRuntime],
   );
   const previewModel = sceneModel.foundryPreview;
@@ -234,7 +232,7 @@ export const AssemblyCharacterThreePreview = ({
       const sampleProgress = (((phase / (Math.PI * 2)) % 1) + 1) % 1;
       const sampleAngle =
         step.phase === "test-character" ? sampleProgress * Math.PI * 2 : 0;
-      const sampleModel = sampleAutomataSceneRuntime(sceneRuntime, sampleAngle);
+      const sampleModel = sampleReusableAutomataSceneRuntime(sceneRuntime, sampleAngle);
       const samplePreview = sampleModel.foundryPreview;
       if (!samplePreview) return undefined;
       return {
@@ -297,7 +295,7 @@ export const AssemblyCharacterThreePreview = ({
       data-assembly-animated-object-count={Object.keys(sceneModel.animatedSceneObjects).length}
       aria-label="3D character assembly simulation"
     >
-      <ThreeFoundryPreview
+      <DeferredThreeFoundryPreview
         mechanism={designMechanism}
         performancePreset={project.settings.performancePreset}
         simulation={physicalSimulation}
@@ -346,7 +344,7 @@ export const AssemblyCharacterThreePreview = ({
           className="foundry-preview-overlay"
           aria-hidden="true"
         />
-      </ThreeFoundryPreview>
+      </DeferredThreeFoundryPreview>
     </section>
   );
 };
@@ -383,11 +381,11 @@ export const AssemblyMechanismThreePreview = ({
     handleWheel,
   } = useAssemblyFoundryCamera();
   const sceneRuntime = useMemo(
-    () => createAutomataSceneRuntime(project, mechanism, "assembly-live"),
+    () => reuseAutomataSceneRuntime(project, mechanism, "assembly-live"),
     [mechanism, project],
   );
   const sceneModel = useMemo(
-    () => sampleAutomataSceneRuntime(sceneRuntime, angle),
+    () => sampleReusableAutomataSceneRuntime(sceneRuntime, angle),
     [angle, sceneRuntime],
   );
   const previewModel = sceneModel.foundryPreview;
@@ -412,7 +410,7 @@ export const AssemblyMechanismThreePreview = ({
   const playbackSample = useMemo(
     () => (phase: number): FoundryPlaybackFrame | undefined => {
       const sampleProgress = (((phase / (Math.PI * 2)) % 1) + 1) % 1;
-      const sampleModel = sampleAutomataSceneRuntime(
+      const sampleModel = sampleReusableAutomataSceneRuntime(
         sceneRuntime,
         sampleProgress * Math.PI * 2,
       );
@@ -488,7 +486,7 @@ export const AssemblyMechanismThreePreview = ({
       data-assembly-animated-object-count={Object.keys(sceneModel.animatedSceneObjects).length}
       aria-label="3D mechanism assembly simulation"
     >
-      <ThreeFoundryPreview
+      <DeferredThreeFoundryPreview
         mechanism={designMechanism}
         performancePreset={project.settings.performancePreset}
         simulation={physicalSimulation}
@@ -537,7 +535,7 @@ export const AssemblyMechanismThreePreview = ({
           className="foundry-preview-overlay"
           aria-hidden="true"
         />
-      </ThreeFoundryPreview>
+      </DeferredThreeFoundryPreview>
     </section>
   );
 };

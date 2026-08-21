@@ -78,4 +78,44 @@ assert.equal(
 unsubscribe();
 assert.equal(listener, undefined, 'unsubscribe releases the clock listener');
 
+const deferredSampledPhases: number[] = [];
+const deferredAppliedPhases: number[] = [];
+const unsubscribeDeferred = subscribeCadencedPlaybackSampler({
+  clock,
+  minFrameIntervalMs: 50,
+  sampleInitial: false,
+  sample: (nextPhase) => {
+    deferredSampledPhases.push(nextPhase);
+    return { phase: nextPhase };
+  },
+  apply: (frame) => deferredAppliedPhases.push(frame.phase),
+});
+
+assert.deepEqual(
+  deferredSampledPhases,
+  [],
+  'a retained scene can own its initial frame without a duplicate subscription sample',
+);
+phase = 2.7;
+const deferredListener = listener as ((frame: PlaybackClockFrame) => void) | undefined;
+assert(deferredListener, 'deferred sampler installs one clock listener');
+deferredListener({
+  elapsedMs: 0,
+  phase,
+  time: 1_100,
+  phaseChanged: true,
+});
+assert.deepEqual(
+  deferredSampledPhases,
+  [2.7],
+  'deferred initial sampling still applies an explicit scrub immediately',
+);
+assert.deepEqual(
+  deferredAppliedPhases,
+  deferredSampledPhases,
+  'deferred sampling applies every delivered frame exactly once',
+);
+unsubscribeDeferred();
+assert.equal(listener, undefined, 'deferred sampler releases its clock listener');
+
 console.log('cadenced playback sampler contract ok');

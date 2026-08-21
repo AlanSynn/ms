@@ -38,6 +38,13 @@ import {
   preparePuppetPartTopology,
   type PuppetPartTopologyIdentity,
 } from '../runtime/render/puppetPartTopology';
+import {
+  createPuppetCutHoleRingInstances,
+  createPuppetJointHardwareInstances,
+  puppetJointIdForInstance,
+  updatePuppetJointHardwareInstances,
+  type PuppetJointHardwareInstances,
+} from '../runtime/render/puppetJointHardware';
 
 const VIEW_SCALE = 35;
 const FABRICATION_LINKAGE_WIDTH_3D = Math.max(0.16, (FABRICATION_LINKAGE_WIDTH_MM * SCENE_PX_PER_MM) / VIEW_SCALE);
@@ -45,6 +52,8 @@ const FABRICATION_HOLE_RADIUS_3D = Math.max(0.04, (FABRICATION_HOLE_RADIUS_MM * 
 const THICKNESS = 0.22;
 const SUPPORTED_MECHANISM_TYPES: MechanismType[] = [...REFERENCE_AUTHORABLE_TYPES];
 const PUPPET_CAMERA_PRESETS: Viewer3DCameraPreset[] = ['front', 'iso'];
+const EMPTY_ANIMATED_PARTS: Record<string, BodyPartLayer> = {};
+const EMPTY_ANIMATED_SCENE_OBJECTS: Record<string, SceneObject> = {};
 const E2E_DIAGNOSTICS = typeof __MOTIONSMITH_E2E_DIAGNOSTICS__ === 'boolean'
   ? __MOTIONSMITH_E2E_DIAGNOSTICS__
   : false;
@@ -89,7 +98,6 @@ type PuppetAssemblyOverlay = {
   activeJointIds?: string[];
 };
 
-type JointVisual = { pin: THREE.Mesh; washer: THREE.Mesh };
 type MechanismVisual = {
   links: Record<LinkKey, THREE.Group>;
   gears: THREE.Mesh[];
@@ -154,7 +162,7 @@ const sharedGeometryCache = new Map<string, THREE.BufferGeometry>();
 const activePuppetScenes = new Map<THREE.Scene, number>();
 let sharedGeometryCacheRevision = 0;
 
-const pruneSharedGeometryCache = (removeEveryUnused = false) => {
+const pruneSharedGeometryCache = (idleRetentionLimit = 0) => {
   const used = new Set<THREE.BufferGeometry>();
   activePuppetScenes.forEach((_limit, scene) => {
     collectThreeObjectResourceUsage(scene).geometries.forEach((geometry) =>
@@ -168,7 +176,7 @@ const pruneSharedGeometryCache = (removeEveryUnused = false) => {
   pruneUnusedThreeResourceCache(
     sharedGeometryCache,
     used,
-    removeEveryUnused ? 0 : configuredLimit,
+    Math.max(configuredLimit, idleRetentionLimit),
   );
 };
 
@@ -726,7 +734,7 @@ const mechanismGeometrySignature = (mechanisms: MechanismConfig[]) => mechanisms
   mechanism.showOutputGear
 ].join(':')).join('|');
 
-export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneObjects = {}, skeleton, mechanisms, paths, selectedPathId, selectedPathPointIndex, angle = 0, playback, viewport, setViewport, inputMode = 'always', testId = 'three-puppet', cameraPresets = PUPPET_CAMERA_PRESETS, showToolbar = true, showCameraPresets = true, initialCameraPreset, initialLayers, assemblyOverlay, drawMode = false, onDrawPoint, onDrawEnd, onSelectPathPoint, onMovePathPoint, onEndPathPointEdit, pathGestureDraft, onSelectPart, onSelectSceneObject, onSelectMechanism, onSelectJoint, onSelectOnlyPointerDown, onSelectOnlyPointerMove, onSelectOnlyPointerUp, onSelectOnlyPointerCancel, onSelectOnlyWheel }: {
+export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PARTS, animatedSceneObjects = EMPTY_ANIMATED_SCENE_OBJECTS, skeleton, mechanisms, paths, selectedPathId, selectedPathPointIndex, angle = 0, playback, viewport, setViewport, inputMode = 'always', testId = 'three-puppet', cameraPresets = PUPPET_CAMERA_PRESETS, showToolbar = true, showCameraPresets = true, initialCameraPreset, initialLayers, assemblyOverlay, drawMode = false, onDrawPoint, onDrawEnd, onSelectPathPoint, onMovePathPoint, onEndPathPointEdit, pathGestureDraft, onSelectPart, onSelectSceneObject, onSelectMechanism, onSelectJoint, onSelectOnlyPointerDown, onSelectOnlyPointerMove, onSelectOnlyPointerUp, onSelectOnlyPointerCancel, onSelectOnlyWheel }: {
   project?: ProjectState;
   animatedParts?: Record<string, BodyPartLayer>;
   animatedSceneObjects?: Record<string, SceneObject>;
@@ -778,12 +786,15 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   const selectedPartIdRef = useRef<string | undefined>(undefined);
   const assemblyExplodeAmountRef = useRef(0);
   const sceneObjectRefs = useRef<Map<string, THREE.Group>>(new Map());
-  const jointRefs = useRef<Map<string, JointVisual>>(new Map());
+  const jointHardwareRef = useRef<PuppetJointHardwareInstances | null>(null);
   const boneRefs = useRef<Map<string, THREE.Mesh>>(new Map());
   const mechanismRefs = useRef<Map<string, MechanismVisual>>(new Map());
   const pathGestureDraftVisualRef = useRef<ThreePathGestureDraftVisual | null>(null);
   const prunedGeometryRevisionRef = useRef(-1);
   const renderFrameRef = useRef<number | undefined>(undefined);
+  const renderSubmissionCountRef = useRef(0);
+  const playbackSampleRef = useRef(playback?.sample);
+  playbackSampleRef.current = playback?.sample;
   const [rendererStatus, setRendererStatus] = useState<RendererStatus>('pending');
   const physicsKernelRuntime = 'deferred-to-foundry';
   const physicsKernelVersion = 'pending';
@@ -938,6 +949,10 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     (sum, topology) => sum + topology.localHoles.length,
     0,
   );
+  const holeRingDrawObjectCount = preparedPartTopologies.reduce(
+    (sum, topology) => sum + (topology.localHoles.length > 0 ? 1 : 0),
+    0,
+  );
   const partTextureCount = preparedPartTopologies.reduce(
     (sum, topology) => sum + (topology.part.textureUrl ? 1 : 0),
     0,
@@ -951,7 +966,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     (sum, samples) => sum + samples.length,
     0,
   );
-  const estimatedObjectCount = boardGridLines(kit).length + 1 + geometryParts.length * 4 + sceneObjects.length * 4 + holeCount + joints.length * 2 + bones.length + pathsToRender.length * 4 + mechanismLinkCount * 2 + mechanismsToRender.length * 8 + mechanismInventory.holes + mechanismInventory.gears * 2;
+  const estimatedObjectCount = 2 + geometryParts.length * 4 + sceneObjects.length * 4 + holeRingDrawObjectCount + (joints.length ? 2 : 0) + bones.length + pathsToRender.length * 4 + mechanismLinkCount * 2 + mechanismsToRender.length * 8 + mechanismInventory.holes + mechanismInventory.gears * 2;
 
   const collectViewerScreenTargets = (includePathPoints = false) => {
     const renderer = rendererRef.current;
@@ -1092,10 +1107,15 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
         }
         renderer.render(scene, camera);
         if (E2E_DIAGNOSTICS && stateRef.current) {
+          renderSubmissionCountRef.current += 1;
           const screenTargets = roundedScreenTargets(collectViewerScreenTargets(true));
           stateRef.current.dataset.threeSceneVisibleObjectCount = String(estimatedObjectCount);
           stateRef.current.dataset.threeSceneObjectCount = String(estimatedObjectCount);
+          stateRef.current.dataset.threeRenderSubmissions = String(renderSubmissionCountRef.current);
+          stateRef.current.dataset.threeRenderCalls = String(renderer.info.render.calls);
           stateRef.current.dataset.threeRenderTriangles = String(renderer.info.render.triangles);
+          stateRef.current.dataset.threeRendererGeometryCount = String(renderer.info.memory.geometries);
+          stateRef.current.dataset.threeRendererTextureCount = String(renderer.info.memory.textures);
           stateRef.current.dataset.threeSceneObjectScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'object'));
           stateRef.current.dataset.threePartScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'part'));
           stateRef.current.dataset.threeMechanismScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'mechanism'));
@@ -1188,7 +1208,9 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       disposeOwnedMaterials(scene);
       disposeObject(scene, false);
       activePuppetScenes.delete(scene);
-      pruneSharedGeometryCache(true);
+      pruneSharedGeometryCache(
+        renderPolicy.repeatedGeometry.maxGeometryCacheEntries,
+      );
       disposeMaterials(materialsRef.current);
       renderer.domElement.removeEventListener('webglcontextlost', handleContextLost);
       renderer.domElement.removeEventListener('webglcontextrestored', handleContextRestored);
@@ -1202,7 +1224,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       partMeshesRef.current.clear();
       partTopologyIdentitiesRef.current.clear();
       sceneObjectRefs.current.clear();
-      jointRefs.current.clear();
+      jointHardwareRef.current = null;
       boneRefs.current.clear();
       mechanismRefs.current.clear();
       pathGestureDraftVisualRef.current = null;
@@ -1219,10 +1241,17 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     const plane = new THREE.Mesh(new THREE.PlaneGeometry(sheet.width / VIEW_SCALE, sheet.height / VIEW_SCALE), materials.sheet);
     plane.position.set((sheet.x + sheet.width / 2) / VIEW_SCALE, (sheet.y + sheet.height / 2) / VIEW_SCALE, -0.18);
     roots.staticLayer.add(plane);
-    boardGridLines(kit).forEach(line => {
-      const geom = new THREE.BufferGeometry().setFromPoints([to3(line.a, -0.16), to3(line.b, -0.16)]);
-      roots.staticLayer.add(new THREE.Line(geom, materials.grid));
-    });
+    const gridLines = boardGridLines(kit);
+    const gridGeometry = new THREE.BufferGeometry().setFromPoints(
+      gridLines.flatMap((line) => [to3(line.a, -0.16), to3(line.b, -0.16)]),
+    );
+    const grid = new THREE.LineSegments(gridGeometry, materials.grid);
+    grid.name = 'board-grid-line-segments';
+    roots.staticLayer.add(grid);
+    if (E2E_DIAGNOSTICS && stateRef.current) {
+      stateRef.current.dataset.threeGridDrawObjectCount = '1';
+      stateRef.current.dataset.threeGridSegmentCount = String(gridLines.length);
+    }
     render();
   }, [kitSignature, rendererStatus]);
 
@@ -1234,6 +1263,10 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       partTopologyIdentitiesRef.current,
       preparedPartTopologies,
     );
+    if (E2E_DIAGNOSTICS && stateRef.current) {
+      stateRef.current.dataset.threeTopologyReady =
+        topologyDiff.build.length === 0 ? 'true' : 'false';
+    }
     const staleParts = topologyDiff.removeIds.flatMap((partId) => {
       const part = partMeshesRef.current.get(partId);
       if (!part) return [];
@@ -1251,37 +1284,55 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       const topologyStartedAt = performance.now();
       const base = topology.part;
       const { outline, localHoles } = topology;
+      const partGeometryKey = topology.identity.geometry;
       const shape = shapeFromLocalOutline(outline);
       localHoles.forEach(local => {
         shape.holes.push(holePath(local.x / VIEW_SCALE, local.y / VIEW_SCALE));
       });
-      const geometry = new THREE.ExtrudeGeometry(shape, {
-        depth: THICKNESS,
-        bevelEnabled: renderPolicy.partTopology.bevelEnabled,
-        bevelSize: 0.018,
-        bevelThickness: 0.012,
-        bevelSegments: 1,
-        curveSegments: renderPolicy.partTopology.curveSegments,
-        steps: 1,
-      });
+      const geometry = cachedGeometry(
+        `puppet-part-plate:${partGeometryKey}`,
+        () => new THREE.ExtrudeGeometry(shape, {
+          depth: THICKNESS,
+          bevelEnabled: renderPolicy.partTopology.bevelEnabled,
+          bevelSize: 0.018,
+          bevelThickness: 0.012,
+          bevelSegments: 1,
+          curveSegments: renderPolicy.partTopology.curveSegments,
+          steps: 1,
+        }),
+      );
       const mesh = new THREE.Mesh(geometry, materials.part);
       mesh.userData.partId = base.id;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       if (renderPolicy.partTopology.edgeGeometryEnabled) {
-        mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), materials.edge));
+        attachCachedEdges(
+          mesh,
+          geometry,
+          materials.edge,
+          `puppet-part-plate:${partGeometryKey}`,
+        );
       }
-      const artGeometry = new THREE.ShapeGeometry(shape);
-      const artPositions = artGeometry.getAttribute('position');
-      const uvs: number[] = [];
-      const artWidth = Math.max(1, base.bounds.width);
-      const artHeight = Math.max(1, base.bounds.height);
-      for (let i = 0; i < artPositions.count; i += 1) {
-        const x = artPositions.getX(i) * VIEW_SCALE;
-        const y = artPositions.getY(i) * VIEW_SCALE;
-        uvs.push((x - base.bounds.x) / artWidth, (y - base.bounds.y) / artHeight);
-      }
-      artGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+      const artGeometry = cachedGeometry(
+        `puppet-part-art:${partGeometryKey}`,
+        () => {
+          const next = new THREE.ShapeGeometry(shape);
+          const artPositions = next.getAttribute('position');
+          const uvs: number[] = [];
+          const artWidth = Math.max(1, base.bounds.width);
+          const artHeight = Math.max(1, base.bounds.height);
+          for (let i = 0; i < artPositions.count; i += 1) {
+            const x = artPositions.getX(i) * VIEW_SCALE;
+            const y = artPositions.getY(i) * VIEW_SCALE;
+            uvs.push(
+              (x - base.bounds.x) / artWidth,
+              (y - base.bounds.y) / artHeight,
+            );
+          }
+          next.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+          return next;
+        },
+      );
       const art = new THREE.Mesh(artGeometry, createPartArtMaterial(base, () => {
         if (topologyComplete) render();
       }));
@@ -1289,24 +1340,39 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       art.position.set(0, 0, THICKNESS + 0.018);
       mesh.add(art);
       if (outline.length > 1) {
-        const topOutline = new THREE.BufferGeometry().setFromPoints([
-          ...outline.map(point => new THREE.Vector3(point.x / VIEW_SCALE, point.y / VIEW_SCALE, THICKNESS + 0.034)),
-          new THREE.Vector3(outline[0].x / VIEW_SCALE, outline[0].y / VIEW_SCALE, THICKNESS + 0.034)
-        ]);
+        const topOutline = cachedGeometry(
+          `puppet-part-outline:${partGeometryKey}`,
+          () => new THREE.BufferGeometry().setFromPoints([
+            ...outline.map(point => new THREE.Vector3(
+              point.x / VIEW_SCALE,
+              point.y / VIEW_SCALE,
+              THICKNESS + 0.034,
+            )),
+            new THREE.Vector3(
+              outline[0].x / VIEW_SCALE,
+              outline[0].y / VIEW_SCALE,
+              THICKNESS + 0.034,
+            ),
+          ]),
+        );
         mesh.add(new THREE.Line(topOutline, materials.edge));
       }
       mesh.traverse(child => {
         child.userData.partId = base.id;
       });
-      localHoles.forEach(local => {
-        const ring = new THREE.Mesh(
-          cachedGeometry('cut-hole-ring:0.11:0.014:8:28', () => new THREE.TorusGeometry(0.11, 0.014, 8, 28)),
-          materials.cutRing,
-        );
-        ring.name = `cut-hole-ring-${base.id}`;
-        ring.position.set(local.x / VIEW_SCALE, local.y / VIEW_SCALE, THICKNESS + 0.04);
-        mesh.add(ring);
-      });
+      if (localHoles.length) {
+        mesh.add(createPuppetCutHoleRingInstances({
+          partId: base.id,
+          holes: localHoles,
+          viewScale: VIEW_SCALE,
+          z: THICKNESS + 0.04,
+          geometry: cachedGeometry(
+            'cut-hole-ring:0.11:0.014:8:28',
+            () => new THREE.TorusGeometry(0.11, 0.014, 8, 28),
+          ),
+          material: materials.cutRing,
+        }));
+      }
       roots.partsLayer.add(mesh);
       partMeshesRef.current.set(base.id, mesh);
       partTopologyIdentitiesRef.current.set(base.id, topology.identity);
@@ -1330,8 +1396,13 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       recordPuppetTopologyBuild(performance.now() - topologyStartedAt);
     }, {
       initialDelayFrames: 1,
+      maxItemsPerFrame: renderPolicy.preset === 'high' ? 2 : 6,
+      frameBudgetMs: renderPolicy.preset === 'high' ? 8 : 12,
       onComplete: () => {
         topologyComplete = true;
+        if (E2E_DIAGNOSTICS && stateRef.current) {
+          stateRef.current.dataset.threeTopologyReady = 'true';
+        }
         render();
       },
     });
@@ -1404,28 +1475,30 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     const materials = materialsRef.current;
     if (!roots || !materials || rendererStatus !== 'webgl') return;
     clearGroup(roots.skeletonLayer);
-    jointRefs.current.clear();
+    jointHardwareRef.current = null;
     boneRefs.current.clear();
     bones.forEach(([a, b]) => {
       const mesh = makeUnitBar(0.045, 0.07, materials.bone);
       roots.skeletonLayer.add(mesh);
       boneRefs.current.set(`${a}-${b}`, mesh);
     });
-    joints.forEach(joint => {
-      const pin = new THREE.Mesh(
-        cachedGeometry('skeleton-pin:0.08:0.36:24', () => new THREE.CylinderGeometry(0.08, 0.08, 0.36, 24)),
-        materials.pin,
-      );
-      pin.rotation.x = Math.PI / 2;
-      const washer = new THREE.Mesh(
-        cachedGeometry('skeleton-washer:0.12:0.018:8:24', () => new THREE.TorusGeometry(0.12, 0.018, 8, 24)),
-        materials.joint,
-      );
-      pin.userData.jointId = joint.id;
-      washer.userData.jointId = joint.id;
-      roots.skeletonLayer.add(pin, washer);
-      jointRefs.current.set(joint.id, { pin, washer });
-    });
+    if (joints.length) {
+      const hardware = createPuppetJointHardwareInstances({
+        jointIds: joints.map((joint) => joint.id),
+        pinGeometry: cachedGeometry(
+          'skeleton-pin:0.08:0.36:24',
+          () => new THREE.CylinderGeometry(0.08, 0.08, 0.36, 24),
+        ),
+        washerGeometry: cachedGeometry(
+          'skeleton-washer:0.12:0.018:8:24',
+          () => new THREE.TorusGeometry(0.12, 0.018, 8, 24),
+        ),
+        pinMaterial: materials.pin,
+        washerMaterial: materials.joint,
+      });
+      roots.skeletonLayer.add(hardware.pins, hardware.washers);
+      jointHardwareRef.current = hardware;
+    }
     render();
   }, [rendererStatus, skeletonTopology]);
 
@@ -1440,18 +1513,19 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       const jb = activeSkeleton?.joints[b];
       updateUnitBar(mesh, ja?.position, jb?.position, 0.18);
     });
-    joints.forEach(joint => {
-      const visual = jointRefs.current.get(joint.id);
-      if (!visual) return;
-      const showAssemblyPin = !assemblyOverlay || (
-        assemblyPhase !== 'character-parts' && assemblyActiveJoints.has(joint.id)
-      );
-      visual.pin.visible = showAssemblyPin;
-      visual.washer.visible = showAssemblyPin;
-      const p = to3(joint.position, 0.35);
-      visual.pin.position.copy(p);
-      visual.washer.position.set(p.x, p.y, 0.55);
-    });
+    const jointHardware = jointHardwareRef.current;
+    if (jointHardware) {
+      updatePuppetJointHardwareInstances({
+        hardware: jointHardware,
+        joints,
+        viewScale: VIEW_SCALE,
+        pinZ: 0.35,
+        washerZ: 0.55,
+        isVisible: (jointId) => !assemblyOverlay || (
+          assemblyPhase !== 'character-parts' && assemblyActiveJoints.has(jointId)
+        ),
+      });
+    }
     render();
   }, [activeSkeleton, assemblyOverlay, assemblyPhase, bones, joints, rendererStatus]);
 
@@ -1900,7 +1974,8 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   }, [angle, renderedMechanisms, rendererStatus]);
 
   useEffect(() => {
-    if (!playback || rendererStatus !== 'webgl') return;
+    const playbackClock = playback?.clock;
+    if (!playbackClock || rendererStatus !== 'webgl') return;
     const applyPreview = (preview: MotionPreview | undefined) => {
       const materials = materialsRef.current;
       if (!materials) return;
@@ -1943,27 +2018,38 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
           const jb = previewSkeleton.joints[b];
           if (mesh) updateUnitBar(mesh, ja?.position, jb?.position, 0.18);
         });
-        Object.values(previewSkeleton.joints).forEach(joint => {
-          const visual = jointRefs.current.get(joint.id);
-          if (!visual) return;
-          const p = to3(joint.position, 0.35);
-          visual.pin.position.copy(p);
-          visual.washer.position.set(p.x, p.y, 0.55);
-        });
+        const jointHardware = jointHardwareRef.current;
+        if (jointHardware) {
+          const assemblyActiveJoints = new Set(
+            assemblyOverlay?.activeJointIds ?? [],
+          );
+          updatePuppetJointHardwareInstances({
+            hardware: jointHardware,
+            joints: Object.values(previewSkeleton.joints),
+            viewScale: VIEW_SCALE,
+            pinZ: 0.35,
+            washerZ: 0.55,
+            isVisible: (jointId) => !assemblyOverlay || (
+              assemblyPhase !== 'character-parts' &&
+              assemblyActiveJoints.has(jointId)
+            ),
+          });
+        }
       }
       render();
     };
 
     return subscribeCadencedPlaybackSampler({
-      clock: playback.clock,
-      sample: playback.sample,
+      clock: playbackClock,
+      sample: (phase) => playbackSampleRef.current?.(phase),
       minFrameIntervalMs: renderPolicy.minRenderIntervalMs,
+      sampleInitial: false,
       apply: applyPreview,
     });
   }, [
     activeSkeleton,
     assemblyExplodeAmount,
-    playback,
+    playback?.clock,
     project,
     renderPolicy.minRenderIntervalMs,
     rendererStatus,
@@ -2223,6 +2309,14 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     if (onSelectJoint) {
       const jointHits = raycaster.intersectObjects([roots.skeletonLayer], true);
       for (const hit of jointHits) {
+        const instancedJointId = puppetJointIdForInstance(
+          hit.object,
+          hit.instanceId,
+        );
+        if (instancedJointId) {
+          onSelectJoint(instancedJointId);
+          return;
+        }
         let node: THREE.Object3D | null = hit.object;
         while (node) {
           const jointId = typeof node.userData.jointId === 'string' ? node.userData.jointId : undefined;
@@ -2480,6 +2574,11 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       data-three-part-art="top-texture-decal"
       data-three-part-art-count={partArtCount}
       data-three-part-texture-count={partTextureCount}
+      data-three-cut-hole-ring-draw-object-count={holeRingDrawObjectCount}
+      data-three-cut-hole-ring-instance-count={holeCount}
+      data-three-skeleton-hardware-draw-object-count={joints.length ? 2 : 0}
+      data-three-skeleton-pin-instance-count={joints.length}
+      data-three-skeleton-washer-instance-count={joints.length}
       data-three-part-opacity="1"
       data-three-part-edge-opacity="0.95"
       data-three-assembly-underlay="plate-art-decal"

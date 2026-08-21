@@ -98,9 +98,13 @@ export const FoundryOverlayLayer = ({
   playback,
 }: FoundryOverlayLayerProps) => {
   const overlayRef = useRef<SVGSVGElement>(null);
+  const playbackSampleRef = useRef(playback?.sample);
+  playbackSampleRef.current = playback?.sample;
+  const playbackClock = playback?.clock;
+  const playbackMinFrameIntervalMs = playback?.minFrameIntervalMs ?? 0;
 
   useEffect(() => {
-    if (!playback) return;
+    if (!playbackClock) return;
     const setAttribute = (node: Element | null, name: string, value: string) => {
       node?.setAttribute(name, value);
     };
@@ -200,12 +204,13 @@ export const FoundryOverlayLayer = ({
       }
     };
     return subscribeCadencedPlaybackSampler({
-      clock: playback.clock,
-      sample: playback.sample,
-      minFrameIntervalMs: playback.minFrameIntervalMs ?? 0,
+      clock: playbackClock,
+      sample: (phase) => playbackSampleRef.current?.(phase),
+      minFrameIntervalMs: playbackMinFrameIntervalMs,
+      sampleInitial: false,
       apply,
     });
-  }, [playback]);
+  }, [playbackClock, playbackMinFrameIntervalMs]);
 
   return (
   <svg

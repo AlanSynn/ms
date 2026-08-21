@@ -116,6 +116,7 @@ export const PathWorkflowPanel = ({
         data-testid="free-draw-status"
         data-point-count={pointCount}
         data-draw-mode={drawMode ? "drawing" : "idle"}
+        data-selected-point={selectedPoint ?? "none"}
       >
         {selectedPath
           ? pointCount >= 3
