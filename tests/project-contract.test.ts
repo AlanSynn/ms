@@ -41,7 +41,7 @@ import { buildAutomataSceneModel } from '../utils/automataSceneModel';
 import { buildDesignAutomataProjection } from '../utils/designAutomataProjection';
 import { canvasPanOffset, canvasViewBoxForViewport, zoomCanvasViewportAtPoint } from '../utils/viewport';
 import { resolveRenderPerformancePolicy } from '../utils/renderPerformancePolicy';
-import { cachedThreeResource, clearThreeGroup, disposeThreeObjectGraph, setRendererPixelRatioCap } from '../utils/threeResourceKit';
+import { cachedThreeResource, clearThreeGroup, disposeThreeObjectGraph, resizeRendererToPerformancePolicy } from '../utils/threeResourceKit';
 import { APP_COMMANDS, APP_MENU_GROUPS, commandById, commandIdForKeyboardEvent, validateAppCommandRegistry } from '../utils/appCommands';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_KERNEL_IMPORT, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, physicsKernelCapability, runRapierFrictionProbe } from '../utils/physicsKernel';
 import { formatGridLabel, formatGridPitch, formatGridReadout } from '../utils/units';
@@ -3446,7 +3446,7 @@ assert(!assemblyWorkbenchText.includes('Build module</text>') && !assemblyWorkbe
 assert(threePreviewText.includes('fabricationGearProfileForPitchRadius'), '3D foundry gear rendering uses shared fabrication gear geometry');
 assert(threePreviewText.includes('FABRICATION_LINKAGE_WIDTH_3D') && threePreviewText.includes('FABRICATION_HOLE_RADIUS_3D'), '3D puppet mechanism links use centralized fabrication linkage and hole dimensions');
 assert(threePreviewText.includes('sharedGeometryCache') && threePreviewText.includes('sharedFabricationGeometry'), '3D puppet preview caches fabrication geometry instead of rebuilding primitive meshes every frame');
-assert(threeResourceKitText.includes('export const cachedThreeResource') && threeResourceKitText.includes('export const disposeThreeObjectGraph') && threeResourceKitText.includes('export const setRendererPixelRatioCap'), '3D previews share Three resource cache/disposal/pixel-ratio helpers instead of duplicating renderer plumbing');
+assert(threeResourceKitText.includes('export const cachedThreeResource') && threeResourceKitText.includes('export const disposeThreeObjectGraph') && threeResourceKitText.includes('export const resizeRendererToPerformancePolicy'), '3D previews share Three resource cache/disposal/atomic-resize helpers instead of duplicating renderer plumbing');
 {
   const cache = new Map<string, THREE.BufferGeometry>();
   const firstGeometry = cachedThreeResource(cache, 'box', () => new THREE.BoxGeometry(1, 2, 3), 'sharedTestGeometry');
@@ -3499,31 +3499,98 @@ assert(threeResourceKitText.includes('export const cachedThreeResource') && thre
   const previousWindow = (globalThis as { window?: unknown }).window;
   try {
     Object.defineProperty(globalThis, 'window', { configurable: true, value: { devicePixelRatio: 10 } });
-    let pixelRatio = 0;
+    let pixelRatio = 1;
+    let logicalWidth = 1;
+    let logicalHeight = 1;
+    let drawingBufferResizeCount = 0;
     const renderbufferContext = {
       MAX_RENDERBUFFER_SIZE: 0x84e8,
       getParameter: () => 8192,
     };
-    setRendererPixelRatioCap({
+    resizeRendererToPerformancePolicy({
       getContext: () => renderbufferContext,
       getPixelRatio: () => pixelRatio,
-      setPixelRatio: (value: number) => { pixelRatio = value; },
+      getSize: (target: THREE.Vector2) => target.set(logicalWidth, logicalHeight),
+      setDrawingBufferSize: (width: number, height: number, value: number) => {
+        logicalWidth = width;
+        logicalHeight = height;
+        pixelRatio = value;
+        drawingBufferResizeCount += 1;
+      },
     } as unknown as THREE.WebGLRenderer, resolveRenderPerformancePolicy('balanced'), {
       width: 1366,
       height: 768,
     });
     assert.equal(pixelRatio, 0.5, 'shared Three pixel-ratio helper applies the selected render policy');
+    assert.deepEqual([logicalWidth, logicalHeight], [1366, 768], 'shared Three resize helper commits the logical viewport with the DPR');
+    assert.equal(drawingBufferResizeCount, 1, 'shared Three resize helper commits size and DPR in one backing-store allocation');
 
-    setRendererPixelRatioCap({
+    resizeRendererToPerformancePolicy({
       capabilities: { maxTextureSize: 2048 },
       getContext: () => { throw new Error('context lost'); },
       getPixelRatio: () => pixelRatio,
-      setPixelRatio: (value: number) => { pixelRatio = value; },
+      getSize: (target: THREE.Vector2) => target.set(logicalWidth, logicalHeight),
+      setDrawingBufferSize: (width: number, height: number, value: number) => {
+        logicalWidth = width;
+        logicalHeight = height;
+        pixelRatio = value;
+        drawingBufferResizeCount += 1;
+      },
     } as unknown as THREE.WebGLRenderer, resolveRenderPerformancePolicy('high'), {
       width: 2000,
       height: 1000,
     });
     assert.equal(pixelRatio, 2048 / 2000, 'lost-context fallback keeps the drawing buffer within a conservative renderer capability');
+    assert.equal(drawingBufferResizeCount, 2, 'lost-context fallback still commits one bounded backing-store allocation');
+
+    logicalWidth = 3098;
+    logicalHeight = 2002;
+    pixelRatio = Math.sqrt(4_000_000 / (logicalWidth * logicalHeight));
+    let maximumCommittedPixels = logicalWidth * logicalHeight * pixelRatio ** 2;
+    resizeRendererToPerformancePolicy({
+      getContext: () => renderbufferContext,
+      getPixelRatio: () => pixelRatio,
+      getSize: (target: THREE.Vector2) => target.set(logicalWidth, logicalHeight),
+      setDrawingBufferSize: (width: number, height: number, value: number) => {
+        logicalWidth = width;
+        logicalHeight = height;
+        pixelRatio = value;
+        maximumCommittedPixels = Math.max(maximumCommittedPixels, width * height * value ** 2);
+      },
+    } as unknown as THREE.WebGLRenderer, resolveRenderPerformancePolicy('high'), {
+      width: 624,
+      height: 610,
+    });
+    assert.equal(pixelRatio, 2, 'a Chromebook-size workbench can raise High resolution to native DPR 2');
+    assert(maximumCommittedPixels <= 4_000_000, 'large-to-small resize never creates an intermediate backing store above the policy budget');
+
+    logicalWidth = 1000;
+    logicalHeight = 4000;
+    pixelRatio = 1;
+    const rotatedCanvas = { width: 1000, height: 4000 };
+    let rotatedResizeCount = 0;
+    let rotatedPeakPixels = rotatedCanvas.width * rotatedCanvas.height;
+    resizeRendererToPerformancePolicy({
+      domElement: rotatedCanvas,
+      getContext: () => renderbufferContext,
+      getPixelRatio: () => pixelRatio,
+      getSize: (target: THREE.Vector2) => target.set(logicalWidth, logicalHeight),
+      setDrawingBufferSize: (width: number, height: number, value: number) => {
+        logicalWidth = width;
+        logicalHeight = height;
+        pixelRatio = value;
+        rotatedCanvas.width = Math.floor(width * value);
+        rotatedPeakPixels = Math.max(rotatedPeakPixels, rotatedCanvas.width * rotatedCanvas.height);
+        rotatedCanvas.height = Math.floor(height * value);
+        rotatedPeakPixels = Math.max(rotatedPeakPixels, rotatedCanvas.width * rotatedCanvas.height);
+        rotatedResizeCount += 1;
+      },
+    } as unknown as THREE.WebGLRenderer, resolveRenderPerformancePolicy('high'), {
+      width: 4000,
+      height: 1000,
+    });
+    assert.equal(rotatedResizeCount, 2, 'a portrait-to-landscape resize clears one tiny intermediate backing store before the final allocation');
+    assert(rotatedPeakPixels <= 4_000_000, 'portrait-to-landscape canvas mutations also stay inside the pixel budget');
   } finally {
     if (previousWindow === undefined) {
       delete (globalThis as { window?: unknown }).window;
@@ -3769,14 +3836,14 @@ assert(
   !renderPerformancePolicyText.includes('navigator') &&
   optionsText.includes('<option value="high">High resolution</option>') &&
   threePreviewText.includes('resolveRenderPerformancePolicy') &&
-  threePreviewText.includes('setRendererPixelRatioCap(renderer, renderPolicy, { width, height })') &&
+  threePreviewText.includes('resizeRendererToPerformancePolicy(renderer, renderPolicy, { width, height })') &&
   threePreviewText.includes("window.addEventListener('resize', resize)") &&
   threePreviewText.includes("window.removeEventListener('resize', resize)") &&
   threeFoundryPreviewText.includes('resolveRenderPerformancePolicy') &&
-  threeFoundryPreviewText.includes('setRendererPixelRatioCap(renderer, renderPolicy, { width, height })') &&
+  threeFoundryPreviewText.includes('resizeRendererToPerformancePolicy(renderer, renderPolicy, { width, height })') &&
   threeFoundryPreviewText.includes('window.addEventListener("resize", resize)') &&
   threeFoundryPreviewText.includes('window.removeEventListener("resize", resize)'),
-  'Options exposes the persisted High resolution preset and both Three viewer engines apply its deterministic DPR, antialias, overlay, cadence, and detail policy without User-Agent branching',
+  'Options exposes the persisted High resolution preset and both Three viewer engines apply its bounded DPR without User-Agent branching or unrelated quality work',
 );
 assert(threePreviewText.includes("setRendererStatus('restoring')") && threePreviewText.includes("setRendererStatus('unavailable')") && threeFoundryPreviewText.includes('setRendererStatus("restoring")') && threeFoundryPreviewText.includes('setRendererStatus("unavailable")') && webglRecoverySpecText.includes('WEBGL_lose_context') && webglRecoverySpecText.includes('WebGL unavailable'), 'Character and Foundry keep controls mounted across unavailable/lost WebGL and production browser coverage restores the same scene');
 assert(!threePreviewText.includes('loadRapierPhysicsKernel') && threePreviewText.includes('deferred-to-foundry') && threeFoundryPreviewText.includes('if (!showForces) return;') && threeFoundryPreviewText.includes('loadRapierPhysicsKernel'), 'Character, Path, and ordinary Foundry entry avoid Rapier; explicit Foundry physics diagnostics own the lazy contact-validation load');
@@ -3791,6 +3858,7 @@ assert(!designWorkflowPanelText.includes('fitMechanismToTargetPath') && designWo
 assert(mechanismRecommendationSheetText.includes('RecommendationFitPreview') && mechanismRecommendationSheetText.includes('<MechanismLinkagePreview') && mechanismRecommendationSheetText.includes('<RecommendationMechanismSketch') && mechanismRecommendationSheetText.includes('data-board-cells') && mechanismRecommendationSheetText.includes('data-user-path-preview') && mechanismRecommendationSheetText.includes('data-mechanism-path-preview') && mechanismRecommendationSheetText.includes('renderPolicy.overlayQuality === "full"') && mechanismRecommendationSheetText.includes('data-ghost-preview') && mechanismRecommendationSheetText.includes('data-trace-samples') && mechanismRecommendationSheetText.includes('.slice(0, visibleRecommendationCount)') && mechanismRecommendationSheetText.includes('visibleRecommendationStep - recommendations.length') && recommendationMechanismSketchText.includes('sketchSegments') && recommendationMechanismSketchText.includes('data-mechanism-type'), 'recommendation modal incrementally mounts cards and bounded path previews from the actual joint state while reserving fabrication detail and ghost frames for High quality');
 assert(pathCanvasPaneText.includes('path-view-2d') && pathCanvasPaneText.includes('path-view-3d'), 'Path Editor exposes a persistent 2D/3D Path view switch');
 assert(pathCanvasPaneText.includes('<DeferredThreePuppetPreview') && pathCanvasPaneText.includes('testId="path-three-puppet"') && pathCanvasPaneText.includes('initialCameraPreset={pathViewMode === "2d" ? "front" : "iso"}'), 'Path Editor defers the shared Three scene while preserving both front 2D and orbitable 3D views');
+assert(pathCanvasPaneText.includes('playback={{') && !pathCanvasPaneText.includes('playback={isPlaying ?') && pathCanvasPaneText.includes('sample: (phase) => isPlaying ? playbackSample(phase) : undefined') && pathCanvasPaneText.includes('mechanisms={[]}'), 'Path keeps one shared-clock sampler subscribed before Play, gates idle samples before expensive projection, and excludes mechanism geometry from its authoritative 2D/3D scene');
 assert(pathCanvasPaneText.includes('drawMode={pathViewMode === "2d" && drawMode') && pathCanvasPaneText.includes('onDrawPoint={onDrawPoint}') && pathCanvasPaneText.includes('onSelectPathPoint={pathLocked ? undefined : onPathPointPick}'), 'Path Editor keeps drawing and editable path handles on the shared front-view scene');
 assert(pathEditorText.includes('createPathGestureDraft()') && pathEditorText.includes('pathGestureDraft.publish') && pathEditorText.includes('pathGestureDraft.flush()') && pathCanvasPaneText.includes('pathGestureDraft={pathGestureDraft}'), 'Path drawing and point dragging use one cadenced renderer draft before committing through the stage action seam');
 assert(pathEditorText.includes('pointDragDraftRef.current = points') && pathEditorText.includes('setPathPoints(points, selectedPath.source)') && !pathEditorText.includes('freeDraftRef.current = next;\n    setPathPoints('), 'Path pointer moves update transient refs while pointerup performs the only canonical path write');

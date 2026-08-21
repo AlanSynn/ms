@@ -15,6 +15,10 @@ import {
 } from '../utils/threeResourceKit';
 import { scheduleIncrementalTopologyBuild } from '../runtime/render/incrementalTopologyBuild';
 import {
+  recordViewerDragDistance,
+  VIEWER_CLICK_MAX_DISTANCE_PX,
+} from '../runtime/render/viewerDragDistance';
+import {
   createPuppetCutHoleRingInstances,
   createPuppetJointHardwareInstances,
   puppetJointIdForInstance,
@@ -33,6 +37,26 @@ import {
 import type { BodyPartLayer, StandardSkeleton } from '../types';
 import { defaultPhysicalKit } from '../utils/coordinates';
 import { createDefaultMechanism } from '../utils/project';
+
+const returningOrbit = { x: 320, y: 240, maxDistance: 0 };
+recordViewerDragDistance(returningOrbit, 410, 270);
+recordViewerDragDistance(returningOrbit, 320, 240);
+assert.equal(
+  returningOrbit.maxDistance,
+  Math.hypot(90, 30),
+  'a drag keeps its maximum displacement after returning to its pointerdown origin',
+);
+assert(
+  returningOrbit.maxDistance >= VIEWER_CLICK_MAX_DISTANCE_PX,
+  'a completed closed-loop orbit cannot fall back into click selection',
+);
+const clickJitter = { x: 100, y: 100, maxDistance: 0 };
+recordViewerDragDistance(clickJitter, 102, 101);
+recordViewerDragDistance(clickJitter, 100, 100);
+assert(
+  clickJitter.maxDistance < VIEWER_CLICK_MAX_DISTANCE_PX,
+  'sub-threshold pointer jitter remains a selectable click',
+);
 
 const root = new THREE.Group();
 const disposed: string[] = [];

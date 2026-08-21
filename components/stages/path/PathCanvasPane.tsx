@@ -100,10 +100,10 @@ export const PathCanvasPane = ({
       selectedPathId={selectedPath?.id}
       selectedPathPointIndex={selectedPoint}
       angle={angle}
-      playback={isPlaying ? {
+      playback={{
         clock: playbackClock,
-        sample: playbackSample,
-      } : undefined}
+        sample: (phase) => isPlaying ? playbackSample(phase) : undefined,
+      }}
       viewport={viewport}
       setViewport={setViewport}
       inputMode="always"

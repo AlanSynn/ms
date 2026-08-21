@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import {
   effectiveRenderPixelRatio,
+  RENDER_VIEWPORT_PIXEL_BUDGET,
   type RenderPerformancePolicy,
 } from "./renderPerformancePolicy";
 
@@ -57,7 +58,9 @@ export const acquireSharedWebGLRenderer = ({
   };
 };
 
-export const setRendererPixelRatioCap = (
+const rendererLogicalSize = new THREE.Vector2();
+
+export const resizeRendererToPerformancePolicy = (
   renderer: THREE.WebGLRenderer,
   policy: Pick<RenderPerformancePolicy, "pixelRatioCap">,
   viewport: { width: number; height: number },
@@ -87,7 +90,30 @@ export const setRendererPixelRatioCap = (
         ? reportedRenderbufferLimit
         : fallbackRenderbufferLimit,
   });
-  if (renderer.getPixelRatio() !== ratio) renderer.setPixelRatio(ratio);
+  const currentSize = renderer.getSize(rendererLogicalSize);
+  if (
+    currentSize.x !== viewport.width ||
+    currentSize.y !== viewport.height ||
+    renderer.getPixelRatio() !== ratio
+  ) {
+    const targetDrawingBufferWidth = Math.floor(viewport.width * ratio);
+    const currentDrawingBufferHeight = Number(renderer.domElement?.height);
+    if (
+      Number.isFinite(currentDrawingBufferHeight) &&
+      currentDrawingBufferHeight > 0 &&
+      targetDrawingBufferWidth * currentDrawingBufferHeight >
+        RENDER_VIEWPORT_PIXEL_BUDGET
+    ) {
+      // Three updates canvas.width before canvas.height. Reset a pathological
+      // portrait/landscape cross-product first so even that intermediate
+      // browser allocation stays inside the classroom pixel budget.
+      renderer.setDrawingBufferSize(1, 1, 1);
+    }
+    // Apply logical size and DPR through one Three API call. Calling
+    // setPixelRatio before setSize can resize the previous large viewport at a
+    // newly raised DPR, briefly exceeding the backing-store pixel budget.
+    renderer.setDrawingBufferSize(viewport.width, viewport.height, ratio);
+  }
   return ratio;
 };
 
