@@ -4,6 +4,9 @@ export type RenderPerformancePreset = AppSettings['performancePreset'];
 
 export type RenderOverlayQuality = 'reduced' | 'balanced' | 'full';
 
+// Bound the drawing-buffer area independently of CSS viewport size and DPR.
+export const RENDER_VIEWPORT_PIXEL_BUDGET = 8_000_000;
+
 export interface RepeatedGeometryPolicy {
   readonly strategy: 'pool-and-instance';
   readonly instancingThreshold: number;
@@ -40,6 +43,39 @@ export interface RenderPerformancePolicy {
   readonly interactiveDetail: InteractiveDetailPolicy;
   readonly repeatedGeometry: RepeatedGeometryPolicy;
 }
+
+export type EffectiveRenderPixelRatioInput = {
+  readonly policy: Pick<RenderPerformancePolicy, 'pixelRatioCap'>;
+  readonly devicePixelRatio: number;
+  readonly viewportWidth: number;
+  readonly viewportHeight: number;
+  readonly maxRenderbufferDimension: number;
+};
+
+const positiveFinite = (value: number, fallback: number) =>
+  Number.isFinite(value) && value > 0 ? value : fallback;
+
+export const effectiveRenderPixelRatio = ({
+  policy,
+  devicePixelRatio,
+  viewportWidth,
+  viewportHeight,
+  maxRenderbufferDimension,
+}: EffectiveRenderPixelRatioInput): number => {
+  const width = positiveFinite(viewportWidth, 1);
+  const height = positiveFinite(viewportHeight, 1);
+  const deviceRatio = positiveFinite(devicePixelRatio, 1);
+  const policyCap = positiveFinite(policy.pixelRatioCap, 1);
+  const renderbufferLimit = positiveFinite(maxRenderbufferDimension, 1);
+  const pixelBudgetRatio = Math.sqrt(
+    RENDER_VIEWPORT_PIXEL_BUDGET / (width * height),
+  );
+  const dimensionRatio = Math.min(
+    renderbufferLimit / width,
+    renderbufferLimit / height,
+  );
+  return Math.min(deviceRatio, policyCap, pixelBudgetRatio, dimensionRatio);
+};
 
 const definePolicy = (
   policy: Omit<RenderPerformancePolicy, 'minRenderIntervalMs'>,
@@ -112,7 +148,7 @@ const RENDER_PERFORMANCE_POLICIES: Readonly<Record<RenderPerformancePreset, Rend
   }),
   high: definePolicy({
     preset: 'high',
-    pixelRatioCap: 1.5,
+    pixelRatioCap: 2,
     antialias: true,
     targetFramesPerSecond: 60,
     overlayQuality: 'full',

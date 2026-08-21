@@ -1142,7 +1142,6 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     }
     const renderer = rendererLease.renderer;
 
-    setRendererPixelRatioCap(renderer, renderPolicy.pixelRatioCap);
     warmPartTopologyPipeline(renderPolicy.partTopology);
     if (E2E_DIAGNOSTICS) renderer.domElement.dataset.testid = `${testId}-canvas`;
     renderer.domElement.className = 'three-puppet-canvas';
@@ -1190,6 +1189,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     const resize = () => {
       const width = Math.max(1, host.clientWidth);
       const height = Math.max(1, host.clientHeight);
+      setRendererPixelRatioCap(renderer, renderPolicy, { width, height });
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
@@ -1197,10 +1197,12 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     };
     const ro = new ResizeObserver(resize);
     ro.observe(host);
+    window.addEventListener('resize', resize);
     resize();
 
     return () => {
       ro.disconnect();
+      window.removeEventListener('resize', resize);
       if (renderFrameRef.current !== undefined) {
         window.cancelAnimationFrame(renderFrameRef.current);
         renderFrameRef.current = undefined;

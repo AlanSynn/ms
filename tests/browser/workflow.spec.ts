@@ -31,6 +31,11 @@ const clickOptionalButton = async (button: Locator, label: string) => {
   return true;
 };
 
+const canvasBackingPixelRatio = (canvas: Locator) => canvas.evaluate(element => {
+  const rect = element.getBoundingClientRect();
+  return (element as HTMLCanvasElement).width / Math.max(1, rect.width);
+});
+
 const FOUNDRY_RENDER_CONTRACT_ATTRS = [
   'data-mechanism-type',
   'data-three-stack-order',
@@ -1611,7 +1616,7 @@ test('animation performance: Foundry playback stays responsive without runaway T
   await expect(foundryRig).toHaveAttribute('data-render-performance-preset', 'balanced');
   await expect(foundryRig).toHaveAttribute('data-render-antialias', 'off');
   await expect(foundryRig).toHaveAttribute('data-repeated-geometry-policy', 'pool-and-instance');
-  await expect(foundryRig).toHaveAttribute('data-three-pixel-ratio-cap', '0.63');
+  await expect(foundryRig).toHaveAttribute('data-three-pixel-ratio-cap', '0.50');
   await expect(
     foundryRig,
     'capture the retained-scene baseline only after its first deferred topology build',
@@ -1916,9 +1921,24 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
     cutSheet: 'svg'
   });
 
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setDeviceMetricsOverride', {
+    width: 1280,
+    height: 720,
+    deviceScaleFactor: 2,
+    mobile: false,
+    screenWidth: 1280,
+    screenHeight: 720,
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event('resize')));
+
   await page.getByRole('button', { name: /Path Editor/i }).click();
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
   await expect(page.getByTestId('path-three-puppet-state')).toHaveAttribute('data-layer-grid', 'shown');
+  await expect.poll(
+    () => canvasBackingPixelRatio(page.getByTestId('path-three-puppet-canvas')),
+    { message: 'High resolution applies native DPR 2 to the shared puppet renderer' },
+  ).toBeCloseTo(2, 1);
   await expect(page.getByTestId('stage-project-card')).toHaveAttribute('aria-label', /25 millimeter grid/);
   await page.getByRole('button', { name: 'Drawing free path', exact: true }).click();
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
@@ -1929,7 +1949,11 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await expect(highPerformanceRig).toHaveAttribute('data-render-antialias', 'on');
   await expect(highPerformanceRig).toHaveAttribute('data-render-overlay-quality', 'full');
   await expect(highPerformanceRig).toHaveAttribute('data-three-animation-commit-ms', '16.7');
-  await expect(highPerformanceRig).toHaveAttribute('data-three-pixel-ratio-cap', '1.50');
+  await expect(highPerformanceRig).toHaveAttribute('data-three-pixel-ratio-cap', '2.00');
+  await expect.poll(
+    () => canvasBackingPixelRatio(page.getByTestId('design-shared-foundry-preview').getByTestId('foundry-three-canvas')),
+    { message: 'High resolution applies native DPR 2 to the shared Foundry renderer' },
+  ).toBeCloseTo(2, 1);
   await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').fill('0');
   await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').press('Enter');
   await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').fill('100');

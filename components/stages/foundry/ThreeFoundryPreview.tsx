@@ -1531,7 +1531,6 @@ export const ThreeFoundryPreview = ({
       return;
     }
     const renderer = rendererLease.renderer;
-    setRendererPixelRatioCap(renderer, renderPolicy.pixelRatioCap);
     renderer.shadowMap.enabled = false;
     renderer.domElement.className = "foundry-three-canvas";
     if (E2E_DIAGNOSTICS) renderer.domElement.dataset.testid = "foundry-three-canvas";
@@ -1581,6 +1580,7 @@ export const ThreeFoundryPreview = ({
       const width = Math.max(1, host.clientWidth);
       const height = Math.max(1, host.clientHeight);
       onProjectionSizeChange({ width, height });
+      setRendererPixelRatioCap(renderer, renderPolicy, { width, height });
       renderer.setSize(width, height, false);
       cam.aspect = width / height;
       cam.updateProjectionMatrix();
@@ -1589,8 +1589,10 @@ export const ThreeFoundryPreview = ({
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(host);
+    window.addEventListener("resize", resize);
     return () => {
       ro.disconnect();
+      window.removeEventListener("resize", resize);
       sceneRef.current = null;
       rendererRef.current = null;
       cameraRef.current = null;

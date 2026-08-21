@@ -196,7 +196,7 @@ export const Options = ({
                 >
                   <option value="fast">Fast</option>
                   <option value="balanced">Balanced</option>
-                  <option value="high">High</option>
+                  <option value="high">High resolution</option>
                 </SelectField>
                 <SelectField
                   label="Snap quality"

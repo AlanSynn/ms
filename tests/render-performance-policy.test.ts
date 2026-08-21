@@ -2,6 +2,8 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  effectiveRenderPixelRatio,
+  RENDER_VIEWPORT_PIXEL_BUDGET,
   resolveRenderPerformancePolicy,
   type RenderPerformancePreset,
 } from '../utils/renderPerformancePolicy';
@@ -47,6 +49,75 @@ assert.deepEqual(
     },
   },
   'Balanced provides the Chromebook-oriented default rendering envelope',
+);
+
+assert.deepEqual(
+  {
+    pixelRatioCap: high.pixelRatioCap,
+    antialias: high.antialias,
+    overlayQuality: high.overlayQuality,
+  },
+  {
+    pixelRatioCap: 2,
+    antialias: true,
+    overlayQuality: 'full',
+  },
+  'High explicitly opts capable hardware into native high-DPI rendering and full overlays',
+);
+
+const effectiveRatio = (
+  policy: typeof balanced,
+  overrides: Partial<Parameters<typeof effectiveRenderPixelRatio>[0]> = {},
+) => effectiveRenderPixelRatio({
+  policy,
+  devicePixelRatio: 2,
+  viewportWidth: 1366,
+  viewportHeight: 768,
+  maxRenderbufferDimension: 8192,
+  ...overrides,
+});
+
+assert.equal(
+  effectiveRatio(balanced),
+  0.5,
+  'Balanced keeps its Chromebook DPR cap at the acceptance viewport',
+);
+assert.equal(
+  effectiveRatio(high),
+  2,
+  'High reaches native 2x rendering when the viewport and GPU limits permit it',
+);
+assert.equal(
+  effectiveRatio(high, { devicePixelRatio: 1.25 }),
+  1.25,
+  'rendering never exceeds the device pixel ratio',
+);
+
+const pixelBudgetRatio = effectiveRatio(high, {
+  devicePixelRatio: 3,
+  viewportWidth: 3840,
+  viewportHeight: 2160,
+  maxRenderbufferDimension: 16384,
+});
+assert.equal(
+  pixelBudgetRatio,
+  Math.sqrt(RENDER_VIEWPORT_PIXEL_BUDGET / (3840 * 2160)),
+  'large viewports are bounded by the rendered-pixel budget',
+);
+assert(
+  3840 * 2160 * pixelBudgetRatio ** 2 <= RENDER_VIEWPORT_PIXEL_BUDGET + 1e-6,
+  'the effective ratio cannot allocate beyond the rendered-pixel budget',
+);
+
+assert.equal(
+  effectiveRatio(high, {
+    devicePixelRatio: 3,
+    viewportWidth: 3000,
+    viewportHeight: 1000,
+    maxRenderbufferDimension: 4096,
+  }),
+  4096 / 3000,
+  'the effective ratio keeps both drawing-buffer dimensions within WebGL limits',
 );
 
 policies.forEach((policy) => {

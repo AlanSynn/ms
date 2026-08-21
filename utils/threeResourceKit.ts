@@ -1,5 +1,8 @@
 import * as THREE from "three";
-import { WEBGL_PIXEL_RATIO_CAP } from "./viewport";
+import {
+  effectiveRenderPixelRatio,
+  type RenderPerformancePolicy,
+} from "./renderPerformancePolicy";
 
 type SharedRendererSlot = {
   renderer: THREE.WebGLRenderer;
@@ -56,9 +59,36 @@ export const acquireSharedWebGLRenderer = ({
 
 export const setRendererPixelRatioCap = (
   renderer: THREE.WebGLRenderer,
-  cap = WEBGL_PIXEL_RATIO_CAP,
+  policy: Pick<RenderPerformancePolicy, "pixelRatioCap">,
+  viewport: { width: number; height: number },
 ) => {
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, cap));
+  let reportedRenderbufferLimit = Number.NaN;
+  try {
+    const context = renderer.getContext();
+    reportedRenderbufferLimit = Number(
+      context.getParameter(context.MAX_RENDERBUFFER_SIZE),
+    );
+  } catch {
+    // A lost context or lightweight test double may not expose parameters.
+  }
+  const textureLimit = Number(renderer.capabilities?.maxTextureSize);
+  const fallbackRenderbufferLimit =
+    Number.isFinite(textureLimit) && textureLimit > 0
+      ? Math.min(textureLimit, 4096)
+      : 4096;
+  const ratio = effectiveRenderPixelRatio({
+    policy,
+    devicePixelRatio:
+      typeof window === "undefined" ? 1 : window.devicePixelRatio || 1,
+    viewportWidth: viewport.width,
+    viewportHeight: viewport.height,
+    maxRenderbufferDimension:
+      Number.isFinite(reportedRenderbufferLimit) && reportedRenderbufferLimit > 0
+        ? reportedRenderbufferLimit
+        : fallbackRenderbufferLimit,
+  });
+  if (renderer.getPixelRatio() !== ratio) renderer.setPixelRatio(ratio);
+  return ratio;
 };
 
 export const cachedThreeResource = <
