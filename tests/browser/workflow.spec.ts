@@ -3897,9 +3897,12 @@ test('School build has no image-recognition surface or network request', async (
     expect(bootText).toMatch(/workspace/i);
   }
   await expect(page.locator('#boot-loader')).toHaveCount(0, { timeout: 180_000 });
-  await expect(page.getByTestId('character-screen')).toBeVisible();
   const gettingStarted = page.getByTestId('getting-started-dialog');
   await expect(gettingStarted).toBeVisible();
+  await expect(
+    page.getByTestId('character-screen'),
+    'Getting Started keeps the deferred Character stage unmounted',
+  ).toHaveCount(0);
   await expect(gettingStarted).toContainText('Character file');
   await expect(gettingStarted.getByText('Image', { exact: true })).toHaveCount(0);
   await expect(page.getByTestId('onnx-cache-status')).toHaveCount(0);
@@ -3907,6 +3910,7 @@ test('School build has no image-recognition surface or network request', async (
   await expect(page.getByTestId('getting-started-onnx-input')).toHaveCount(0);
   await gettingStarted.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(gettingStarted).toHaveCount(0);
+  await expect(page.getByTestId('character-screen')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create from image', exact: true })).toHaveCount(0);
   expect(forbiddenRequests, 'school workflow never requests image-recognition assets').toEqual([]);
 });

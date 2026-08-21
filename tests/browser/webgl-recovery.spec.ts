@@ -46,13 +46,17 @@ test('WebGL unavailable keeps Character and Foundry controls recoverable', async
 
   await page.goto('/');
   await waitForEditor(page);
+  await expect(
+    page.getByTestId('character-three-puppet'),
+    'Getting Started keeps the deferred Character WebGL scene unmounted',
+  ).toHaveCount(0);
+  await openWavingArm(page);
   const character = page.getByTestId('character-three-puppet');
   await expect(character).toHaveAttribute('data-three-renderer-status', 'unavailable');
   await expect(
     character.getByTestId('character-three-puppet-renderer-status'),
   ).toHaveText('3D unavailable');
 
-  await openWavingArm(page);
   await openFoundry(page);
   const foundry = page.getByTestId('foundry-preview');
   await expect(foundry).toHaveAttribute('data-three-renderer-status', 'unavailable');
