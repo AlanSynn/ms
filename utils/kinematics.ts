@@ -648,6 +648,7 @@ export const mechanismTracePointForState = (
 ): Point => {
     const traces = mechanismTraceDefinitionsForState(type, state);
     return traces.find((trace) => trace.id === traceId)?.point
+        ?? traces.find((trace) => trace.primary)?.point
         ?? state.effector;
 };
 

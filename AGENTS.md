@@ -1,7 +1,7 @@
 # MotionSmith Project Agents Contract
 
 Status: active
-Last refreshed: 2026-06-29
+Last refreshed: 2026-08-20
 Scope: every implementation, design, test, and documentation change in this repository.
 
 This file is the project-level rulebook for future agents. If older docs or UI copy drift from this contract, update the product to match this file and `DESIGN.md`; do not add another explanatory layer.
@@ -14,14 +14,14 @@ MotionSmith is a tinkerable workbench, not a reading-heavy tutorial. Users shoul
 - Classroom web release is the static GitHub Pages app at `https://alansynn.com/ms/` with `VITE_BASE_PATH=/ms/`; do not add accounts, uploads, rosters, dashboards, analytics, or cloud sync language for classroom support.
 - When a full-stack feature gap needs a server, document it as excluded local-first scope instead of building a fake client-only substitute.
 - Local persistence must be named honestly: browser autosave, local snapshot download, portable project copy. Do not label downloads as cloud save/sync.
-- AI/inference stays browser-local ONNX. If model caching or local inference fails, use starter/package workflows and show status; do not mock remote AI.
+- Image recognition is excluded from the classroom and Tauri builds. Use guided starters and explicit local character packages; do not add a local model, remote inference, or mock AI surface unless the user explicitly reopens that scope.
 - Guided classroom lesson templates must create real serializable `ProjectState` data. Blank starters stay mechanism-free; lessons may include paths/mechanisms only when they are editable and exportable.
 - Classroom entry is theme-guided first: guided project templates are the primary classroom start, while blank/import/open exploration stays secondary and always available. Keep this guidance in compact modal/left-pane/library surfaces, never as a center-canvas tutorial.
 - Guided project cards must show the result plus two novice cues only: `Change <editable thing>` and `Build <physical thing>`. Put direct-translation / sensemaking detail in stage context or teacher-pack metadata, not first-run cards.
 - Opening any guided project must land on Character with a compact `Make it yours` ownership cluster for parts, joints, path, mechanism fit, and reset. Guided starters are editable baselines, never locked demos.
 - Repository text and product UI are English-only. Do not add bilingual labels, Korean prose, or mixed-language examples; tests must block non-English Hangul text from returning.
 - First-run startup is one static logo/wordmark/version boot loader that disappears when the editor is ready; after it releases to Character, show the compact Getting Started modal unless the student checked the session-only opt-out.
-- Getting Started can be reopened from the Character/Getting Started action and stays compact/result-first: Guide, Starter rig, Girl, Boy, Image, and Character file tiles with tiny thumbnails only where useful, plus Open full project as secondary. Avoid process/explanation copy in the modal.
+- Getting Started can be reopened from the Character/Getting Started action and stays compact/result-first: show only Guide and Starter rig as primary tiles; pair Character file beside Open full project as secondary actions below. Do not ship image-recognition or Boy/Girl recognition starter assets. Avoid process/explanation copy in the modal.
 - `Reset Lesson` must restore a known-good lesson baseline while preserving app settings; Foundry reset must restore finite mechanism preview state, not just stop playback.
 - Prefer direct manipulation over explanatory prose: draw on the canvas, drag joints, scrub playback, rotate the view, tune sliders, and see the result immediately.
 - Remove or collapse text that does not unlock an action, safety warning, blocker, or fabrication decision.
@@ -75,7 +75,7 @@ The editor follows a Canva/CAD-like shell with one shared scene state.
 - The selected high-performance stack is `three` + Rapier WASM (`@dimforge/rapier3d-compat`) behind `utils/physicsKernel.ts`; mechanism kinematics/fabrication constraints remain authoritative, and Rapier handles contact/friction validation.
 - Use a Viser-style transform tree, batched transform updates, object pooling, shared geometries/materials, and `InstancedMesh` before adding another renderer or scene framework.
 - Do not add React Three Fiber, Babylon, WebGPU, or a new physics engine unless profiling or contract tests prove the current Three/Rapier boundary cannot meet the requirement.
-- Do not bundle the browser Rapier runtime with `bun build`; the app build path must remain `tsc && vite build`, with a literal dynamic Rapier import so Vite emits the lazy physics chunk and Playwright validates it through production preview.
+- Do not bundle the browser Rapier runtime with `bun build`; the app build path must remain TypeScript check + exclusion guard + Vite build, with a literal dynamic Rapier import so Vite emits the lazy physics chunk and Playwright validates it through production preview.
 - A mechanism preview must show the physical parts that would be built: links, holes, slots, pivots, pins, gears, cams, followers, racks, guides, spacers, clips, and base board where relevant.
 - Real thickness must be visible on parts. Avoid confusing transparent planes unless they are temporary hover/selection affordances.
 - Force, velocity, friction, contact, and constraint-error overlays must come from sampled kinematic/physics state.
@@ -94,12 +94,12 @@ The app must always trend toward real buildable artifacts, not illustration-only
 - Blueprint and assembly guide exports must be derived from `ProjectState` plus the same fabrication stack used by the viewport.
 - If a mechanism cannot be fabricated with current templates, surface a blocker and create or document the missing template instead of pretending it works.
 
-## 6. AI / ONNX contract
+## 6. Image-recognition exclusion contract
 
-- No mock AI panels, fake recommendations, or placeholder inference.
-- If AI is used, run browser-local Web ONNX and reference `docs/to-port-web-onnx` / Python behavior when porting model logic.
-- ONNX output must become editable `ProjectState` data: body parts, joints, paths, masks, anchors, or package metadata.
-- If inference is unavailable, fall back to explicit user-loaded packages or starter templates and say what is missing in the status dock.
+- Do not ship an ONNX model, ONNX Runtime/ORT dependency, inference or model-cache worker, image-to-rig UI, or recognition starter asset.
+- `scripts/check-no-image-recognition.mjs` must guard source and production output in browser, Tauri, CI, and tag-only deployment builds.
+- Guided starters, explicit local character packages, full-project import, ordinary scene-object images, and GIF/video Trace remain supported; do not remove them with the recognition pipeline.
+- Preserve legacy `onnx-mask` project provenance as read-only compatibility. It must not reactivate, download, or advertise image recognition.
 
 ## 7. Simplicity and implementation discipline
 

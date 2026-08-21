@@ -37,13 +37,12 @@ agents:
   - id: luna-io
     model: luna-max
     owns:
-      - hooks/useAppOnnxBootstrap.ts
-      - utils/webOnnx*.ts
+      - runtime/import/characterImportProgressStore.ts
       - hooks/useProjectAutosave.ts
       - runtime/persistence/**
       - baseline-compatible autosave transaction files
     commits:
-      - "perf(ai): remove boot model warming"
+      - "perf(import): isolate local character review state"
       - "perf(persistence): coalesce and workerize autosave"
 
   - id: luna-analysis-cache

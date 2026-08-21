@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   EditorStageFrame,
   canvasPane,
@@ -28,6 +28,7 @@ import { PathCanvasPane } from "./PathCanvasPane";
 import { PathInspectorPanel } from "./PathInspectorPanel";
 import { PathWorkflowPanel } from "./PathWorkflowPanel";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
+import { createPathGestureDraft } from "../../../runtime/path/pathGestureDraft";
 
 export const PathEditor = ({
   project,
@@ -72,7 +73,10 @@ export const PathEditor = ({
   viewport: CanvasViewport;
   setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
 }) => {
+  const pathGestureDraft = useMemo(() => createPathGestureDraft(), []);
   const freeDraftRef = useRef<DrawSamplePoint[] | null>(null);
+  const pointDragDraftRef = useRef<Point[] | null>(null);
+  const pointDragDirtyRef = useRef(false);
   const [dragPoint, setDragPoint] = useState<number | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
   const [isFreeDrawing, setIsFreeDrawing] = useState(false);
@@ -107,12 +111,36 @@ export const PathEditor = ({
     ? project.skeleton?.joints[ikDescriptor.foldJointId]
     : undefined;
   const jointLabel = (id?: string) => (id ? id.replaceAll("_", " ") : "none");
+  useEffect(() => () => pathGestureDraft.dispose(), [pathGestureDraft]);
   useEffect(() => {
     freeDraftRef.current = null;
+    pointDragDraftRef.current = null;
+    pointDragDirtyRef.current = false;
+    pathGestureDraft.clear();
     setIsFreeDrawing(false);
     setDragPoint(null);
     setSelectedPoint(null);
-  }, [selectedPart?.id, selectedSceneObject?.id]);
+  }, [pathGestureDraft, selectedPart?.id, selectedSceneObject?.id]);
+  useEffect(() => {
+    if (pathGestureDraft.getSnapshot()) pathGestureDraft.clear();
+  }, [pathGestureDraft, selectedPath?.points]);
+  const publishPathDraft = (
+    points: Point[],
+    selectedPointIndex: number | null,
+    force = false,
+  ) => {
+    const targetId = selectedSceneObject?.id ?? selectedPart?.id;
+    if (!targetId) return;
+    pathGestureDraft.publish(
+      {
+        pathId: selectedPath?.id ?? `path-${targetId}`,
+        points,
+        closed: selectedPath?.closed ?? true,
+        selectedPointIndex,
+      },
+      force,
+    );
+  };
   const appendFreePoint = (point: Point, seed = false) => {
     const next = addDrawSamplePoint(
       freeDraftRef.current,
@@ -121,23 +149,17 @@ export const PathEditor = ({
       seed,
     );
     if (next === freeDraftRef.current) return;
-    const timed = normalizeDrawTimedPoints(
-      next,
-      selectedPath?.duration ?? project.settings.animationDurationMs,
-      { closed: selectedPath?.closed ?? true },
-    );
     freeDraftRef.current = next;
-    setPathPoints(
-      timed.map(({ x, y }) => ({ x, y })),
-      "drawn",
-      timed,
+    publishPathDraft(
+      next.map(({ x, y }) => ({ x, y })),
+      null,
+      seed,
     );
   };
   const onDrawPoint = (point: Point) => {
     if (!drawMode || pathLocked) return;
     const seed = !freeDraftRef.current?.length;
     if (seed) {
-      setSelectedPoint(null);
       setIsFreeDrawing(true);
     }
     appendFreePoint(point, seed);
@@ -188,21 +210,54 @@ export const PathEditor = ({
     }
     if (dragPoint === null || !selectedPath || pathLocked)
       return;
-    const points = [...selectedPath.points];
+    const points = [...(pointDragDraftRef.current ?? selectedPath.points)];
     points[dragPoint] = point;
-    setPathPoints(points, selectedPath.source);
+    pointDragDraftRef.current = points;
+    pointDragDirtyRef.current = true;
+    publishPathDraft(points, dragPoint);
   };
   const pickPathPoint = (pathId: string, pointIndex: number) => {
     if (pathLocked || selectedPath?.id !== pathId) return;
     setSelectedPoint(pointIndex);
     setDragPoint(pointIndex);
+    pointDragDraftRef.current = [...selectedPath.points];
+    pointDragDirtyRef.current = false;
+    publishPathDraft(pointDragDraftRef.current, pointIndex, true);
   };
-  const stopPointEdit = () => setDragPoint(null);
+  const stopPointEdit = () => {
+    const points = pointDragDraftRef.current;
+    const dirty = pointDragDirtyRef.current;
+    pointDragDraftRef.current = null;
+    pointDragDirtyRef.current = false;
+    setDragPoint(null);
+    if (!dirty || !points || !selectedPath) {
+      pathGestureDraft.clear();
+      return;
+    }
+    pathGestureDraft.flush();
+    setPathPoints(points, selectedPath.source);
+  };
   const stopDrawing = () => {
-    const finishedFreeStroke = Boolean(freeDraftRef.current?.length);
+    const freeDraft = freeDraftRef.current;
+    const finishedFreeStroke = Boolean(freeDraft?.length);
     setDragPoint(null);
     setIsFreeDrawing(false);
     freeDraftRef.current = null;
+    if (freeDraft?.length) {
+      const timed = normalizeDrawTimedPoints(
+        freeDraft,
+        selectedPath?.duration ?? project.settings.animationDurationMs,
+        { closed: selectedPath?.closed ?? true },
+      );
+      pathGestureDraft.flush();
+      setPathPoints(
+        timed.map(({ x, y }) => ({ x, y })),
+        "drawn",
+        timed,
+      );
+    } else {
+      pathGestureDraft.clear();
+    }
     if (finishedFreeStroke) setDrawMode(false);
   };
   const deletePoint = () => {
@@ -227,6 +282,7 @@ export const PathEditor = ({
   const togglePathDrawing = () => {
     setPathViewMode("2d");
     if (drawMode) stopDrawing();
+    else setSelectedPoint(null);
     setDrawMode(!drawMode);
   };
   const pathMechanism = selectedPath
@@ -321,6 +377,7 @@ export const PathEditor = ({
             pathViewMode={pathViewMode}
             switchPathView={switchPathView}
             pathPreview={pathPreview}
+            pathGestureDraft={pathGestureDraft}
           />,
         ),
         inspector: inspectorPane(

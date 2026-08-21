@@ -12,7 +12,10 @@ import { createDefaultMechanism, mechanismWithGeneratedPath } from "./project";
 import { sampleFeasibleRange, validateMechanismPreviewReadiness, validateForFabrication } from "./fabrication";
 import { boardToScene, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, SCENE_PX_PER_MM } from "./coordinates";
 import { motionAnchorJointIds, preferredMotionJointId } from "./motion";
-import { MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY } from "./mechanismTemplates";
+import {
+  MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY,
+  isMechanismTypeEnabled,
+} from "./mechanismTemplates";
 import { isReferenceFoundryVisible, normalizeMechanismToFabricationSet, normalizeMechanismToReference } from "./mechanismReference";
 import { offBoardFixedAssemblyCoordinatesForMechanism } from "./boardHoleConstraints";
 import { fitPathToBox } from "./mechanismPreview";
@@ -31,6 +34,10 @@ export type MechanismRecommendation = {
   previewPath: string;
   feasibility: string;
   fabricationErrors: string[];
+};
+
+export type MechanismRecommendationBuildOptions = {
+  random?: () => number;
 };
 
 const pathMetrics = (path: ProjectMotionPath) => {
@@ -500,6 +507,7 @@ const createRecommendedMechanism = (
   type: MechanismType,
   reason: string,
   score: number,
+  random: () => number = Math.random,
 ): MechanismConfig => {
   const metrics = pathMetrics(selectedPath);
   const targetPart = recommendationTargetPart(project, selectedPart, selectedPath);
@@ -518,7 +526,7 @@ const createRecommendedMechanism = (
     (Math.atan2(last.y - first.y, last.x - first.x) * 180) / Math.PI;
   const span = Math.max(metrics.width, metrics.height, 40);
   const base = createDefaultMechanism(type, `recommend-${type}`);
-  const smart = generateSmartConfig(selectedPath.points, type);
+  const smart = generateSmartConfig(selectedPath.points, type, undefined, random);
   const tunedCrankLength = Math.max(20, Math.min(90, span * 0.24));
   const tunedRockerLength =
     type === "cam"
@@ -875,6 +883,7 @@ export const buildMechanismRecommendations = (
   project: ProjectState,
   selectedPart?: BodyPartLayer,
   selectedPath?: ProjectMotionPath,
+  options: MechanismRecommendationBuildOptions = {},
 ): MechanismRecommendation[] => {
   if (!selectedPath || (!selectedPart && !selectedPath.sceneObjectId) || selectedPath.points.length < 3)
     return [];
@@ -924,6 +933,7 @@ export const buildMechanismRecommendations = (
     },
   ];
   return candidates
+    .filter((candidate) => isMechanismTypeEnabled(candidate.type))
     .map((candidate) => {
       const initialMechanism = createRecommendedMechanism(
         project,
@@ -932,6 +942,7 @@ export const buildMechanismRecommendations = (
         candidate.type,
         candidate.reason,
         candidate.score,
+        options.random,
       );
       const initialErrors = fabricationErrorsForCandidate(
         project,

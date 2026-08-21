@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { MechanismConfig, Point, ProjectAction, ProjectState } from "../../../types";
 import {
   FOUNDRY_OVERLAY_SIZE,
@@ -10,12 +10,13 @@ import {
   type FoundryOverlaySize,
   type FoundryViewPreset,
 } from "../../../utils/foundryCamera";
-import { buildAutomataSceneModel } from "../../../utils/automataSceneModel";
-import { pointsToSvgPath } from "../../../utils/mechanismPreview";
 import {
-  ThreeFoundryPreview,
-  type FoundryPlaybackFrame,
-} from "../foundry/ThreeFoundryPreview";
+  reuseAutomataSceneRuntime,
+  sampleReusableAutomataSceneRuntime,
+} from "../../../utils/automataSceneModel";
+import { pointsToSvgPath } from "../../../utils/mechanismPreview";
+import { DeferredThreeFoundryPreview } from "../foundry/DeferredThreeFoundryPreview";
+import type { FoundryPlaybackFrame } from "../foundry/ThreeFoundryPreview";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 
 type DesignFoundryPreviewProps = {
@@ -35,7 +36,7 @@ const cameraLabel = (camera: FoundryCamera) =>
     ? "Custom view"
     : FOUNDRY_VIEW_PRESETS[camera.preset].label;
 
-export const DesignFoundryPreview = ({
+export const DesignFoundryPreview = React.memo(({
   project,
   mechanism,
   angle,
@@ -57,6 +58,7 @@ export const DesignFoundryPreview = ({
   const [isOrbiting, setIsOrbiting] = useState(false);
   const [isZooming, setIsZooming] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
+  const [characterLayerReady, setCharacterLayerReady] = useState(false);
   const orbitStartRef = useRef<{
     pointerId: number;
     x: number;
@@ -68,43 +70,60 @@ export const DesignFoundryPreview = ({
     mode: "orbit" | "zoom" | "pan";
   } | null>(null);
 
+  useEffect(() => {
+    setCharacterLayerReady(false);
+    const handle = window.setTimeout(() => setCharacterLayerReady(true), 120);
+    return () => window.clearTimeout(handle);
+  }, [mechanism, project]);
+
+  const sceneRuntime = useMemo(
+    () => reuseAutomataSceneRuntime(project, mechanism, "design-live"),
+    [mechanism, project],
+  );
   const sceneModel = useMemo(
-    () => buildAutomataSceneModel(project, mechanism, angle, "design-live"),
-    [angle, mechanism, project],
+    () => sampleReusableAutomataSceneRuntime(sceneRuntime, angle),
+    [angle, sceneRuntime],
   );
   const automataContext = useMemo(
     () =>
-      sceneModel.mechanism
+      characterLayerReady && sceneModel.mechanism
         ? {
             project,
             animatedParts: sceneModel.animatedParts,
             animatedSceneObjects: sceneModel.animatedSceneObjects,
+            geometrySkeleton: project.skeleton,
             skeleton: sceneModel.skeleton,
             paths: [],
             showCharacter: true,
             showSkeleton: false,
           }
         : undefined,
-    [project, sceneModel],
+    [characterLayerReady, project, sceneModel],
   );
   const showUserPath = showTrace && showUserPathPreview;
   const showMechanismPath = showTrace && showMechanismPathPreview;
-  const playbackSample = (phase: number): FoundryPlaybackFrame | undefined => {
-    const frame = buildAutomataSceneModel(project, mechanism, phase, "design-live");
-    if (!frame.foundryPreview || !frame.mechanism) return undefined;
-    return {
-      simulation: frame.foundryPreview.physicalSimulation,
-      automataContext: {
-        project,
-        animatedParts: frame.animatedParts,
-        animatedSceneObjects: frame.animatedSceneObjects,
-        skeleton: frame.skeleton,
-        paths: [],
-        showCharacter: true,
-        showSkeleton: false,
-      },
-    };
-  };
+  const playbackSample = useMemo(
+    () => (phase: number): FoundryPlaybackFrame | undefined => {
+      const frame = sampleReusableAutomataSceneRuntime(sceneRuntime, phase);
+      if (!frame.foundryPreview || !frame.mechanism) return undefined;
+      return {
+        simulation: frame.foundryPreview.physicalSimulation,
+        automataContext: characterLayerReady
+          ? {
+              project,
+              animatedParts: frame.animatedParts,
+              animatedSceneObjects: frame.animatedSceneObjects,
+              geometrySkeleton: project.skeleton,
+              skeleton: frame.skeleton,
+              paths: [],
+              showCharacter: true,
+              showSkeleton: false,
+            }
+          : undefined,
+      };
+    },
+    [characterLayerReady, project, sceneRuntime],
+  );
   const userPathD = useMemo(() => {
     if (!showUserPath || !sceneModel.foundryPreview?.userPathPoints.length) return "";
     const projected = sceneModel.foundryPreview.userPathPoints
@@ -216,7 +235,7 @@ export const DesignFoundryPreview = ({
       data-renderer-source="ThreeFoundryPreview"
       data-shared-with="foundry-renderer"
       data-design-scene-mode="single-foundry-automata-scene"
-      data-automata-model-source="buildAutomataSceneModel"
+      data-automata-model-source="automata-scene-runtime"
       data-mechanism-id={sceneModel.mechanism.id}
       data-mechanism-type={sceneModel.mechanism.type}
       data-foundry-feature-label={sceneModel.featureLabel ?? ""}
@@ -251,7 +270,7 @@ export const DesignFoundryPreview = ({
       data-design-animated-object-count={Object.keys(sceneModel.animatedSceneObjects).length}
       data-design-show-trace={showTrace ? "true" : "false"}
       data-design-trace-layer={showTrace ? "shown" : "hidden"}
-      data-design-foundry-contract-source="buildAutomataSceneModel"
+      data-design-foundry-contract-source="automata-scene-runtime"
       data-design-mechanism-contract-id={sceneModel.mechanismContract?.mechanismId ?? ""}
     >
       <div
@@ -303,18 +322,18 @@ export const DesignFoundryPreview = ({
           Mech path
         </button>
       </div>
-      <ThreeFoundryPreview
+      <DeferredThreeFoundryPreview
         mechanism={sceneModel.foundryPreview.mechanism}
+        performancePreset={project.settings.performancePreset}
         simulation={sceneModel.foundryPreview.physicalSimulation}
-      playback={
-        isPlaying
-          ? {
-              clock: playbackClock,
-              sample: playbackSample,
-              minFrameIntervalMs: 1000 / 30,
-            }
-          : undefined
-      }
+        playback={
+          isPlaying
+            ? {
+                clock: playbackClock,
+                sample: playbackSample,
+              }
+            : undefined
+        }
         kit={project.settings.physicalKit}
         camera={camera}
         rigOpacity={0.94}
@@ -372,7 +391,9 @@ export const DesignFoundryPreview = ({
             />
           </svg>
         )}
-      </ThreeFoundryPreview>
+      </DeferredThreeFoundryPreview>
     </section>
   );
-};
+});
+
+DesignFoundryPreview.displayName = "DesignFoundryPreview";

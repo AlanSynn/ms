@@ -4,15 +4,47 @@ import type { BodyPartLayer, CanvasViewport, MechanismConfig, MechanismType, Poi
 import { boardGridLines, defaultPhysicalKit, SCENE_PX_PER_MM, sceneBoundsForSheet } from '../utils/coordinates';
 import { calculateLinkage, normalizeCamProfileSamples, sampledCamProfileScale, gearPairOutputRatio, gearTrainCenters, gearTrainMeshPhaseRadAt, gearTrainOutputRatio, gearTrainPitchRadii, gearTrainRotationRatioAt, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
 import { FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRenderPlanForMechanism, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, validateMechanismPreviewReadiness, type FabricationLinkageRoleLengths, type FabricationRenderLayer, type FabricationRenderPlan } from '../utils/fabrication';
-import { fabricablePartOutlinePoints, partLandmarkLocalPoints, pointInsideOutline } from '../utils/partGeometry';
-import { clampCanvasZoom, WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
-import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, loadRapierPhysicsKernel, physicsKernelErrorMessage } from '../utils/physicsKernel';
+import { clampCanvasZoom } from '../utils/viewport';
+import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY } from '../utils/physicsKernel';
 import { DEFAULT_PUPPET_VIEWER_LAYERS, VIEWER3D_CAMERA_PRESETS, VIEWER3D_CONTRACT_VERSION, createViewer3DContract, viewer3DLayerDataValue, type Viewer3DCameraPreset, type Viewer3DTabKey } from '../utils/viewer3d';
 import { REFERENCE_AUTHORABLE_TYPES, referenceRequiredPartsHoleCount } from '../utils/mechanismReference';
 import { mechanismRequiredParts } from '../utils/project';
 import type { MotionPreview } from '../utils/motion';
 import type { PlaybackClock } from '../runtime/playback/externalPlaybackClock';
-import { cachedThreeResource, clearThreeGroup, disposeMarkedThreeMaterials, disposeThreeObjectGraph, setRendererPixelRatioCap } from '../utils/threeResourceKit';
+import type { PathGestureDraft } from '../runtime/path/pathGestureDraft';
+import {
+  createThreePathGestureDraftVisual,
+  type ThreePathGestureDraftVisual,
+} from './stages/path/threePathGestureDraftVisual';
+import { subscribeCadencedPlaybackSampler } from '../runtime/playback/cadencedPlaybackSampler';
+import { scheduleIncrementalTopologyBuild } from '../runtime/render/incrementalTopologyBuild';
+import { createPartArtMaterial, disposePartArtMaterial } from '../runtime/render/partArtMaterial';
+import { warmPartTopologyPipeline } from '../runtime/render/warmPartTopology';
+import {
+  acquireSharedWebGLRenderer,
+  cachedThreeResource,
+  clearThreeGroup,
+  collectThreeObjectResourceUsage,
+  disposeMarkedThreeMaterials,
+  disposeThreeObjectGraph,
+  pruneUnusedThreeResourceCache,
+  setRendererPixelRatioCap,
+} from '../utils/threeResourceKit';
+import { resolveRenderPerformancePolicy } from '../utils/renderPerformancePolicy';
+import { recordPuppetTopologyBuild } from '../utils/performanceAudit';
+import { sampleIndexedValues } from '../utils/interactiveSampling';
+import {
+  diffPuppetPartTopologies,
+  preparePuppetPartTopology,
+  type PuppetPartTopologyIdentity,
+} from '../runtime/render/puppetPartTopology';
+import {
+  createPuppetCutHoleRingInstances,
+  createPuppetJointHardwareInstances,
+  puppetJointIdForInstance,
+  updatePuppetJointHardwareInstances,
+  type PuppetJointHardwareInstances,
+} from '../runtime/render/puppetJointHardware';
 
 const VIEW_SCALE = 35;
 const FABRICATION_LINKAGE_WIDTH_3D = Math.max(0.16, (FABRICATION_LINKAGE_WIDTH_MM * SCENE_PX_PER_MM) / VIEW_SCALE);
@@ -20,10 +52,12 @@ const FABRICATION_HOLE_RADIUS_3D = Math.max(0.04, (FABRICATION_HOLE_RADIUS_MM * 
 const THICKNESS = 0.22;
 const SUPPORTED_MECHANISM_TYPES: MechanismType[] = [...REFERENCE_AUTHORABLE_TYPES];
 const PUPPET_CAMERA_PRESETS: Viewer3DCameraPreset[] = ['front', 'iso'];
+const EMPTY_ANIMATED_PARTS: Record<string, BodyPartLayer> = {};
+const EMPTY_ANIMATED_SCENE_OBJECTS: Record<string, SceneObject> = {};
 const E2E_DIAGNOSTICS = typeof __MOTIONSMITH_E2E_DIAGNOSTICS__ === 'boolean'
   ? __MOTIONSMITH_E2E_DIAGNOSTICS__
   : false;
-type RendererStatus = 'pending' | 'webgl' | 'unavailable';
+type RendererStatus = 'pending' | 'webgl' | 'restoring' | 'unavailable';
 type LinkKey = 'base' | 'driver' | 'coupler' | 'output' | 'effector' | 'follower';
 
 type MaterialKit = {
@@ -64,7 +98,6 @@ type PuppetAssemblyOverlay = {
   activeJointIds?: string[];
 };
 
-type JointVisual = { pin: THREE.Mesh; washer: THREE.Mesh };
 type MechanismVisual = {
   links: Record<LinkKey, THREE.Group>;
   gears: THREE.Mesh[];
@@ -83,7 +116,7 @@ type MechanismInventory = {
   endStops: number;
 };
 
-type ViewerPickKind = 'object' | 'part' | 'mechanism';
+type ViewerPickKind = 'object' | 'part' | 'mechanism' | 'path-point';
 type ViewerScreenTarget = {
   kind: ViewerPickKind;
   id: string;
@@ -126,9 +159,39 @@ const orbitPosition = (yaw: number, pitch: number): [number, number, number] => 
 const clampOrbitPitch = (pitch: number) => Math.max(-68, Math.min(78, pitch));
 
 const sharedGeometryCache = new Map<string, THREE.BufferGeometry>();
+const activePuppetScenes = new Map<THREE.Scene, number>();
+let sharedGeometryCacheRevision = 0;
 
-const cachedGeometry = <T extends THREE.BufferGeometry>(key: string, factory: () => T): T =>
-  cachedThreeResource(sharedGeometryCache, key, factory, 'sharedFabricationGeometry');
+const pruneSharedGeometryCache = (idleRetentionLimit = 0) => {
+  const used = new Set<THREE.BufferGeometry>();
+  activePuppetScenes.forEach((_limit, scene) => {
+    collectThreeObjectResourceUsage(scene).geometries.forEach((geometry) =>
+      used.add(geometry),
+    );
+  });
+  const configuredLimit = Math.max(
+    0,
+    ...activePuppetScenes.values(),
+  );
+  pruneUnusedThreeResourceCache(
+    sharedGeometryCache,
+    used,
+    Math.max(configuredLimit, idleRetentionLimit),
+  );
+};
+
+const cachedGeometry = <T extends THREE.BufferGeometry>(key: string, factory: () => T): T => {
+  const existing = sharedGeometryCache.get(key);
+  if (existing) return existing as T;
+  const geometry = cachedThreeResource(
+    sharedGeometryCache,
+    key,
+    factory,
+    'sharedFabricationGeometry',
+  );
+  sharedGeometryCacheRevision += 1;
+  return geometry;
+};
 
 const geometryKeyNumber = (value: number) => Number.isFinite(value) ? value.toFixed(3) : 'nan';
 
@@ -147,7 +210,10 @@ const disposeOwnedMaterials = (object: THREE.Object3D) =>
   disposeMarkedThreeMaterials(
     object,
     material => Boolean(material.userData?.ownedByPartArt || material.userData?.ownedBySceneObject),
-    material => (material as THREE.MeshBasicMaterial).map?.dispose()
+    material => {
+      if (material.userData?.ownedByPartArt) disposePartArtMaterial(material);
+      else (material as THREE.MeshBasicMaterial).map?.dispose();
+    }
   );
 
 const clearGroup = (group: THREE.Group) =>
@@ -155,26 +221,6 @@ const clearGroup = (group: THREE.Group) =>
     disposeOwnedMaterials(child);
     disposeObject(child, false);
   });
-
-const createPartArtMaterial = (part: BodyPartLayer, onLoaded: () => void) => {
-  const material = new THREE.MeshBasicMaterial({
-    color: part.textureUrl ? '#ffffff' : part.fillColor,
-    transparent: true,
-    opacity: part.textureUrl ? Math.max(0.35, Math.min(1, part.opacity ?? 1)) : 0.6,
-    depthWrite: false,
-    polygonOffset: true,
-    polygonOffsetFactor: -1
-  });
-  material.userData.ownedByPartArt = true;
-  if (part.textureUrl) {
-    const texture = new THREE.TextureLoader().load(part.textureUrl, () => onLoaded());
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.anisotropy = 4;
-    material.map = texture;
-    material.needsUpdate = true;
-  }
-  return material;
-};
 
 const viewerTabFromTestId = (testId: string): Viewer3DTabKey => {
   if (testId.startsWith('character')) return 'character';
@@ -632,18 +678,6 @@ const gearShape = (pitchRadius: number, physicalPitchRadiusMm: number) => {
   return shape;
 };
 
-const partGeometrySignature = (parts: BodyPartLayer[], project?: ProjectState, skeleton?: StandardSkeleton | null) => [
-  parts.map(part => {
-    const base = project?.parts[part.id] ?? part;
-    const contour = base.contourPoints?.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(';') ?? '';
-    return `${base.id}:${base.bounds.width}:${base.bounds.height}:${base.bounds.x}:${base.bounds.y}:${base.transform.x}:${base.transform.y}:${base.transform.rotation}:${base.transform.scale}:${base.visible}:${base.textureUrl ?? ''}:${base.contourSource ?? ''}:${contour}:${base.fillColor}:${base.opacity}`;
-  }).join('|'),
-  Object.values((project?.skeleton ?? skeleton)?.joints ?? {})
-    .map(joint => `${joint.id}:${joint.position.x.toFixed(2)}:${joint.position.y.toFixed(2)}`)
-    .join('|')
-].join('::');
-
-
 const planetaryLayerIndexesForPlan = (layers: FabricationRenderLayer[]) => {
   const ring = layers.findIndex(layer => layer.renderKind === 'gear' && /ring/i.test(layer.label));
   const sun = layers.findIndex(layer => layer.renderKind === 'gear' && /G1|sun/i.test(layer.label));
@@ -700,7 +734,7 @@ const mechanismGeometrySignature = (mechanisms: MechanismConfig[]) => mechanisms
   mechanism.showOutputGear
 ].join(':')).join('|');
 
-export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneObjects = {}, skeleton, mechanisms, paths, selectedPathId, selectedPathPointIndex, angle = 0, playback, viewport, setViewport, inputMode = 'always', testId = 'three-puppet', cameraPresets = PUPPET_CAMERA_PRESETS, showToolbar = true, showCameraPresets = true, initialCameraPreset, initialLayers, assemblyOverlay, drawMode = false, onDrawPoint, onDrawEnd, onSelectPathPoint, onMovePathPoint, onEndPathPointEdit, onSelectPart, onSelectSceneObject, onSelectMechanism, onSelectJoint, onSelectOnlyPointerDown, onSelectOnlyPointerMove, onSelectOnlyPointerUp, onSelectOnlyPointerCancel, onSelectOnlyWheel }: {
+export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PARTS, animatedSceneObjects = EMPTY_ANIMATED_SCENE_OBJECTS, skeleton, mechanisms, paths, selectedPathId, selectedPathPointIndex, angle = 0, playback, viewport, setViewport, inputMode = 'always', testId = 'three-puppet', cameraPresets = PUPPET_CAMERA_PRESETS, showToolbar = true, showCameraPresets = true, initialCameraPreset, initialLayers, assemblyOverlay, drawMode = false, onDrawPoint, onDrawEnd, onSelectPathPoint, onMovePathPoint, onEndPathPointEdit, pathGestureDraft, onSelectPart, onSelectSceneObject, onSelectMechanism, onSelectJoint, onSelectOnlyPointerDown, onSelectOnlyPointerMove, onSelectOnlyPointerUp, onSelectOnlyPointerCancel, onSelectOnlyWheel }: {
   project?: ProjectState;
   animatedParts?: Record<string, BodyPartLayer>;
   animatedSceneObjects?: Record<string, SceneObject>;
@@ -727,6 +761,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   onSelectPathPoint?: (pathId: string, pointIndex: number) => void;
   onMovePathPoint?: (point: Point) => void;
   onEndPathPointEdit?: () => void;
+  pathGestureDraft?: PathGestureDraft;
   onSelectPart?: (partId: string) => void;
   onSelectSceneObject?: (objectId: string) => void;
   onSelectMechanism?: (mechanismId: string) => void;
@@ -737,6 +772,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   onSelectOnlyPointerCancel?: React.PointerEventHandler<HTMLDivElement>;
   onSelectOnlyWheel?: React.WheelEventHandler<HTMLDivElement>;
 }) => {
+  const renderPolicy = resolveRenderPerformancePolicy(project?.settings.performancePreset ?? 'balanced');
   const hostRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef<HTMLDivElement | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -745,14 +781,24 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   const rootsRef = useRef<SceneRoots | null>(null);
   const materialsRef = useRef<MaterialKit | null>(null);
   const partMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
+  const partTopologyIdentitiesRef = useRef<Map<string, PuppetPartTopologyIdentity>>(new Map());
+  const renderedPartsRef = useRef<BodyPartLayer[]>([]);
+  const selectedPartIdRef = useRef<string | undefined>(undefined);
+  const assemblyExplodeAmountRef = useRef(0);
   const sceneObjectRefs = useRef<Map<string, THREE.Group>>(new Map());
-  const jointRefs = useRef<Map<string, JointVisual>>(new Map());
+  const jointHardwareRef = useRef<PuppetJointHardwareInstances | null>(null);
   const boneRefs = useRef<Map<string, THREE.Mesh>>(new Map());
   const mechanismRefs = useRef<Map<string, MechanismVisual>>(new Map());
+  const pathGestureDraftVisualRef = useRef<ThreePathGestureDraftVisual | null>(null);
+  const prunedGeometryRevisionRef = useRef(-1);
+  const renderFrameRef = useRef<number | undefined>(undefined);
+  const renderSubmissionCountRef = useRef(0);
+  const playbackSampleRef = useRef(playback?.sample);
+  playbackSampleRef.current = playback?.sample;
   const [rendererStatus, setRendererStatus] = useState<RendererStatus>('pending');
-  const [physicsKernelRuntime, setPhysicsKernelRuntime] = useState<'loading' | 'ready' | 'unavailable'>('loading');
-  const [physicsKernelVersion, setPhysicsKernelVersion] = useState('pending');
-  const [physicsKernelError, setPhysicsKernelError] = useState('none');
+  const physicsKernelRuntime = 'deferred-to-foundry';
+  const physicsKernelVersion = 'pending';
+  const physicsKernelError = 'none';
   const [cameraPreset, setCameraPreset] = useState<Viewer3DCameraPreset>(() => initialCameraPreset ?? 'iso');
   const [cameraOrbit, setCameraOrbit] = useState(() => cameraOrbitFromPreset(initialCameraPreset ?? 'iso'));
   const [isViewerDragging, setIsViewerDragging] = useState(false);
@@ -769,24 +815,6 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   }, [initialLayers?.grid, initialLayers?.character, initialLayers?.skeleton, initialLayers?.mechanisms]);
   const toggleLayer = (layer: keyof typeof DEFAULT_PUPPET_VIEWER_LAYERS) => setVisibleLayers(prev => ({ ...prev, [layer]: !prev[layer] }));
 
-  useEffect(() => {
-    let active = true;
-    loadRapierPhysicsKernel()
-      .then(kernel => {
-        if (!active) return;
-        setPhysicsKernelRuntime('ready');
-        setPhysicsKernelVersion(kernel.version());
-        setPhysicsKernelError('none');
-      })
-      .catch(error => {
-        if (!active) return;
-        setPhysicsKernelRuntime('unavailable');
-        setPhysicsKernelVersion('unavailable');
-        setPhysicsKernelError(physicsKernelErrorMessage(error));
-      });
-    return () => { active = false; };
-  }, []);
-
   const activeSkeleton = skeleton ?? project?.skeleton ?? null;
   const canonicalSkeleton = project?.skeleton ?? activeSkeleton;
   const kit = project?.settings.physicalKit ?? defaultPhysicalKit();
@@ -797,6 +825,12 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     .map(id => project?.parts[id])
     .filter((part): part is BodyPartLayer => Boolean(part?.visible)), [project?.partOrder, project?.parts]);
   const geometryParts = topologyParts.length ? topologyParts : parts;
+  const preparedPartTopologies = useMemo(
+    () => geometryParts.map((part) =>
+      preparePuppetPartTopology(part, canonicalSkeleton, renderPolicy.partTopology),
+    ),
+    [canonicalSkeleton, geometryParts, renderPolicy.partTopology],
+  );
   const sceneObjects = useMemo(() => (project?.sceneObjectOrder ?? [])
     .map(id => animatedSceneObjects[id] ?? project?.sceneObjects[id])
     .filter((object): object is SceneObject => Boolean(object?.visible)), [animatedSceneObjects, project?.sceneObjectOrder, project?.sceneObjects]);
@@ -806,10 +840,49 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     .filter(mechanism => mechanism.visible !== false && mechanism.enabled !== false), [mechanisms, project?.mechanisms]);
   const pathsToRender = useMemo(() => (paths ?? [])
     .filter(path => path.visible !== false && path.enabled !== false && path.points.length > 1), [paths]);
+  const pathLineSamples = useMemo(
+    () => new Map(pathsToRender.map((path) => [
+      path.id,
+      sampleIndexedValues(
+        path.points,
+        renderPolicy.interactiveDetail.maxPathLinePoints,
+        path.id === selectedPathId && selectedPathPointIndex != null
+          ? [selectedPathPointIndex]
+          : [],
+      ),
+    ])),
+    [
+      pathsToRender,
+      renderPolicy.interactiveDetail.maxPathLinePoints,
+      selectedPathId,
+      selectedPathPointIndex,
+    ],
+  );
+  const pathHandleSamples = useMemo(
+    () => new Map(pathsToRender.map((path) => [
+      path.id,
+      sampleIndexedValues(
+        path.points,
+        renderPolicy.interactiveDetail.maxPathHandles,
+        path.id === selectedPathId && selectedPathPointIndex != null
+          ? [selectedPathPointIndex]
+          : [],
+      ),
+    ])),
+    [
+      pathsToRender,
+      renderPolicy.interactiveDetail.maxPathHandles,
+      selectedPathId,
+      selectedPathPointIndex,
+    ],
+  );
   const selectedRenderedPath = pathsToRender.find(path => path.id === selectedPathId);
   const assemblyPhase = assemblyOverlay?.phase;
   const assemblyProgress = Math.max(0, Math.min(1, assemblyOverlay?.progress ?? 0));
   const assemblyExplodeAmount = assemblyExplodeAmountForPhase(assemblyPhase, assemblyProgress);
+  renderedPartsRef.current = parts;
+  selectedPartIdRef.current = project?.selectedPartId;
+  assemblyExplodeAmountRef.current = assemblyExplodeAmount;
   const selectedMechanism = useMemo(
     () => mechanismsToRender.find(mechanism => mechanism.id === project?.selectedMechanismId) ?? mechanismsToRender[0],
     [mechanismsToRender, project?.selectedMechanismId]
@@ -872,17 +945,30 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   );
   const mechanismInventory = mechanismsToRender.reduce((sum, mechanism) => addInventory(sum, puppetMechanismInventory(mechanism)), zeroInventory());
   const mechanismLinkCount = mechanismInventory.parts;
-  const holeCount = useMemo(() => geometryParts.reduce((sum, part) => {
-    const base = project?.parts[part.id] ?? part;
-    const landmarks = partLandmarkLocalPoints(base, canonicalSkeleton);
-    const outline = fabricablePartOutlinePoints(base, landmarks);
-    return sum + landmarks.filter(local => pointInsideOutline(local, outline, 0.5)).length;
-  }, 0), [canonicalSkeleton, geometryParts, project?.parts]);
-  const partTextureCount = geometryParts.reduce((sum, part) => sum + ((project?.parts[part.id] ?? part).textureUrl ? 1 : 0), 0);
-  const partArtCount = geometryParts.length;
-  const estimatedObjectCount = boardGridLines(kit).length + 1 + geometryParts.length * 4 + sceneObjects.length * 4 + holeCount + joints.length * 2 + bones.length + pathsToRender.length * 3 + pathsToRender.reduce((sum, path) => sum + path.points.length, 0) + mechanismLinkCount * 2 + mechanismsToRender.length * 8 + mechanismInventory.holes + mechanismInventory.gears * 2;
+  const holeCount = preparedPartTopologies.reduce(
+    (sum, topology) => sum + topology.localHoles.length,
+    0,
+  );
+  const holeRingDrawObjectCount = preparedPartTopologies.reduce(
+    (sum, topology) => sum + (topology.localHoles.length > 0 ? 1 : 0),
+    0,
+  );
+  const partTextureCount = preparedPartTopologies.reduce(
+    (sum, topology) => sum + (topology.part.textureUrl ? 1 : 0),
+    0,
+  );
+  const partArtCount = preparedPartTopologies.length;
+  const renderedPathHandleCount = [...pathHandleSamples.values()].reduce(
+    (sum, samples) => sum + samples.length,
+    0,
+  );
+  const renderedPathLinePointCount = [...pathLineSamples.values()].reduce(
+    (sum, samples) => sum + samples.length,
+    0,
+  );
+  const estimatedObjectCount = 2 + geometryParts.length * 4 + sceneObjects.length * 4 + holeRingDrawObjectCount + (joints.length ? 2 : 0) + bones.length + pathsToRender.length * 4 + mechanismLinkCount * 2 + mechanismsToRender.length * 8 + mechanismInventory.holes + mechanismInventory.gears * 2;
 
-  const collectViewerScreenTargets = () => {
+  const collectViewerScreenTargets = (includePathPoints = false) => {
     const renderer = rendererRef.current;
     const camera = cameraRef.current;
     const roots = rootsRef.current;
@@ -950,7 +1036,48 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
         return mechanismId ? targetForObject('mechanism', mechanismId, object) : null;
       })
       .filter((target): target is ViewerScreenTarget => Boolean(target));
-    return [...objectTargets, ...partTargets, ...mechanismTargets];
+    const pathPointTargets: ViewerScreenTarget[] = [];
+    if (includePathPoints && roots.pathsLayer.visible) {
+      const instanceMatrix = new THREE.Matrix4();
+      const worldPoint = new THREE.Vector3();
+      roots.pathsLayer.traverse((object) => {
+        if (!(object instanceof THREE.InstancedMesh) || !object.visible) return;
+        let ancestor: THREE.Object3D | null = object.parent;
+        while (ancestor) {
+          if (!ancestor.visible) return;
+          ancestor = ancestor.parent;
+        }
+        const pathId = typeof object.userData.pathId === 'string'
+          ? object.userData.pathId
+          : '';
+        const pointIndexes = Array.isArray(object.userData.pathPointIndices)
+          ? object.userData.pathPointIndices
+          : [];
+        if (!pathId || pointIndexes.length === 0) return;
+        object.updateWorldMatrix(true, false);
+        for (let instanceIndex = 0; instanceIndex < object.count; instanceIndex += 1) {
+          const pointIndex = pointIndexes[instanceIndex];
+          if (typeof pointIndex !== 'number') continue;
+          object.getMatrixAt(instanceIndex, instanceMatrix);
+          worldPoint.setFromMatrixPosition(instanceMatrix).applyMatrix4(object.matrixWorld);
+          const screen = projectWorld(worldPoint);
+          const radius = 12;
+          pathPointTargets.push({
+            kind: 'path-point',
+            id: `${pathId}:${pointIndex}`,
+            x: screen.x,
+            y: screen.y,
+            left: screen.x - radius,
+            top: screen.y - radius,
+            right: screen.x + radius,
+            bottom: screen.y + radius,
+            radius,
+            visible: screen.z >= -1 && screen.z <= 1,
+          });
+        }
+      });
+    }
+    return [...objectTargets, ...partTargets, ...mechanismTargets, ...pathPointTargets];
   };
 
   const roundedScreenTargets = (targets: ViewerScreenTarget[]) => targets.map(target => ({
@@ -967,39 +1094,68 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   }));
 
   const render = () => {
-    const scene = sceneRef.current;
-    const camera = cameraRef.current;
-    const renderer = rendererRef.current;
-    if (scene && camera && renderer) {
-      renderer.render(scene, camera);
-      if (E2E_DIAGNOSTICS && stateRef.current) {
-        const screenTargets = roundedScreenTargets(collectViewerScreenTargets());
-        stateRef.current.dataset.threeSceneVisibleObjectCount = String(estimatedObjectCount);
-        stateRef.current.dataset.threeSceneObjectCount = String(estimatedObjectCount);
-        stateRef.current.dataset.threeRenderTriangles = String(renderer.info.render.triangles);
-        stateRef.current.dataset.threeSceneObjectScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'object'));
-        stateRef.current.dataset.threePartScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'part'));
-        stateRef.current.dataset.threeMechanismScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'mechanism'));
+    if (renderFrameRef.current !== undefined) return;
+    renderFrameRef.current = window.requestAnimationFrame(() => {
+      renderFrameRef.current = undefined;
+      const scene = sceneRef.current;
+      const camera = cameraRef.current;
+      const renderer = rendererRef.current;
+      if (scene && camera && renderer) {
+        if (prunedGeometryRevisionRef.current !== sharedGeometryCacheRevision) {
+          pruneSharedGeometryCache();
+          prunedGeometryRevisionRef.current = sharedGeometryCacheRevision;
+        }
+        renderer.render(scene, camera);
+        if (E2E_DIAGNOSTICS && stateRef.current) {
+          renderSubmissionCountRef.current += 1;
+          const screenTargets = roundedScreenTargets(collectViewerScreenTargets(true));
+          stateRef.current.dataset.threeSceneVisibleObjectCount = String(estimatedObjectCount);
+          stateRef.current.dataset.threeSceneObjectCount = String(estimatedObjectCount);
+          stateRef.current.dataset.threeRenderSubmissions = String(renderSubmissionCountRef.current);
+          stateRef.current.dataset.threeRenderCalls = String(renderer.info.render.calls);
+          stateRef.current.dataset.threeRenderTriangles = String(renderer.info.render.triangles);
+          stateRef.current.dataset.threeRendererGeometryCount = String(renderer.info.memory.geometries);
+          stateRef.current.dataset.threeRendererTextureCount = String(renderer.info.memory.textures);
+          stateRef.current.dataset.threeSceneObjectScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'object'));
+          stateRef.current.dataset.threePartScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'part'));
+          stateRef.current.dataset.threeMechanismScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'mechanism'));
+          stateRef.current.dataset.threePathPointScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'path-point'));
+        }
       }
-    }
+    });
   };
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
-    let renderer: THREE.WebGLRenderer;
+    let rendererLease;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      rendererLease = acquireSharedWebGLRenderer({
+        antialias: renderPolicy.antialias,
+        alpha: true,
+      });
     } catch (error) {
       console.warn('ThreePuppetPreview WebGL unavailable', error);
       setRendererStatus('unavailable');
       return;
     }
+    const renderer = rendererLease.renderer;
 
-    setRendererPixelRatioCap(renderer);
+    setRendererPixelRatioCap(renderer, renderPolicy.pixelRatioCap);
+    warmPartTopologyPipeline(renderPolicy.partTopology);
     if (E2E_DIAGNOSTICS) renderer.domElement.dataset.testid = `${testId}-canvas`;
     renderer.domElement.className = 'three-puppet-canvas';
+    const handleContextLost = (event: Event) => {
+      event.preventDefault();
+      setRendererStatus('restoring');
+    };
+    const handleContextRestored = () => {
+      setRendererStatus('webgl');
+      render();
+    };
+    renderer.domElement.addEventListener('webglcontextlost', handleContextLost);
+    renderer.domElement.addEventListener('webglcontextrestored', handleContextRestored);
     host.appendChild(renderer.domElement);
 
     const materials = createMaterials();
@@ -1025,6 +1181,10 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     sceneRef.current = scene;
     cameraRef.current = camera;
     rootsRef.current = { root, staticLayer, partsLayer, objectsLayer, skeletonLayer, pathsLayer, mechanismsLayer };
+    activePuppetScenes.set(
+      scene,
+      renderPolicy.repeatedGeometry.maxGeometryCacheEntries,
+    );
     setRendererStatus('webgl');
 
     const resize = () => {
@@ -1041,23 +1201,35 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
 
     return () => {
       ro.disconnect();
+      if (renderFrameRef.current !== undefined) {
+        window.cancelAnimationFrame(renderFrameRef.current);
+        renderFrameRef.current = undefined;
+      }
       disposeOwnedMaterials(scene);
       disposeObject(scene, false);
+      activePuppetScenes.delete(scene);
+      pruneSharedGeometryCache(
+        renderPolicy.repeatedGeometry.maxGeometryCacheEntries,
+      );
       disposeMaterials(materialsRef.current);
-      renderer.dispose();
+      renderer.domElement.removeEventListener('webglcontextlost', handleContextLost);
+      renderer.domElement.removeEventListener('webglcontextrestored', handleContextRestored);
       if (renderer.domElement.parentElement === host) host.removeChild(renderer.domElement);
+      rendererLease.release();
       materialsRef.current = null;
       rendererRef.current = null;
       sceneRef.current = null;
       cameraRef.current = null;
       rootsRef.current = null;
       partMeshesRef.current.clear();
+      partTopologyIdentitiesRef.current.clear();
       sceneObjectRefs.current.clear();
-      jointRefs.current.clear();
+      jointHardwareRef.current = null;
       boneRefs.current.clear();
       mechanismRefs.current.clear();
+      pathGestureDraftVisualRef.current = null;
     };
-  }, [testId]);
+  }, [renderPolicy, testId]);
 
   const kitSignature = `${kit.profileKey}:${kit.gridPitchMm}:${kit.sheetWidthMm}:${kit.sheetHeightMm}:${kit.boardCells}`;
   useEffect(() => {
@@ -1069,71 +1241,172 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     const plane = new THREE.Mesh(new THREE.PlaneGeometry(sheet.width / VIEW_SCALE, sheet.height / VIEW_SCALE), materials.sheet);
     plane.position.set((sheet.x + sheet.width / 2) / VIEW_SCALE, (sheet.y + sheet.height / 2) / VIEW_SCALE, -0.18);
     roots.staticLayer.add(plane);
-    boardGridLines(kit).forEach(line => {
-      const geom = new THREE.BufferGeometry().setFromPoints([to3(line.a, -0.16), to3(line.b, -0.16)]);
-      roots.staticLayer.add(new THREE.Line(geom, materials.grid));
-    });
+    const gridLines = boardGridLines(kit);
+    const gridGeometry = new THREE.BufferGeometry().setFromPoints(
+      gridLines.flatMap((line) => [to3(line.a, -0.16), to3(line.b, -0.16)]),
+    );
+    const grid = new THREE.LineSegments(gridGeometry, materials.grid);
+    grid.name = 'board-grid-line-segments';
+    roots.staticLayer.add(grid);
+    if (E2E_DIAGNOSTICS && stateRef.current) {
+      stateRef.current.dataset.threeGridDrawObjectCount = '1';
+      stateRef.current.dataset.threeGridSegmentCount = String(gridLines.length);
+    }
     render();
   }, [kitSignature, rendererStatus]);
 
-  const partSignature = useMemo(() => partGeometrySignature(geometryParts, project, canonicalSkeleton), [canonicalSkeleton, geometryParts, project?.parts]);
   useEffect(() => {
     const roots = rootsRef.current;
     const materials = materialsRef.current;
     if (!roots || !materials || rendererStatus !== 'webgl') return;
-    clearGroup(roots.partsLayer);
-    partMeshesRef.current.clear();
-    geometryParts.forEach(part => {
-      const base = project?.parts[part.id] ?? part;
-      const landmarks = partLandmarkLocalPoints(base, canonicalSkeleton);
-      const outline = fabricablePartOutlinePoints(base, landmarks);
-      const localHoles = landmarks.filter(local => pointInsideOutline(local, outline, 0.5));
+    const topologyDiff = diffPuppetPartTopologies(
+      partTopologyIdentitiesRef.current,
+      preparedPartTopologies,
+    );
+    if (E2E_DIAGNOSTICS && stateRef.current) {
+      stateRef.current.dataset.threeTopologyReady =
+        topologyDiff.build.length === 0 ? 'true' : 'false';
+    }
+    const staleParts = topologyDiff.removeIds.flatMap((partId) => {
+      const part = partMeshesRef.current.get(partId);
+      if (!part) return [];
+      roots.partsLayer.remove(part);
+      partMeshesRef.current.delete(partId);
+      partTopologyIdentitiesRef.current.delete(partId);
+      return [part];
+    });
+    scheduleIncrementalTopologyBuild(staleParts, part => {
+      disposeOwnedMaterials(part);
+      disposeObject(part, false);
+    });
+    let topologyComplete = false;
+    return scheduleIncrementalTopologyBuild(topologyDiff.build, topology => {
+      const topologyStartedAt = performance.now();
+      const base = topology.part;
+      const { outline, localHoles } = topology;
+      const partGeometryKey = topology.identity.geometry;
       const shape = shapeFromLocalOutline(outline);
       localHoles.forEach(local => {
         shape.holes.push(holePath(local.x / VIEW_SCALE, local.y / VIEW_SCALE));
       });
-      const geometry = new THREE.ExtrudeGeometry(shape, { depth: THICKNESS, bevelEnabled: true, bevelSize: 0.018, bevelThickness: 0.012 });
+      const geometry = cachedGeometry(
+        `puppet-part-plate:${partGeometryKey}`,
+        () => new THREE.ExtrudeGeometry(shape, {
+          depth: THICKNESS,
+          bevelEnabled: renderPolicy.partTopology.bevelEnabled,
+          bevelSize: 0.018,
+          bevelThickness: 0.012,
+          bevelSegments: 1,
+          curveSegments: renderPolicy.partTopology.curveSegments,
+          steps: 1,
+        }),
+      );
       const mesh = new THREE.Mesh(geometry, materials.part);
-      mesh.userData.partId = part.id;
+      mesh.userData.partId = base.id;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), materials.edge));
-      const artGeometry = new THREE.ShapeGeometry(shape);
-      const artPositions = artGeometry.getAttribute('position');
-      const uvs: number[] = [];
-      const artWidth = Math.max(1, base.bounds.width);
-      const artHeight = Math.max(1, base.bounds.height);
-      for (let i = 0; i < artPositions.count; i += 1) {
-        const x = artPositions.getX(i) * VIEW_SCALE;
-        const y = artPositions.getY(i) * VIEW_SCALE;
-        uvs.push((x - base.bounds.x) / artWidth, (y - base.bounds.y) / artHeight);
+      if (renderPolicy.partTopology.edgeGeometryEnabled) {
+        attachCachedEdges(
+          mesh,
+          geometry,
+          materials.edge,
+          `puppet-part-plate:${partGeometryKey}`,
+        );
       }
-      artGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-      const art = new THREE.Mesh(artGeometry, createPartArtMaterial(base, render));
-      art.name = `part-art-decal-${part.id}`;
+      const artGeometry = cachedGeometry(
+        `puppet-part-art:${partGeometryKey}`,
+        () => {
+          const next = new THREE.ShapeGeometry(shape);
+          const artPositions = next.getAttribute('position');
+          const uvs: number[] = [];
+          const artWidth = Math.max(1, base.bounds.width);
+          const artHeight = Math.max(1, base.bounds.height);
+          for (let i = 0; i < artPositions.count; i += 1) {
+            const x = artPositions.getX(i) * VIEW_SCALE;
+            const y = artPositions.getY(i) * VIEW_SCALE;
+            uvs.push(
+              (x - base.bounds.x) / artWidth,
+              (y - base.bounds.y) / artHeight,
+            );
+          }
+          next.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+          return next;
+        },
+      );
+      const art = new THREE.Mesh(artGeometry, createPartArtMaterial(base, () => {
+        if (topologyComplete) render();
+      }));
+      art.name = `part-art-decal-${base.id}`;
       art.position.set(0, 0, THICKNESS + 0.018);
       mesh.add(art);
       if (outline.length > 1) {
-        const topOutline = new THREE.BufferGeometry().setFromPoints([
-          ...outline.map(point => new THREE.Vector3(point.x / VIEW_SCALE, point.y / VIEW_SCALE, THICKNESS + 0.034)),
-          new THREE.Vector3(outline[0].x / VIEW_SCALE, outline[0].y / VIEW_SCALE, THICKNESS + 0.034)
-        ]);
+        const topOutline = cachedGeometry(
+          `puppet-part-outline:${partGeometryKey}`,
+          () => new THREE.BufferGeometry().setFromPoints([
+            ...outline.map(point => new THREE.Vector3(
+              point.x / VIEW_SCALE,
+              point.y / VIEW_SCALE,
+              THICKNESS + 0.034,
+            )),
+            new THREE.Vector3(
+              outline[0].x / VIEW_SCALE,
+              outline[0].y / VIEW_SCALE,
+              THICKNESS + 0.034,
+            ),
+          ]),
+        );
         mesh.add(new THREE.Line(topOutline, materials.edge));
       }
       mesh.traverse(child => {
-        child.userData.partId = part.id;
+        child.userData.partId = base.id;
       });
-      localHoles.forEach(local => {
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.014, 8, 28), materials.cutRing);
-        ring.name = `cut-hole-ring-${part.id}`;
-        ring.position.set(local.x / VIEW_SCALE, local.y / VIEW_SCALE, THICKNESS + 0.04);
-        mesh.add(ring);
-      });
+      if (localHoles.length) {
+        mesh.add(createPuppetCutHoleRingInstances({
+          partId: base.id,
+          holes: localHoles,
+          viewScale: VIEW_SCALE,
+          z: THICKNESS + 0.04,
+          geometry: cachedGeometry(
+            'cut-hole-ring:0.11:0.014:8:28',
+            () => new THREE.TorusGeometry(0.11, 0.014, 8, 28),
+          ),
+          material: materials.cutRing,
+        }));
+      }
       roots.partsLayer.add(mesh);
-      partMeshesRef.current.set(part.id, mesh);
+      partMeshesRef.current.set(base.id, mesh);
+      partTopologyIdentitiesRef.current.set(base.id, topology.identity);
+      const renderedParts = renderedPartsRef.current;
+      const renderedIndex = renderedParts.findIndex(candidate => candidate.id === base.id);
+      const renderedPart = renderedIndex >= 0 ? renderedParts[renderedIndex] : base;
+      const assemblyOffset = assemblyOffsetForPart(
+        Math.max(0, renderedIndex),
+        Math.max(1, renderedParts.length),
+        assemblyExplodeAmountRef.current,
+      );
+      mesh.visible = renderedPart.visible;
+      mesh.position.set(
+        (renderedPart.transform.x + assemblyOffset.x) / VIEW_SCALE,
+        (renderedPart.transform.y + assemblyOffset.y) / VIEW_SCALE,
+        renderedPart.zIndex * 0.035 + assemblyOffset.z,
+      );
+      mesh.rotation.z = (renderedPart.transform.rotation * Math.PI) / 180;
+      mesh.scale.set(renderedPart.transform.scale, renderedPart.transform.scale, 1);
+      mesh.material = selectedPartIdRef.current === base.id ? materials.selected : materials.part;
+      recordPuppetTopologyBuild(performance.now() - topologyStartedAt);
+    }, {
+      initialDelayFrames: 1,
+      maxItemsPerFrame: renderPolicy.preset === 'high' ? 2 : 6,
+      frameBudgetMs: renderPolicy.preset === 'high' ? 8 : 12,
+      onComplete: () => {
+        topologyComplete = true;
+        if (E2E_DIAGNOSTICS && stateRef.current) {
+          stateRef.current.dataset.threeTopologyReady = 'true';
+        }
+        render();
+      },
     });
-    render();
-  }, [partSignature, rendererStatus]);
+  }, [preparedPartTopologies, rendererStatus, renderPolicy.partTopology]);
 
   useEffect(() => {
     const materials = materialsRef.current;
@@ -1202,22 +1475,30 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     const materials = materialsRef.current;
     if (!roots || !materials || rendererStatus !== 'webgl') return;
     clearGroup(roots.skeletonLayer);
-    jointRefs.current.clear();
+    jointHardwareRef.current = null;
     boneRefs.current.clear();
     bones.forEach(([a, b]) => {
       const mesh = makeUnitBar(0.045, 0.07, materials.bone);
       roots.skeletonLayer.add(mesh);
       boneRefs.current.set(`${a}-${b}`, mesh);
     });
-    joints.forEach(joint => {
-      const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.36, 24), materials.pin);
-      pin.rotation.x = Math.PI / 2;
-      const washer = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.018, 8, 24), materials.joint);
-      pin.userData.jointId = joint.id;
-      washer.userData.jointId = joint.id;
-      roots.skeletonLayer.add(pin, washer);
-      jointRefs.current.set(joint.id, { pin, washer });
-    });
+    if (joints.length) {
+      const hardware = createPuppetJointHardwareInstances({
+        jointIds: joints.map((joint) => joint.id),
+        pinGeometry: cachedGeometry(
+          'skeleton-pin:0.08:0.36:24',
+          () => new THREE.CylinderGeometry(0.08, 0.08, 0.36, 24),
+        ),
+        washerGeometry: cachedGeometry(
+          'skeleton-washer:0.12:0.018:8:24',
+          () => new THREE.TorusGeometry(0.12, 0.018, 8, 24),
+        ),
+        pinMaterial: materials.pin,
+        washerMaterial: materials.joint,
+      });
+      roots.skeletonLayer.add(hardware.pins, hardware.washers);
+      jointHardwareRef.current = hardware;
+    }
     render();
   }, [rendererStatus, skeletonTopology]);
 
@@ -1232,18 +1513,19 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       const jb = activeSkeleton?.joints[b];
       updateUnitBar(mesh, ja?.position, jb?.position, 0.18);
     });
-    joints.forEach(joint => {
-      const visual = jointRefs.current.get(joint.id);
-      if (!visual) return;
-      const showAssemblyPin = !assemblyOverlay || (
-        assemblyPhase !== 'character-parts' && assemblyActiveJoints.has(joint.id)
-      );
-      visual.pin.visible = showAssemblyPin;
-      visual.washer.visible = showAssemblyPin;
-      const p = to3(joint.position, 0.35);
-      visual.pin.position.copy(p);
-      visual.washer.position.set(p.x, p.y, 0.55);
-    });
+    const jointHardware = jointHardwareRef.current;
+    if (jointHardware) {
+      updatePuppetJointHardwareInstances({
+        hardware: jointHardware,
+        joints,
+        viewScale: VIEW_SCALE,
+        pinZ: 0.35,
+        washerZ: 0.55,
+        isVisible: (jointId) => !assemblyOverlay || (
+          assemblyPhase !== 'character-parts' && assemblyActiveJoints.has(jointId)
+        ),
+      });
+    }
     render();
   }, [activeSkeleton, assemblyOverlay, assemblyPhase, bones, joints, rendererStatus]);
 
@@ -1258,32 +1540,113 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     const roots = rootsRef.current;
     const materials = materialsRef.current;
     if (!roots || !materials || rendererStatus !== 'webgl') return;
-    clearGroup(roots.pathsLayer);
+    const draftGroup = pathGestureDraftVisualRef.current?.group;
+    roots.pathsLayer.children
+      .filter(child => child !== draftGroup)
+      .forEach(child => {
+        roots.pathsLayer.remove(child);
+        disposeObject(child, false);
+      });
+    const activeDraftPathId = pathGestureDraft?.getSnapshot()?.pathId;
     pathsToRender.forEach(path => {
       const z = path.id === selectedPathId ? 0.88 : 0.82;
-      const points3 = path.points.map(point => to3(point, z));
+      const lineSamples = pathLineSamples.get(path.id) ?? [];
+      const handleSamples = pathHandleSamples.get(path.id) ?? [];
+      const points3 = lineSamples.map(({ value }) => to3(value, z));
       const linePoints = path.closed && points3.length > 2 ? [...points3, points3[0].clone()] : points3;
       const geometry = new THREE.BufferGeometry().setFromPoints(linePoints);
       const line = new THREE.Line(geometry, path.id === selectedPathId ? materials.pathSelected : materials.path);
       line.name = `path-line-${path.id}`;
+      line.userData.pathId = path.id;
+      line.visible = path.id !== activeDraftPathId;
       line.renderOrder = 90;
       roots.pathsLayer.add(line);
-      path.points.forEach((point, index) => {
-        const marker = new THREE.Mesh(
-          cachedGeometry(`path-point:${index === 0 ? 'start' : 'node'}`, () => new THREE.SphereGeometry(index === 0 ? 0.115 : 0.075, 16, 8)),
-          materials.pathPoint
-        );
-        marker.name = `path-point-${path.id}-${index}`;
-        marker.userData.pathId = path.id;
-        marker.userData.pathPointIndex = index;
-        marker.renderOrder = 91;
-        if (path.id === selectedPathId && index === selectedPathPointIndex) marker.scale.setScalar(1.45);
-        marker.position.copy(to3(point, z + 0.04));
-        roots.pathsLayer.add(marker);
+      const markers = new THREE.InstancedMesh(
+        cachedGeometry('path-point:node', () => new THREE.SphereGeometry(0.075, 12, 6)),
+        materials.pathPoint,
+        handleSamples.length,
+      );
+      markers.name = `path-points-${path.id}-instanced`;
+      markers.userData.pathId = path.id;
+      markers.userData.pathPointIndices = handleSamples.map(({ index }) => index);
+      markers.visible = path.id !== activeDraftPathId;
+      markers.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+      markers.renderOrder = 91;
+      const markerTransform = new THREE.Object3D();
+      handleSamples.forEach(({ value: point, index }, instanceIndex) => {
+        const startScale = index === 0 ? 0.115 / 0.075 : 1;
+        const selectedScale = path.id === selectedPathId && index === selectedPathPointIndex
+          ? 1.45
+          : 1;
+        markerTransform.position.copy(to3(point, z + 0.04));
+        markerTransform.scale.setScalar(startScale * selectedScale);
+        markerTransform.updateMatrix();
+        markers.setMatrixAt(instanceIndex, markerTransform.matrix);
       });
+      markers.instanceMatrix.needsUpdate = true;
+      roots.pathsLayer.add(markers);
     });
     render();
-  }, [pathSignature, rendererStatus, selectedPathId, selectedPathPointIndex]);
+  }, [pathGestureDraft, pathHandleSamples, pathLineSamples, pathSignature, rendererStatus, selectedPathId, selectedPathPointIndex]);
+
+  useEffect(() => {
+    const roots = rootsRef.current;
+    const materials = materialsRef.current;
+    if (!pathGestureDraft || !roots || !materials || rendererStatus !== 'webgl') return;
+    let visual = pathGestureDraftVisualRef.current;
+    if (!visual) {
+      visual = createThreePathGestureDraftVisual({
+        parent: roots.pathsLayer,
+        lineMaterial: materials.pathSelected,
+        markerGeometry: cachedGeometry(
+          'path-point:node',
+          () => new THREE.SphereGeometry(0.075, 12, 6),
+        ),
+        markerMaterial: materials.pathPoint,
+        maxLinePoints: renderPolicy.interactiveDetail.maxPathLinePoints,
+        maxHandles: renderPolicy.interactiveDetail.maxPathHandles,
+        viewScale: VIEW_SCALE,
+      });
+      pathGestureDraftVisualRef.current = visual;
+    }
+
+    let activePathId: string | null = null;
+    const setCanonicalPathVisibility = (pathId: string | null, visible: boolean) => {
+      if (!pathId) return;
+      roots.pathsLayer.children.forEach((child) => {
+        if (child === visual?.group) return;
+        if (child.userData.pathId === pathId) child.visible = visible;
+      });
+    };
+    return pathGestureDraft.subscribe((snapshot) => {
+      roots.pathsLayer.visible = Boolean(snapshot) || pathsToRender.length > 0;
+      if (activePathId && activePathId !== snapshot?.pathId) {
+        setCanonicalPathVisibility(activePathId, true);
+      }
+      activePathId = snapshot?.pathId ?? null;
+      if (!snapshot || !visual) {
+        visual?.apply(null);
+        setCanonicalPathVisibility(activePathId, true);
+        if (stateRef.current) {
+          stateRef.current.dataset.pathGestureDraft = 'idle';
+          stateRef.current.dataset.pathGestureDraftPoints = '0';
+        }
+        render();
+        return;
+      }
+
+      setCanonicalPathVisibility(snapshot.pathId, false);
+      visual.apply(snapshot);
+      if (stateRef.current) {
+        stateRef.current.dataset.pathGestureDraft = 'active';
+        stateRef.current.dataset.pathGestureDraftPoints = String(snapshot.points.length);
+        stateRef.current.dataset.pathGestureDraftEmissions = String(
+          pathGestureDraft.getEmissionCount(),
+        );
+      }
+      render();
+    });
+  }, [pathGestureDraft, pathsToRender.length, renderPolicy.interactiveDetail.maxPathHandles, renderPolicy.interactiveDetail.maxPathLinePoints, rendererStatus]);
 
   const mechanismSignature = useMemo(() => mechanismGeometrySignature(renderedMechanisms), [renderedMechanisms]);
   useEffect(() => {
@@ -1367,7 +1730,10 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
         }
       }
       const pins = Array.from({ length: 6 }, () => {
-        const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.36, 20), materials.mechPin);
+        const pin = new THREE.Mesh(
+          cachedGeometry('mechanism-pin:0.055:0.36:20', () => new THREE.CylinderGeometry(0.055, 0.055, 0.36, 20)),
+          materials.mechPin,
+        );
         pin.rotation.x = Math.PI / 2;
         group.add(pin);
         return pin;
@@ -1608,7 +1974,8 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   }, [angle, renderedMechanisms, rendererStatus]);
 
   useEffect(() => {
-    if (!playback || rendererStatus !== 'webgl') return;
+    const playbackClock = playback?.clock;
+    if (!playbackClock || rendererStatus !== 'webgl') return;
     const applyPreview = (preview: MotionPreview | undefined) => {
       const materials = materialsRef.current;
       if (!materials) return;
@@ -1651,28 +2018,40 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
           const jb = previewSkeleton.joints[b];
           if (mesh) updateUnitBar(mesh, ja?.position, jb?.position, 0.18);
         });
-        Object.values(previewSkeleton.joints).forEach(joint => {
-          const visual = jointRefs.current.get(joint.id);
-          if (!visual) return;
-          const p = to3(joint.position, 0.35);
-          visual.pin.position.copy(p);
-          visual.washer.position.set(p.x, p.y, 0.55);
-        });
+        const jointHardware = jointHardwareRef.current;
+        if (jointHardware) {
+          const assemblyActiveJoints = new Set(
+            assemblyOverlay?.activeJointIds ?? [],
+          );
+          updatePuppetJointHardwareInstances({
+            hardware: jointHardware,
+            joints: Object.values(previewSkeleton.joints),
+            viewScale: VIEW_SCALE,
+            pinZ: 0.35,
+            washerZ: 0.55,
+            isVisible: (jointId) => !assemblyOverlay || (
+              assemblyPhase !== 'character-parts' &&
+              assemblyActiveJoints.has(jointId)
+            ),
+          });
+        }
       }
       render();
     };
 
-    applyPreview(playback.sample(playback.clock.getPhase()));
-    return playback.clock.subscribe(frame => {
-      if (frame.phaseChanged || frame.elapsedMs === 0) {
-        applyPreview(playback.sample(frame.phase));
-      }
+    return subscribeCadencedPlaybackSampler({
+      clock: playbackClock,
+      sample: (phase) => playbackSampleRef.current?.(phase),
+      minFrameIntervalMs: renderPolicy.minRenderIntervalMs,
+      sampleInitial: false,
+      apply: applyPreview,
     });
   }, [
     activeSkeleton,
     assemblyExplodeAmount,
-    playback,
+    playback?.clock,
     project,
+    renderPolicy.minRenderIntervalMs,
     rendererStatus,
   ]);
 
@@ -1758,9 +2137,23 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(pointer, camera);
     const pointObjects = roots.pathsLayer.children.filter(object => (
-      typeof object.userData.pathId === 'string' && typeof object.userData.pathPointIndex === 'number'
+      typeof object.userData.pathId === 'string' &&
+      (
+        typeof object.userData.pathPointIndex === 'number' ||
+        Array.isArray(object.userData.pathPointIndices)
+      )
     ));
     for (const hit of raycaster.intersectObjects(pointObjects, true)) {
+      if (
+        hit.instanceId !== undefined &&
+        typeof hit.object.userData.pathId === 'string' &&
+        Array.isArray(hit.object.userData.pathPointIndices)
+      ) {
+        const pointIndex = hit.object.userData.pathPointIndices[hit.instanceId];
+        if (typeof pointIndex === 'number') {
+          return { pathId: hit.object.userData.pathId, pointIndex };
+        }
+      }
       let node: THREE.Object3D | null = hit.object;
       while (node) {
         const pathId = typeof node.userData.pathId === 'string' ? node.userData.pathId : undefined;
@@ -1916,6 +2309,14 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     if (onSelectJoint) {
       const jointHits = raycaster.intersectObjects([roots.skeletonLayer], true);
       for (const hit of jointHits) {
+        const instancedJointId = puppetJointIdForInstance(
+          hit.object,
+          hit.instanceId,
+        );
+        if (instancedJointId) {
+          onSelectJoint(instancedJointId);
+          return;
+        }
         let node: THREE.Object3D | null = hit.object;
         while (node) {
           const jointId = typeof node.userData.jointId === 'string' ? node.userData.jointId : undefined;
@@ -2035,6 +2436,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     data-joint-count={joints.length}
     data-scene-object-count={sceneObjects.length}
     data-selected-scene-object-id={project?.selectedSceneObjectId ?? ''}
+    data-three-renderer-status={rendererStatus}
     data-assembly-mode={assemblyPhase ? 'character' : ''}
     data-assembly-phase={assemblyPhase ?? ''}
     data-assembly-progress={Math.round(assemblyProgress * 100)}
@@ -2050,6 +2452,15 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       onPointerCancel={finishViewerDrag}
       onContextMenu={event => event.preventDefault()}
     />
+    {rendererStatus !== 'pending' && rendererStatus !== 'webgl' && (
+      <div
+        className="three-renderer-status"
+        data-testid={`${testId}-renderer-status`}
+        role="status"
+      >
+        {rendererStatus === 'restoring' ? 'Restoring 3D…' : '3D unavailable'}
+      </div>
+    )}
     {project?.settings.debugVisuals && (
       <div
         data-testid="canvas-debug-visuals"
@@ -2129,12 +2540,14 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       data-physics-kernel={PHYSICS_KERNEL_ENGINE}
       data-physics-update-policy={PHYSICS_UPDATE_POLICY}
       data-high-throughput-scene-policy={HIGH_THROUGHPUT_SCENE_POLICY}
-      data-physics-contact-mode="kinematic-estimate-rapier-contact-probe"
+      data-physics-contact-mode="deferred-to-foundry"
       data-physics-kernel-runtime={physicsKernelRuntime}
       data-physics-kernel-version={physicsKernelVersion}
       data-physics-kernel-error={physicsKernelError}
       data-physics-authority="motionsmith-kinematics"
-      data-three-pixel-ratio-cap={WEBGL_PIXEL_RATIO_CAP.toFixed(1)}
+      data-render-performance-preset={renderPolicy.preset}
+      data-render-antialias={renderPolicy.antialias ? 'on' : 'off'}
+      data-three-pixel-ratio-cap={renderPolicy.pixelRatioCap.toFixed(2)}
       data-puppet-mode="thick-flat-assembly"
       data-part-outline-mode="model-or-user-contour-with-fabrication-fallback"
       data-joint-placement="skeleton-anchors"
@@ -2149,6 +2562,8 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       data-three-selected-path-id={selectedRenderedPath?.id ?? ''}
       data-three-selected-path-closed={selectedRenderedPath ? String(selectedRenderedPath.closed) : ''}
       data-three-selected-path-point-count={selectedRenderedPath?.points.length ?? 0}
+      data-three-rendered-path-line-point-count={renderedPathLinePointCount}
+      data-three-rendered-path-handle-count={renderedPathHandleCount}
       data-three-selected-path-smoothness={selectedRenderedPath?.smoothness ?? ''}
       data-three-mechanism-ids={mechanismsToRender.map(mechanism => mechanism.id).join(',')}
       data-three-rendered-mechanism-ids={renderedMechanisms.map(mechanism => mechanism.id).join(',')}
@@ -2159,6 +2574,11 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       data-three-part-art="top-texture-decal"
       data-three-part-art-count={partArtCount}
       data-three-part-texture-count={partTextureCount}
+      data-three-cut-hole-ring-draw-object-count={holeRingDrawObjectCount}
+      data-three-cut-hole-ring-instance-count={holeCount}
+      data-three-skeleton-hardware-draw-object-count={joints.length ? 2 : 0}
+      data-three-skeleton-pin-instance-count={joints.length}
+      data-three-skeleton-washer-instance-count={joints.length}
       data-three-part-opacity="1"
       data-three-part-edge-opacity="0.95"
       data-three-assembly-underlay="plate-art-decal"
@@ -2226,6 +2646,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       data-three-scene-object-screen-targets="[]"
       data-three-part-screen-targets="[]"
       data-three-mechanism-screen-targets="[]"
+      data-three-path-point-screen-targets="[]"
       data-three-joint-count={joints.length}
       data-three-joint-ids={joints.map(joint => joint.id).join(',')}
       data-three-bone-count={bones.length}

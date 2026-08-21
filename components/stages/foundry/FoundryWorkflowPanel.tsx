@@ -1,4 +1,5 @@
 import { Boxes, Sparkles } from "lucide-react";
+import { useMemo } from "react";
 import { ContextHelp } from "../../ui/ContextHelp";
 import type {
   AppStage,
@@ -7,7 +8,7 @@ import type {
   ProjectState,
 } from "../../../types";
 import {
-  FOUNDRY_MECHANISM_TYPES,
+  ENABLED_FOUNDRY_MECHANISM_TYPES,
   MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY,
 } from "../../../utils/mechanismTemplates";
 import {
@@ -21,6 +22,7 @@ import {
 import { createDefaultMechanism } from "../../../utils/project";
 import { StageLeftSummary } from "../stageLayout";
 import { MechanismLinkagePreview } from "./MechanismLinkagePreview";
+import { resolveRenderPerformancePolicy } from "../../../utils/renderPerformancePolicy";
 
 type MechanismPathFitState = NonNullable<
   NonNullable<MechanismConfig["fabricationMetadata"]>["pathFit"]
@@ -34,6 +36,8 @@ export const FoundryWorkflowPanel = ({
   targetReady,
   fitRequired,
   fitState,
+  fitBusy = false,
+  fitJobError = false,
   isPickingAnchor,
   hardBlocked,
   onToggleAnchorPick,
@@ -50,6 +54,8 @@ export const FoundryWorkflowPanel = ({
   fitState?: MechanismPathFitState;
   fitError?: number;
   fitMaxError?: number;
+  fitBusy?: boolean;
+  fitJobError?: boolean;
   isPickingAnchor: boolean;
   hardBlocked: boolean;
   onToggleAnchorPick: () => void;
@@ -57,6 +63,40 @@ export const FoundryWorkflowPanel = ({
   onUseMechanism: () => void;
   onSelectMechanismType: (type: MechanismType) => void;
 }) => {
+  const previewResolution = resolveRenderPerformancePolicy(
+    project.settings.performancePreset,
+  ).interactiveDetail.mechanismTraceSamples;
+  const galleryCards = useMemo(
+    () => ENABLED_FOUNDRY_MECHANISM_TYPES.map((type) => {
+      const mechanism = {
+        ...(foundry.type === type
+          ? foundry
+          : createDefaultMechanism(type, `foundry-card-${type}`)),
+        id: `foundry-card-${type}`,
+        color: foundry.color,
+      };
+      const context = createMechanismFitContext(
+        mechanism,
+        180,
+        96,
+        previewResolution,
+      );
+      const traces = generateFoundryPlaybackPointTraces(
+        mechanism,
+        previewResolution,
+      ).traces;
+      const trace = traces.find((candidate) => candidate.primary) ?? traces[0];
+      return {
+        type,
+        mechanism,
+        context,
+        pathD: trace
+          ? pointsToSvgPath(trace.points.map(context.map))
+          : context.pathD,
+      };
+    }),
+    [foundry, previewResolution],
+  );
   return (
   <div className="stage-pane-stack">
     <StageLeftSummary
@@ -71,9 +111,10 @@ export const FoundryWorkflowPanel = ({
           data-testid="foundry-fit-path"
           className="btn-primary flex-1"
           disabled={!targetReady}
+          aria-busy={fitBusy}
           onClick={onFitPath}
         >
-          <Sparkles size={16} /> Fit path
+          <Sparkles size={16} /> {fitBusy ? "Cancel" : "Fit path"}
         </button>
         <ContextHelp helpId="foundry.fitPath" />
       </div>
@@ -94,6 +135,7 @@ export const FoundryWorkflowPanel = ({
         <Boxes size={16} /> Use mechanism
       </button>
       {!targetReady && <div className="warning">Draw a path first.</div>}
+      {fitJobError && <div className="warning">Fit failed. Try again.</div>}
       {fitRequired && targetReady && (!fitState || fitState === "unfitted") && (
         <div className="warning">Fit path first.</div>
       )}
@@ -107,41 +149,19 @@ export const FoundryWorkflowPanel = ({
         className="mechanism-choice-grid"
         data-testid="foundry-mechanism-gallery"
       >
-        {FOUNDRY_MECHANISM_TYPES.map((type) => {
+        {galleryCards.map(({ type, mechanism: cardMechanism, context: cardContext, pathD: cardPathD }) => {
           const item = MECHANISM_LIBRARY[type];
-          const cardMechanism = {
-            ...(foundry.type === type
-              ? foundry
-              : createDefaultMechanism(type, `foundry-card-${type}`)),
-            id: `foundry-card-${type}`,
-            color: foundry.color,
-          };
-          const cardContext = createMechanismFitContext(
-            cardMechanism,
-            180,
-            96,
-            96,
-          );
+          const previewPhase = foundry.type === type ? foundryPhase : 0;
           const cardSimulation = createFoundryPlaybackFrame(
             cardMechanism,
-            foundryPhase,
+            previewPhase,
             cardContext,
           ).simulation;
-          const cardPlaybackTraces = generateFoundryPlaybackPointTraces(
-            cardMechanism,
-            96,
-          ).traces;
-          const cardPlaybackTrace =
-            cardPlaybackTraces.find((trace) => trace.primary) ??
-            cardPlaybackTraces[0];
-          const cardPathD = cardPlaybackTrace
-            ? pointsToSvgPath(cardPlaybackTrace.points.map(cardContext.map))
-            : cardSimulation.pathD;
           const ghostSimulations = [Math.PI * 0.65, Math.PI * 1.3].map(
             (offset) =>
               createFoundryPlaybackFrame(
                 cardMechanism,
-                foundryPhase + offset,
+                previewPhase + offset,
                 cardContext,
               ).simulation,
           );

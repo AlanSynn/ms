@@ -1,0 +1,371 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-21T03:19:54.844Z",
+  "resultLabel": "6x CPU emulation",
+  "productionBuild": true,
+  "actualChromebookTested": false,
+  "runtimeProbe": "browser-api-ownership-v1",
+  "workload": "production-feature",
+  "environment": {
+    "browser": "chrome",
+    "browserVersion": "151.0.7922.172",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.7827.55 Safari/537.36",
+    "viewport": {
+      "width": 1366,
+      "height": 768
+    },
+    "deviceScaleFactor": 1,
+    "cpuThrottlingRate": 6,
+    "throttlingScope": "feature-action",
+    "network": {
+      "name": "bounded-classroom-wifi",
+      "latencyMs": 40,
+      "downloadBytesPerSecond": 1310720,
+      "uploadBytesPerSecond": 655360
+    }
+  },
+  "feature": {
+    "name": "blueprintPackage",
+    "actions": [
+      {
+        "label": "blueprint-package-cancel",
+        "cycle": 1,
+        "outcome": "cancelled",
+        "nextPaintMs": 30.80000001192093,
+        "settleMs": 88.5,
+        "longTasks": {
+          "durationsMs": [],
+          "latencyMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "totalMs": 0,
+          "maxMs": 0
+        },
+        "puppetTopologyDurationsMs": [],
+        "before": {
+          "atMs": 1746.0999999642372,
+          "heapBytes": 10655676,
+          "longTaskCount": 2,
+          "puppetTopologyCount": 17,
+          "lifecycle": {
+            "probeSupport": {
+              "workers": true,
+              "imageBitmaps": true,
+              "objectUrls": true
+            },
+            "workers": {
+              "acquired": 1,
+              "released": 1,
+              "active": 0,
+              "peakActive": 1
+            },
+            "imageBitmaps": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            },
+            "objectUrls": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            }
+          }
+        },
+        "after": {
+          "atMs": 1893.3999999761581,
+          "heapBytes": 12007235,
+          "longTaskCount": 2,
+          "puppetTopologyCount": 17,
+          "lifecycle": {
+            "probeSupport": {
+              "workers": true,
+              "imageBitmaps": true,
+              "objectUrls": true
+            },
+            "workers": {
+              "acquired": 2,
+              "released": 2,
+              "active": 0,
+              "peakActive": 1
+            },
+            "imageBitmaps": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            },
+            "objectUrls": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            }
+          }
+        }
+      },
+      {
+        "label": "blueprint-package-complete",
+        "cycle": 2,
+        "outcome": "completed",
+        "nextPaintMs": 15.5,
+        "settleMs": 308.10000002384186,
+        "jobCompletionMs": 289.9000000357628,
+        "longTasks": {
+          "durationsMs": [],
+          "latencyMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "totalMs": 0,
+          "maxMs": 0
+        },
+        "puppetTopologyDurationsMs": [],
+        "before": {
+          "atMs": 1901.300000011921,
+          "heapBytes": 12416247,
+          "longTaskCount": 2,
+          "puppetTopologyCount": 17,
+          "lifecycle": {
+            "probeSupport": {
+              "workers": true,
+              "imageBitmaps": true,
+              "objectUrls": true
+            },
+            "workers": {
+              "acquired": 2,
+              "released": 2,
+              "active": 0,
+              "peakActive": 1
+            },
+            "imageBitmaps": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            },
+            "objectUrls": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            }
+          }
+        },
+        "after": {
+          "atMs": 2260.300000011921,
+          "heapBytes": 15774190,
+          "longTaskCount": 2,
+          "puppetTopologyCount": 17,
+          "lifecycle": {
+            "probeSupport": {
+              "workers": true,
+              "imageBitmaps": true,
+              "objectUrls": true
+            },
+            "workers": {
+              "acquired": 3,
+              "released": 3,
+              "active": 0,
+              "peakActive": 1
+            },
+            "imageBitmaps": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            },
+            "objectUrls": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            }
+          }
+        }
+      }
+    ],
+    "nextPaintLatencyMs": {
+      "p50": 15.5,
+      "p95": 30.80000001192093,
+      "p99": 30.80000001192093
+    },
+    "jobCompletionLatencyMs": {
+      "p50": 289.9000000357628,
+      "p95": 289.9000000357628,
+      "p99": 289.9000000357628
+    },
+    "settleLatencyMs": {
+      "p50": 88.5,
+      "p95": 308.10000002384186,
+      "p99": 308.10000002384186
+    },
+    "mainThreadLongTaskLatencyMs": {
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "lifecycle": {
+      "baseline": {
+        "probeSupport": {
+          "workers": true,
+          "imageBitmaps": true,
+          "objectUrls": true
+        },
+        "workers": {
+          "acquired": 1,
+          "released": 1,
+          "active": 0,
+          "peakActive": 1
+        },
+        "imageBitmaps": {
+          "acquired": 0,
+          "released": 0,
+          "active": 0,
+          "peakActive": 0
+        },
+        "objectUrls": {
+          "acquired": 0,
+          "released": 0,
+          "active": 0,
+          "peakActive": 0
+        }
+      },
+      "final": {
+        "probeSupport": {
+          "workers": true,
+          "imageBitmaps": true,
+          "objectUrls": true
+        },
+        "workers": {
+          "acquired": 3,
+          "released": 3,
+          "active": 0,
+          "peakActive": 1
+        },
+        "imageBitmaps": {
+          "acquired": 0,
+          "released": 0,
+          "active": 0,
+          "peakActive": 0
+        },
+        "objectUrls": {
+          "acquired": 0,
+          "released": 0,
+          "active": 0,
+          "peakActive": 0
+        }
+      },
+      "workerCreations": 2,
+      "imageBitmapAcquisitions": 0,
+      "objectUrlCreations": 0
+    },
+    "heap": {
+      "supported": true,
+      "baselineBytes": 10911507,
+      "finalBytes": 12882986,
+      "growthBytes": 1971479,
+      "allowedGrowthBytes": 8388608,
+      "finalSamplesBytes": [
+        13012902,
+        12876878,
+        12882986
+      ],
+      "tailRangeBytes": 136024,
+      "stable": true
+    },
+    "acceptance": {
+      "nextPaintP95": {
+        "passed": true,
+        "observed": 30.80000001192093,
+        "limit": 100
+      },
+      "mainThreadLongTaskP95": {
+        "passed": true,
+        "observed": 0,
+        "limit": 50
+      },
+      "workerProbeSupported": {
+        "passed": true,
+        "observed": true,
+        "limit": true
+      },
+      "imageBitmapProbeSupported": {
+        "passed": true,
+        "observed": true,
+        "limit": true
+      },
+      "objectUrlProbeSupported": {
+        "passed": true,
+        "observed": true,
+        "limit": true
+      },
+      "workersReturnedToBaseline": {
+        "passed": true,
+        "observed": 0,
+        "limit": 0
+      },
+      "imageBitmapsReturnedToBaseline": {
+        "passed": true,
+        "observed": 0,
+        "limit": 0
+      },
+      "objectUrlsReturnedToBaseline": {
+        "passed": true,
+        "observed": 0,
+        "limit": 0
+      },
+      "workerCyclesExercised": {
+        "passed": true,
+        "observed": 2,
+        "limit": ">=2"
+      },
+      "imageBitmapOwnershipExercised": {
+        "passed": true,
+        "observed": 0,
+        "limit": ">=0"
+      },
+      "objectUrlOwnershipExercised": {
+        "passed": true,
+        "observed": 0,
+        "limit": ">=0"
+      },
+      "completedCycle": {
+        "passed": true,
+        "observed": 1,
+        "limit": ">=1"
+      },
+      "cancelledCycle": {
+        "passed": true,
+        "observed": 1,
+        "limit": ">=1"
+      },
+      "heapBounded": {
+        "passed": true,
+        "observed": 1971479,
+        "limit": 8388608
+      },
+      "heapStable": {
+        "passed": true,
+        "observed": 136024,
+        "limit": 8388608
+      },
+      "passed": {
+        "passed": true,
+        "observed": true,
+        "limit": true
+      }
+    }
+  },
+  "acceptance": {
+    "passed": {
+      "passed": true,
+      "observed": true,
+      "limit": true
+    }
+  }
+}

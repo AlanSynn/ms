@@ -1,7 +1,7 @@
 # MotionSmith Design Contract
 
 Status: active
-Last refreshed: 2026-06-26
+Last refreshed: 2026-08-20
 Primary reference: user-provided Stitch MotionSmith editor HTML + `docs/ui-to-web/*`
 Project governance: `AGENTS.md` defines the standing tinkerable-workbench, 3D physics, and fabrication rules for all agents.
 
@@ -37,7 +37,7 @@ Avoid: dark CAD chrome, tiny low-contrast controls, dense ungrouped lists, fake 
 
 The startup splash is the static boot loader only: MotionSmith mark, wordmark, and version. It disappears when the editor is ready, does not teach, and must not show galleries, embedded videos, or starter choices.
 
-Getting Started is a compact modal dialog shown after the boot loader unless the student checked the session-only opt-out; it can also be reopened from the Character/Getting Started action. It is not a full-screen stage. It shows result-first starter choices: Guide, Starter rig, Girl, Boy, Image, and Character file. Girl/Boy use tiny thumbnails, Open full project is secondary, and process/explanation copy stays out. The Guide tile opens guided project cards; closing always lands on the Character tab with the editor shell still visible underneath.
+Getting Started is a compact modal dialog shown after the boot loader unless the student checked the session-only opt-out; it can also be reopened from the Character/Getting Started action. It is not a full-screen stage. It shows only two result-first primary tiles: Guide and Starter rig. Character file sits beside Open full project as a paired secondary action below the tiles. Image recognition and its Boy/Girl recognition starters are not shipped. Process/explanation copy stays out. The Guide tile opens guided project cards; closing always lands on the Character tab with the editor shell still visible underneath.
 
 ### Character tab
 
@@ -71,7 +71,7 @@ Do not put broad galleries, recipe lists, onboarding choices, primary navigation
 - **Novice first:** buttons should read like actions: “Draw free path”, “Use this mechanism”, “Generate package”.
 - **Direct manipulation:** paths are drawn on the canvas; IK/mechanism preview updates from real project state.
 - **Sensemaking beside controls:** mechanism cards must explain what the mechanism does, what it is good for, and constraints.
-- **Real workflow only:** no placeholder simulation, fake recommendations, or mock AI panels. If ONNX is used, it is browser-local Web ONNX and produces actual project state.
+- **Real workflow only:** no placeholder simulation, fake recommendations, mock AI panels, or image-recognition download. Local character packages and starters produce actual project state.
 - **One source of truth:** body parts, skeleton joints, paths, mechanisms, blueprint positions, and assembly metadata all come from canonical `ProjectState`.
 
 ## Component rules

@@ -1,6 +1,59 @@
 import * as THREE from "three";
 import { WEBGL_PIXEL_RATIO_CAP } from "./viewport";
 
+type SharedRendererSlot = {
+  renderer: THREE.WebGLRenderer;
+  leased: boolean;
+};
+
+export type SharedWebGLRendererLease = {
+  renderer: THREE.WebGLRenderer;
+  release: () => void;
+};
+
+const sharedRendererSlots = new Map<string, SharedRendererSlot[]>();
+
+/**
+ * Keep the browser's WebGL context alive while stage-owned scenes come and go.
+ * Geometry, materials, textures, and scene references remain owned by each
+ * preview and are still disposed by that preview before releasing the lease.
+ */
+export const acquireSharedWebGLRenderer = ({
+  antialias,
+  alpha,
+}: Pick<THREE.WebGLRendererParameters, "antialias" | "alpha">): SharedWebGLRendererLease => {
+  const key = `${antialias ? "aa" : "no-aa"}:${alpha ? "alpha" : "opaque"}`;
+  const slots = sharedRendererSlots.get(key) ?? [];
+  sharedRendererSlots.set(key, slots);
+  let slot = slots.find((candidate) =>
+    !candidate.leased && !candidate.renderer.getContext().isContextLost()
+  );
+  if (!slot) {
+    slot = {
+      renderer: new THREE.WebGLRenderer({ antialias, alpha }),
+      leased: false,
+    };
+    slots.push(slot);
+  }
+  slot.leased = true;
+  const renderer = slot.renderer;
+  let released = false;
+  return {
+    renderer,
+    release: () => {
+      if (released) return;
+      released = true;
+      renderer.setAnimationLoop(null);
+      renderer.setRenderTarget(null);
+      renderer.renderLists.dispose();
+      renderer.info.reset();
+      renderer.resetState();
+      renderer.setSize(1, 1, false);
+      slot.leased = false;
+    },
+  };
+};
+
 export const setRendererPixelRatioCap = (
   renderer: THREE.WebGLRenderer,
   cap = WEBGL_PIXEL_RATIO_CAP,
@@ -49,6 +102,9 @@ export const disposeThreeObjectGraph = (
 ) =>
   object.traverse((child) => {
     const mesh = child as THREE.Mesh;
+    if ((child as THREE.InstancedMesh).isInstancedMesh) {
+      (child as THREE.InstancedMesh).dispose();
+    }
     if (mesh.geometry && !keepGeometry?.(mesh.geometry, child))
       mesh.geometry.dispose();
     if (!disposeMaterials) return;
@@ -83,4 +139,46 @@ export const clearThreeGroup = (
     group.remove(child);
     disposeChild(child);
   });
+};
+
+export type ThreeObjectResourceUsage = {
+  geometries: Set<THREE.BufferGeometry>;
+  materials: Set<THREE.Material>;
+};
+
+export const collectThreeObjectResourceUsage = (
+  root: THREE.Object3D,
+): ThreeObjectResourceUsage => {
+  const geometries = new Set<THREE.BufferGeometry>();
+  const materials = new Set<THREE.Material>();
+  root.traverse((object) => {
+    const geometry = (object as THREE.Mesh).geometry;
+    if (geometry) geometries.add(geometry);
+    const material = (object as THREE.Mesh).material;
+    const entries = Array.isArray(material)
+      ? material
+      : material
+        ? [material]
+        : [];
+    entries.forEach((entry) => materials.add(entry));
+  });
+  return { geometries, materials };
+};
+
+export const pruneUnusedThreeResourceCache = <Resource extends { dispose: () => void }>(
+  cache: Map<string, Resource>,
+  used: ReadonlySet<Resource>,
+  maxEntries: number,
+) => {
+  let removed = 0;
+  const limit = Math.max(0, Math.floor(maxEntries));
+  if (cache.size <= limit) return removed;
+  for (const [key, resource] of cache) {
+    if (cache.size <= limit) break;
+    if (used.has(resource)) continue;
+    resource.dispose();
+    cache.delete(key);
+    removed += 1;
+  }
+  return removed;
 };

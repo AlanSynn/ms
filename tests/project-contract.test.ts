@@ -35,7 +35,7 @@ import { contourPathD, fabricablePartOutlinePoints, partLandmarkJointIds, partLa
 import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureRegistry, type MechanismDragHandle } from '../utils/mechanismFeatureRegistry';
 import { buildMechanismSnapshot, buildMechanismSnapshots } from '../utils/mechanismSnapshot';
 import { createFoundryPlaybackFrame, foundryPlaybackPhaseToInputAngle, generateFoundryPlaybackPointTraces } from '../utils/foundryPlayback';
-import { createMechanismFitContext, createSceneMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext, pointsToSvgPath } from '../utils/mechanismPreview';
+import { createMechanismFitContext, createSceneMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext } from '../utils/mechanismPreview';
 import { buildMechanismRecommendations, fitMechanismToTargetPath, fitRecommendedMechanismToSheet } from '../utils/mechanismRecommendations';
 import { buildAutomataSceneModel } from '../utils/automataSceneModel';
 import { buildDesignAutomataProjection } from '../utils/designAutomataProjection';
@@ -52,10 +52,13 @@ import { selectBlueprintRecipe } from '../components/stages/blueprint/BlueprintE
 import { MechanismLinkagePreview } from '../components/stages/foundry/MechanismLinkagePreview';
 import { FoundryWorkflowPanel } from '../components/stages/foundry/FoundryWorkflowPanel';
 import { useAppMechanismActions } from '../hooks/useAppMechanismActions';
+import { createMechanismOptimizerJobInput, runMechanismOptimizerJob } from '../runtime/optimizer/mechanismOptimizerJob';
+import { runMechanismFitJob } from '../runtime/fitting/mechanismFitJob';
+import type { MechanismFitWorkerClient } from '../runtime/fitting/mechanismFitWorkerClient';
 import { createStageNavigator, navigateAppStage } from '../utils/appStageNavigation';
 import { assemblyCoordToSvg, characterBoardProjector, characterCanvasProjector, smoothAssemblyProgress, svgPathFromPoints } from '../components/stages/assembly/assemblyGeometry';
 import { smoothTrackingPoints, trackingPointsToWorldPath } from '../utils/trackingPath';
-import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, FOUNDRY_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, mechanismTemplateLabel } from '../utils/mechanismTemplates';
+import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, ENABLED_AUTHORABLE_MECHANISM_TYPES, ENABLED_FOUNDRY_MECHANISM_TYPES, ENABLED_MECHANISM_TYPES, FOUNDRY_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, isMechanismTypeEnabled, mechanismTemplateLabel } from '../utils/mechanismTemplates';
 import { createFabricationReadyFourBarProject } from './fixtures/fabricationProject';
 import { CLASSROOM_ASSESSMENT_KEYS, CLASSROOM_COPY, classroomAssessmentFor, classroomAssessmentKeyFromSearch, classroomAssessmentKeyHint, classroomAssessmentStatusText, classroomCueTitleFor, classroomUseExampleFor, DEFAULT_CLASSROOM_ASSESSMENT_KEY, formatClassroomAssessmentPrompt, formatClassroomUseExampleLabel, normalizeClassroomAssessmentKey, resolveClassroomAssessmentBundle, youtubeNoCookieEmbedUrl } from '../utils/classroomContent';
 import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES, sanitizeMechanismRuntime } from '../utils/sanitize';
@@ -185,10 +188,9 @@ const scanEnglishOnlyText = (dir: string) => {
 scanEnglishOnlyText(process.cwd());
 assert.deepEqual(filesWithHangul, [], 'repository text and UI copy stay English-only with no Hangul/Korean strings');
 
-const onnxPath = join(process.cwd(), 'public', 'onnx', 'pose_model.onnx');
-assert(existsSync(onnxPath), 'web ONNX asset is present');
-assert(statSync(onnxPath).size > 1_000_000, 'web ONNX asset is real model data, not a Git LFS pointer or mock');
-assert(!readFileSync(onnxPath).subarray(0, 64).toString('utf8').startsWith('version https://git-lfs'), 'web ONNX asset is checked out from Git LFS before tests run');
+assert(!existsSync(join(process.cwd(), 'public', 'onnx')), 'the classroom source tree has no image-recognition model directory');
+assert(!existsSync(join(process.cwd(), 'utils', 'webOnnx.ts')), 'the browser image-recognition client stays removed');
+assert(!existsSync(join(process.cwd(), 'workers', 'webOnnxInferenceWorker.ts')), 'the image-recognition worker stays removed');
 
 const emptyProject = createEmptyProject();
 const starterSample = createSampleProject();
@@ -217,8 +219,15 @@ const renderMechanismActionHarness = (overrides: {
   const dispatches: ProjectAction[] = [];
   let stage: AppStage = 'character';
   let commandStatus = '';
-  let recommendationsShown = true;
   let actions: MechanismActionHarness | undefined;
+  const mechanismFitClient: MechanismFitWorkerClient = {
+    request: (input, callbacks) => {
+      callbacks.complete(runMechanismFitJob(input));
+      return 1;
+    },
+    cancel: () => undefined,
+    dispose: () => undefined,
+  };
   const Harness = () => {
     actions = useAppMechanismActions({
       project,
@@ -232,7 +241,7 @@ const renderMechanismActionHarness = (overrides: {
       angle: overrides.angle ?? 0,
       setStage: (nextStage) => { stage = nextStage; },
       setCommandStatus: (status) => { commandStatus = status; },
-      setShowRecommendations: (shown) => { recommendationsShown = shown; },
+      mechanismFitClient,
     });
     return null;
   };
@@ -243,7 +252,6 @@ const renderMechanismActionHarness = (overrides: {
     dispatches,
     stage: () => stage,
     commandStatus: () => commandStatus,
-    recommendationsShown: () => recommendationsShown,
   };
 };
 
@@ -276,8 +284,8 @@ const gearSceneRadiusIsFabricationPreset = (radius: number) =>
   FABRICATION_GEAR_SPECS.some(spec => Math.abs(spec.pitchRadiusMm * SCENE_PX_PER_MM - radius) < 1e-9);
 const linkageSceneLengthIsFabricationPreset = (length: number) =>
   FABRICATION_LINKAGE_SPECS.some(spec => Math.abs(spec.lengthMm * SCENE_PX_PER_MM - length) < 1e-9);
-assert(existsSync(join(process.cwd(), 'resources/examples/raw/girl.png')), 'girl starter source image is present');
-assert(existsSync(join(process.cwd(), 'resources/examples/raw/boy.PNG')), 'boy starter source image is present');
+assert(!existsSync(join(process.cwd(), 'resources/examples/raw/girl.png')), 'girl recognition starter image stays removed');
+assert(!existsSync(join(process.cwd(), 'resources/examples/raw/boy.png')), 'boy recognition starter image stays removed');
 const designContract = readFileSync(join(process.cwd(), 'DESIGN.md'), 'utf8');
 const agentsContract = readFileSync(join(process.cwd(), 'AGENTS.md'), 'utf8');
 const docsMap = readFileSync(join(process.cwd(), 'docs', 'README.md'), 'utf8');
@@ -340,22 +348,23 @@ const classroomExampleVideoSource = readFileSync(join(process.cwd(), 'components
 const viteConfigText = readFileSync(join(process.cwd(), 'vite.config.ts'), 'utf8');
 assert(viteConfigText.includes("const webBase = process.env.VITE_BASE_PATH ?? '/'"), 'web deployment base can be set by VITE_BASE_PATH for project Pages');
 assert(viteConfigText.includes("base: isTauri ? './' : webBase"), 'Tauri stays relative while web builds can target /ms/');
-assert(viteConfigText.includes('chunkSizeWarningLimit: 2400'), 'Vite chunk warning budget is explicit for intentional lazy Rapier/ONNX browser chunks');
+assert(viteConfigText.includes("format: 'es' as const"), 'module workers keep expensive jobs out of their cold entrypoint');
+assert(viteConfigText.includes('chunkSizeWarningLimit: 2400'), 'Vite chunk warning budget is explicit for the lazy Rapier browser chunk');
 assert(normalizedCodebaseCleanupPlan.includes('Button and command audit lock') && normalizedCodebaseCleanupPlan.includes('utils/appCommands.ts'), 'cleanup plan records the executable button/menu audit lock');
 assert(normalizedCodebaseCleanupPlan.includes('Warning fixes locked') && normalizedCodebaseCleanupPlan.includes('Rapier warning boundary'), 'cleanup plan records scoped warning fixes instead of broad suppression');
-assert(normalizedCodebaseCleanupPlan.includes('`App.tsx` is now a tiny composition entry') && normalizedCodebaseCleanupPlan.includes('`hooks/useMotionSmithAppController.ts`') && normalizedCodebaseCleanupPlan.includes('top-level state/action orchestration') && normalizedCodebaseCleanupPlan.includes('`components/AppWorkspaceShell.tsx`') && normalizedCodebaseCleanupPlan.includes('workspace shell chrome lives outside App.tsx') && normalizedCodebaseCleanupPlan.includes('no ProjectState mutation or fabrication validation') && normalizedCodebaseCleanupPlan.includes('`utils/workflowStatus.ts`') && normalizedCodebaseCleanupPlan.includes('fabrication-aware status derivation') && normalizedCodebaseCleanupPlan.includes('`components/AppStageRouter.tsx`') && normalizedCodebaseCleanupPlan.includes('shared stage-to-component routing and player-dock placement') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppDerivedState.ts`') && normalizedCodebaseCleanupPlan.includes('selected part/path/mechanism, playback duration, sorted parts, and global mechanism config') && normalizedCodebaseCleanupPlan.includes('`hooks/useWorkspacePlayerDock.tsx`') && normalizedCodebaseCleanupPlan.includes('workspace player dock visibility') && normalizedCodebaseCleanupPlan.includes('Assembly step dock state') && normalizedCodebaseCleanupPlan.includes('`hooks/useWorkspacePlaybackLoop.ts`') && normalizedCodebaseCleanupPlan.includes('shared playback rAF loop and Path draw reset') && normalizedCodebaseCleanupPlan.includes('`hooks/useModalInertEffect.ts`') && normalizedCodebaseCleanupPlan.includes('modal inert') && normalizedCodebaseCleanupPlan.includes('`resources/starterImageTemplates.ts`') && normalizedCodebaseCleanupPlan.includes('starter image template assets') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppPathActions.ts`') && normalizedCodebaseCleanupPlan.includes('Path draw mode, tracking modal state, path point upsert/validation, and tracked-path transfer') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppCharacterImportActions.ts`') && normalizedCodebaseCleanupPlan.includes('character ONNX image import, starter image/package/project import, pending review, replacement review, skeleton export') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppMechanismActions.ts`') && normalizedCodebaseCleanupPlan.includes('mechanism update, Foundry export, recommendation apply, optimizer loop, and SVG/DXF export actions') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppOnnxBootstrap.ts`') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectHistory.ts`') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectAutosave.ts`') && normalizedCodebaseCleanupPlan.includes('`utils/projectPersistence.ts`') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppProjectCommands.ts`'), 'cleanup plan records the current App/controller hotspot and completed command/persistence/derived-state/stage-router/shell/status/player seams without brittle line-count locking');
+assert(normalizedCodebaseCleanupPlan.includes('`App.tsx` is now a tiny composition entry') && normalizedCodebaseCleanupPlan.includes('`hooks/useMotionSmithAppController.ts`') && normalizedCodebaseCleanupPlan.includes('`components/AppWorkspaceShell.tsx`') && normalizedCodebaseCleanupPlan.includes('`components/AppStageRouter.tsx`') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppCharacterImportActions.ts`') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppMechanismActions.ts`') && normalizedCodebaseCleanupPlan.includes('Image recognition removed'), 'cleanup plan records the current composition seams and the separate image-recognition removal milestone');
 assert(normalizedCodebaseCleanupPlan.includes('`utils/appStageNavigation.ts`') && normalizedCodebaseCleanupPlan.includes('stage handoff gate, recovery dispatch, stage-open status, and `goStage` wiring'), 'cleanup plan records the extracted stage navigation seam');
 assert(normalizedCodebaseCleanupPlan.includes('`utils/appStageRouterProps.ts`') && normalizedCodebaseCleanupPlan.includes('stage-router prop grouping'), 'cleanup plan records the extracted App stage-router prop grouping seam');
 assert(normalizedCodebaseCleanupPlan.includes('`hooks/useAppCommandBindings.ts` | 36') && normalizedCodebaseCleanupPlan.includes('application keyboard shortcut binding owns latest-handler ref'), 'cleanup plan records the extracted keyboard command binding hook seam');
-assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/ProgressBlock.tsx` | 84') && normalizedCodebaseCleanupPlan.includes('character import progress UI lives outside the app shell'), 'cleanup plan records the extracted character progress seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/ProgressBlock.tsx`') && normalizedCodebaseCleanupPlan.includes('package import progress UI lives outside the app shell'), 'cleanup plan records the extracted character progress seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/ui/InspectorControls.tsx` | 70') && normalizedCodebaseCleanupPlan.includes('shared inspector sliders/toggles live outside the app shell'), 'cleanup plan records the extracted inspector controls seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/PartInspector.tsx` | 276') && normalizedCodebaseCleanupPlan.includes('selected-part inspector owns part toggles'), 'cleanup plan records the extracted part inspector seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/CutOutlineEditorDialog.tsx` | 379') && normalizedCodebaseCleanupPlan.includes('cut-outline editor owns modal pointer editing'), 'cleanup plan records the extracted cut outline editor seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/SkeletonInspector.tsx` | 225') && normalizedCodebaseCleanupPlan.includes('skeleton inspector owns joint/anchor editing'), 'cleanup plan records the extracted skeleton inspector seam');
-assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/CharacterImportOverlays.tsx` | 165') && normalizedCodebaseCleanupPlan.includes('character import status/review overlays live outside the app shell'), 'cleanup plan records the extracted character import overlay seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/CharacterImportOverlays.tsx`') && normalizedCodebaseCleanupPlan.includes('character import status/review overlays live outside the app shell'), 'cleanup plan records the extracted character import overlay seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/CharacterLessonOwnership.tsx` | 47') && normalizedCodebaseCleanupPlan.includes('guided lesson ownership cues/actions live outside the app shell'), 'cleanup plan records the extracted guided lesson ownership seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/CharacterSetupPanel.tsx` | 53') && normalizedCodebaseCleanupPlan.includes('Character setup right-inspector wrapper lives outside the app shell'), 'cleanup plan records the extracted character setup panel seam');
-assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/CharacterImportControls.tsx` | 103') && normalizedCodebaseCleanupPlan.includes('character import entry controls live outside the app shell'), 'cleanup plan records the extracted character import controls seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/CharacterImportControls.tsx`') && normalizedCodebaseCleanupPlan.includes('character import entry controls live outside the app shell'), 'cleanup plan records the extracted character import controls seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/CharacterSelection.tsx` | 259') && normalizedCodebaseCleanupPlan.includes('Character stage wrapper lives outside the app shell'), 'cleanup plan records the extracted CharacterSelection stage seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/path/PathEditor.tsx` | 376') && normalizedCodebaseCleanupPlan.includes('Path stage wrapper lives outside the app shell'), 'cleanup plan records the extracted PathEditor stage seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/path/MechanismRecommendationSheet.tsx` | 230') && normalizedCodebaseCleanupPlan.includes('Path recommendation modal lives outside the app shell and previews board-fit overlays'), 'cleanup plan records the extracted Path recommendation modal seam');
@@ -380,10 +389,9 @@ assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/Foundr
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/FoundryOverlayLayer.tsx` | 285') && normalizedCodebaseCleanupPlan.includes('Foundry SVG force, velocity, playhead, param handle, and anchor overlays live outside the preview host'), 'cleanup plan records the extracted Foundry overlay seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/FoundryWorkflowPanel.tsx` | 238') && normalizedCodebaseCleanupPlan.includes('Foundry left workflow pane owns target summary'), 'cleanup plan records the extracted Foundry workflow pane seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/FoundryInspectorPanel.tsx` | 231') && normalizedCodebaseCleanupPlan.includes('Foundry right inspector owns physics readout'), 'cleanup plan records the extracted Foundry inspector pane seam');
-assert(normalizedCodebaseCleanupPlan.includes('`components/AppShell.tsx` | 9') && normalizedCodebaseCleanupPlan.includes('compatibility re-export barrel for shell leaves'), 'cleanup plan records AppShell as a compatibility shell barrel');
+assert(normalizedCodebaseCleanupPlan.includes('`components/AppShell.tsx`') && normalizedCodebaseCleanupPlan.includes('compatibility re-export barrel for shell leaves'), 'cleanup plan records AppShell as a compatibility shell barrel');
 assert(normalizedCodebaseCleanupPlan.includes('`components/shell/workflowStages.ts` | 22') && normalizedCodebaseCleanupPlan.includes('workflow stage labels and shared playback stage list'), 'cleanup plan records the extracted workflow stage metadata seam');
-assert(normalizedCodebaseCleanupPlan.includes('`components/shell/GettingStartedDialog.tsx` | 133') && normalizedCodebaseCleanupPlan.includes('Getting Started modal is a shell leaf outside AppShell'), 'cleanup plan records the extracted Getting Started shell leaf seam');
-assert(normalizedCodebaseCleanupPlan.includes('`components/shell/OnnxCacheStatusPill.tsx` | 15') && normalizedCodebaseCleanupPlan.includes('ONNX cache chip is a shell leaf outside AppShell'), 'cleanup plan records the extracted ONNX cache chip seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/shell/GettingStartedDialog.tsx`') && normalizedCodebaseCleanupPlan.includes('Getting Started modal is a shell leaf outside AppShell'), 'cleanup plan records the extracted Getting Started shell leaf seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/shell/WorkflowRail.tsx` | 23') && normalizedCodebaseCleanupPlan.includes('workflow rail and version mark are shell leaves outside AppShell'), 'cleanup plan records the extracted workflow rail seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/shell/TopCommandBar.tsx` | 29') && normalizedCodebaseCleanupPlan.includes('top menu rendering is a shell leaf outside AppShell'), 'cleanup plan records the extracted top command bar seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/shell/ShellDialogs.tsx` | 51') && normalizedCodebaseCleanupPlan.includes('shortcut/about dialogs are shell leaves outside AppShell'), 'cleanup plan records the extracted shell dialogs seam');
@@ -490,9 +498,14 @@ assert.equal(commandIdForKeyboardEvent({ key: '5', ctrlKey: false, metaKey: fals
 assert(!APP_COMMANDS.some(command => /exit|updates/i.test(command.label)), 'browser menu omits old placeholder Exit and Check for Updates items');
 APP_MENU_GROUPS.forEach(group => group.commandIds.forEach(id => assert.equal(commandById(id).menu, group.id, `${id} belongs to its declared menu group`)));
 const appWorkspaceShellCommandSource = readFileSync(join(process.cwd(), 'components', 'AppWorkspaceShell.tsx'), 'utf8');
+const appStageRouterCommandSource = readFileSync(join(process.cwd(), 'components', 'AppStageRouter.tsx'), 'utf8');
+const classroomStageModulesSource = readFileSync(join(process.cwd(), 'components', 'classroomStageModules.tsx'), 'utf8');
+const deferredThreePuppetPreviewSource = readFileSync(join(process.cwd(), 'components', 'DeferredThreePuppetPreview.tsx'), 'utf8');
+const deferredThreeFoundryPreviewSource = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'DeferredThreeFoundryPreview.tsx'), 'utf8');
+const characterSelectionCommandSource = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CharacterSelection.tsx'), 'utf8');
+const indexEntrySource = readFileSync(join(process.cwd(), 'index.tsx'), 'utf8');
 const appShellCommandSource = readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8');
 const gettingStartedDialogCommandSource = readFileSync(join(process.cwd(), 'components', 'shell', 'GettingStartedDialog.tsx'), 'utf8');
-const onnxCachePillCommandSource = readFileSync(join(process.cwd(), 'components', 'shell', 'OnnxCacheStatusPill.tsx'), 'utf8');
 const workflowRailCommandSource = readFileSync(join(process.cwd(), 'components', 'shell', 'WorkflowRail.tsx'), 'utf8');
 const topCommandBarCommandSource = readFileSync(join(process.cwd(), 'components', 'shell', 'TopCommandBar.tsx'), 'utf8');
 const shellDialogsCommandSource = readFileSync(join(process.cwd(), 'components', 'shell', 'ShellDialogs.tsx'), 'utf8');
@@ -502,7 +515,9 @@ const workflowStatusStripCommandSource = readFileSync(join(process.cwd(), 'compo
 const workflowStagesCommandSource = readFileSync(join(process.cwd(), 'components', 'shell', 'workflowStages.ts'), 'utf8');
 const trackingModalSource = readFileSync(join(process.cwd(), 'components', 'TrackingModal.tsx'), 'utf8');
 const appProjectHistoryHookText = readFileSync(join(process.cwd(), 'hooks', 'useProjectHistory.ts'), 'utf8');
-assert(appCommandSource.includes('useProjectHistory(createInitialProject)') && !appCommandSource.includes('setProjectHistory') && !appCommandSource.includes('applyProjectAction(prev, action)') && appProjectHistoryHookText.includes('projectSelfCheck()') && appProjectHistoryHookText.includes('applyProjectAction') && appProjectHistoryHookText.includes('PROJECT_HISTORY_LIMIT') && appProjectHistoryHookText.includes('undoProject') && appProjectHistoryHookText.includes('redoProject'), 'App delegates ProjectState history, reducer dispatch, reload restore, and undo/redo stack management to useProjectHistory');
+const projectHistoryPolicyText = readFileSync(join(process.cwd(), 'runtime', 'persistence', 'projectHistoryPolicy.ts'), 'utf8');
+assert(appCommandSource.includes('useProjectHistory(createEmptyProject)') && !appCommandSource.includes('setProjectHistory') && !appCommandSource.includes('applyProjectAction(prev, action)') && appProjectHistoryHookText.includes('projectSelfCheck()') && appProjectHistoryHookText.includes('applyProjectAction') && projectHistoryPolicyText.includes('PROJECT_HISTORY_LIMIT') && appProjectHistoryHookText.includes('undoProject') && appProjectHistoryHookText.includes('redoProject'), 'App delegates empty ProjectState initialization, reducer dispatch, and undo/redo stack management to useProjectHistory while cold recovery remains a separate post-paint hook');
+assert(appProjectHistoryHookText.includes('createProjectHistoryEntry') && appProjectHistoryHookText.includes('boundProjectHistory') && projectHistoryPolicyText.includes('PROJECT_HISTORY_BYTE_BUDGET = 8 * 1024 * 1024') && projectHistoryPolicyText.includes('Object.is(value, nextValue)'), 'undo history is bounded by retained bytes and exploits ProjectState structural sharing instead of serializing the aggregate on every edit');
 assert(appProjectCommandsHookText.includes('satisfies AppCommandHandlerMap') && appCommandsSource.includes('export type AppCommandHandlerMap = Record<AppCommandId, () => void>'), 'App command handlers are type-exhaustive against AppCommandId through the shared command handler map type');
 const commandHandlerBlock =
   appCommandSource.match(/const commandHandlers = \{([\s\S]*?)\n\s*\} satisfies AppCommandHandlerMap;/)?.[1] ??
@@ -518,11 +533,17 @@ assert(appProjectCommandsHookText.includes('setShowAbout(true)'), 'About command
 assert(!appCommandSource.includes('showDirectoryPicker'), 'browser UI omits fake output-folder selection until downloads can write there');
 assert(appEntrySource.includes('<AppWorkspaceShell {...workspaceProps} />') && appControllerSource.includes('useMotionSmithAppController') && appCommandSource.includes('workflowStatus,') && appCommandSource.includes('stageRouterProps,') && appCommandSource.includes('buildAppStageRouterProps') && appStageRouterPropsText.includes('export type AppStageRouterPropGroups') && appStageRouterPropsText.includes(': AppStageRouterProps =>') && appStageRouterPropsText.includes('foundryStage') && appStageRouterPropsText.includes('...assembly') && !appStageRouterPropsText.includes('return (') && !appStageRouterPropsText.includes('useState') && !appStageRouterPropsText.includes('React') && !appEntrySource.includes('app-header') && !appEntrySource.includes('quick-toolbar') && !appEntrySource.includes('WorkflowStatusStrip'), 'App delegates workspace shell markup and pure stage-router prop grouping while preserving status and stage-router props');
 assert(appEntrySource.includes('useMotionSmithAppController') && appEntrySource.includes('<AppWorkspaceShell {...workspaceProps} />') && !appEntrySource.includes('useState') && !appEntrySource.includes('useRef') && !appEntrySource.includes('buildAppStageRouterProps'), 'App.tsx is a tiny composition entry while useMotionSmithAppController owns app orchestration');
-assert(appWorkspaceShellCommandSource.includes('<AppStageRouter') && appWorkspaceShellCommandSource.includes('<TopCommandBar') && appWorkspaceShellCommandSource.includes('commandHandlers={commandHandlers}') && appWorkspaceShellCommandSource.includes('<WorkflowRail') && appWorkspaceShellCommandSource.includes('<WorkflowStatusStrip {...workflowStatus}') && appWorkspaceShellCommandSource.includes('<GettingStartedDialog') && appWorkspaceShellCommandSource.includes('<ShortcutHelpDialog') && appWorkspaceShellCommandSource.includes('<AboutDialog') && appWorkspaceShellCommandSource.includes('<MechanismRecommendationSheet') && appWorkspaceShellCommandSource.includes('onApply={onApplyRecommendation}') && appWorkspaceShellCommandSource.includes('<TrackingModal') && appWorkspaceShellCommandSource.includes('onTransfer={onTransferTracking}'), 'AppWorkspaceShell preserves command, status, modal, recommendation, and tracking prop wiring');
+assert(appWorkspaceShellCommandSource.includes('<AppStageRouter') && appWorkspaceShellCommandSource.includes('<TopCommandBar') && appWorkspaceShellCommandSource.includes('commandHandlers={commandHandlers}') && appWorkspaceShellCommandSource.includes('<WorkflowRail') && appWorkspaceShellCommandSource.includes('<WorkflowStatusStrip {...workflowStatus}') && appWorkspaceShellCommandSource.includes('<GettingStartedDialog') && appWorkspaceShellCommandSource.includes('<ShortcutHelpDialog') && appWorkspaceShellCommandSource.includes('<AboutDialog') && !appWorkspaceShellCommandSource.includes('<MechanismRecommendationSheet') && appWorkspaceShellCommandSource.includes('<TrackingModal') && appWorkspaceShellCommandSource.includes('onTransfer={onTransferTracking}'), 'AppWorkspaceShell preserves command, status, global modal, and tracking wiring without owning Design-local recommendation state');
+assert(!indexEntrySource.includes('flushSync') && indexEntrySource.includes('window.requestAnimationFrame(releaseBootLoader)'), 'startup yields the first React commit instead of synchronously flushing the entire workspace');
+assert(appWorkspaceShellCommandSource.includes('suspendStageContent={showGettingStarted}') && !classroomStageModulesSource.includes('lazy(') && classroomStageModulesSource.includes('if (!pathModule) throw loadPath()') && classroomStageModulesSource.includes('return <Component {...props} />') && classroomStageModulesSource.includes('loadCharacterStage') && classroomStageModulesSource.includes('preloadNextClassroomStage') && classroomStageModulesSource.includes('case "path"') && classroomStageModulesSource.includes('characterPromise = undefined') && classroomStageModulesSource.includes('foundryPromise = undefined') && classroomStageModulesSource.includes('pathPromise = undefined') && !appStageRouterCommandSource.includes('import { CharacterSelection }'), 'Getting Started keeps hidden WebGL unmounted while stable Suspense stage adapters warm only the likely next stage and clear rejected preload promises for an in-session retry');
+assert(deferredThreePuppetPreviewSource.includes('import("./ThreePuppetPreview")') && deferredThreePuppetPreviewSource.includes('preloadThreePuppetPreview().then(() => {') && deferredThreePuppetPreviewSource.includes('setLoadState("failed")') && deferredThreePuppetPreviewSource.includes('setLoadAttempt') && deferredThreePuppetPreviewSource.includes('data-preview-load-state') && deferredThreePuppetPreviewSource.includes('window.requestAnimationFrame') && deferredThreePuppetPreviewSource.includes('<LazyThreePuppetPreview') && !deferredThreePuppetPreviewSource.includes('loadedThreePuppetPreview') && appStageRouterCommandSource.includes('void loadCharacterStage()') && characterSelectionCommandSource.includes('<DeferredThreePuppetPreview'), 'Character exposes an in-session Three chunk retry, waits for module resolution before its two-frame mount, and keeps one stable lazy viewport identity across project updates');
+assert(deferredThreeFoundryPreviewSource.includes('import("./ThreeFoundryPreview")') && deferredThreeFoundryPreviewSource.includes('preloadThreeFoundryPreview().then(() => {') && deferredThreeFoundryPreviewSource.includes('setLoadState("failed")') && deferredThreeFoundryPreviewSource.includes('setLoadAttempt') && deferredThreeFoundryPreviewSource.includes('data-preview-load-state') && deferredThreeFoundryPreviewSource.includes('window.requestAnimationFrame') && deferredThreeFoundryPreviewSource.includes('startTransition') && deferredThreeFoundryPreviewSource.includes('<LazyThreeFoundryPreview') && !deferredThreeFoundryPreviewSource.includes('loadedThreeFoundryPreview'), 'Foundry-backed stages expose an in-session Three chunk retry, paint controls first, and mount only after module resolution without swapping the lazy component identity after load');
+assert(appStageRouterCommandSource.includes('preloadThreeFoundryPreview') && appStageRouterCommandSource.includes('requestIdleCallback') && appStageRouterCommandSource.includes('mountedStage === "character" || mountedStage === "path"'), 'each stage keeps its interaction window while the small Path/Foundry adapters and renderer warm only during post-project idle time');
+assert(appWorkspaceShellCommandSource.includes('const TrackingModal = lazy') && appWorkspaceShellCommandSource.includes('{showTracking && ('), 'Trace media code stays out of the classroom shell until Path requests it');
 assert(appWorkspaceShellCommandSource.includes('data-testid="header-home"') && appWorkspaceShellCommandSource.includes('onClick={onHome}') && workflowRailCommandSource.includes('data-testid="rail-home"') && workflowRailCommandSource.includes('onClick={onHome}') && appControllerSource.includes('const openHome = ()') && appControllerSource.includes('setStage("character")') && appControllerSource.includes('setShowGettingStarted(true)'), 'Home controls return to Character and reopen Getting Started without replacing ProjectState');
 assert(appShellCommandSource.includes("export { GettingStartedDialog") && gettingStartedDialogCommandSource.includes('export const GettingStartedDialog') && gettingStartedDialogCommandSource.includes('data-testid="getting-started-dialog"') && appWorkspaceShellCommandSource.includes('<GettingStartedDialog'), 'Getting Started dialog is an extracted shell leaf while preserving workspace mount wiring');
 assert(!appShellCommandSource.includes('<') && !appShellCommandSource.includes('useState') && appShellCommandSource.includes("export { WorkflowRail") && appShellCommandSource.includes("export { TopCommandBar") && appShellCommandSource.includes("export { WorkspacePlayerDock") && appShellCommandSource.includes("export { SHARED_PLAYBACK_STAGES, STAGES"), 'AppShell is a compatibility re-export barrel, not a JSX/state owner');
-assert(onnxCachePillCommandSource.includes('data-testid="onnx-cache-status"') && workflowRailCommandSource.includes('data-testid="workspace-steps"') && topCommandBarCommandSource.includes('data-testid="top-command-bar"') && shellDialogsCommandSource.includes('data-testid="shortcut-help-dialog"') && shellDialogsCommandSource.includes('data-testid="about-dialog"') && canvasZoomToolbarCommandSource.includes('data-testid="canvas-zoom-readout"') && workspacePlayerDockCommandSource.includes('data-testid="workspace-player-dock"') && workspacePlayerDockCommandSource.includes('data-testid="workspace-player-drag-handle"') && workflowStatusStripCommandSource.includes('data-testid="workflow-status-strip"') && workflowStagesCommandSource.includes("id: 'assembly'"), 'extracted shell leaves preserve existing test ids and workflow metadata');
+assert(workflowRailCommandSource.includes('data-testid="workspace-steps"') && topCommandBarCommandSource.includes('data-testid="top-command-bar"') && shellDialogsCommandSource.includes('data-testid="shortcut-help-dialog"') && shellDialogsCommandSource.includes('data-testid="about-dialog"') && canvasZoomToolbarCommandSource.includes('data-testid="canvas-zoom-readout"') && workspacePlayerDockCommandSource.includes('data-testid="workspace-player-dock"') && workspacePlayerDockCommandSource.includes('data-testid="workspace-player-drag-handle"') && workflowStatusStripCommandSource.includes('data-testid="workflow-status-strip"') && workflowStagesCommandSource.includes("id: 'assembly'"), 'extracted shell leaves preserve existing test ids and workflow metadata');
 for (const forbiddenShellBoundary of ['validateForFabrication', 'applyProjectAction', 'ProjectAction', 'dispatch(', 'setProject(']) {
   assert(!appWorkspaceShellCommandSource.includes(forbiddenShellBoundary), `AppWorkspaceShell must stay presentation-only and exclude ${forbiddenShellBoundary}`);
 }
@@ -532,7 +553,6 @@ const visibleUiSource = [
   'components/TrackingModal.tsx',
   'components/AppShell.tsx',
   'components/shell/GettingStartedDialog.tsx',
-  'components/shell/OnnxCacheStatusPill.tsx',
   'components/shell/WorkflowRail.tsx',
   'components/shell/TopCommandBar.tsx',
   'components/shell/ShellDialogs.tsx',
@@ -629,9 +649,8 @@ assert(!visibleUiSource.includes('CameraCaptureDialog'), 'browser hardware camer
 assert(!visibleUiSource.includes('getUserMedia'), 'browser hardware camera capture API is not used by the app UI');
 assert(existsSync(join(process.cwd(), 'public', 'fonts', 'manrope-800-latin.woff2')), 'Manrope splash font is self-hosted instead of loaded from a runtime CDN');
 assert(existsSync(join(process.cwd(), 'resources', 'icons', 'AppIcon.png')) && existsSync(join(process.cwd(), 'resources', 'icons', 'AppIcon.icns')), 'canonical MotionSmith icon assets live under resources/icons');
-assert(readFileSync(join(process.cwd(), 'components', 'shell', 'WorkflowRail.tsx'), 'utf8').includes("../../resources/icons/AppIcon.png?url"), 'workflow rail uses the canonical resources icon');
-assert(readFileSync(join(process.cwd(), 'components', 'AppWorkspaceShell.tsx'), 'utf8').includes("../resources/icons/AppIcon.png?url"), 'top app bar uses the canonical resources icon');
-assert(!readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8').includes('src-tauri/icons/icon.png'), 'welcome splash does not reuse the old Tauri grid icon path');
+assert(readFileSync(join(process.cwd(), 'components', 'shell', 'WorkflowRail.tsx'), 'utf8').includes("../../src-tauri/icons/icon.png?url"), 'workflow rail uses the 256px MotionSmith delivery icon');
+assert(readFileSync(join(process.cwd(), 'components', 'AppWorkspaceShell.tsx'), 'utf8').includes("../src-tauri/icons/icon.png?url"), 'top app bar uses the 256px MotionSmith delivery icon');
 assert(!readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8').includes('<svg className="motionsmith-logo-mark"'), 'welcome splash does not keep an inline dummy logo SVG');
 assert(readFileSync(join(process.cwd(), 'index.html'), 'utf8').includes("font-family: 'Manrope'") && readFileSync(join(process.cwd(), 'index.html'), 'utf8').includes("%BASE_URL%fonts/manrope-800-latin.woff2"), 'welcome splash uses a base-aware local Manrope wordmark font');
 [
@@ -673,7 +692,8 @@ assert(readFileSync(join(process.cwd(), 'index.html'), 'utf8').includes("font-fa
   'Feasibility:',
   'Path Preview',
   'One registry drives the menu bar',
-  'Cache ONNX model for faster image imports',
+  'Create from image',
+  'Get AI',
   'Static web workbench',
   'scene units from target to nearest board hole',
   'Scrub the mechanism once before cutting extra copies',
@@ -727,6 +747,11 @@ const rapierProbe = await runRapierFrictionProbe({ frictionCoefficient: 0.74, st
 const physicsKernelSource = readFileSync(join(process.cwd(), 'utils', 'physicsKernel.ts'), 'utf8');
 const dockerfileText = readFileSync(join(process.cwd(), 'Dockerfile'), 'utf8');
 const deployWorkflowText = readFileSync(join(process.cwd(), '.github', 'workflows', 'deploy.yml'), 'utf8');
+const ciWorkflowText = readFileSync(join(process.cwd(), '.github', 'workflows', 'ci.yml'), 'utf8');
+const workflowBrowserTestText = readFileSync(join(process.cwd(), 'tests', 'browser', 'workflow.spec.ts'), 'utf8');
+const performanceWorkflowText = readFileSync(join(process.cwd(), '.github', 'workflows', 'performance-audit.yml'), 'utf8');
+const bundleBudgetSource = readFileSync(join(process.cwd(), 'scripts', 'check-browser-bundle.mjs'), 'utf8');
+const chromebookAuditDoc = readFileSync(join(process.cwd(), 'docs', 'chromebook-feature-audit.md'), 'utf8');
 const cargoTomlText = readFileSync(join(process.cwd(), 'src-tauri', 'Cargo.toml'), 'utf8');
 const cargoLockText = readFileSync(join(process.cwd(), 'src-tauri', 'Cargo.lock'), 'utf8');
 const tauriConfig = JSON.parse(readFileSync(join(process.cwd(), 'src-tauri', 'tauri.conf.json'), 'utf8'));
@@ -739,20 +764,26 @@ assert(playwrightConfigText.includes('MAX_BROWSER_WORKERS'), 'browser worker def
 assert(playwrightConfigText.includes('Number.isInteger'), 'browser worker override validates positive integer input');
 assert(playwrightConfigText.includes('PLAYWRIGHT_SERVER') && playwrightConfigText.includes('preview'), 'browser tests can run against production preview without Vite HMR noise');
 assert(playwrightConfigText.includes('delete process.env.NO_COLOR') && playwrightConfigText.includes('env -u NO_COLOR'), 'Playwright normalizes conflicting FORCE_COLOR/NO_COLOR env to avoid worker/webserver warning spam');
-assert.equal(packageJson.version, '0.0.12', 'release version is bumped for the GitHub Pages redeploy');
+assert.equal(packageJson.version, '0.0.13', 'release version advances without moving the existing v0.0.12 tag');
 assert.equal(tauriConfig.version, packageJson.version, 'Tauri config version stays aligned with package.json');
 assert(viteConfigText.includes('__APP_VERSION__') && viteConfigText.includes('packageVersion'), 'Vite exposes package.json version to the browser UI');
 assert.deepEqual(tauriConfig.bundle.icon, ['icons/icon.png', 'icons/icon.ico', 'icons/icon.icns'], 'Tauri bundle references the tracked MotionSmith png, ico, and icns icons');
 assert(cargoTomlText.includes(`version = "${packageJson.version}"`), 'Cargo.toml version stays aligned with package.json');
 assert(cargoLockText.includes('name = "motionsmith"') && cargoLockText.includes(`version = "${packageJson.version}"`), 'Cargo.lock MotionSmith package version stays aligned with package.json');
 assert.equal(packageJson.packageManager, 'bun@1.3.14', 'Bun is the canonical package manager');
-assert.equal(packageJson.scripts['test:contracts'], 'bun tests/project-contract.test.ts', 'contract tests run directly through Bun without noisy temporary bundling');
+assert.equal(packageJson.scripts['test:contracts'], 'bun tests/project-contract.test.ts && bun tests/assembly-guide-model.test.ts && bun tests/no-image-recognition-runtime.test.ts && bun tests/b695-blueprint.test.ts && bun tests/b695-fit.test.ts && bun tests/blueprint-package-worker.test.ts && bun tests/autosave-recovery-worker.test.ts && bun tests/four-bar-fit-retention.test.ts && bun tests/foundry-handle-gesture.test.ts && bun tests/mechanism-fit-worker.test.ts && bun tests/mechanism-recommendation-worker.test.ts && bun tests/mechanism-optimizer-worker.test.ts && bun tests/project-import-worker.test.ts && bun tests/scene-object-image-worker.test.ts && bun tests/tracking-media-policy.test.ts && bun tests/chromebook-audit-contract.test.ts && bun tests/render-performance-policy.test.ts && bun tests/interactive-sampling.test.ts && bun tests/path-gesture-draft.test.ts && bun tests/automata-scene-runtime.test.ts && bun tests/three-resource-retention.test.ts && bun tests/cadenced-playback-sampler.test.ts', 'contract tests include cold autosave recovery, image-recognition exclusion, deterministic Assembly, Blueprint/export, fit, worker, bounded import and artwork, media-memory, Chromebook, render-policy, Path/Foundry gesture-draft, sampling, and retention gates');
+assert.equal(packageJson.scripts['test:all'], 'bun scripts/run-unit-tests.mjs', 'release verification uses the checked deterministic unit-test manifest');
+assert.equal(packageJson.scripts['test:bundle-budget'], 'bun scripts/check-browser-bundle.mjs', 'bundle budget runs from the checked production dist');
+assert(bundleBudgetSource.includes('CORE_JS_GZIP_LIMIT_BYTES = 450_000'), 'core JavaScript gzip budget stays at 450 KB');
+assert(bundleBudgetSource.includes('SHELL_COMPRESSED_LIMIT_BYTES = 1_500_000'), 'initial shell compressed budget stays at 1.5 MB');
+assert(bundleBudgetSource.includes("imageRecognitionRuntime: 'absent'"), 'bundle evidence states that the image-recognition runtime is absent');
 assert.equal(packageJson.dependencies[PHYSICS_KERNEL_IMPORT], '^0.19.3', 'Rapier 3D compatibility WASM kernel is installed behind the physics subsystem boundary');
 assert(!packageJson.dependencies['@react-three/fiber'] && !packageJson.dependencies['@react-three/rapier'] && !packageJson.dependencies['babylonjs'], 'renderer stack avoids extra scene frameworks while the imperative Three boundary is sufficient');
-assert.equal(packageJson.scripts.build, 'tsc && vite build', 'browser build keeps Vite as the bundler for Rapier/Vite chunk handling');
+assert.equal(packageJson.scripts.build, 'tsc && bun scripts/check-no-image-recognition.mjs --source && vite build && bun scripts/check-no-image-recognition.mjs --dist', 'browser build keeps Vite for Rapier and hard-fails if image recognition returns');
 assert(!Object.values(packageJson.scripts).some(script => String(script).includes('bun build')), 'browser scripts do not use Bun JS bundling for the Rapier runtime');
 assert(physicsKernelSource.includes("import('@dimforge/rapier3d-compat')"), 'Rapier kernel uses a literal dynamic import so Vite emits a lazy Rapier chunk');
 assert(!physicsKernelSource.includes('import(PHYSICS_KERNEL_IMPORT)'), 'Rapier kernel does not use a variable dynamic import that browsers cannot resolve after build');
+assert(physicsKernelSource.includes('rapierModulePromise = null') && physicsKernelSource.includes('.catch(error =>'), 'a transient Rapier download or initialization failure remains retryable in the same session');
 assert.equal(physicsKernel.renderStack, PHYSICS_RENDER_STACK, 'physics capability keeps the imperative Three/WebGL2 renderer as the high-performance viewport stack');
 assert.equal(physicsKernel.physicsKernel, PHYSICS_KERNEL_ENGINE, 'physics capability advertises Rapier as the contact/friction solver');
 assert.equal(physicsKernel.updatePolicy, PHYSICS_UPDATE_POLICY, 'physics capability keeps mechanism kinematics authoritative while using Rapier for contact validation');
@@ -773,11 +804,26 @@ assert(physicsKernelSource.includes('RAPIER_INIT_DEPRECATION_WARNING'), 'Rapier 
 assert(physicsKernelSource.includes('args.length === 1 && args[0] === RAPIER_INIT_DEPRECATION_WARNING'), 'Rapier init filters only the exact upstream deprecation warning');
 assert(physicsKernelSource.includes('finally') && physicsKernelSource.includes('console.warn = warn'), 'Rapier init restores console.warn after the scoped compatibility filter');
 assert(deployWorkflowText.includes('oven-sh/setup-bun@v2') && deployWorkflowText.includes('bun install --frozen-lockfile') && deployWorkflowText.includes('bun run build'), 'GitHub Pages workflow uses Bun install and build');
-assert(deployWorkflowText.includes('lfs: true') && deployWorkflowText.includes('git lfs pull --include="public/onnx/pose_model.onnx"'), 'GitHub Pages workflow fetches real ONNX bytes from Git LFS before build');
-assert(deployWorkflowText.includes('Check ONNX LFS asset') && deployWorkflowText.includes('Check built ONNX asset') && deployWorkflowText.includes('version https://git-lfs'), 'GitHub Pages workflow rejects Git LFS pointer files before upload');
+assert(deployWorkflowText.includes('bun run test:all'), 'GitHub Pages runs every checked unit and contract test before artifact creation');
+assert(deployWorkflowText.includes('bun run build:e2e') && deployWorkflowText.includes('tests/browser/webgl-recovery.spec.ts'), 'GitHub Pages runs focused production-preview and WebGL recovery checks before artifact creation');
+assert(deployWorkflowText.includes('bun run test:bundle-budget'), 'GitHub Pages enforces the production shell and core JavaScript budgets');
+assert(deployWorkflowText.includes('Check classroom build exclusions') && deployWorkflowText.includes('bun run test:no-image-recognition'), 'GitHub Pages verifies that image-recognition assets cannot be uploaded');
+assert(!deployWorkflowText.includes('git lfs') && !deployWorkflowText.includes('pose_model.onnx'), 'GitHub Pages no longer fetches an image-recognition model');
 assert(deployWorkflowText.includes('tags:') && deployWorkflowText.includes('v*.*.*') && !deployWorkflowText.includes('branches:'), 'GitHub Pages workflow deploys only from version tags');
 assert(deployWorkflowText.includes('test "v${VERSION}" = "${GITHUB_REF_NAME}"'), 'GitHub Pages workflow requires the tag to match package.json version');
 assert(deployWorkflowText.includes('VITE_BASE_PATH: /ms/'), 'GitHub Pages workflow builds assets under /ms/');
+assert(ciWorkflowText.includes('pull_request:') && ciWorkflowText.includes('bun run test:contracts') && ciWorkflowText.includes('bun run build:e2e'), 'pull requests run contracts and the production-preview diagnostics build');
+assert(ciWorkflowText.includes('PLAYWRIGHT_WORKERS: 3') && ciWorkflowText.includes('tests/browser/webgl-recovery.spec.ts') && ciWorkflowText.includes('Run isolated interaction checks') && ciWorkflowText.includes('PLAYWRIGHT_WORKERS: 1') && ciWorkflowText.includes('Recommendation worker and job stay unloaded|Design Fit runs'), 'pull-request browser coverage keeps functional smoke bounded in parallel while isolating latency-sensitive interactions from shared SwiftShader contention');
+assert(ciWorkflowText.includes('WebGL unavailable') && ciWorkflowText.includes('Foundry restores the same scene'), 'pull-request filtering executes both WebGL recovery checks instead of only naming their spec');
+assert(ciWorkflowText.includes('Recommendation worker and job stay unloaded') && deployWorkflowText.includes('Recommendation worker and job stay unloaded') && workflowBrowserTestText.includes('Recommendation worker and job stay unloaded until explicit request'), 'PR and tag workflows execute the recommendation lazy-worker browser contract by its current test title');
+assert(ciWorkflowText.includes('bun run test:bundle-budget'), 'pull requests enforce the production shell and core JavaScript budgets');
+assert(performanceWorkflowText.includes('workflow_dispatch:') && performanceWorkflowText.includes('schedule:'), 'performance audits are available manually and on a nightly schedule');
+assert(performanceWorkflowText.includes('bun run test:chromebook-audit') && performanceWorkflowText.includes('bun run test:chromebook-audit:full') && !performanceWorkflowText.includes('real-ai'), 'performance workflow keeps short and full non-AI scopes explicit');
+assert(!ciWorkflowText.includes('deploy-pages') && !performanceWorkflowText.includes('deploy-pages'), 'verification workflows cannot deploy GitHub Pages');
+assert(docsMap.includes('chromebook-feature-audit.md'), 'docs map registers the current Chromebook feature evidence');
+assert(chromebookAuditDoc.includes('Actual Chromebook tested: no') && chromebookAuditDoc.includes('6× CPU emulation'), 'Chromebook evidence does not claim untested physical hardware');
+assert(chromebookAuditDoc.includes('does not establish ten-minute heap stabilization') && chromebookAuditDoc.includes('No physical Chromebook was tested'), 'short memory evidence keeps the physical-device and ten-minute boundaries explicit');
+assert(chromebookAuditDoc.includes('393,510 compressed bytes') && chromebookAuditDoc.includes('454,568 compressed bytes'), 'audit document records the checked production bundle evidence');
 assert(dockerfileText.includes('FROM oven/bun:1.3.14-alpine') && dockerfileText.includes('bun install --frozen-lockfile') && dockerfileText.includes('\"preview\"'), 'Docker image uses Bun install, build, and preview runtime');
 assert.equal(tauriConfig.build.beforeDevCommand, 'bun run dev', 'Tauri dev hook uses Bun');
 assert.equal(tauriConfig.build.beforeBuildCommand, 'bun run build:tauri-frontend', 'Tauri build hook uses Bun');
@@ -824,7 +870,7 @@ const contextHelpConsumerSource = [
   'components/stages/assembly/AssemblyControlPanel.tsx',
   'components/stages/options/Options.tsx'
 ].map(file => readFileSync(join(process.cwd(), file), 'utf8')).join('\n');
-assert(['character.createFromImage', 'character.bodySides', 'path.draw', 'viewer.layers', 'blueprint.boardPreview', 'assembly.steps', 'options.fabricationExport'].every(helpId => contextHelpConsumerSource.includes(helpId)), 'high-friction UI controls attach contextual help through shared help ids');
+assert(['character.loadCharacterFile', 'character.bodySides', 'path.draw', 'viewer.layers', 'blueprint.boardPreview', 'assembly.steps', 'options.fabricationExport'].every(helpId => contextHelpConsumerSource.includes(helpId)), 'high-friction UI controls attach contextual help through shared help ids');
 assert(agentsContract.includes('3D physics'), 'AGENTS.md codifies the 3D physics simulation direction');
 assert(agentsContract.includes('fabrication'), 'AGENTS.md codifies fabrication-oriented mechanisms');
 assert(agentsContract.includes('canonical `ProjectState`'), 'AGENTS.md requires one canonical ProjectState across workflows');
@@ -989,18 +1035,20 @@ const wavingLessonGround = calculateLinkage(wavingLessonMechanism, 0);
 assert(sceneToBoardRaw({ x: wavingLessonMechanism.anchorX ?? Number.NaN, y: wavingLessonMechanism.anchorY ?? Number.NaN }, classroomLesson.settings.physicalKit).valid, 'waving-arm chooses a board-hole main pivot');
 assert(sceneToBoardRaw(wavingLessonGround.p2, classroomLesson.settings.physicalKit).valid, 'waving-arm chooses a board-hole second fixed pivot');
 assert([0, 90, 180, 270].includes(((wavingLessonMechanism.groundAngle ?? 0) % 360 + 360) % 360), 'waving-arm keeps the ground link on a fabricatable cardinal board direction');
-assert.equal(wavingLessonMechanism.fabricationMetadata?.pathFit?.status, 'rejected', 'waving-arm does not claim a fabrication fit when the authored path misses hard tolerance');
-assert.equal(wavingLessonMechanism.fabricationMetadata?.pathFit?.outputTraceId, undefined, 'rejected waving-arm fit does not invent a physical output trace');
-assert.equal(classroomLesson.mechanisms[0].generatedPath, undefined, 'rejected waving-arm fit does not expose an arbitrary generated target path');
+assert.equal(sceneToBoardRaw({ x: wavingLessonMechanism.anchorX!, y: wavingLessonMechanism.anchorY! }, classroomLesson.settings.physicalKit).label, 'H13', 'waving-arm uses the certified H13 input pivot');
+assert.equal(sceneToBoardRaw(wavingLessonGround.p2, classroomLesson.settings.physicalKit).label, 'H5', 'waving-arm uses the certified H5 ground pivot');
+assert.equal(wavingLessonMechanism.fabricationMetadata?.pathFit?.status, 'fit', 'waving-arm ships a fabrication-valid physical output path');
+assert.equal(wavingLessonMechanism.fabricationMetadata?.pathFit?.outputTraceId, 'C', 'waving-arm binds the hand to the physical output pin');
+assert.equal(classroomLesson.mechanisms[0].generatedPath?.length, 96, 'waving-arm stores one bounded physical sweep instead of fitting at lesson-open time');
 const classroomLessonRoundTrip = loadProjectSnapshot(JSON.parse(serializeProject(classroomLesson)));
-assert.equal(classroomLessonRoundTrip.mechanisms[0].fabricationMetadata?.pathFit?.status, 'rejected', 'lesson load preserves the explicit rejected fit state');
-assert(classroomLessonRoundTrip.mechanisms[0].warnings?.includes('No fabrication-valid path fit.'), 'lesson load preserves the hard path-fit blocker');
-const rejectedFitReducerReplay = applyProjectAction(classroomLesson, {
+assert.equal(classroomLessonRoundTrip.mechanisms[0].fabricationMetadata?.pathFit?.status, 'fit', 'lesson load preserves the certified physical fit');
+assert.deepEqual(classroomLessonRoundTrip.mechanisms[0].warnings, [], 'lesson load preserves a warning-free certified fit');
+const fittedReducerReplay = applyProjectAction(classroomLesson, {
   type: 'upsert_mechanism',
   mechanism: classroomLesson.mechanisms[0],
 });
-assert.equal(rejectedFitReducerReplay.mechanisms[0].fabricationMetadata?.pathFit?.status, 'rejected', 'ProjectState upsert preserves a deliberate rejected fit even without a generated trace');
-const rejectedFitPathEdit = applyProjectAction(classroomLesson, {
+assert.equal(fittedReducerReplay.mechanisms[0].fabricationMetadata?.pathFit?.status, 'fit', 'ProjectState upsert preserves the certified fit and generated trace');
+const fittedPathEdit = applyProjectAction(classroomLesson, {
   type: 'upsert_path',
   path: {
     ...classroomLesson.paths['path-right-arm'],
@@ -1009,21 +1057,71 @@ const rejectedFitPathEdit = applyProjectAction(classroomLesson, {
     ),
   },
 });
-assert.equal(rejectedFitPathEdit.mechanisms[0].fabricationMetadata?.pathFit?.status, 'unfitted', 'editing the authored path invalidates the previous rejected fit metadata');
+assert.equal(fittedPathEdit.mechanisms[0].fabricationMetadata?.pathFit?.status, 'unfitted', 'editing the authored path invalidates the previous certified fit metadata');
+const wavingTraceSet = generateFoundryPlaybackPointTraces(wavingLessonMechanism, 96);
+const wavingBoardHalfSpan = ((classroomLesson.settings.physicalKit.boardCells - 1) / 2)
+  * classroomLesson.settings.physicalKit.gridPitchMm
+  * SCENE_PX_PER_MM;
+assert.equal(wavingTraceSet.percentValid, 1, 'waving-arm remains valid through the complete input rotation');
+assert(
+  wavingTraceSet.traces.flatMap(trace => trace.points).every(point =>
+    Math.abs(point.x) <= wavingBoardHalfSpan + 1e-6 && Math.abs(point.y) <= wavingBoardHalfSpan + 1e-6
+  ),
+  'waving-arm keeps every moving pin inside the 15x15 board for the complete sweep',
+);
+for (const phase of [0, 0.37, 1.2, 3.14, 5.9]) {
+  const state = calculateLinkage(wavingLessonMechanism, phase);
+  const physicalTarget = mechanismTracePointForState(
+    wavingLessonMechanism.type,
+    state,
+    wavingLessonMechanism.fabricationMetadata?.pathFit?.outputTraceId,
+  );
+  const pathTarget = pointOnProjectPath(classroomLesson.paths['path-right-arm'], phase);
+  const preview = motionPreviewForProject(classroomLesson, [wavingLessonMechanism], phase);
+  assert(state.isValid && physicalTarget && preview.target, `waving-arm has a physical Design target at phase ${phase}`);
+  assert(Math.hypot(physicalTarget!.x - pathTarget.x, physicalTarget!.y - pathTarget.y) < 0.1, `waving-arm authored path follows the output pin at phase ${phase}`);
+  assert(Math.hypot(preview.target!.x - physicalTarget!.x, preview.target!.y - physicalTarget!.y) < 1e-9, `waving-arm target binding follows the mechanism at phase ${phase}`);
+  assert(Object.keys(preview.parts).length >= 3, `waving-arm moves the complete bound arm chain at phase ${phase}`);
+}
+const rejectedPreviewMechanism: MechanismConfig = {
+  ...wavingLessonMechanism,
+  fabricationMetadata: {
+    ...wavingLessonMechanism.fabricationMetadata,
+    pathFit: {
+      ...wavingLessonMechanism.fabricationMetadata!.pathFit!,
+      status: 'rejected',
+    },
+  },
+  warnings: ['No fabrication-valid path fit.'],
+};
+const rejectedPreviewProject = { ...classroomLesson, mechanisms: [rejectedPreviewMechanism] };
+const rejectedPhysicalState = calculateLinkage(rejectedPreviewMechanism, 0.75);
+const rejectedPhysicalTarget = mechanismTracePointForState(
+  rejectedPreviewMechanism.type,
+  rejectedPhysicalState,
+  rejectedPreviewMechanism.fabricationMetadata?.pathFit?.outputTraceId,
+);
+assert(Math.hypot(rejectedPhysicalTarget.x - rejectedPhysicalState.j2.x, rejectedPhysicalTarget.y - rejectedPhysicalState.j2.y) < 1e-9, 'missing fit metadata falls back to the visible primary output pin instead of an arbitrary coupler point');
+const rejectedDesignPreview = motionPreviewForProject(rejectedPreviewProject, [rejectedPreviewMechanism], 0.75);
+assert.equal(mechanismPathFitIsUsable(rejectedPreviewProject, rejectedPreviewMechanism), false, 'rejected path fit remains blocked from fabrication');
+assert(rejectedDesignPreview.warnings?.[rejectedPreviewMechanism.id]?.includes('No fabrication-valid path fit.'), 'rejected path fit remains visible as a Design warning');
+assert(rejectedDesignPreview.target && rejectedPhysicalTarget && Math.hypot(rejectedDesignPreview.target.x - rejectedPhysicalTarget.x, rejectedDesignPreview.target.y - rejectedPhysicalTarget.y) < 1e-9, 'fit warnings do not disconnect the bound character target from the physical mechanism');
 const recommendationAuditProject: ProjectState = { ...classroomLesson, mechanisms: [], selectedMechanismId: undefined };
 const wavingPathForRecommendations = recommendationAuditProject.paths['path-right-arm'];
 const wavingRecommendations = buildMechanismRecommendations(recommendationAuditProject, recommendationAuditProject.parts[wavingPathForRecommendations.partId], wavingPathForRecommendations);
+assert(wavingRecommendations.every(option => isMechanismTypeEnabled(option.type)), 'recommendations contain only currently enabled linkage and gear mechanisms');
+assert(!wavingRecommendations.some(option => ['piston', 'cam', 'planetary_gear'].includes(option.type)), 'recommendations do not surface disabled mechanism combinations');
 const wavingFourBarRecommendation = wavingRecommendations.find(option => option.type === '4bar');
-assert(wavingFourBarRecommendation, 'recommendation audit keeps a four-bar card with an explicit fit blocker for the classroom hand-wave path');
-assert(wavingFourBarRecommendation!.fabricationErrors.some(error => error.includes('No fabrication-valid path fit.')), 'four-bar recommendation surfaces the hard path-fit blocker instead of hiding it');
-assert.equal(wavingFourBarRecommendation!.mechanism.fabricationMetadata?.pathFit?.status, 'rejected', 'four-bar recommendation records a rejected physical path-fit state');
-assert.equal(wavingFourBarRecommendation!.mechanism.fabricationMetadata?.pathFit?.outputTraceId, undefined, 'rejected four-bar recommendation does not select an output trace');
-assert(validateForFabrication({ ...recommendationAuditProject, mechanisms: [wavingFourBarRecommendation!.mechanism] }).errors.some(error => error.includes('No fabrication-valid path fit.')), 'four-bar recommendation remains blocked from export until the path fits');
+assert(wavingFourBarRecommendation, 'recommendation audit keeps a four-bar card for the certified classroom hand-wave path');
+assert.deepEqual(wavingFourBarRecommendation!.fabricationErrors, [], 'four-bar recommendation reuses the board-valid hand-wave path without a fit blocker');
+assert.equal(wavingFourBarRecommendation!.mechanism.fabricationMetadata?.pathFit?.status, 'fit', 'four-bar recommendation records a physical path-fit state');
+assert.equal(wavingFourBarRecommendation!.mechanism.fabricationMetadata?.pathFit?.outputTraceId, 'C', 'four-bar recommendation selects the physical output pin');
+assert.deepEqual(validateForFabrication({ ...recommendationAuditProject, mechanisms: [wavingFourBarRecommendation!.mechanism] }).errors, [], 'four-bar recommendation remains fabrication-ready');
 const occupiedAnchorRecommendations = buildMechanismRecommendations(classroomLesson, classroomLesson.parts[classroomLesson.selectedPartId!], classroomLesson.paths['path-right-arm']);
 const occupiedFourBarRecommendation = occupiedAnchorRecommendations.find(option => option.type === '4bar');
 assert.equal(occupiedFourBarRecommendation?.mechanism.targetPartId, 'right_arm_lower', 'recommendations retarget to the closest parent part when the hand anchor already has a driver');
 assert.equal(occupiedFourBarRecommendation?.mechanism.targetAnchorJointId, 'right_hand', 'recommendation retarget keeps the hand end-effector for IK motion');
-assert(validateForFabrication({ ...classroomLesson, mechanisms: [...classroomLesson.mechanisms, { ...occupiedFourBarRecommendation!.mechanism, id: 'recommendation-contract-4bar' }] }).errors.some(error => error.includes('No fabrication-valid path fit.')), 'retargeted recommendation preserves the path-fit blocker instead of exporting a mismatched motion');
+assert.deepEqual(validateForFabrication({ ...classroomLesson, mechanisms: [...classroomLesson.mechanisms, { ...occupiedFourBarRecommendation!.mechanism, id: 'recommendation-contract-4bar' }] }).errors, [], 'retargeted recommendation preserves the certified physical fit');
 const guidedChainReach = (project: ProjectState, jointIds: string[]) => {
   const skeleton = project.skeleton;
   assert(skeleton, 'guided project has skeleton');
@@ -1066,8 +1164,23 @@ assert.equal(walkingLegMechanism.type, '4bar', 'walking-leg guided theme creates
 assert.equal(walkingLegLesson.selectedPathId, 'path-right-foot-step', 'walking-leg guided theme creates an editable foot path');
 assert.equal(walkingLegLesson.paths['path-right-foot-step'].partId, 'right_foot_part', 'walking-leg drives the foot part instead of the lower leg plate');
 assert.equal(walkingLegMechanism.targetPartId, 'right_foot_part', 'walking-leg mechanism binds to the foot part instead of the lower leg plate');
-assert((walkingLegMechanism.anchorX ?? -Infinity) > Math.max(...walkingLegLesson.paths['path-right-foot-step'].points.map(point => point.x)), 'walking-leg keeps the linkage driver to the outside of the foot path');
-assert.equal(walkingLegMechanism.groundAngle, 180, 'walking-leg points the mechanism back toward the character from the outside');
+const walkingLegGround = calculateLinkage(walkingLegMechanism, 0);
+assert.equal(sceneToBoardRaw({ x: walkingLegMechanism.anchorX!, y: walkingLegMechanism.anchorY! }, walkingLegLesson.settings.physicalKit).label, 'F13', 'walking-leg uses the certified F13 input pivot');
+assert.equal(sceneToBoardRaw(walkingLegGround.p2, walkingLegLesson.settings.physicalKit).label, 'F5', 'walking-leg uses the certified F5 ground pivot');
+assert.equal(walkingLegMechanism.groundAngle, 90, 'walking-leg keeps its fixed pivots on one board column');
+assert.equal(walkingLegMechanism.fabricationMetadata?.pathFit?.status, 'fit', 'walking-leg ships a fabrication-valid physical output path');
+assert.equal(walkingLegMechanism.fabricationMetadata?.pathFit?.outputTraceId, 'C', 'walking-leg binds the foot to the physical output pin');
+const walkingTraceSet = generateFoundryPlaybackPointTraces(walkingLegMechanism, 96);
+const walkingBoardHalfSpan = ((walkingLegLesson.settings.physicalKit.boardCells - 1) / 2)
+  * walkingLegLesson.settings.physicalKit.gridPitchMm
+  * SCENE_PX_PER_MM;
+assert.equal(walkingTraceSet.percentValid, 1, 'walking-leg remains valid through the complete input rotation');
+assert(
+  walkingTraceSet.traces.flatMap(trace => trace.points).every(point =>
+    Math.abs(point.x) <= walkingBoardHalfSpan + 1e-6 && Math.abs(point.y) <= walkingBoardHalfSpan + 1e-6
+  ),
+  'walking-leg keeps every moving pin inside the 15x15 board for the complete sweep',
+);
 assertGuidedPathUsesReach(walkingLegLesson, 'path-right-foot-step', ['right_hip', 'right_knee', 'right_foot'], 0.7);
 const spinGearsLesson = createLessonProject('spin-gears');
 assert.equal(spinGearsLesson.mechanisms[0]?.type, 'gear', 'spin-gears guided theme creates a real gear mechanism baseline');
@@ -1186,12 +1299,18 @@ assert(Math.abs(scaledReplacement.paths['legacy-wave'].points[0].x - (coarsePrev
 assert.deepEqual(SANITIZE_MECHANISM_TYPES, [...ALL_MECHANISM_TYPES], 'import sanitizer accepts every low-level mechanism template including crank');
 const expectedReferenceAuthorableTypes: MechanismType[] = ['4bar', 'piston', 'cam', 'gear', 'gear_linkage', 'planetary_gear'];
 const expectedReferenceFoundryTypes: MechanismType[] = ['4bar', 'cam', 'gear', 'gear_linkage', 'planetary_gear'];
+const expectedEnabledMechanismTypes: MechanismType[] = ['4bar', 'gear', 'gear_linkage'];
 const unsupportedLegacyMechanismTypes: MechanismType[] = ['yoke', 'quick-return', 'rack-pinion', '5bar', '6bar'];
 assert.deepEqual(AUTHORABLE_MECHANISM_TYPES, expectedReferenceAuthorableTypes, 'authorable mechanism types are exactly export-ready mechanism-reference recipes');
 assert.deepEqual(REFERENCE_EXPORT_READY_TYPES, expectedReferenceAuthorableTypes, 'mechanism-reference export-ready types match the authoring contract');
 assert.deepEqual(OPTIMIZER_MECHANISM_TYPES, expectedReferenceAuthorableTypes, 'optimizer searches export-ready mechanism-reference templates only');
-assert.deepEqual(FOUNDRY_MECHANISM_TYPES, expectedReferenceFoundryTypes, 'Foundry exposes only visible mechanism-reference recipes');
-assert.deepEqual(REFERENCE_FOUNDRY_TYPES, expectedReferenceFoundryTypes, 'mechanism-reference Foundry-visible types match the gallery contract');
+assert.deepEqual(FOUNDRY_MECHANISM_TYPES, expectedReferenceFoundryTypes, 'Foundry-capable types preserve every fabrication-ready reference recipe');
+assert.deepEqual(REFERENCE_FOUNDRY_TYPES, expectedReferenceFoundryTypes, 'mechanism-reference Foundry-capable types preserve imported-project compatibility');
+assert.deepEqual(ENABLED_MECHANISM_TYPES, expectedEnabledMechanismTypes, 'new mechanism work is temporarily limited to linkage and gear families');
+assert.deepEqual(ENABLED_AUTHORABLE_MECHANISM_TYPES, expectedEnabledMechanismTypes, 'Design exposes only enabled linkage and gear templates');
+assert.deepEqual(ENABLED_FOUNDRY_MECHANISM_TYPES, expectedEnabledMechanismTypes, 'Foundry exposes only enabled linkage and gear templates');
+assert(expectedEnabledMechanismTypes.every(isMechanismTypeEnabled), 'the mechanism availability predicate accepts every enabled type');
+assert(['piston', 'cam', 'planetary_gear'].every(type => !isMechanismTypeEnabled(type as MechanismType)), 'disabled mechanism types stay out of new-work UI paths');
 assert(!AUTHORABLE_MECHANISM_TYPES.includes('crank'), 'bare crank stays a low-level driver, not a novice authoring template');
 assert.equal(REFERENCE_MECHANISM_RECIPES.piston.canonicalKey, 'slider_crank', 'piston maps to the mechanism-reference slider_crank recipe');
 unsupportedLegacyMechanismTypes.forEach(type => {
@@ -1560,8 +1679,8 @@ const goldenExportConfig = {
   mechanisms: goldenSample.mechanisms
 };
 const goldenMaster = {
-  project: serializeProject(stableProjectForGoldenMaster(goldenSample)),
-  lesson: serializeProject(stableProjectForGoldenMaster(goldenLesson)),
+  project: JSON.parse(serializeProject(stableProjectForGoldenMaster(goldenSample))),
+  lesson: JSON.parse(serializeProject(stableProjectForGoldenMaster(goldenLesson))),
   mechanismSnapshot: stableMechanismSnapshotForGoldenMaster(goldenSnapshot),
   allMechanismSnapshots: goldenAllMechanismSnapshots.map(stableMechanismSnapshotForGoldenMaster),
   sceneProjection: buildToonSceneProjection(goldenSample),
@@ -1574,8 +1693,8 @@ const goldenMaster = {
 assert.deepEqual(
   Object.fromEntries(Object.entries(goldenMaster).map(([key, value]) => [key, goldenMasterHash(value)])),
   {
-    project: '2b8b317121b8013563fb8478915e2596769ea9f17d121ba67698fc53366f813a',
-    lesson: 'b637062b9a6ebbe8d2756c2422f8780f466f1d26ce13616427b4c591cf13cabc',
+    project: '313706e17f200518b12a7870842f8cd411bda133f426ecae0a5a764a2f907f37',
+    lesson: '65ca58904c584e0241a0ee3685dc9153248b2630d56d3bcbe137f04026f40abd',
     mechanismSnapshot: '25f57f11023993ac2623d6863ee5528573befa68c3053ae4bfbb5b6e20db65a7',
     allMechanismSnapshots: '16a8a3b3c54f3352926b56a69ce65da46a027d993eb44556ba3705ab5ee18f09',
     sceneProjection: '84e51e7b708660831a8a7bb540fe9bea2f61807841f3e7dafe17c6fe44350dba',
@@ -2820,6 +2939,8 @@ const blueprintControlPanelText = readFileSync(join(process.cwd(), 'components',
 const blueprintDetailPanelText = readFileSync(join(process.cwd(), 'components', 'stages', 'blueprint', 'BlueprintDetailPanel.tsx'), 'utf8');
 const assemblyPlaybackText = readFileSync(join(process.cwd(), 'utils', 'assemblyPlayback.ts'), 'utf8');
 const threePreviewText = readFileSync(join(process.cwd(), 'components', 'ThreePuppetPreview.tsx'), 'utf8');
+const partArtMaterialText = readFileSync(join(process.cwd(), 'runtime', 'render', 'partArtMaterial.ts'), 'utf8');
+const puppetPartTopologyText = readFileSync(join(process.cwd(), 'runtime', 'render', 'puppetPartTopology.ts'), 'utf8');
 const exporterText = readFileSync(join(process.cwd(), 'utils', 'exporter.ts'), 'utf8');
 const physicsSessionText = readFileSync(join(process.cwd(), 'utils', 'physicsSession.ts'), 'utf8');
 const mechanismPreviewText = readFileSync(join(process.cwd(), 'utils', 'mechanismPreview.ts'), 'utf8');
@@ -2827,7 +2948,6 @@ const viewportText = readFileSync(join(process.cwd(), 'utils', 'viewport.ts'), '
 const viewer3dText = readFileSync(join(process.cwd(), 'utils', 'viewer3d.ts'), 'utf8');
 const foundryCameraText = readFileSync(join(process.cwd(), 'utils', 'foundryCamera.ts'), 'utf8');
 const mechanismRecommendationsText = readFileSync(join(process.cwd(), 'utils', 'mechanismRecommendations.ts'), 'utf8');
-const webOnnxText = readFileSync(join(process.cwd(), 'utils', 'webOnnx.ts'), 'utf8');
 const stageLayoutText = readFileSync(join(process.cwd(), 'components', 'stages', 'stageLayout.tsx'), 'utf8');
 const partInspectorText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'PartInspector.tsx'), 'utf8');
 const cutOutlineEditorText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CutOutlineEditorDialog.tsx'), 'utf8');
@@ -2838,10 +2958,27 @@ const characterSetupPanelText = readFileSync(join(process.cwd(), 'components', '
 const characterImportControlsText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CharacterImportControls.tsx'), 'utf8');
 const characterSelectionText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CharacterSelection.tsx'), 'utf8');
 const sceneObjectInspectorText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'SceneObjectInspector.tsx'), 'utf8');
-const sceneObjectImageText = readFileSync(join(process.cwd(), 'utils', 'sceneObjectImage.ts'), 'utf8');
+const sceneObjectImagePolicyText = readFileSync(join(process.cwd(), 'runtime', 'import', 'sceneObjectImagePolicy.ts'), 'utf8');
+const sceneObjectImageJobText = readFileSync(join(process.cwd(), 'runtime', 'import', 'sceneObjectImageJob.ts'), 'utf8');
+const sceneObjectImageWorkerClientText = readFileSync(join(process.cwd(), 'runtime', 'import', 'sceneObjectImageWorkerClient.ts'), 'utf8');
+const sceneObjectImageWorkerText = readFileSync(join(process.cwd(), 'workers', 'sceneObjectImageWorker.ts'), 'utf8');
 const pathEditorText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'PathEditor.tsx'), 'utf8');
 const mechanismRecommendationSheetText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'MechanismRecommendationSheet.tsx'), 'utf8');
+const recommendationMechanismSketchText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'RecommendationMechanismSketch.tsx'), 'utf8');
+const mechanismRecommendationJobText = readFileSync(join(process.cwd(), 'runtime', 'recommendations', 'mechanismRecommendationJob.ts'), 'utf8');
+const mechanismRecommendationWorkerClientText = readFileSync(join(process.cwd(), 'runtime', 'recommendations', 'mechanismRecommendationWorkerClient.ts'), 'utf8');
+const mechanismRecommendationWorkerText = readFileSync(join(process.cwd(), 'workers', 'mechanismRecommendationWorker.ts'), 'utf8');
+const mechanismFitJobText = readFileSync(join(process.cwd(), 'runtime', 'fitting', 'mechanismFitJob.ts'), 'utf8');
+const mechanismFitWorkerClientText = readFileSync(join(process.cwd(), 'runtime', 'fitting', 'mechanismFitWorkerClient.ts'), 'utf8');
+const mechanismFitWorkerText = readFileSync(join(process.cwd(), 'workers', 'mechanismFitWorker.ts'), 'utf8');
+const mechanismOptimizerJobText = readFileSync(join(process.cwd(), 'runtime', 'optimizer', 'mechanismOptimizerJob.ts'), 'utf8');
+const mechanismOptimizerWorkerClientText = readFileSync(join(process.cwd(), 'runtime', 'optimizer', 'mechanismOptimizerWorkerClient.ts'), 'utf8');
+const mechanismOptimizerWorkerText = readFileSync(join(process.cwd(), 'workers', 'mechanismOptimizerWorker.ts'), 'utf8');
+const trackingMediaPolicyText = readFileSync(join(process.cwd(), 'runtime', 'media', 'trackingMediaPolicy.ts'), 'utf8');
+const gifFrameSessionText = readFileSync(join(process.cwd(), 'runtime', 'media', 'gifFrameSession.ts'), 'utf8');
+const gifFrameWorkerText = readFileSync(join(process.cwd(), 'workers', 'gifFrameWorker.ts'), 'utf8');
 const mechanismParametricEditorText = readFileSync(join(process.cwd(), 'components', 'stages', 'mechanism', 'MechanismParametricEditor.tsx'), 'utf8');
+const inspectorControlsText = readFileSync(join(process.cwd(), 'components', 'ui', 'InspectorControls.tsx'), 'utf8');
 const mechanismInspectorAnalysisText = readFileSync(join(process.cwd(), 'utils', 'mechanismInspectorAnalysis.ts'), 'utf8');
 const mechanismParamPolicyText = readFileSync(join(process.cwd(), 'components', 'stages', 'mechanism', 'mechanismParamPolicy.ts'), 'utf8');
 const pathCanvasPaneText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'PathCanvasPane.tsx'), 'utf8');
@@ -2857,6 +2994,8 @@ const motionText = readFileSync(join(process.cwd(), 'utils', 'motion.ts'), 'utf8
 const b695FrameTestText = readFileSync(join(process.cwd(), 'tests', 'b695-frame.test.ts'), 'utf8');
 const b695FitTestText = readFileSync(join(process.cwd(), 'tests', 'b695-fit.test.ts'), 'utf8');
 const blueprintModelRuntimeText = readFileSync(join(process.cwd(), 'runtime', 'blueprint', 'BlueprintModel.ts'), 'utf8');
+const blueprintPackageWorkerClientText = readFileSync(join(process.cwd(), 'runtime', 'blueprint', 'blueprintPackageWorkerClient.ts'), 'utf8');
+const blueprintPackageWorkerText = readFileSync(join(process.cwd(), 'workers', 'blueprintPackageWorker.ts'), 'utf8');
 const b695BlueprintTestText = readFileSync(join(process.cwd(), 'tests', 'b695-blueprint.test.ts'), 'utf8');
 const studyArtifactText = readFileSync(join(process.cwd(), 'infrastructure', 'study-final', 'artifact.ts'), 'utf8');
 const finalStudyHookText = readFileSync(join(process.cwd(), 'hooks', 'useFinalStudyArtifact.ts'), 'utf8');
@@ -2864,12 +3003,22 @@ const b695StudyTestText = readFileSync(join(process.cwd(), 'tests', 'b695-study.
 const modalInertHookText = readFileSync(join(process.cwd(), 'hooks', 'useModalInertEffect.ts'), 'utf8');
 const appPathActionsHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppPathActions.ts'), 'utf8');
 const appCharacterImportActionsHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppCharacterImportActions.ts'), 'utf8');
-const starterImageTemplatesText = readFileSync(join(process.cwd(), 'resources', 'starterImageTemplates.ts'), 'utf8');
-const appOnnxBootstrapText = readFileSync(join(process.cwd(), 'hooks', 'useAppOnnxBootstrap.ts'), 'utf8');
+const projectImportPolicyText = readFileSync(join(process.cwd(), 'runtime', 'import', 'projectImportPolicy.ts'), 'utf8');
+const projectImportWorkerClientText = readFileSync(join(process.cwd(), 'runtime', 'import', 'projectImportWorkerClient.ts'), 'utf8');
+const projectImportWorkerText = readFileSync(join(process.cwd(), 'workers', 'projectImportWorker.ts'), 'utf8');
+const packageLoaderText = readFileSync(join(process.cwd(), 'utils', 'packageLoader.ts'), 'utf8');
 const indexTsxText = readFileSync(join(process.cwd(), 'index.tsx'), 'utf8');
 const appAutosaveHookText = readFileSync(join(process.cwd(), 'hooks', 'useProjectAutosave.ts'), 'utf8');
+const coldAutosaveRecoveryHookText = readFileSync(join(process.cwd(), 'hooks', 'useColdAutosaveRecovery.ts'), 'utf8');
 const projectPersistenceText = readFileSync(join(process.cwd(), 'utils', 'projectPersistence.ts'), 'utf8');
 const projectAutosaveFormatText = readFileSync(join(process.cwd(), 'utils', 'projectAutosaveFormat.ts'), 'utf8');
+const projectAutosaveTransactionsText = readFileSync(join(process.cwd(), 'utils', 'projectAutosaveTransactions.ts'), 'utf8');
+const autosaveTransactionText = readFileSync(join(process.cwd(), 'runtime', 'persistence', 'autosaveTransaction.ts'), 'utf8');
+const autosaveWorkerText = readFileSync(join(process.cwd(), 'runtime', 'persistence', 'autosaveWorker.ts'), 'utf8');
+const autosaveRecoveryWorkerClientText = readFileSync(join(process.cwd(), 'runtime', 'persistence', 'autosaveRecoveryWorkerClient.ts'), 'utf8');
+const autosaveRecoveryWorkerText = readFileSync(join(process.cwd(), 'workers', 'autosaveRecoveryWorker.ts'), 'utf8');
+const projectSerializationText = readFileSync(join(process.cwd(), 'utils', 'projectSerialization.ts'), 'utf8');
+const autosaveFingerprintText = readFileSync(join(process.cwd(), 'utils', 'autosaveFingerprint.ts'), 'utf8');
 const mechanismDesignText = readFileSync(join(process.cwd(), 'components', 'stages', 'mechanism', 'MechanismDesign.tsx'), 'utf8');
 const collectComponentSourceFiles = (dir: string): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
@@ -2882,6 +3031,7 @@ const designAutomataProjectionText = readFileSync(join(process.cwd(), 'utils', '
 const automataSceneModelText = readFileSync(join(process.cwd(), 'utils', 'automataSceneModel.ts'), 'utf8');
 const designWorkflowPanelText = readFileSync(join(process.cwd(), 'components', 'stages', 'mechanism', 'DesignWorkflowPanel.tsx'), 'utf8');
 const workflowSpecText = readFileSync(join(process.cwd(), 'tests', 'browser', 'workflow.spec.ts'), 'utf8');
+const webglRecoverySpecText = readFileSync(join(process.cwd(), 'tests', 'browser', 'webgl-recovery.spec.ts'), 'utf8');
 const designInspectorPanelText = readFileSync(join(process.cwd(), 'components', 'stages', 'mechanism', 'DesignInspectorPanel.tsx'), 'utf8');
 const foundryPreviewModelText = readFileSync(join(process.cwd(), 'utils', 'foundryPreviewModel.ts'), 'utf8');
 const mechanismDesignStageText = `${mechanismDesignText}
@@ -2893,12 +3043,16 @@ const foundryPreviewGeometryText = readFileSync(join(process.cwd(), 'components'
 const threeFoundryPreviewText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'ThreeFoundryPreview.tsx'), 'utf8');
 const foundryPreviewStateProbeText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'FoundryPreviewStateProbe.tsx'), 'utf8');
 const foundryThreePrimitivesText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryThreePrimitives.ts'), 'utf8');
+const foundryThreeObjectPoolText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryThreeObjectPool.ts'), 'utf8');
 const foundryThreeRenderLayersText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryThreeRenderLayers.ts'), 'utf8');
 const foundryAssemblySceneOverlayText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryAssemblySceneOverlay.ts'), 'utf8');
+const renderPerformancePolicyText = readFileSync(join(process.cwd(), 'utils', 'renderPerformancePolicy.ts'), 'utf8');
+const cadencedPlaybackSamplerText = readFileSync(join(process.cwd(), 'runtime', 'playback', 'cadencedPlaybackSampler.ts'), 'utf8');
 const threeResourceKitText = readFileSync(join(process.cwd(), 'utils', 'threeResourceKit.ts'), 'utf8');
 const foundryRenderInventoryText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryRenderInventory.ts'), 'utf8');
 const foundryPreviewStacksText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryPreviewStacks.ts'), 'utf8');
 const mechanismFoundryText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'MechanismFoundry.tsx'), 'utf8');
+const foundryHandleGestureText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryHandleGesture.ts'), 'utf8');
 const foundryCanvasPaneText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'FoundryCanvasPane.tsx'), 'utf8');
 const foundryCanvasChromeText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'FoundryCanvasChrome.tsx'), 'utf8');
 const foundryOverlayLayerText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'FoundryOverlayLayer.tsx'), 'utf8');
@@ -2917,6 +3071,7 @@ const foundry3dText = `${foundryStageText}
 ${threeFoundryPreviewText}
 ${foundryPreviewStateProbeText}
 ${foundryThreePrimitivesText}
+${foundryThreeObjectPoolText}
 ${foundryThreeRenderLayersText}
 ${threeResourceKitText}
 ${foundryRenderInventoryText}
@@ -2924,7 +3079,6 @@ ${foundryPreviewStacksText}`;
 const appShellText = readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8');
 const shellUiText = [
   'GettingStartedDialog.tsx',
-  'OnnxCacheStatusPill.tsx',
   'WorkflowRail.tsx',
   'TopCommandBar.tsx',
   'ShellDialogs.tsx',
@@ -2980,8 +3134,10 @@ assert(
     !appStageRouterText.includes('fitMechanismToTargetPath') &&
     appText.includes('useAppMechanismActions') &&
     appMechanismActionsHookText.includes('exportFoundryMechanism') &&
-    appMechanismActionsHookText.includes('fitMechanismToTargetPath') &&
-    appMechanismActionsHookText.includes('fitRecommendedMechanismToSheet') &&
+    appMechanismActionsHookText.includes('createMechanismFitWorkerClient') &&
+    appMechanismActionsHookText.includes('createMechanismFitJobInput') &&
+    !appMechanismActionsHookText.includes('fitMechanismToTargetPath') &&
+    !appMechanismActionsHookText.includes('fitRecommendedMechanismToSheet') &&
     appMechanismActionsHookText.includes('normalizeGearMeshMechanism') &&
     appMechanismActionsHookText.includes('optimizeSelectedMechanism') &&
     appMechanismActionsHookText.includes('exportMechanismSvg') &&
@@ -3074,8 +3230,15 @@ assert(appMechanismActionsHookText.includes('commitFoundryDraft') && mechanismFo
 
 assert(appText.includes('useAppDerivedState(project)') && !appText.includes('const sortedParts = useMemo') && appDerivedStateHookText.includes('selectedMechanism') && appDerivedStateHookText.includes('playbackDurationMs') && appDerivedStateHookText.includes('mechanismConfig: GlobalConfig') && appDerivedStateHookText.includes('current?.partId === selectedPart.id'), 'App delegates selected part/path/mechanism/playback/config derivation to a pure hook without changing selection defaults');
 assert(mechanismFoundryText.includes('<FoundryWorkflowPanel') && foundryWorkflowPanelText.includes('data-testid="foundry-pick-anchor"') && !foundryWorkflowPanelText.includes('data-testid="foundry-target-summary"') && !foundryWorkflowPanelText.includes('Board hole') && !foundryWorkflowPanelText.includes('Range') && !foundryWorkflowPanelText.includes('Status'), 'Foundry left pane keeps action controls while hiding raw target, board-hole, range, and status readouts from the default student UI');
-assert(mechanismFoundryText.includes('fitMechanismToTargetPath') && mechanismFoundryText.includes('onFitPath={() => applyPathFit()}') && !mechanismFoundryText.includes('lastPathFitSignatureRef') && !mechanismFoundryText.includes('applyPathFit(next)') && foundryWorkflowPanelText.includes('data-testid="foundry-fit-path"') && foundryWorkflowPanelText.includes('foundry.fitPath') && foundryCanvasPaneText.includes('data-fit-board-cells') && foundryCanvasPaneText.includes('data-fit-target-path'), 'Foundry exposes a prominent Fit path action while preserving the default mechanism until the user clicks Fit');
+assert(mechanismFoundryText.includes('createCadencedGestureDraft<MechanismConfig>') && mechanismFoundryText.includes('foundryGestureDraft.publish(next)') && mechanismFoundryText.includes('setFoundryDraft(refreshEditedFoundryMechanism(drag.draft))'), 'Foundry handle pointer moves stay in the leaf-local cadenced draft and pointerup performs the expensive canonical refresh once');
+assert(foundryHandleGestureText.includes("handle === 'M'") && foundryHandleGestureText.includes("handle === 'B'") && foundryHandleGestureText.includes("handle === 'D'") && foundryHandleGestureText.includes("couplerLength"), 'Foundry M/B/C/D handle calculations share one pure gesture helper');
+assert(appProjectHistoryHookText.includes('recordProjectAction(action.type)') && workflowSpecText.includes('Foundry M B C D drags stay local until one pointerup commit'), 'runtime audit counters prove every Foundry handle gesture has zero pointermove actions and one pointerup commit');
+assert(mechanismFoundryText.includes('useState(false);\n  const [showVelocity') && mechanismFoundryText.includes('setShowForces(false)') && mechanismFoundryText.includes('setShowVelocity(false)'), 'Foundry keeps optional force and velocity overlays off at entry and reset');
+assert(threeFoundryPreviewText.includes('if (!showForces) return;') && threeFoundryPreviewText.includes('setPhysicsKernelRuntime("loading")') && threeFoundryPreviewText.includes('}, [showForces]);'), 'Foundry loads the Rapier WASM kernel only after the student requests physics diagnostics');
+assert(workflowSpecText.includes('Foundry defers Rapier until physics diagnostics are requested') && workflowSpecText.includes('expect(rapierRequests).toEqual([])') && workflowSpecText.includes('expect(rapierRequests).toHaveLength(1)'), 'production preview proves ordinary Foundry entry does not request the optional Rapier chunk');
+assert(mechanismFoundryText.includes('createMechanismFitJobInput') && mechanismFoundryText.includes('onFitPath={() => applyPathFit()}') && !mechanismFoundryText.includes('lastPathFitSignatureRef') && !mechanismFoundryText.includes('applyPathFit(next)') && foundryWorkflowPanelText.includes('data-testid="foundry-fit-path"') && foundryWorkflowPanelText.includes('foundry.fitPath') && foundryCanvasPaneText.includes('data-fit-board-cells') && foundryCanvasPaneText.includes('data-fit-target-path'), 'Foundry exposes a prominent cancellable worker Fit path action while preserving the default mechanism until the user clicks Fit');
 assert(foundryWorkflowPanelText.includes('No valid fabrication fit. Try a shorter path or another mechanism.') && foundryWorkflowPanelText.includes('fitError?: number') && foundryWorkflowPanelText.includes('fitMaxError?: number') && !foundryWorkflowPanelText.includes('Math.round(fitError)') && !foundryWorkflowPanelText.includes('Math.round(fitMaxError)'), 'Foundry keeps fit diagnostics in the data contract while showing only an actionable student warning');
+assert(foundryWorkflowPanelText.includes('ENABLED_FOUNDRY_MECHANISM_TYPES.map') && foundryInspectorPanelText.includes('ENABLED_FOUNDRY_MECHANISM_TYPES.map') && designWorkflowPanelText.includes('ENABLED_AUTHORABLE_MECHANISM_TYPES.map') && mechanismFoundryText.includes('if (!isMechanismTypeEnabled(type)) return') && mechanismRecommendationsText.includes('.filter((candidate) => isMechanismTypeEnabled(candidate.type))') && appControllerSource.includes('const ENABLED_GUIDED_LESSONS = CLASSROOM_LESSONS.filter') && appProjectCommandsHookText.includes('!isMechanismTypeEnabled(lesson.mechanismType)'), 'all new-work mechanism entry points share the central linkage-and-gear availability gate');
 const foundryFitContractSeed = createDefaultMechanism('4bar', 'foundry-fit-contract');
 const foundryFitContract = fitMechanismToTargetPath(sample, foundryFitContractSeed, 'path-right-arm');
 assert.equal(foundryFitContract.id, foundryFitContractSeed.id, 'Fit path preserves the active Foundry preview instance id');
@@ -3231,8 +3394,8 @@ assert(
 );
 assert(mechanismFoundryText.includes('<FoundryInspectorPanel') && foundryInspectorPanelText.includes('testId="foundry-parametric-editor"') && foundryInspectorPanelText.includes('Mechanism options') && foundryInspectorPanelText.includes('data-testid="foundry-view-controls"'), 'MechanismFoundry delegates the right Foundry inspector without changing parametric editor, compact view controls, or advanced options');
 assert(foundryInspectorPanelText.includes('data-testid="foundry-visible-sensemaking"') && foundryInspectorPanelText.includes('<ClassroomExampleVideo') && !foundryWorkflowPanelText.includes('data-testid="foundry-visible-sensemaking"') && !foundryInspectorPanelText.includes('Preview overlays') && !foundryInspectorPanelText.includes('foundry-physics-readout'), 'Foundry right inspector owns sensemaking first while removing stale preview-overlay and Motion readout cards');
-assert(mechanismFoundryText.includes('<FoundryCanvasPane') && foundryCanvasPaneText.includes('<ThreeFoundryPreview') && foundryCanvasPaneText.includes('<FoundryOverlayLayer') && foundryCanvasChromeText.includes('data-testid="foundry-toolbar"') && foundryCanvasChromeText.includes('data-testid="foundry-camera-controls"') && foundryOverlayLayerText.includes('data-testid="foundry-preview-overlay"') && foundryOverlayLayerText.includes('data-testid="foundry-param-handles"') && foundryCanvasPaneText.includes('data-testid="foundry-toolbar-state"') && foundryCanvasPaneText.includes('data-testid="foundry-motion-warning"'), 'MechanismFoundry delegates the center Foundry canvas while warning overlays live above playback controls');
-assert(foundryOverlayLayerText.includes('data-handle-contract="move-anchor-plus-shape-handles"') && foundryOverlayLayerText.includes('data-handle-ids=') && mechanismFoundryText.includes('id: "M"') && mechanismFoundryText.includes('applyAnchor({') && mechanismFoundryText.includes('setSelectedOutputTraceId') && foundryCanvasChromeText.includes('data-testid="foundry-cycle-output-trace"'), 'Foundry exposes a shared move handle and a selectable Mech Path target instead of limiting direct manipulation to 4bar B/C/D handles');
+assert(mechanismFoundryText.includes('<FoundryCanvasPane') && foundryCanvasPaneText.includes('<DeferredThreeFoundryPreview') && foundryCanvasPaneText.includes('<FoundryOverlayLayer') && foundryCanvasChromeText.includes('data-testid="foundry-toolbar"') && foundryCanvasChromeText.includes('data-testid="foundry-camera-controls"') && foundryOverlayLayerText.includes('data-testid="foundry-preview-overlay"') && foundryOverlayLayerText.includes('data-testid="foundry-param-handles"') && foundryCanvasPaneText.includes('data-testid="foundry-toolbar-state"') && foundryCanvasPaneText.includes('data-testid="foundry-motion-warning"'), 'MechanismFoundry delegates the center Foundry canvas while warning overlays live above playback controls');
+assert(foundryOverlayLayerText.includes('data-handle-contract="move-anchor-plus-shape-handles"') && foundryOverlayLayerText.includes('data-handle-ids=') && mechanismFoundryText.includes('id: "M"') && foundryHandleGestureText.includes("handle === 'M'") && mechanismFoundryText.includes('setSelectedOutputTraceId') && foundryCanvasChromeText.includes('data-testid="foundry-cycle-output-trace"'), 'Foundry exposes a shared move handle and a selectable Mech Path target instead of limiting direct manipulation to 4bar B/C/D handles');
 assert(foundryWorkflowPanelText.includes('<MechanismLinkagePreview') && mechanismLinkagePreviewText.includes('export const MechanismLinkagePreview') && mechanismLinkagePreviewText.includes('mechanismLinkagePreviewHelpers') && mechanismLinkagePreviewHelpersText.includes('mechanismReferenceTopologySummary') && mechanismLinkagePreviewHelpersText.includes('camProfilePathD') && foundryPreviewGeometryText.includes('export const fittedGearTrainCenters'), 'Foundry workflow delegates 2D Foundry SVG preview to extracted foundry renderer/helper seams');
 assert(foundryWorkflowPanelText.includes('ghostSimulations') && foundryWorkflowPanelText.includes('foundry-mini-ghost'), 'Foundry gallery cards show moving front-view mechanism poses instead of a single static icon');
 assert(threeFoundryPreviewText.includes('foundryRenderedInventory(mechanism.type)') && foundryRenderInventoryText.includes('export const foundryRenderedInventory') && foundryRenderInventoryText.includes('referenceRequiredPartsHoleCount'), 'Foundry Three renderer delegates rendered inventory counts to a pure helper');
@@ -3256,6 +3419,8 @@ assert(foundryStageText.includes('foundry-parametric-editor') && mechanismDesign
 assert(mechanismFoundryText.includes('refreshEditedFoundryMechanism') && mechanismFoundryText.includes('bcTraces.length === 0') && mechanismFoundryText.includes('mechanismWithGeneratedPath(normalized)') && !mechanismFoundryText.includes('createPathFittedFoundry({ ...foundry, ...updates }'), 'Foundry parametric edits recompute the mechanism path from the edited mechanism instead of re-optimizing away user-selected link sizes or crashing when no B/C trace is valid');
 assert(mechanismParametricEditorText.includes('Paired link length') && mechanismInspectorAnalysisText.includes('Drive gear size') && mechanismInspectorAnalysisText.includes('Output gear size'), 'parametric editor exposes gear and linkage fabrication selectors instead of hidden generic numbers');
 assert(foundryInspectorPanelText.includes('<MechanismParametricEditor') && mechanismDesignStageText.includes('<MechanismParametricEditor') && mechanismInspectorAnalysisText.includes('gearTrainPitchRadii') && mechanismParametricEditorText.includes('defaultCamProfileSamples'), 'Foundry and Design delegate compact parametric gear/link/cam controls to a mechanism stage seam');
+assert(inspectorControlsText.includes('data-gesture-commit="pointerup"') && inspectorControlsText.includes('pointerActiveRef.current') && inspectorControlsText.includes('commitPointerDraft') && workflowSpecText.includes('Shared inspector sliders keep pointer moves local until one canonical commit'), 'shared Character, Path, Foundry, Design, and Options sliders paint a local draft while pointerup performs the only canonical write');
+assert(mechanismParametricEditorText.includes('draftProfileRef') && mechanismParametricEditorText.includes('commitDraft') && workflowSpecText.includes("cam pointermove has no ProjectAction") && workflowSpecText.includes("cam pointerup performs one canonical commit"), 'legacy cam profile editing keeps pointer moves inside its leaf and commits one mechanism update on pointerup');
 assert(foundryStageText.includes('MECHANISM_PARAM_META') && mechanismDesignStageText.includes('MECHANISM_PARAM_META') && mechanismParamPolicyText.includes('shouldShowMechanismParam') && mechanismParamPolicyText.includes('clampMechanismParam'), 'Foundry and Design delegate legacy numeric mechanism parameter policy to a pure mechanism stage helper');
 assert(foundryPreviewGeometryText.includes('export const fittedGearTrainCenters') && foundry3dText.includes('pin-stacks-use-rendered-gear-centers'), 'Foundry 3D gear plates, axles, and spacer stacks share fitted preview gear centers instead of raw mechanism coordinates');
 assert(foundry3dText.includes('gearTrainMeshPhaseDegAt') && foundry3dText.includes('alternating-three-quarter-tooth-gap-phase'), 'Foundry 3D gear rendering still exposes mesh phase helpers for inserted idler chains');
@@ -3337,10 +3502,11 @@ assert(!threePreviewText.includes('scene.traverse(child =>'), '3D puppet preview
 assert.equal(threePreviewText.includes('const renderedMechanisms = mechanismsToRender') && threePreviewText.includes('data-three-selected-mechanism-id') && threePreviewText.includes('data-three-rendered-mechanism-ids') && threePreviewText.includes('data-three-mechanism-generated-path-counts'), true, '3D puppet preview renders active mechanisms and exposes mechanism ids/generated path counts so Assembly can prove fitted-mechanism continuity');
 assert(threePreviewText.includes("const pinSites = mechanism.type === 'gear'") && threePreviewText.includes('boardToMovingZ(zDriverGear)') && !threePreviewText.includes('[state.p1, state.p2, state.j1, state.j2, state.aux, state.effector].forEach'), '3D puppet mechanism pins use per-site z spans instead of one global pin tower through empty planes');
 assert(mechanismDesignText.includes('<DesignFoundryPreview') && designFoundryPreviewText.includes('export const DesignFoundryPreview') && designFoundryPreviewText.includes('data-testid="design-shared-foundry-preview"'), 'Mechanism Design owns a thin automata preview adapter instead of a separate legacy renderer');
-assert(designFoundryPreviewText.includes('<ThreeFoundryPreview') && !designFoundryPreviewText.includes('<ThreePuppetPreview') && !designFoundryPreviewText.includes('design-foundry-context-layer') && designFoundryPreviewText.includes('automataContext={automataContext}') && foundryCanvasPaneText.includes('<ThreeFoundryPreview'), 'Design renders mechanism plus character/object context inside the same Foundry Three scene instead of a parallel puppet overlay');
-assert(designFoundryPreviewText.includes('data-renderer-source="ThreeFoundryPreview"') && designFoundryPreviewText.includes('data-shared-with="foundry-renderer"') && designFoundryPreviewText.includes('data-design-scene-mode="single-foundry-automata-scene"') && designFoundryPreviewText.includes('data-automata-model-source="buildAutomataSceneModel"'), 'Mechanism Design advertises single-scene Foundry-renderer mechanism truth with automata telemetry');
-assert(automataSceneModelText.includes('mechanismFeature(normalizedMechanism.type)') && automataSceneModelText.includes('const mechanisms = normalizedMechanisms.length ? normalizedMechanisms : [normalizedMechanism]') && automataSceneModelText.includes('motionPreviewForProject(project, mechanisms, angle)') && automataSceneModelText.includes('motionPreviewForProject(project, [normalizedMechanism], angle)'), 'Automata scene model reuses Foundry registry semantics, drives the full automata scene, and reads the selected IK/object target for inspector feedback');
+assert(designFoundryPreviewText.includes('<DeferredThreeFoundryPreview') && !designFoundryPreviewText.includes('<ThreePuppetPreview') && !designFoundryPreviewText.includes('design-foundry-context-layer') && designFoundryPreviewText.includes('automataContext={automataContext}') && foundryCanvasPaneText.includes('<DeferredThreeFoundryPreview'), 'Design renders mechanism plus character/object context inside the same deferred Foundry Three scene instead of a parallel puppet overlay');
+assert(designFoundryPreviewText.includes('data-renderer-source="ThreeFoundryPreview"') && designFoundryPreviewText.includes('data-shared-with="foundry-renderer"') && designFoundryPreviewText.includes('data-design-scene-mode="single-foundry-automata-scene"') && designFoundryPreviewText.includes('data-automata-model-source="automata-scene-runtime"'), 'Mechanism Design advertises single-scene Foundry-renderer mechanism truth with retained automata runtime telemetry');
+assert(automataSceneModelText.includes('mechanismFeature(normalizedMechanism.type)') && automataSceneModelText.includes('const mechanisms = normalizedMechanisms.length ? normalizedMechanisms : [normalizedMechanism]') && automataSceneModelText.includes('motionPreviewForProject(project, mechanisms, angle)') && automataSceneModelText.includes('motionPreviewForProject(project, [mechanism], angle)'), 'Automata scene runtime reuses Foundry registry semantics, drives the full automata scene, and reads the selected IK/object target for inspector feedback');
 assert(foundry3dText.includes('const placeFoundryLocalGroup') && foundry3dText.includes('group.rotation.z = (-transform.rotation * Math.PI) / 180') && foundry3dText.includes('const placeSceneLocalGroup') && foundry3dText.includes('group.rotation.z = (transform.rotation * Math.PI) / 180'), 'Foundry keeps y-down fit-space rotations separate from scene-preserving automata rotations');
+assert(threeFoundryPreviewText.includes('context.geometrySkeleton ?? project.skeleton ?? context.skeleton') && designFoundryPreviewText.includes('geometrySkeleton: project.skeleton') && assemblyThreePreviewText.includes('geometrySkeleton: project.skeleton'), 'Design and Assembly retain rigid part/hole geometry from the authored skeleton while animated transforms consume sampled IK state');
 assert(foundryPreviewModelText.includes("frame: 'fit' | 'scene' = 'fit'") && automataSceneModelText.includes("'scene'"), 'Design/Assembly automata previews request the scene-preserving Foundry preview frame instead of re-fitting the character scene');
 assert(foundry3dText.includes('data-three-stack-source') && designFoundryPreviewText.includes('data-foundry-feature-label') && designFoundryPreviewText.includes('data-foundry-feature-issue-count'), 'Mechanism Design exposes Foundry feature provenance for browser verification');
 assert(!appText.includes('<Canvas project={project} config={mechanismConfig}'), 'Mechanism Design no longer mounts the legacy 2D design canvas mechanism renderer');
@@ -3348,8 +3514,8 @@ assert(exporterText.includes('fabricationGearPathD'), 'SVG export gear rendering
 assert(foundry3dText.includes('fabricationGearProfileForPitchRadius'), 'Foundry gear helper uses shared fabrication gear holes/profile');
 assert(foundry3dText.includes('validateMechanismPreviewReadiness'), 'Foundry gates standalone 3D previews through shared physical/fabrication readiness validation');
 assert(foundry3dText.includes('data-three-physical-validation-errors'), 'Foundry exposes physical readiness errors for browser verification');
-assert(foundry3dText.includes('validateMechanismPreviewReadiness') && automataSceneModelText.includes('buildFoundryMechanismPreviewModel') && designFoundryPreviewText.includes('data-design-foundry-contract-source="buildAutomataSceneModel"'), 'Mechanism Design readiness and preview state now route through the shared automata scene model and Foundry preview model/renderer seam');
-assert(automataSceneModelText.includes('buildFoundryMechanismPreviewModel') && designFoundryPreviewText.includes('buildAutomataSceneModel') && assemblyThreePreviewText.includes('buildAutomataSceneModel') && foundryPreviewModelText.includes('createFoundryPlaybackFrame') && foundryPreviewModelText.includes('generateFoundryPlaybackPointTraces') && !designFoundryPreviewText.includes('generateMechanismPointTraces') && !assemblyThreePreviewText.includes('generateMechanismPointTraces') && !assemblyThreePreviewText.includes('fitMechanismSimulationWithContext'), 'Mechanism Design and Assembly derive preview motion from the shared Foundry preview model instead of private legacy simulation paths');
+assert(foundry3dText.includes('validateMechanismPreviewReadiness') && automataSceneModelText.includes('createFoundryMechanismPreviewRuntime') && designFoundryPreviewText.includes('data-design-foundry-contract-source="automata-scene-runtime"'), 'Mechanism Design readiness and preview state route through the shared retained automata scene runtime and Foundry renderer seam');
+assert(automataSceneModelText.includes('createFoundryMechanismPreviewRuntime') && designFoundryPreviewText.includes('reuseAutomataSceneRuntime') && designFoundryPreviewText.includes('sampleReusableAutomataSceneRuntime') && assemblyThreePreviewText.includes('reuseAutomataSceneRuntime') && assemblyThreePreviewText.includes('sampleReusableAutomataSceneRuntime') && foundryPreviewModelText.includes('createFoundryPlaybackFrame') && foundryPreviewModelText.includes('generateFoundryPlaybackPointTraces') && !designFoundryPreviewText.includes('generateMechanismPointTraces') && !assemblyThreePreviewText.includes('generateMechanismPointTraces') && !assemblyThreePreviewText.includes('fitMechanismSimulationWithContext'), 'Mechanism Design and Assembly retain bounded reusable Foundry state and sample motion without private legacy simulation paths');
 assert(assemblyThreePreviewText.includes('viewerTab="assembly"') && assemblyThreePreviewText.includes('automataContext={automataContext}') && assemblyThreePreviewText.includes('data-assembly-one-scene-automata'), 'Assembly labels the viewer as Assembly and can render character/object context inside the shared Foundry mechanism scene');
 assert(!automataSceneModelText.includes('firstVisiblePath'), 'Automata scene model does not silently pick a different first-visible path than Foundry when no explicit/selected path exists');
 assert(designAutomataProjectionText.includes('buildAutomataSceneModel') && !designAutomataProjectionText.includes('motionPreviewForProject') && !designAutomataProjectionText.includes('mechanismFeature('), 'Legacy Design projection file is a thin compatibility wrapper around the canonical automata scene model');
@@ -3463,7 +3629,7 @@ assert(
 );
 assert(appText.includes('useWorkspacePlaybackLoop({') && !appText.includes('requestAnimationFrame(') && !appText.includes('animationDeltaRadians('), 'App delegates shared playback timing to useWorkspacePlaybackLoop without owning animation-frame math');
 assert(modalInertHookText.includes('setAttribute("inert", "")') && modalInertHookText.includes('aria-hidden') && modalInertHookText.includes('welcome-modal-open') && appText.includes('useModalInertEffect(appShellRef, modalOpen)') && !appText.includes('document.documentElement.classList.add("welcome-modal-open")') && !appText.includes('useEffect, useRef'), 'App delegates startup/help/about modal inert DOM side effects to useModalInertEffect');
-assert(appText.includes('STARTER_IMAGE_TEMPLATES') && !appText.includes('girl.png?url') && starterImageTemplatesText.includes('girl.png?url') && starterImageTemplatesText.includes('boy.PNG?url') && starterImageTemplatesText.includes('girl-thumb.png?url') && starterImageTemplatesText.includes('boy-thumb.png?url'), 'App delegates starter image template assets to resources/starterImageTemplates without changing starter labels or package URLs');
+assert(!appText.includes('STARTER_IMAGE_TEMPLATES') && !existsSync(join(process.cwd(), 'resources', 'starterImageTemplates.ts')), 'image-recognition starter assets stay outside the classroom app');
 assert(appText.includes('useAppPathActions({') && !appText.includes('const setPathPoints =') && !appText.includes('setShowTracking(false);\n    setStage("path")') && appPathActionsHookText.includes('validatePath') && appPathActionsHookText.includes('ProjectMotionPath["source"] = "drawn"') && appPathActionsHookText.includes('setPathPoints(path, "tracked")') && appPathActionsHookText.includes('setStage("path")'), 'App delegates Path draw/tracking actions to useAppPathActions while preserving validated drawn/tracked path upserts');
 assert(appPathActionsHookText.includes('closed: current?.closed ?? true'), 'new drawn/tracked paths default to closed loops while preserving existing open paths');
 const pathWorkflowPanelText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'PathWorkflowPanel.tsx'), 'utf8');
@@ -3485,19 +3651,20 @@ const assertMotionFitSourceContracts = () => {
     foundryCanvasPaneText.includes('data-user-path-basis="mechanism-fit-context"') &&
     foundryCanvasPaneText.includes('data-user-to-mech-fit-error') &&
     foundryCanvasPaneText.includes('data-testid="foundry-user-path-overlay"') &&
-    mechanismFoundryText.includes('selectedPath?.points.map(foundryFitContext.map)') &&
+    mechanismFoundryText.includes('sampleIndexedValues(') &&
+    mechanismFoundryText.includes('foundryFitContext.map(value)') &&
     foundryPreviewStateProbeText.includes('data-three-primary-path-bounds');
   assert.equal(foundrySplitPathControls, true, 'Foundry separates the drawn user path from the generated mechanism path in the same fit-context coordinate basis so students can compare fit before applying the mechanism');
 
   const designGeneratedPathMotion =
-    automataSceneModelText.includes('motionPreviewForProject(project, [normalizedMechanism], angle)') &&
+    automataSceneModelText.includes('motionPreviewForProject(project, [mechanism], angle)') &&
     automataSceneModelText.includes('generatedTarget && selectedMotionPreview.target') &&
     automataSceneModelText.includes("? 'linkage-trace'") &&
     designFoundryPreviewText.includes('data-design-motion-source={sceneModel.motionSource}') &&
     designFoundryPreviewText.includes('data-design-target-error') &&
     designFoundryPreviewText.includes('data-design-target-x') &&
     designFoundryPreviewText.includes('data-design-animated-part-count');
-  assert.equal(designGeneratedPathMotion, true, 'Mechanism Design fails closed unless the selected fitted mechanism drives character motion from the physical linkage trace through motionPreviewForProject');
+  assert.equal(designGeneratedPathMotion, true, 'Mechanism Design drives character motion from the physical linkage trace through motionPreviewForProject while fabrication fit remains a separate export gate');
 
   const puppetMechanismContinuity =
     threePreviewText.includes('data-three-selected-mechanism-generated-path-count') &&
@@ -3515,7 +3682,7 @@ const assertMotionFitSourceContracts = () => {
     assemblyCanvasPaneText.includes('buildMechanismAssemblySceneFrame') &&
     assemblyThreePreviewText.includes('data-mechanism-scene-contract-mechanism-id={sceneFrame.mechanismContract?.mechanismId') &&
     assemblyThreePreviewText.includes('assemblySceneFrame={sceneFrame}') &&
-    assemblyThreePreviewText.includes('buildAutomataSceneModel') &&
+    assemblyThreePreviewText.includes('sampleReusableAutomataSceneRuntime') &&
     assemblyThreePreviewText.includes('automataContext={automataContext}') &&
     assemblyThreePreviewText.includes('ThreeFoundryPreview') &&
     threeFoundryPreviewText.includes('assemblySceneFrame?: FoundryAssemblySceneFrame') &&
@@ -3531,38 +3698,54 @@ assert.equal(pathWorkflowPanelText.includes('Choose mechanism'), false, 'Path Ed
 assert(pathWorkflowPanelText.includes('aria-label="Motion target"') && pathWorkflowPanelText.includes('<optgroup label="Body parts">') && pathWorkflowPanelText.includes('<optgroup label="Scene objects">'), 'Path target selector labels mixed body/object targets honestly');
 assert(designInspectorPanelText.includes('aria-label="Mechanism target"') && designInspectorPanelText.includes('<optgroup label="Body parts">') && designInspectorPanelText.includes('<optgroup label="Scene objects">'), 'Design target selector labels mixed body/object mechanism targets honestly');
 
-assert(appText.includes('useAppCharacterImportActions({') && !appText.includes('const runWebOnnx =') && !appText.includes('const importCharacterPackage =') && !appText.includes('const importProject =') && !appText.includes('const acceptPendingCharacter =') && appCharacterImportActionsHookText.includes('createProjectFromProcessed') && appCharacterImportActionsHookText.includes('processImageWithWebOnnx') && appCharacterImportActionsHookText.includes('loadCharacterPackage') && appCharacterImportActionsHookText.includes('loadProjectSnapshot') && appCharacterImportActionsHookText.includes('setProject(pendingCharacter.project, { resetHistory: true })') && appCharacterImportActionsHookText.includes('returnStage: "character"'), 'App delegates character import/review actions to useAppCharacterImportActions while preserving ONNX/package/project import review semantics');
+assert(appText.includes('useAppCharacterImportActions({') && !appText.includes('const importCharacterPackage =') && !appText.includes('const importProject =') && !appText.includes('const acceptPendingCharacter =') && appCharacterImportActionsHookText.includes('createProjectImportWorkerClient') && appCharacterImportActionsHookText.includes('requestCharacterPackage(files') && appCharacterImportActionsHookText.includes('requestProject(file') && appCharacterImportActionsHookText.includes('importClient.dispose()') && !appCharacterImportActionsHookText.includes('loadCharacterPackage') && !appCharacterImportActionsHookText.includes('loadProjectSnapshot') && appCharacterImportActionsHookText.includes('setProject(pendingCharacter.project, { resetHistory: true })') && appCharacterImportActionsHookText.includes('returnStage: "character"') && !appCharacterImportActionsHookText.includes('processImageWithWebOnnx'), 'App delegates package/project import review to a disposable worker while the image-recognition path stays removed');
+assert(projectImportWorkerClientText.includes('new URL("../../workers/projectImportWorker.ts", import.meta.url)') && projectImportWorkerClientText.includes('active.firstFrame') && projectImportWorkerClientText.includes('active.secondFrame') && projectImportWorkerClientText.includes('data.generationId !== generationId') && projectImportWorkerClientText.includes('worker.terminate()') && projectImportWorkerText.includes('await import('), 'project and character imports wait for two paints, ignore stale generations, load worker code lazily, and always release the worker');
+assert(projectImportPolicyText.includes('projectBytes: 12 * MEBIBYTE') && projectImportPolicyText.includes('packageFileCount: 96') && projectImportPolicyText.includes('packageConfigBytes: 512 * 1024') && projectImportPolicyText.includes('packageTotalConfigBytes: 512 * 1024') && projectImportPolicyText.includes('packageAssetBytes: 2 * MEBIBYTE') && projectImportPolicyText.includes('packageTotalAssetBytes: 3 * MEBIBYTE') && projectImportPolicyText.includes('packageTotalBytes: 4 * MEBIBYTE') && projectImportPolicyText.includes('validateProjectImportShape') && projectImportPolicyText.includes('objectGraphContainers: 50_000'), 'classroom imports reserve enough serialized headroom for base64 artwork, configs, entities, points, depth, and object containers before ProjectState normalization');
+assert(packageLoaderText.includes('validateCharacterPackageFiles(list)') && packageLoaderText.includes('for (const file of assetFiles)') && !packageLoaderText.includes('Promise.all('), 'character package assets are validated and encoded sequentially instead of retaining every conversion at once');
 assert(workspacePlayerDockHookText.includes('const showsWorkspacePlayer =') && workspacePlayerDockHookText.includes('editorStage === "path"') && workspacePlayerDockHookText.includes('editorStage === "design"') && workspacePlayerDockHookText.includes('editorStage === "assembly"'), 'shared playback dock is restricted to Path, Mechanism Design, and Assembly instead of leaking onto unrelated tabs');
 assert(appText.includes('useWorkspacePlayerDock') && !appText.includes('<WorkspacePlayerDock') && !appText.includes('const [assemblyPlaying'), 'App delegates shared player dock assembly and Assembly dock state to useWorkspacePlayerDock');
 assert(workspacePlayerDockHookText.includes('setAssemblyStepProgress(0)') && workspacePlayerDockHookText.includes('onStepChange: goSharedAssemblyStep'), 'workspace player dock owns Assembly previous/next step handoff and scrubber reset');
+assert(appControllerSource.includes('const [isPlaying, setIsPlaying] = useState(false)') && workspacePlayerDockHookText.includes('document.addEventListener("visibilitychange"') && workspacePlayerDockHookText.includes('setAssemblyPlaying(false)') && workflowSpecText.includes('Classroom playback is opt-in and pauses across stage or hidden-tab boundaries'), 'classroom playback starts paused and stops across stage, modal, and hidden-tab ownership boundaries');
 assert(appUiText.includes('workspace-player-prev-step') && appUiText.includes('workspace-player-next-step') && appUiText.includes('Assembly scrubber'), 'shared playback dock owns Assembly previous/next step controls and scrubber');
 assert(!`${appText}
 ${mechanismDesignStageText}
 ${designFoundryPreviewText}`.includes('data-testid="design-foundry-playback-hud"'), 'Mechanism Design uses the shared workspace player instead of a duplicate local playback HUD');
-assert(foundry3dText.includes('renderDynamicRef') && foundry3dText.includes('playback.clock.subscribe') && foundry3dText.includes('frame.phaseChanged'), 'Foundry playback renders external-clock samples directly into the existing Three scene');
-assert(foundry3dText.includes("scene.remove(old)") && foundry3dText.includes("disposeFoundryThreeObject(old)"), 'Foundry disposes noncached dynamic resources when replacing animation groups');
+assert(threeFoundryPreviewText.includes('renderDynamicRef') && threeFoundryPreviewText.includes('subscribeCadencedPlaybackSampler') && foundryOverlayLayerText.includes('subscribeCadencedPlaybackSampler') && threePreviewText.includes('subscribeCadencedPlaybackSampler') && cadencedPlaybackSamplerText.includes('const frame = sample(phase)') && cadencedPlaybackSamplerText.indexOf('time - lastSampleTime < minFrameIntervalMs') < cadencedPlaybackSamplerText.indexOf('const frame = sample(phase)'), 'Foundry and puppet playback gate expensive external-clock sampling before updating retained Three and overlay scenes');
+assert(foundryThreeObjectPoolText.includes('class FoundryThreeObjectPool') && foundryThreeObjectPoolText.includes('topologyRevision') && threeFoundryPreviewText.includes('foundry-mechanism-runtime') && !threeFoundryPreviewText.includes('scene.remove(old)'), 'Foundry retains one dynamic transform tree and rebuilds pooled objects only when topology keys change');
+assert(foundryThreeObjectPoolText.includes('maxRetainedEntries') && foundryThreeObjectPoolText.includes('trimUnusedEntries') && threeFoundryPreviewText.includes('renderPolicy.repeatedGeometry.maxPoolEntries') && foundryAssemblySceneOverlayText.includes('resourcePolicy.maxPoolEntries'), 'performance policy bounds retained Foundry and Assembly pool high-water entries');
 assert(foundry3dText.includes('geometryCacheRef') && foundry3dText.includes('materialCacheRef'), 'Foundry caches reusable Three geometry/material resources during playback');
 assert(foundry3dText.includes('foundryCached') && foundry3dText.includes('data-three-geometry-cache-size'), 'Foundry tags cached resources and exposes cache size for browser perf tests');
-assert(foundry3dText.includes('const addPath = (points: Point[], z: number, mat: THREE.Material)') && foundry3dText.includes('new THREE.BufferGeometry().setFromPoints') && foundry3dText.includes('points.map((point) => to3(point, z))'), 'Foundry path/trail line geometry is intentionally not long-cached because it can be phase-dependent');
+assert(threeResourceKitText.includes('pruneUnusedThreeResourceCache') && threeFoundryPreviewText.includes('maxGeometryCacheEntries') && threeFoundryPreviewText.includes('maxMaterialCacheEntries') && foundryAssemblySceneOverlayText.includes('pruneOverlayResourceCaches') && threePreviewText.includes('pruneSharedGeometryCache'), 'Foundry, Assembly, and puppet renderers prune unused resources against the selected preset budgets');
+assert(foundryThreePrimitivesText.includes('objectPool.acquire(\n      "path"') && foundryThreePrimitivesText.includes('position.setXYZ') && foundryThreePrimitivesText.includes('position.needsUpdate = true'), 'Foundry path/trail lines retain BufferGeometry and update position attributes in place');
 assert(mechanismPreviewText.includes('sweepBounds') && foundry3dText.includes('data-three-fit-bounds=\"phase-invariant-sweep\"'), 'Foundry fitting bounds are sampled in the shared preview utility instead of jittering per animation frame');
 assert(foundry3dText.includes('data-three-static-grid-mode=\"persistent-scene-layer\"'), 'Foundry grid and plane live in a persistent scene layer, not the per-frame dynamic group');
 assert(mechanismPreviewText.includes('export const fitMechanismSimulation'), 'Foundry fitting/sweep simulation lives in the mechanism preview utility, not as stage-local UI code');
-assert(mechanismPreviewText.includes('createMechanismFitContext') && foundry3dText.includes('createMechanismFitContext(') && foundry3dText.includes('selectedPath?.points ?? []'), 'Foundry caches phase-invariant fit bounds and includes the user path in the same fitted coordinate basis');
+assert(mechanismPreviewText.includes('createMechanismFitContext') && foundry3dText.includes('createMechanismFitContext(') && foundry3dText.includes('sampleIndexedValues('), 'Foundry caches phase-invariant fit bounds and includes a bounded view of the user path in the same fitted coordinate basis');
 const foundryCardMechanism = createDefaultMechanism('4bar', 'foundry-card-contract');
 const foundryCardContext = createMechanismFitContext(foundryCardMechanism, 180, 96, 96);
 const foundryCardSimulation = fitMechanismSimulationWithContext(foundryCardMechanism, 0.75, foundryCardContext);
 assert.deepEqual(foundryCardSimulation.pathPoints, foundryCardContext.pathPoints, 'Foundry card previews can reuse the shared fit context path instead of direct per-card resampling');
 assert(foundry3dText.includes('buildFoundryPhysicsOverlay') && physicsSessionText.includes('export const buildFoundryPhysicsOverlay'), 'Foundry force/velocity/constraint overlay math lives in PhysicsSession, not the React stage');
-assert(foundry3dText.includes('const range = useMemo(') && foundry3dText.includes('() => sampleFeasibleRange(landedFoundry)') && foundry3dText.includes('[landedFoundry]'), 'Foundry feasible-range sampling is memoized by mechanism, not re-run on every animation render');
-assert(viewportText.includes('WEBGL_PIXEL_RATIO_CAP') && foundry3dText.includes('WEBGL_PIXEL_RATIO_CAP') && threePreviewText.includes('WEBGL_PIXEL_RATIO_CAP'), 'WebGL renderer pixel ratio cap is shared across Foundry and puppet previews');
+assert(foundry3dText.includes('const range = useMemo(') && foundry3dText.includes('sampleFeasibleRange(landedFoundry, gestureFoundry ? 24 : 96)') && foundry3dText.includes('[gestureFoundry, landedFoundry]'), 'Foundry feasible-range sampling is memoized and uses a reduced direct-manipulation sample before the full pointerup validation');
+assert(renderPerformancePolicyText.includes('interface RenderPerformancePolicy') && renderPerformancePolicyText.includes("preset: 'balanced'") && !renderPerformancePolicyText.includes('navigator') && threeFoundryPreviewText.includes('resolveRenderPerformancePolicy') && foundry3dText.includes('resolveRenderPerformancePolicy'), 'persisted performance presets drive both Three renderers through one deterministic policy without User-Agent branching');
+assert(threePreviewText.includes("setRendererStatus('restoring')") && threePreviewText.includes("setRendererStatus('unavailable')") && threeFoundryPreviewText.includes('setRendererStatus("restoring")') && threeFoundryPreviewText.includes('setRendererStatus("unavailable")') && webglRecoverySpecText.includes('WEBGL_lose_context') && webglRecoverySpecText.includes('WebGL unavailable'), 'Character and Foundry keep controls mounted across unavailable/lost WebGL and production browser coverage restores the same scene');
+assert(!threePreviewText.includes('loadRapierPhysicsKernel') && threePreviewText.includes('deferred-to-foundry') && threeFoundryPreviewText.includes('if (!showForces) return;') && threeFoundryPreviewText.includes('loadRapierPhysicsKernel'), 'Character, Path, and ordinary Foundry entry avoid Rapier; explicit Foundry physics diagnostics own the lazy contact-validation load');
 assert(threePreviewText.includes("const PUPPET_CAMERA_PRESETS: Viewer3DCameraPreset[] = ['front', 'iso']"), 'puppet viewer toolbar exposes only the fixed 2D and orbitable 3D modes');
 assert(threePreviewText.includes('onWheel={handleViewerWheel}') && threePreviewText.includes('data-camera-yaw'), 'puppet 3D canvas exposes direct wheel zoom and orbit state for browser verification');
 assert(appStageRouterText.includes('<PathEditor') && !appText.includes('<PathEditor'), 'AppStageRouter delegates Path Editor stage to the extracted PathEditor seam');
-assert(appWorkspaceShellText.includes('<MechanismRecommendationSheet') && mechanismRecommendationSheetText.includes('buildMechanismRecommendations') && mechanismRecommendationSheetText.includes('mechanismWithGeneratedPath'), 'AppWorkspaceShell mounts the Path recommendation modal while recommendation scoring and generated-path wrapping stay outside the app shell');
-assert(mechanismRecommendationSheetText.includes('RecommendationFitPreview') && mechanismRecommendationSheetText.includes('<MechanismLinkagePreview') && mechanismRecommendationSheetText.includes('data-board-cells') && mechanismRecommendationSheetText.includes('data-user-path-preview') && mechanismRecommendationSheetText.includes('data-mechanism-path-preview'), 'recommendation modal previews board fit with user path, fitted mechanism path, and the actual front-view mechanism');
+assert(designWorkflowPanelText.includes('const DesignRecommendationControl') && designWorkflowPanelText.includes('useState(false)') && designWorkflowPanelText.includes('<MechanismRecommendationSheet') && designWorkflowPanelText.includes('onApply(mechanism)') && designWorkflowPanelText.includes('createMechanismRecommendationWorkerClient') && designWorkflowPanelText.includes('data-recommendation-worker="on-demand"') && !designWorkflowPanelText.includes('prepareMechanismRecommendationWorker') && !mechanismDesignText.includes('useState(false)') && !appWorkspaceShellText.includes('<MechanismRecommendationSheet') && !mechanismRecommendationSheetText.includes('createMechanismRecommendationWorkerClient') && mechanismRecommendationSheetText.includes('workerClient: MechanismRecommendationWorkerClient') && mechanismRecommendationSheetText.includes('mechanismWithGeneratedPath') && mechanismRecommendationJobText.includes('buildMechanismRecommendations') && mechanismRecommendationWorkerClientText.includes('generationId') && mechanismRecommendationWorkerClientText.includes('releaseWorker(worker)') && !mechanismRecommendationWorkerClientText.includes('preparedWorker') && mechanismRecommendationWorkerText.includes('runMechanismRecommendationJob'), 'the Design recommendation control owns modal visibility while each explicit request creates and releases one generation-checked recommendation worker');
+assert(appMechanismActionsHookText.includes('createMechanismOptimizerWorkerClient') && appMechanismActionsHookText.includes('cancelMechanismOptimization') && mechanismOptimizerJobText.includes('runMechanismOptimizerSearch') && mechanismOptimizerJobText.includes('fitMechanismInWorkerJob') && mechanismOptimizerWorkerClientText.includes('generationId') && mechanismOptimizerWorkerClientText.includes('releaseWorker(worker)') && !mechanismOptimizerWorkerClientText.includes('preparedWorker') && mechanismOptimizerWorkerText.includes('runMechanismOptimizerJob(data.input') && designInspectorPanelText.includes('data-optimizer-worker="on-demand"') && !designInspectorPanelText.includes('prepareMechanismOptimizerWorker') && designInspectorPanelText.includes('optimizerBusy ? onCancelOptimize : onOptimize') && !appMechanismActionsHookText.includes('for (let i = 0; i < iterations; i++)'), 'Design fitting creates one on-demand worker, runs deterministic search and final path fitting there, then releases the worker on every terminal path');
+assert(mechanismFitJobText.includes('fitMechanismInWorkerJob') && mechanismFitJobText.includes("mode === 'path'") && mechanismFitJobText.includes('fitRecommendedMechanismToSheet'), 'path and sheet placement share one serializable fit job authority');
+assert(mechanismFitWorkerClientText.includes('active.firstFrame') && mechanismFitWorkerClientText.includes('active.secondFrame') && mechanismFitWorkerClientText.includes('releaseWorker(worker)') && mechanismFitWorkerText.includes('runMechanismFitJob(data.input)') && workflowSpecText.includes('Every visible path-fit trigger owns and releases the shared fit worker'), 'fit jobs wait for two paints, reject stale generations, terminate their heavy worker after completion, and expose production lifecycle evidence');
+assert(!designWorkflowPanelText.includes('fitMechanismToTargetPath') && designWorkflowPanelText.includes('createMechanismFitWorkerClient') && !foundry3dText.includes('fitMechanismToTargetPath') && foundry3dText.includes('createMechanismFitWorkerClient'), 'new Design families and Foundry Fit use the same cancellable worker protocol instead of blocking the main thread');
+assert(mechanismRecommendationSheetText.includes('RecommendationFitPreview') && mechanismRecommendationSheetText.includes('<MechanismLinkagePreview') && mechanismRecommendationSheetText.includes('<RecommendationMechanismSketch') && mechanismRecommendationSheetText.includes('data-board-cells') && mechanismRecommendationSheetText.includes('data-user-path-preview') && mechanismRecommendationSheetText.includes('data-mechanism-path-preview') && mechanismRecommendationSheetText.includes('renderPolicy.overlayQuality === "full"') && mechanismRecommendationSheetText.includes('data-ghost-preview') && mechanismRecommendationSheetText.includes('data-trace-samples') && mechanismRecommendationSheetText.includes('.slice(0, visibleRecommendationCount)') && mechanismRecommendationSheetText.includes('visibleRecommendationStep - recommendations.length') && recommendationMechanismSketchText.includes('sketchSegments') && recommendationMechanismSketchText.includes('data-mechanism-type'), 'recommendation modal incrementally mounts cards and bounded path previews from the actual joint state while reserving fabrication detail and ghost frames for High quality');
 assert(pathCanvasPaneText.includes('path-view-2d') && pathCanvasPaneText.includes('path-view-3d'), 'Path Editor exposes a persistent 2D/3D Path view switch');
-assert(pathCanvasPaneText.includes('<ThreePuppetPreview') && pathCanvasPaneText.includes('testId="path-three-puppet"') && pathCanvasPaneText.includes('initialCameraPreset={pathViewMode === "2d" ? "front" : "iso"}'), 'Path Editor uses the shared Three scene for both front 2D and orbitable 3D views');
+assert(pathCanvasPaneText.includes('<DeferredThreePuppetPreview') && pathCanvasPaneText.includes('testId="path-three-puppet"') && pathCanvasPaneText.includes('initialCameraPreset={pathViewMode === "2d" ? "front" : "iso"}'), 'Path Editor defers the shared Three scene while preserving both front 2D and orbitable 3D views');
 assert(pathCanvasPaneText.includes('drawMode={pathViewMode === "2d" && drawMode') && pathCanvasPaneText.includes('onDrawPoint={onDrawPoint}') && pathCanvasPaneText.includes('onSelectPathPoint={pathLocked ? undefined : onPathPointPick}'), 'Path Editor keeps drawing and editable path handles on the shared front-view scene');
+assert(pathEditorText.includes('createPathGestureDraft()') && pathEditorText.includes('pathGestureDraft.publish') && pathEditorText.includes('pathGestureDraft.flush()') && pathCanvasPaneText.includes('pathGestureDraft={pathGestureDraft}'), 'Path drawing and point dragging use one cadenced renderer draft before committing through the stage action seam');
+assert(pathEditorText.includes('pointDragDraftRef.current = points') && pathEditorText.includes('setPathPoints(points, selectedPath.source)') && !pathEditorText.includes('freeDraftRef.current = next;\n    setPathPoints('), 'Path pointer moves update transient refs while pointerup performs the only canonical path write');
+assert(threePreviewText.includes('pathGestureDraft.subscribe') && threePreviewText.includes('createThreePathGestureDraftVisual') && threePreviewText.includes('child !== draftGroup'), 'ThreePuppetPreview retains one dynamic draft line/instance buffer instead of rebuilding the canonical path graph during a gesture');
+assert(threePreviewText.includes('collectViewerScreenTargets(true)') && threePreviewText.includes('data-three-path-point-screen-targets') && workflowSpecText.includes('Path point drag stays transient and commits one undo entry'), 'E2E-only path handle coordinates verify direct point dragging without adding production collection work');
 assert(!pathCanvasPaneText.includes('SceneSketch') && !pathCanvasPaneText.includes('svgRef'), 'Path Editor has no SVG authoring surface or SVG pointer owner');
 assert(pathCanvasPaneText.includes('mechanisms={[]}'), 'Path Editor explicitly hides mechanism geometry so the tab shows only character plus path');
 assert(pathCanvasPaneText.includes('paths={selectedPath ? [selectedPath] : []}') && pathCanvasPaneText.includes('selectedPathId={selectedPath?.id}'), 'Path Editor 3D passes the selected editable path into the shared 3D preview');
@@ -3587,18 +3770,12 @@ const cachedFit = fitMechanismSimulationWithContext(sample.mechanisms[0], 1.234,
 assert.deepEqual(cachedFit.pathPoints, directFit.pathPoints, 'cached Foundry fit preserves the direct preview path exactly');
 assert(Math.hypot(cachedFit.state.effector.x - directFit.state.effector.x, cachedFit.state.effector.y - directFit.state.effector.y) < 1e-9, 'cached Foundry fit maps the live effector exactly like direct fit');
 assert(!threePreviewText.includes('teeth * 2'), '3D preview no longer carries a separate saw-tooth gear implementation');
-assert(threePreviewText.includes('fabricablePartOutlinePoints'), '3D puppet preview uses shared model/user contour outlines instead of raw image crop rectangles');
-assert(webOnnxText.includes('contourFromCropMask') && webOnnxText.includes("contourSource: crop.contourPoints.length >= 3 ? 'onnx-mask'"), 'browser ONNX preserves mask-derived part contours for fabrication plates');
-assert(webOnnxText.includes('MODEL_CACHE_NAME') && webOnnxText.includes('caches.open') && webOnnxText.includes('warmWebOnnxCache'), 'browser ONNX model can be separately downloaded and cached');
-assert(webOnnxText.includes('GIT_LFS_POINTER_PREFIX') && webOnnxText.includes('deleteCachedModel') && webOnnxText.includes("cache: 'reload'"), 'browser ONNX rejects stale Git LFS pointer caches and refetches model bytes');
-assert(webOnnxText.includes('MODEL_BYTES_HEADER') && webOnnxText.includes('x-motionsmith-model-bytes'), 'browser ONNX marks valid cached model bytes to avoid treating pointer files as ready');
-assert(webOnnxText.includes('assertCompleteModelDownload') && webOnnxText.includes('download disconnected after'), 'browser ONNX rejects interrupted model downloads before they can be cached');
-assert(webOnnxText.includes('markedBytes && markedBytes !== buffer.byteLength'), 'browser ONNX evicts cache entries whose recorded bytes do not match the cached body');
-assert(webOnnxText.includes("runtimeStage === 'loading-model'") && webOnnxText.includes('Cached model bytes were cleared') && webOnnxText.includes('URL.revokeObjectURL(imageUrl)'), 'browser ONNX clears bad session-load caches and releases per-image blob URLs for repeated imports');
-assert(webOnnxText.includes('InferenceSession.create(new Uint8Array(modelBuffer)'), 'browser ONNX creates sessions from cached model bytes');
-assert(webOnnxText.includes("import('onnxruntime-web')") && !webOnnxText.includes("import * as ort from 'onnxruntime-web'"), 'ONNX Runtime JS is lazy-loaded outside the initial editor shell bundle');
-assert(appUiText.includes('data-testid="onnx-cache-status"') && appOnnxBootstrapText.includes('warmWebOnnxCache'), 'status bar exposes ONNX cache/download status');
-assert(indexText.includes('id="boot-loader"') && indexText.includes('Loading MotionSmith') && indexText.includes('boot-version') && indexText.includes('data-boot-status') && indexText.includes('data-boot-progress'), 'static boot loader covers slow startup with logo, wordmark, version, and AI model progress');
+assert(puppetPartTopologyText.includes('fabricablePartOutlinePoints'), '3D puppet topology preparation uses shared model/user contour outlines instead of raw image crop rectangles');
+assert(!packageJson.dependencies['onnxruntime-web'] && !packageJson.devDependencies['onnxruntime-web'], 'the classroom dependency graph excludes ONNX Runtime');
+assert(projectText.includes('local-package://${input.sourceImageName}') && !projectText.includes('web-onnx://'), 'new character packages use an honest local-package provenance');
+assert(packageJson.scripts.build.includes('check-no-image-recognition.mjs --source') && packageJson.scripts.build.includes('check-no-image-recognition.mjs --dist'), 'the production build fails if image-recognition source or output returns');
+assert(!appUiText.includes('onnx-cache-status') && !appUiText.includes('Create from image') && !appUiText.includes('Get AI'), 'runtime UI has no image-recognition entry or download status');
+assert(indexText.includes('id="boot-loader"') && indexText.includes('Loading MotionSmith') && indexText.includes('boot-version') && indexText.includes('data-boot-status') && indexText.includes('data-boot-progress'), 'static boot loader covers normal workspace startup with logo, wordmark, version, and progress');
 assert(viewer3dText.includes('VIEWER3D_CAMERA_PRESETS') && threePreviewText.includes('three-puppet-view-toolbar') && foundryCameraText.includes('foundryPreset'), '3D puppet and foundry previews share one viewer camera preset contract');
 assert(viewer3dText.includes('type Viewer3DContract') && viewer3dText.includes('createViewer3DContract'), '3D viewers expose one shared OOP-style contract object for tab adapters');
 assert(threePreviewText.includes('DEFAULT_PUPPET_VIEWER_LAYERS') && threePreviewText.includes('data-testid={`${testId}-toggle-${layer}`}') && foundry3dText.includes('foundry-toggle-grid'), '3D viewer top overlay toolbar wires shared layer toggles instead of decorative buttons');
@@ -3613,7 +3790,8 @@ ${mechanismDesignStageText}
 ${designFoundryPreviewText}`.includes('hideSceneUnderlay/>'), 'Mechanism Design no longer depends on the legacy 2D design canvas underlay toggle');
 assert(threePreviewText.includes('data-three-part-surface="solid-cut-plates"'), '3D puppet preview exposes the solid cut-plate surface contract');
 assert(threePreviewText.includes('data-three-part-art="top-texture-decal"'), '3D puppet preview exposes that artwork is rendered on top of plates');
-assert(threePreviewText.includes('TextureLoader'), '3D puppet preview loads character part images as surface decals');
+assert(threePreviewText.includes('createPartArtMaterial') && partArtMaterialText.includes('ImageBitmapLoader') && partArtMaterialText.includes('bitmap.close()'), '3D puppet preview decodes surface decals asynchronously and closes owned ImageBitmaps');
+assert(threePreviewText.includes('diffPuppetPartTopologies') && threePreviewText.includes('partTopologyIdentitiesRef') && puppetPartTopologyText.includes('preparePuppetPartTopology') && puppetPartTopologyText.includes('samePuppetPartTopologyIdentity') && !threePreviewText.includes('const staleParts = [...roots.partsLayer.children]'), '3D puppet editing retains unchanged plates and replaces only changed outline, hole, or artwork topology');
 assert(threePreviewText.includes('new THREE.ShapeGeometry(shape)'), '3D puppet artwork decals are clipped to fabrication part outlines');
 assert(threePreviewText.includes('part-art-decal'), '3D puppet preview names surface decal meshes for browser inspection');
 assert(threePreviewText.includes('cut-hole-ring'), '3D puppet preview draws raised joint-hole rings on part surfaces');
@@ -3623,37 +3801,40 @@ assert(agentsContract.includes('Path Editor must render only character, skeleton
 assert(designContract.includes('Getting Started is a compact modal dialog'), 'DESIGN.md separates Getting Started from full-screen onboarding');
 assert(designContract.includes('The Character tab is functional'), 'DESIGN.md defines Character as a functional editor tab');
 assert(indexText.includes('id="boot-loader"') && indexText.includes('aria-label="Loading MotionSmith"') && indexText.includes('boot-word') && indexText.includes('boot-version') && indexText.includes('Opening workspace'), 'startup uses one static logo/wordmark/version boot loader before the async workspace mounts');
-assert(indexText.includes('resources/icons/AppIcon.png') && !indexText.includes('src-tauri/icons/icon.png'), 'startup boot loader uses the canonical MotionSmith app icon instead of the old blue grid path');
+assert(indexText.includes('src-tauri/icons/icon.png'), 'startup boot loader uses the 256px MotionSmith delivery icon');
 assert(indexText.includes('#boot-loader .boot-word') && indexText.includes('max-width: calc(100vw - 2rem)') && indexText.includes('white-space: nowrap'), 'startup wordmark is viewport-constrained instead of clipped');
-assert(appText.includes('useAppOnnxBootstrap') && appOnnxBootstrapText.includes('warmWebOnnxCacheInWorker(setOnnxCacheStatus)') && appOnnxBootstrapText.includes('stage: "missing"') && !appOnnxBootstrapText.includes('requestIdleCallback') && !appOnnxBootstrapText.includes('setTimeout(') && !appOnnxBootstrapText.includes('finishBootLoader()') && indexTsxText.includes("void import('./App')") && indexTsxText.includes('releaseBootLoader'), 'the workspace releases the static boot loader without starting an ONNX request until explicit AI preparation');
+assert(!appText.includes('useAppOnnxBootstrap') && indexTsxText.includes("void import('./App')") && indexTsxText.includes('releaseBootLoader'), 'the workspace releases the static boot loader without mounting an image-recognition bootstrap');
 assert(shellUiText.includes('const APP_VERSION = __APP_VERSION__') && shellUiText.includes('workflow-rail-version') && indexText.includes('v%APP_VERSION%'), 'startup boot loader and editor rail show the package version subtly');
 assert(indexText.includes('.boot-version') && indexText.includes('.workflow-rail-version'), 'version labels use low-emphasis styling');
-assert(appWorkspaceShellText.includes('../resources/icons/AppIcon.png?url') && indexText.includes('.app-header-icon'), 'top bar renders the canonical MotionSmith app icon with dedicated sizing');
+assert(appWorkspaceShellText.includes('../src-tauri/icons/icon.png?url') && indexText.includes('.app-header-icon'), 'top bar renders the right-sized MotionSmith delivery icon with dedicated sizing');
 assert(indexText.includes("font-family: 'Manrope'") && indexText.includes('fonts/manrope-800-latin.woff2'), 'startup boot loader uses self-hosted Manrope wordmark styling');
 assert(!appShellText.includes('welcome-dialog') && !appShellText.includes('Skip forever') && !appShellText.includes('>Start<'), 'startup has no second React welcome modal or persistence/start controls');
 assert(indexText.includes('--ms-font-sans') && indexText.includes('font-family: var(--ms-font-sans)') && indexText.includes('.brand-title'), 'global typography uses the shared modern MotionSmith font stack');
 assert(appWorkspaceShellText.includes('app-header-home') && appWorkspaceShellText.includes('app-header-actions') && appWorkspaceShellText.includes('quick-toolbar'), 'top app bar separates home, menus, and quick actions into compact zones');
 assert(indexText.includes('.app-header-home') && indexText.includes('.app-header-actions') && indexText.includes('border-radius: 999px'), 'top app bar keeps the home control and current stage in one slick editor row');
 assert(!appWorkspaceShellText.includes('flex flex-col items-end gap-2'), 'top app bar does not stack menu and quick actions vertically');
-assert(appText.includes('useProjectAutosave(project') && appControllerSource.includes('readAutosaveProject(initialProject)') && appProjectCommandsHookText.includes('readAutosaveProject') && appProjectCommandsHookText.includes('readWorkspaceLayoutSnapshot') && appProjectCommandsHookText.includes('writeWorkspaceLayoutSnapshot') && appAutosaveHookText.includes('createAutosaveTransaction') && appAutosaveHookText.includes('pagehide') && appAutosaveHookText.includes('beforeunload') && projectPersistenceText.includes('readStorageWithLegacy') && projectPersistenceText.includes('migrateStorageValue') && projectAutosaveFormatText.includes('motionsmith.autosave'), 'MotionSmith storage rename keeps legacy autosave/workspace migration hooks behind the persistence seam and reload protection');
+assert(appText.includes('useProjectAutosave(project') && appControllerSource.includes('useColdAutosaveRecovery') && appControllerSource.includes('suspended: autosaveRecovery.pending') && coldAutosaveRecoveryHookText.includes('latestProjectRef.current === initialProject') && coldAutosaveRecoveryHookText.includes('client.dispose()') && autosaveRecoveryWorkerClientText.includes('active.firstFrame') && autosaveRecoveryWorkerClientText.includes('active.secondFrame') && autosaveRecoveryWorkerClientText.includes('captureAutosaveRecoveryStorage') && autosaveRecoveryWorkerClientText.includes('autosaveRecoveryStorageIsCurrent') && autosaveRecoveryWorkerText.includes('await import(') && appProjectCommandsHookText.includes('readAutosaveProject') && appProjectCommandsHookText.includes('readWorkspaceLayoutSnapshot') && appProjectCommandsHookText.includes('writeWorkspaceLayoutSnapshot') && appAutosaveHookText.includes('createAutosaveTransaction') && appAutosaveHookText.includes('pagehide') && appAutosaveHookText.includes('beforeunload') && projectPersistenceText.includes('readStorageWithLegacy') && projectPersistenceText.includes('migrateStorageValue') && projectAutosaveFormatText.includes('motionsmith.autosave'), 'cold boot paints an empty ProjectState before a lazy generation-checked recovery worker validates browser storage, while explicit recovery and workspace migration remain behind the persistence seam');
+assert(appAutosaveHookText.includes('project === initialProjectRef.current') && appAutosaveHookText.includes('project === options.recoveredBaseline') && appAutosaveHookText.includes('Autosave failed: Storage full') && autosaveTransactionText.includes('terminate();') && autosaveTransactionText.includes('projectForPersistence(project)') && autosaveWorkerText.includes('serializeProjectCompact') && autosaveWorkerText.includes('autosaveFingerprint(serialized)') && projectSerializationText.includes('lastExport: _lastExport') && projectSerializationText.includes('JSON.stringify(versionedProject(project))') && autosaveFingerprintText.includes('UTF-8 byte count without allocating') && projectAutosaveTransactionsText.includes('readAutosaveJournalSnapshot(target, false)') && projectAutosaveTransactionsText.includes('AUTOSAVE_SNAPSHOT_MAX_BYTES') && projectAutosaveTransactionsText.includes('AUTOSAVE_JOURNAL_MAX_BYTES') && projectAutosaveTransactionsText.includes('return write(false)') && projectAutosaveFormatText.includes('retainedGenerations: 1 | 2') && workflowSpecText.includes('Autosave keeps cold boot idle and bounds 1/3/5MB writes at 6x CPU') && workflowSpecText.includes('Autosave quota failure is visible in the status dock'), 'autosave strips transient export bytes before structured clone, ignores the recovered baseline, prepares compact measured bytes in a disposable worker, applies snapshot/journal memory budgets, reports failure, and drops the optional recovery generation under memory or quota pressure');
 assert(!appUiText.includes('MOTIONSMITH_VIDEO_URL'), 'welcome splash does not embed the old preview video');
 assert(appUiText.includes('getting-started-dialog') && appUiText.includes('getting-started-gallery'), 'Getting Started is an explicit compact starter dialog');
 assert(appUiText.includes('const [showGuided, setShowGuided] = useState(false)') && appUiText.includes('Start.') && appUiText.includes('Pick a project.'), 'Getting Started opens as starter choices and moves guided projects behind the explicit Guide tile');
-assert(gettingStartedDialogCommandSource.includes('Starter rig') && gettingStartedDialogCommandSource.includes('Open full project') && !gettingStartedDialogCommandSource.includes('Character file') && !gettingStartedDialogCommandSource.includes('>Humanoid<') && !gettingStartedDialogCommandSource.includes('>Package<') && !gettingStartedDialogCommandSource.includes('Import project'), 'Getting Started keeps starter choices compact and leaves character file loading to the Character tab');
+assert(gettingStartedDialogCommandSource.includes('Starter rig') && gettingStartedDialogCommandSource.includes('Character file') && gettingStartedDialogCommandSource.includes('Open full project') && !gettingStartedDialogCommandSource.includes('>Humanoid<') && !gettingStartedDialogCommandSource.includes('Import project'), 'Getting Started keeps two starter tiles and paired local-file actions compact');
 assert(appUiText.includes('getting-started-card-guided') && appUiText.includes('Open Guide') && appUiText.includes('guided-project-library') && appUiText.includes('guided-project-card-${lesson.id}') && appUiText.includes('Don&apos;t show again this session'), 'Getting Started exposes guided projects through a Guide tile with a session-only opt-out while keeping open exploration visible');
 assert(appUiText.includes('GuidedLessonMotionPreview') && appUiText.includes('guided-project-preview-${lessonId}') && appUiText.includes('data-preview-mode="rendered-character-motion"') && appUiText.includes('data-motion-preview="character-path"') && appUiText.includes('gearTrainCenters(mechanism)') && indexText.includes('repeat(auto-fit, minmax(13rem, 1fr))') && indexText.includes('.guided-project-preview') && indexText.includes('min-height: min(82vh, 43rem)') && indexText.includes('min-height: 11.25rem'), 'Guide project cards render larger character-motion thumbnails and the Start dialog uses taller starter cards');
+assert(gettingStartedDialogCommandSource.includes('createSampleProject') && gettingStartedDialogCommandSource.includes('starterRigPreviewProject') && gettingStartedDialogCommandSource.includes('data-testid="getting-started-guide-preview"') && gettingStartedDialogCommandSource.includes('lessonId="starter-rig"') && indexText.includes('.guide-preview-slot .guided-project-preview'), 'Guide uses the shared gray starter humanoid render as its entry thumbnail');
 assert(appUiText.includes('Change') && appUiText.includes('Build') && appUiText.includes('data-change-cue') && appUiText.includes('data-direct-translation') && appUiText.includes('data-evidence-cue') && appUiText.includes('data-expected-answer') && appUiText.includes('data-clip-slot') && gettingStartedDialogCommandSource.includes('starter-card-cues') && gettingStartedDialogCommandSource.includes('Edit one move') && gettingStartedDialogCommandSource.includes('Ready to build'), 'Guided and starter cards show compact action cues while carrying local classroom check/evidence metadata without visible sensemaking text load');
 assert(characterLessonOwnershipText.includes('character-make-it-yours') && characterLessonOwnershipText.includes('Make it yours') && characterLessonOwnershipText.includes('data-change-cue={activeClassroomLesson.changeCue}') && characterLessonOwnershipText.includes('data-build-cue={activeClassroomLesson.buildCue}') && characterLessonOwnershipText.includes('Select a part') && characterLessonOwnershipText.includes('Place joints') && characterSelectionText.includes('<CharacterLessonOwnership') && !appText.includes('Change {activeClassroomLesson.changeCue}') && !appText.includes('Build {activeClassroomLesson.buildCue}'), 'Guided lessons land on Character with character-only rigging controls while keeping lesson metadata for later stages');
-assert(gettingStartedDialogCommandSource.includes('getting-started-card-humanoid') && gettingStartedDialogCommandSource.includes('getting-started-card-image') && !gettingStartedDialogCommandSource.includes('getting-started-card-package') && gettingStartedDialogCommandSource.includes('getting-started-card-${template.id}') && starterImageTemplatesText.includes('id: "girl"') && starterImageTemplatesText.includes('id: "boy"'), 'Getting Started exposes compact starter/result choices including Girl and Boy without a duplicate character-file card');
-assert(!appUiText.includes('Local browser processing') && !appUiText.includes('Load art + skeleton') && !appUiText.includes('Full body rig') && !appUiText.includes('Browser ONNX rigging'), 'Getting Started avoids process/explanation copy');
+assert(gettingStartedDialogCommandSource.includes('getting-started-card-humanoid') && !gettingStartedDialogCommandSource.includes('getting-started-card-character') && gettingStartedDialogCommandSource.includes('getting-started-file-actions') && gettingStartedDialogCommandSource.includes('getting-started-open-character') && gettingStartedDialogCommandSource.includes('getting-started-package-input') && indexText.includes('.getting-started-file-actions') && !gettingStartedDialogCommandSource.includes('getting-started-card-image') && !appWorkspaceShellText.includes('showStarterImages'), 'Getting Started keeps only Guide and Starter rig in the gallery while pairing local character and project file actions below');
+assert(gettingStartedDialogCommandSource.includes('onSample(starterRigProject)') && gettingStartedDialogCommandSource.includes('starterRigPreviewProject(starterRigProject)') && gettingStartedDialogCommandSource.includes('onLesson(lesson.id, previewProjects[lesson.id]') && appProjectCommandsHookText.includes('preparedProject ?? createSampleProject()') && appProjectCommandsHookText.includes('preparedProject ?? createLessonProject(lesson.id)'), 'starter clicks reuse their already-prepared full serializable ProjectState while rendering a lightweight preview projection instead of rebuilding the project on the interaction path');
+assert(!appUiText.includes('Local browser processing') && !appUiText.includes('Load art + skeleton') && !appUiText.includes('Full body rig'), 'Getting Started avoids process/explanation copy');
 assert(!appUiText.includes('Crank turns -> rocker swings') && !appUiText.includes('Cam shape -> follower lifts') && !appUiText.includes('Two cranks -> one trace point') && !appUiText.includes('Touching teeth -> spin transfers') && !appUiText.includes('Parts + joints -> motion rig'), 'Getting Started keeps direct-translation sensemaking out of visible first-run copy');
 assert(!appUiText.includes('lesson-template-'), 'Getting Started does not use legacy lesson-template cards');
-assert(indexText.includes('.starter-thumb { width: 2.25rem; height: 2.25rem;') && indexText.includes('.getting-started-dialog .template-gallery .starter-thumb { width: 6rem; height: 6rem;') && indexText.includes('transform: scale(1.22)'), 'Girl/Boy starter thumbnails stay compact globally but larger inside Start cards');
-assert(appText.includes('useProjectHistory(createInitialProject)') && appProjectHistoryHookText.includes('return { present: createInitialProject(), past: [], future: [] }'), 'App initializes through the ProjectState history hook and can restore a browser autosave instead of preloading a character');
+assert(appControllerSource.includes('useProjectHistory(createEmptyProject)') && appProjectHistoryHookText.includes('return { present: createInitialProject(), past: [], future: [] }'), 'App history initializes with an empty ProjectState so browser autosave recovery can replace it only after the first paint');
 assert(appProjectCommandsHookText.includes('setProject(createEmptyProject(), { resetHistory: true })'), 'New Project resets to an empty project instead of a starter character');
+assert(appProjectCommandsHookText.includes('startTransition(() =>') && appProjectCommandsHookText.includes('setCommandStatus("New project")'), 'New Project paints its status before transitioning a potentially textured scene to empty state');
 assert(appProjectCommandsHookText.includes('project.sceneObjectOrder.length > 0') && appProjectCommandsHookText.includes('Object.keys(project.sceneObjects).length > 0'), 'New Project discard confirmation treats Character-created scene objects as user work');
-assert(appCharacterImportActionsHookText.includes('returnStage: "character"') && appCharacterImportActionsHookText.includes('AI could not load on this network. Use a starter character or load a character file.'), 'Accepted character loads stay in Character and failed AI imports provide a local fallback action');
-assert(characterImportOverlaysText.includes('character-import-review') && characterSelectionText.includes('<CharacterImportStatusDock') && characterSelectionText.includes('reviewedProject={reviewedProject}') && characterSelectionText.includes('<CharacterImportReviewDialog') && characterImportOverlaysText.includes('showImportChecks = project.settings.debugVisuals'), 'Character imports preview the pending character and put approval in a centered overlay while checks stay dev-only');
+assert(appCharacterImportActionsHookText.includes('returnStage: "character"') && appCharacterImportActionsHookText.includes('requestCharacterPackage(files') && !appCharacterImportActionsHookText.includes('AI could not load'), 'accepted local character packages stay in Character through the import worker without an AI failure path');
+assert(characterImportOverlaysText.includes('character-import-review') && characterSelectionText.includes('<CharacterImportStatusDock') && characterSelectionText.includes('<CharacterImportReviewBoundary') && characterSelectionText.includes('project={project}') && !characterSelectionText.includes('reviewedProject={reviewedProject}') && characterImportOverlaysText.includes('showImportChecks = project.settings.debugVisuals') && characterImportOverlaysText.includes('transientProgress !== null || pendingCharacter !== null'), 'Character imports keep the current workbench stable until centered approval, avoid an idle ready-state overlay, then build the accepted character while checks stay dev-only');
 assert(appUiText.includes('Dev mode') && !appUiText.includes('Debug visuals'), 'Options expose debug overlays as Dev mode instead of novice-facing debug copy');
 assert(!appText.includes('<WelcomeDialog') && !appUiText.includes('WelcomeDialog') && !appText.includes('setShowWelcome') && !appText.includes('setShowGettingStarted(!hideNextTime)') && appText.includes('const [showGettingStarted, setShowGettingStarted] = useState(') && appText.includes('readGettingStartedHiddenForSession'), 'Startup uses the static boot loader only, then opens Getting Started unless the session opt-out is set');
 assert(characterImportControlsText.includes('onOpenGettingStarted') && characterImportControlsText.includes('Open Getting Started') && characterSelectionText.includes('<CharacterImportControls'), 'Character tab can reopen Getting Started through extracted import controls without owning its starter gallery');
@@ -3661,8 +3842,10 @@ assert(!appUiText.includes('Start with character art'), 'Character tab no longer
 assert(!indexText.includes('.onboarding-page'), 'CSS no longer keeps a full-screen onboarding page mode');
 assert(!indexText.includes('.welcome-simple'), 'CSS no longer keeps the old welcome video layout');
 assert(characterSetupPanelText.includes('character-setup-panel') && characterSelectionText.includes('<CharacterSetupPanel'), 'Character tab exposes direct part settings through the extracted setup panel instead of only getting-started cards');
-assert(characterImportControlsText.includes('character-import-controls') && characterImportControlsText.includes('blank-package-input') && characterImportControlsText.includes('onnx-input') && characterImportControlsText.includes('onboarding-import-input') && !characterImportControlsText.includes('Keep compatible mechanisms') && !characterImportControlsText.includes('Keep mechanisms') && characterSelectionText.includes('<CharacterImportControls'), 'Character import file controls live in the extracted import-controls seam with stable chooser ids and no keep-mechanisms toggle');
-assert(characterImportControlsText.includes('character-add-scene-object') && characterImportControlsText.includes('scene-object-image-input') && characterImportControlsText.includes('accept="image/png,image/jpeg,image/webp,image/svg+xml"') && characterSelectionText.includes('sceneObjectFromImageFile(file, uid("object"))') && sceneObjectImageText.includes('contourPoints: imageContour') && sceneObjectImageText.includes('Object SVG must be local artwork only.') && sceneObjectImageText.includes('Object image could not be saved locally.') && !sceneObjectImageText.includes('?? sourceUrl') && sceneObjectInspectorText.includes('data-testid="scene-object-inspector"') && sceneObjectInspectorText.includes('Object name') && sceneObjectInspectorText.includes('Size · use Scale') && sceneObjectInspectorText.includes('Delete object'), 'Character tab exclusively owns safe image-object import, contour creation, rename, and object-property editing');
+assert(characterImportControlsText.includes('character-import-controls') && characterImportControlsText.includes('blank-package-input') && characterImportControlsText.includes('onboarding-import-input') && !characterImportControlsText.includes('onnx-input') && !characterImportControlsText.includes('Create from image') && !characterImportControlsText.includes('Keep mechanisms') && characterSelectionText.includes('<CharacterImportControls'), 'Character import controls keep local package/project choosers and exclude image recognition');
+assert(characterImportControlsText.includes('character-add-scene-object') && characterImportControlsText.includes('scene-object-image-input') && characterImportControlsText.includes('data-object-image-worker="on-demand"') && characterImportControlsText.includes('accept="image/png,image/jpeg,image/webp,image/svg+xml"') && characterSelectionText.includes('createSceneObjectImageWorkerClient()') && characterSelectionText.includes('objectImageClient.request(file, uid("object")') && characterSelectionText.includes('objectImageClient.dispose()') && sceneObjectImageJobText.includes('contourPoints') && sceneObjectImagePolicyText.includes('Object SVG must be local artwork only.') && sceneObjectImageJobText.includes('Object image could not be saved locally.') && sceneObjectInspectorText.includes('data-testid="scene-object-inspector"') && sceneObjectInspectorText.includes('Object name') && sceneObjectInspectorText.includes('Size · use Scale') && sceneObjectInspectorText.includes('Delete object'), 'Character exclusively owns safe object artwork import through a disposable local worker');
+assert(sceneObjectImagePolicyText.includes('compressedBytes: 12 * MEBIBYTE') && sceneObjectImagePolicyText.includes('maxSourcePixels: 16_000_000') && sceneObjectImagePolicyText.includes('textureEdge: 512') && sceneObjectImagePolicyText.includes('contourEdge: 160') && sceneObjectImageJobText.includes('new OffscreenCanvas(') && sceneObjectImageJobText.includes('ImageDecoder.isTypeSupported') && sceneObjectImageJobText.includes('decoded.close()'), 'object artwork has explicit decode/output memory bounds and releases worker-owned decoded frames');
+assert(sceneObjectImageWorkerClientText.includes('new URL("../../workers/sceneObjectImageWorker.ts", import.meta.url)') && sceneObjectImageWorkerClientText.includes('active.firstFrame') && sceneObjectImageWorkerClientText.includes('active.secondFrame') && sceneObjectImageWorkerClientText.includes('worker.terminate()') && sceneObjectImageWorkerText.includes('await import(') && !existsSync(join(process.cwd(), 'utils', 'sceneObjectImage.ts')), 'object artwork waits for two paints, lazy-loads its worker job, supersedes stale work, and removes the old main-thread decoder');
 assert(threePreviewText.includes('SceneObject') && threePreviewText.includes('objectsLayer') && threePreviewText.includes('object.contourPoints') && threePreviewText.includes('createSceneObjectArtMaterial') && threePreviewText.includes('data-three-scene-prop-count'), 'Shared 3D viewer renders Character-created image-contour scene objects as ProjectState props without adding object-creation controls to later stages');
 assert(pathCanvasPaneText.includes('onSelectSceneObject={(objectId)') && designFoundryPreviewText.includes('onAutomataSceneObjectSelect={(objectId)') && designFoundryPreviewText.includes('onAutomataPartSelect={(partId)') && designFoundryPreviewText.includes('onWheel={handleWheel}') && foundry3dText.includes('pickAutomataTarget(event)'), 'Path and Mechanism Design can select and animate Character-created objects without exposing object creation outside Character, while Design routes viewport input through Foundry');
 const sceneObjectUiOwnerFiles = new Set([
@@ -3688,9 +3871,9 @@ assert(partInspectorText.includes('sourceTextureUrl={sourceTextureUrl}') && cutO
 assert(partInspectorText.includes('contourSource: "user"') && cutOutlineEditorText.includes('Auto cut') && cutOutlineEditorText.includes('Add point'), 'Character cut editor writes user contours and can bake/add contour points');
 assert(cutOutlineEditorText.includes('type CutTool = "edit" | "draw" | "pan"') && cutOutlineEditorText.includes('data-testid={`cut-tool-${id}`}') && cutOutlineEditorText.includes('data-cut-tool={tool}') && cutOutlineEditorText.includes('replacePoints(draw.points, 0)'), 'Character cut editor exposes explicit Edit/Draw/Pan tools and replaces the contour from a one-stroke Draw cut');
 assert(cutOutlineEditorText.includes('setPointerCapture') && cutOutlineEditorText.includes('onPointerCancel={stopDrag}') && !cutOutlineEditorText.includes('onPointerLeave={stopDrag}'), 'Character cut editor keeps captured drag-pan/point-drag active when the pointer leaves the SVG edge');
-assert(threePreviewText.includes('partMeshesRef.current') && threePreviewText.includes('createPart') && threePreviewText.includes('partLandmarkLocalPoints'), 'Path Editor renders solid component geometry from the shared Three scene and canonical part landmarks');
+assert(threePreviewText.includes('partMeshesRef.current') && threePreviewText.includes('createPart') && puppetPartTopologyText.includes('partLandmarkLocalPoints'), 'Path Editor renders solid component geometry from the shared Three scene and canonical part landmarks');
 assert(!existsSync(join(process.cwd(), 'components', 'stages', 'path', 'PartShape.tsx')), 'Path Editor has no SVG-only part artwork/clip renderer');
-assert(designFoundryPreviewText.includes('data-testid="design-shared-foundry-preview"') && designFoundryPreviewText.includes('data-shared-with="foundry-renderer"') && designFoundryPreviewText.includes('buildAutomataSceneModel') && automataSceneModelText.includes('buildFoundryMechanismPreviewModel') && designFoundryPreviewText.includes('<ThreeFoundryPreview') && !designFoundryPreviewText.includes('data-testid="design-guided-context-overlay"'), 'Mechanism Design shows a Foundry-renderer-backed mechanism instance instead of a ghost/private mechanism overlay');
+assert(designFoundryPreviewText.includes('data-testid="design-shared-foundry-preview"') && designFoundryPreviewText.includes('data-shared-with="foundry-renderer"') && designFoundryPreviewText.includes('sampleReusableAutomataSceneRuntime') && automataSceneModelText.includes('createFoundryMechanismPreviewRuntime') && designFoundryPreviewText.includes('<DeferredThreeFoundryPreview') && !designFoundryPreviewText.includes('data-testid="design-guided-context-overlay"'), 'Mechanism Design shows a retained Foundry-renderer-backed mechanism instance instead of a ghost/private mechanism overlay');
 assert(characterSelectionText.includes('Choose new character.'), 'Character tab disables active-project artwork edits while a package review is pending');
 assert(characterSelectionText.includes('disabled={partPanelDisabled}') && characterSelectionText.includes('onClick={onEditCharacter}'), 'Pending package review disables active-character edit buttons');
 assert(characterSelectionText.includes('disabled={partPanelDisabled}') && characterSelectionText.includes('onClick={onSaveSkeleton}'), 'Pending package review disables active skeleton save controls');
@@ -3712,14 +3895,19 @@ const blueprintInspectorStart = blueprintExportText.indexOf('<BlueprintDetailPan
 assert(blueprintCanvasStart >= 0 && blueprintInspectorStart > blueprintCanvasStart && blueprintDetailPanelText.includes('data-testid="blueprint-detail-preview"'), 'Blueprint layout exposes web-first board preview and extracted inspector slot');
 const blueprintCanvasBlock = blueprintExportText.slice(blueprintCanvasStart, blueprintInspectorStart);
 const blueprintInspectorBlock = blueprintDetailPanelText;
-assert(blueprintCanvasBlock.includes('<ThreePuppetPreview') && blueprintCanvasBlock.includes('testId="blueprint-three-puppet"') && blueprintCanvasBlock.includes('initialCameraPreset="front"'), 'Blueprint center canvas previews the canonical components in the shared front-view Three scene');
+assert(blueprintCanvasBlock.includes('<DeferredThreePuppetPreview') && blueprintCanvasBlock.includes('testId="blueprint-three-puppet"') && blueprintCanvasBlock.includes('initialCameraPreset="front"'), 'Blueprint center canvas defers the canonical shared front-view Three scene until its lightweight controls paint');
 assert(!blueprintCanvasBlock.includes('<img') && !blueprintCanvasBlock.includes('alt="Cut sheet"'), 'Blueprint center preview does not expose a broken cut-sheet image placeholder');
 assert(blueprintCanvasBlock.includes('data-visual-level="3d-components"') && !blueprintControlPanelText.includes('blueprint-more-exports') && !blueprintControlPanelText.includes('Assembly guide') && !blueprintControlPanelText.includes('Teacher files'), 'Blueprint keeps the physical 3D component scene central and removes secondary teacher/assembly buttons from the primary workflow');
 assert(blueprintExportText.includes('<BlueprintControlPanel') && blueprintControlPanelText.includes('data-testid="blueprint-control-panel"') && blueprintControlPanelText.includes('aria-label="Generate package"') && blueprintExportText.includes('<BlueprintDetailPanel') && blueprintDetailPanelText.includes('data-testid="blueprint-stack-summary"'), 'Blueprint left workflow controls/downloads and right recipe detail live outside the stage wrapper behind tested panel seams');
+assert(blueprintExportText.includes('createBlueprintPackageWorkerClient()') && !blueprintExportText.includes('createBlueprintPackage(project)') && blueprintControlPanelText.includes('data-blueprint-package-worker="on-demand"') && blueprintControlPanelText.includes('packageStatus === "running" ? "Cancel" : "Make files"'), 'Blueprint package generation paints first, runs on demand in a cancelable worker, and exposes direct status');
+assert(blueprintPackageWorkerClientText.includes('new URL("../../workers/blueprintPackageWorker.ts", import.meta.url)') && blueprintPackageWorkerClientText.includes('active.firstFrame') && blueprintPackageWorkerClientText.includes('active.secondFrame') && blueprintPackageWorkerClientText.includes('lastExport: undefined') && blueprintPackageWorkerClientText.includes('lastFoundryExport: undefined') && blueprintPackageWorkerClientText.includes('characterPackage: undefined') && blueprintPackageWorkerClientText.includes('delete geometryPart.textureUrl') && blueprintPackageWorkerClientText.includes('worker.terminate()') && blueprintPackageWorkerText.includes('await import('), 'Blueprint package work waits for two paints, omits stale generated artifacts and STL-only raster payloads from worker input, lazy-loads generation code, and releases ownership');
+assert(blueprintExportText.includes('requestCustomPartsStl(project') && blueprintControlPanelText.includes('data-blueprint-stl-worker="on-demand"') && blueprintPackageWorkerText.includes('create-custom-parts-stl'), 'Blueprint generates the optional STL only from an explicit cancelable worker request');
+assert(blueprintExportText.includes('pkg && exposePackageDiagnostics') && blueprintExportText.includes('__MOTIONSMITH_E2E_DIAGNOSTICS__') && blueprintExportText.includes('__MOTIONSMITH_CHROMEBOOK_AUDIT__') && blueprintExportText.includes('JSON.stringify(pkg)'), 'multi-megabyte package JSON is exposed only in ordinary diagnostics builds, not production or memory-audit DOM');
+assert(fabricationCustomPartsText.includes('const boundaryColumns = new Set(') && fabricationCustomPartsText.includes('Math.max(1.5, Math.min(2.75, holeRadiusMm * 1.375))') && fabricationCustomPartsText.includes('maxCells: 100_000') && fabricationCustomPartsText.includes('maxFacets: 20_000') && fabricationCustomPartsText.includes('maxBytes: 1_300_000') && fabricationCustomPartsText.includes('fixedBytes + nextBytes') && b695BlueprintTestText.includes('compacted classroom STL has no open mesh edges'), 'custom-parts STL preflights cell work and bounds conforming strip facets and output bytes');
 assert(blueprintModelRuntimeText.includes('const liveRecipes = activeMechanisms.map') && blueprintModelRuntimeText.includes('const recipes = liveRecipes.length ? liveRecipes : (pkg?.recipes ?? [])') && !blueprintModelRuntimeText.includes('previewSvg'), 'Blueprint model prepares live fabrication recipes while SVG remains an export-only artifact');
 assert(blueprintExportText.includes('selectBlueprintRecipe(recipes, selectedRecipeId, project.selectedMechanismId)') && blueprintExportText.includes('recipes.find((recipe) => recipe.mechanismId === selectedMechanismId)'), 'Blueprint defaults the detail recipe to the selected live mechanism so fitted mechanisms carry into print/build views');
 assert(blueprintExportText.includes('<BlueprintDetailPanel') && blueprintDetailPanelText.includes('data-testid="blueprint-sensemaking-label"') && blueprintDetailPanelText.includes('requiredPartCount') && assemblySceneFrameComponentText.includes('data-testid="assembly-scene-sensemaking"') && assemblyInspectorPanelText.includes('data-testid="assembly-sensemaking-label"'), 'Blueprint delegates detail inspector rendering while Blueprint and Assembly reuse mechanism sensemaking metadata for compact visual cues');
-assert(blueprintCanvasBlock.includes('<ThreePuppetPreview') && !blueprintCanvasBlock.includes('<Canvas project={project}'), 'Blueprint center canvas reuses the animated 3D/2.5D workbench scene instead of a separate SVG document');
+assert(blueprintCanvasBlock.includes('<DeferredThreePuppetPreview') && !blueprintCanvasBlock.includes('<Canvas project={project}'), 'Blueprint center canvas reuses the deferred animated 3D/2.5D workbench scene instead of a separate SVG document');
 assert(!blueprintCanvasBlock.includes('assembly-guide-web-preview') && !blueprintInspectorBlock.includes('assembly-guide-web-preview'), 'Blueprint no longer embeds the assembly guide document');
 assert(fabricationRuntimeText.includes('svg: makeBlueprintSvg(project, recipes)'), 'export package uses the physical printable blueprint SVG, not the screen preview');
 const physicalBlueprintSvgStart = fabricationBlueprintSvgText.indexOf('export const makeBlueprintSvg');
@@ -3745,9 +3933,9 @@ assert(assemblyCanvasPaneText.includes('<AssemblyCharacterThreePreview') && asse
 assert(assemblyThreePreviewText.includes('data-testid="assembly-character-three-preview"') && assemblyThreePreviewText.includes('data-testid="assembly-mechanism-three-preview"') && assemblyThreePreviewText.includes('assemblySceneFrame={sceneFrame}') && foundryPreviewStateProbeText.includes('data-three-assembly-phase'), 'Assembly Three preview exposes shared Foundry step phase/progress telemetry for both character and mechanism branches');
 assert(assemblyThreePreviewText.includes('const stepLift') && assemblyThreePreviewText.includes('playing || progress > 0') && assemblyThreePreviewText.includes('Build animation') && !assemblyThreePreviewText.includes('return 0.72') && assemblyCanvasPaneText.includes('playing={playing}'), 'Assembly Three preview stays assembled by default and only lifts z-stack during animated assembly playback');
 assert(assemblySceneFrameText.includes('activeScenePoints') && assemblySceneFrameText.includes('floatingReferencePoints') && foundryAssemblySceneOverlayText.includes('frame.kind === "character"') && foundryAssemblySceneOverlayText.includes('(frame.activeScenePoints ?? []).map(scenePointToPreviewPoint)') && threeFoundryPreviewText.includes('assemblyLift'), 'Character assembly feeds art pins into the Foundry renderer through the scene-to-Foundry coordinate seam and keeps explode_z on z only');
-assert(foundryAssemblySceneOverlayText.includes('assembly-15x15-board-surface') && foundryAssemblySceneOverlayText.includes('board.userData.assemblyBoardZ = z') && foundryAssemblySceneOverlayText.includes('kit.boardCells * kit.boardCells') && threeFoundryPreviewText.includes('threeAssemblyBoardSurface'), 'Assembly overlays render a testable 15x15 board surface at z=0 instead of floating pins without a base board');
-assert(assemblyThreePreviewText.includes('buildAutomataSceneModel') && assemblyThreePreviewText.includes('automataContext={automataContext}') && automataSceneModelText.includes('buildFoundryMechanismPreviewModel') && !assemblyThreePreviewText.includes('mechanisms={[]}'), 'Assembly character context consumes the shared automata/Foundry preview seam instead of private puppet mechanism fallbacks');
-assert(assemblyBlock.includes('buildAssemblyGuideModel') && !assemblyBlock.includes('const liveRecipes = activeMechanisms.map') && assemblyGuideModelText.includes('const liveRecipes = activeMechanisms.map') && assemblyGuideModelText.includes('liveRecipes.length ? liveRecipes : (pkg?.recipes ?? [])'), 'Assembly Guide delegates live recipe fallback to the DOM-free model seam');
+assert(foundryAssemblySceneOverlayText.includes('assembly-15x15-board-surface') && foundryAssemblySceneOverlayText.includes('board.userData.assemblyBoardZ = z') && foundryAssemblySceneOverlayText.includes('kit.boardCells * kit.boardCells') && foundryAssemblySceneOverlayText.includes('new THREE.InstancedMesh') && threeFoundryPreviewText.includes('threeAssemblyBoardSurface'), 'Assembly overlays retain a testable 15x15 board at z=0 and instance its repeated holes in one draw object');
+assert(assemblyThreePreviewText.includes('sampleReusableAutomataSceneRuntime') && assemblyThreePreviewText.includes('automataContext={automataContext}') && automataSceneModelText.includes('createFoundryMechanismPreviewRuntime') && !assemblyThreePreviewText.includes('mechanisms={[]}'), 'Assembly character context consumes the retained shared automata/Foundry preview seam instead of private puppet mechanism fallbacks');
+assert(assemblyBlock.includes('prepareAssemblyGuideModel') && !assemblyBlock.includes('const liveRecipes = activeMechanisms.map') && assemblyGuideModelText.includes('const liveRecipes = activeMechanisms.map') && assemblyGuideModelText.includes('liveRecipes.length ? liveRecipes : (pkg?.recipes ?? [])'), 'Assembly Guide delegates live recipe fallback to the DOM-free prepared model seam');
 assert(assemblyGuideModelText.includes('activeAssemblyMode === "character"') && assemblyCanvasPaneText.includes('buildCharacterAssemblySceneFrame') && assemblyCanvasPaneText.includes('buildMechanismAssemblySceneFrame') && !assemblyCanvasPaneText.includes('{pkg && selectedRecipe && currentStep ?'), 'Assembly animation supports character and mechanism stages through DOM-free scene frames before generating PDF/HTML output');
 assert(!existsSync(join(process.cwd(), 'components', 'stages', 'assembly', 'AssemblyWorkbench.tsx')) && !existsSync(join(process.cwd(), 'components', 'stages', 'assembly', 'MechanismAssemblyWorkbench.tsx')) && !existsSync(join(process.cwd(), 'components', 'stages', 'assembly', 'CharacterAssemblyWorkbench.tsx')), 'legacy Assembly SVG workbench files are deleted rather than preserved as a second scene authority');
 assert(assemblySceneFrameComponentText.includes('data-testid="assembly-readonly-step-strip"') && assemblySceneFrameComponentText.includes('data-assembly-motion-kind') && assemblySceneFrameComponentText.includes('data-mechanism-scene-contract-version'), 'AssemblySceneFrame exposes a testable read-only scene contract strip');
@@ -3755,15 +3943,15 @@ assert(assemblySceneFrameText.includes('export const buildMechanismAssemblyScene
 assert(mechanismSceneContractText.includes('export const buildMechanismSceneContract') && mechanismSceneContractText.includes('fabricationRenderPlanForMechanism') && mechanismSceneContractText.includes("stackSource: 'fabricationStackForMechanism'"), 'MechanismSceneContract derives mechanism layers from the same fabrication render plan as Foundry');
 assert(assemblyGeometryText.includes('export const assemblyCoordToSvg') && assemblyGeometryText.includes('export const characterBoardProjector') && !assemblyGeometryText.includes('<') && !assemblyGeometryText.includes('document.'), 'assemblyGeometry is a DOM-free deterministic helper seam');
 assert(assemblyPlaybackText.includes('export const pendingRecipeForMechanism') && assemblyPlaybackText.includes('createFabricationRecipe(project, mechanism)') && assemblyPlaybackText.includes('buildAssemblyPlaybackSteps'), 'Assembly recipe/playback derivation lives outside App.tsx and reuses the export fabrication recipe seam');
-assert(assemblyGuideModelText.includes('export const buildAssemblyGuideModel') && assemblyGuideModelText.includes('pendingRecipeForMechanism') && assemblyGuideModelText.includes('buildCharacterAssemblyPlan') && assemblyGuideModelText.includes('resetKey: `${activeAssemblyMode}:${selectedRecipe?.mechanismId ?? "none"}:${lane}`') && !assemblyGuideModelText.includes('useState') && !assemblyGuideModelText.includes('window.') && !assemblyGuideModelText.includes('document.') && !assemblyGuideModelText.includes('dispatch('), 'Assembly guide model helper is a pure derivation seam for recipes, mode, steps, and reset key');
-assert(assemblyBlock.includes('const {') && assemblyBlock.includes('resetKey,') && assemblyBlock.includes('buildAssemblyGuideModel({') && assemblyBlock.includes('createFabricationPackage(project)') && assemblyBlock.includes('window.open') && assemblyBlock.includes('downloadText'), 'Assembly Guide keeps IO and pane wiring while delegating pure model derivation');
+assert(assemblyGuideModelText.includes('export const prepareAssemblyGuideModel') && assemblyGuideModelText.includes('export const selectAssemblyGuideStep') && assemblyGuideModelText.includes('export const buildAssemblyGuideModel') && assemblyGuideModelText.includes('pendingRecipeForMechanism') && assemblyGuideModelText.includes('buildCharacterAssemblyPlan') && assemblyGuideModelText.includes('resetKey: `${activeAssemblyMode}:${selectedRecipe?.mechanismId ?? "none"}:${lane}`') && !assemblyGuideModelText.includes('useState') && !assemblyGuideModelText.includes('window.') && !assemblyGuideModelText.includes('document.') && !assemblyGuideModelText.includes('dispatch('), 'Assembly guide model helper separates static preparation from pure current-step selection');
+assert(assemblyBlock.includes('const preparedModel = useMemo(') && assemblyBlock.includes('selectAssemblyGuideStep(preparedModel, stepIndex)') && assemblyBlock.includes('useMemo(() => validateForFabrication(project), [project])') && assemblyBlock.includes('createBlueprintPackageWorkerClient()') && !assemblyBlock.includes('createFabricationPackage(project)') && assemblyControlPanelText.includes('data-assembly-package-worker="on-demand"') && assemblyBlock.includes('window.open') && assemblyBlock.includes('downloadText'), 'Assembly Guide memoizes validation and static recipes/steps while package generation reuses the cancelable Blueprint worker');
 assert(assemblyPlaybackText.includes("motion: 'explode_z'") && assemblyPlaybackText.includes("motion: 'mount_travel_xy'") && assemblyPlaybackText.includes("motion: 'connect_travel_xy'") && assemblyPlaybackText.includes("motion: 'scrub_time'"), 'Assembly playback declares canonical visual motion modes for every build phase');
 assert(assemblyControlPanelText.includes('data-testid="assembly-mode-switch"') && assemblyInspectorPanelText.includes('data-testid="character-assembly-inspector"'), 'Assembly tab exposes a character assembly sub-stage with a compact inspector');
 assert(assemblySceneFrameText.includes("step.phase === 'fixed-pins'") && assemblySceneFrameText.includes("step.phase === 'free-pivots'") && assemblySceneFrameText.includes('activePins'), 'Character assembly frame separates fixed board pins from free limb pivots without a second SVG scene');
 assert(assemblyControlPanelText.includes('activeAssemblyMode === "mechanism" &&') && assemblyControlPanelText.includes('data-testid="assembly-lane-switch"') && assemblyControlPanelText.includes('assembly-recipe-card text-left'), 'Character assembly mode hides mechanism-only lane and recipe controls');
 assert(assemblyPlaybackText.includes('export const buildCharacterAssemblyPlan') && assemblyPlaybackText.includes("kind: 'character'") && assemblyPlaybackText.includes('mechanismAssemblySteps: []') && assemblyPlaybackText.includes('sceneToBoardRaw(joint.position') && assemblyPlaybackText.includes('board?.valid ? board.label : undefined'), 'Character assembly plan is derived separately from mechanism recipe steps and does not fake clamped board holes');
 assert(assemblyBlock.includes('useAssemblyGuidePlayback') && !assemblyBlock.includes('stepProgressRef') && !assemblyBlock.includes('window.requestAnimationFrame(tick)'), 'Assembly Guide delegates playback timing/reset choreography to a harnessable hook seam');
-assert(assemblyGuidePlaybackHookText.includes('export const useAssemblyGuidePlayback') && assemblyGuidePlaybackHookText.includes('setStepCount(activeStepCount)') && assemblyGuidePlaybackHookText.includes('playbackClock') && assemblyGuidePlaybackHookText.includes('phaseAdvance') && assemblyGuidePlaybackHookText.includes('1400') && !assemblyGuidePlaybackHookText.includes('window.requestAnimationFrame(tick)') && assemblyGuidePlaybackHookText.includes('setPlaying(false)'), 'Assembly playback hook preserves step count reporting, external-clock phase timing, and reset-to-stopped behavior');
+assert(assemblyGuidePlaybackHookText.includes('export const useAssemblyGuidePlayback') && assemblyGuidePlaybackHookText.includes('setStepCount(activeStepCount)') && assemblyGuidePlaybackHookText.includes('playbackClock') && assemblyGuidePlaybackHookText.includes('phaseAdvance') && assemblyGuidePlaybackHookText.includes('1400') && !assemblyGuidePlaybackHookText.includes('window.requestAnimationFrame(tick)') && assemblyGuidePlaybackHookText.includes('setPlaying(false)') && !assemblyGuidePlaybackHookText.includes('setStepIndex((index) => (index >= activeStepCount - 1'), 'Assembly playback loops the selected step on the external clock without React step commits and preserves reset-to-stopped behavior');
 const assemblyGuideLiveModel = buildAssemblyGuideModel({ project: sample, selectedRecipeId: null, assemblyMode: 'mechanism', lane: 'kit', stepIndex: 0 });
 assert.equal(assemblyGuideLiveModel.selectedRecipe?.mechanismId, sample.mechanisms[0].id, 'Assembly guide model prefers live project mechanisms before package recipes');
 assert.equal(assemblyGuideLiveModel.activeAssemblyMode, 'mechanism', 'Assembly guide model defaults to mechanism mode when a live recipe exists');
@@ -3791,6 +3979,8 @@ assert.equal(smoothAssemblyProgress(0.5), 0.5, 'assembly progress easing preserv
 assert.equal(smoothAssemblyProgress(2), 1, 'assembly progress easing clamps above one');
 assert.equal(svgPathFromPoints([{ x: 0, y: 0 }, { x: 1, y: 2 }], point => ({ x: point.x + 10, y: point.y + 20 })), 'M 10.0 20.0 L 11.0 22.0 Z', 'assembly path helper is deterministic and projection-driven');
 assert(trackingModalSource.includes("from '../utils/trackingPath'") && !trackingModalSource.includes('segmentsPerEdge = 20'), 'Tracking modal delegates path smoothing/normalization to a DOM-free helper seam');
+assert(trackingModalSource.includes('createGifFrameSession') && trackingModalSource.includes('requestVideoFrameCallback') && trackingModalSource.includes('gifBitmapRef.current?.close()') && trackingModalSource.includes('URL.revokeObjectURL') && trackingModalSource.includes('updateTimeline(frame, activePlan.sampledFrames') && !trackingModalSource.includes('updateTimeline(nextFrame') && !trackingModalSource.includes("from 'gifuct-js'") && !trackingModalSource.includes('toDataURL(') && !trackingModalSource.includes('setInterval('), 'Trace playback lazily decodes GIFs, advances the GIF timeline only after bitmap delivery, drives video outside React frame state, and releases bitmap/blob resources');
+assert(trackingMediaPolicyText.includes('TRACKING_MEDIA_MAX_EDGE_PX = 1280') && trackingMediaPolicyText.includes('TRACKING_MEDIA_MAX_FPS = 30') && trackingMediaPolicyText.includes('TRACKING_MEDIA_MAX_SAMPLED_FRAMES = 600') && trackingMediaPolicyText.includes('scanTrackingGifMetadata') && trackingMediaPolicyText.includes('assertTrackingGifDecodeInput') && trackingMediaPolicyText.includes('trackingGifFallbackReplayWindow') && gifFrameSessionText.includes('queuedIndex') && gifFrameWorkerText.includes('assertTrackingGifDecodeInput(metadata)') && gifFrameWorkerText.includes('new ImageDecoder({') && gifFrameWorkerText.includes('desiredWidth: initialPlan.width') && gifFrameWorkerText.includes('sourceCanvas = new OffscreenCanvas(plan.width, plan.height)') && gifFrameWorkerText.includes('TRACKING_GIF_FALLBACK_MAX_RAW_FRAMES') && gifFrameWorkerText.includes("await import('gifuct-js')") && gifFrameWorkerText.includes('transferToImageBitmap()'), 'Trace GIF decoding rejects raw timelines above 600 before decode, scans metadata without retaining raw frame objects, scales native decode inputs, bounds fallback replay/canvases, and streams one in-flight coalesced ImageBitmap');
 assert.deepEqual(smoothTrackingPoints([{ x: 0, y: 0 }, { x: 10, y: 0 }], { enabled: true }), [{ x: 0, y: 0 }, { x: 10, y: 0 }], 'tracking smoothing leaves short manual paths unchanged');
 assert.equal(smoothTrackingPoints([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], { connectEndPoints: true, segmentsPerEdge: 2 }).length, 6, 'closed tracking smoothing samples every wrapped segment');
 assert.equal(smoothTrackingPoints([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], { connectEndPoints: false, segmentsPerEdge: 2 }).length, 5, 'open tracking smoothing samples edge segments and preserves the final point');
@@ -3850,7 +4040,7 @@ const oversizedCutPart: BodyPartLayer = {
 };
 const oversizedLocalJoints = [{ x: 0, y: 84 }, { x: 0, y: -84 }];
 const oversizedOutlineBounds = partOutlineBounds(fabricablePartOutlinePoints(oversizedCutPart, oversizedLocalJoints));
-assert(oversizedOutlineBounds.width < 90 && oversizedOutlineBounds.height < 260, 'fabrication-fit outline follows the limb joint chain rather than the full raw ONNX crop');
+assert(oversizedOutlineBounds.width < 90 && oversizedOutlineBounds.height < 260, 'fabrication-fit outline follows the limb joint chain rather than the full imported-image crop');
 const userContourPart: BodyPartLayer = {
   ...oversizedCutPart,
   contourSource: 'user',
@@ -3883,7 +4073,7 @@ assert.deepEqual(partLandmarkJointIds(sampleWideArm, sample.skeleton), ['right_e
 const productionArmLandmarks = partLandmarkLocalPoints(sampleWideArm, sample.skeleton);
 const productionArmOutline = fabricablePartOutlinePoints(sampleWideArm, productionArmLandmarks);
 const productionArmBounds = partOutlineBounds(productionArmOutline);
-assert(productionArmLandmarks.length === 2, 'production 3D outline path ignores unrelated joints inside an oversized ONNX crop');
+assert(productionArmLandmarks.length === 2, 'production 3D outline path ignores unrelated joints inside an oversized imported-image crop');
 assert(productionArmBounds.width < 120 && productionArmBounds.height < 140, 'production lower-arm outline stays limb-sized even when the crop contains the full character');
 assert(productionArmLandmarks.every(point => pointInsideOutline(point, productionArmOutline, 0.5)), '3D puppet only cuts joint holes inside the generated part outline');
 const torsoCutPart: BodyPartLayer = { ...oversizedCutPart, id: 'torso', name: 'Torso', anchorJointId: 'torso' };
@@ -3961,6 +4151,7 @@ const twoFourBars = {
   ]
 };
 const pkg = createFabricationPackage(twoFourBars);
+const pkgWithExplicitStl = createFabricationPackage(twoFourBars, { includeCustomPartsStl: true });
 assert.equal(directMakeBlueprintSvg(twoFourBars, pkg.recipes), makeBlueprintSvg(twoFourBars, pkg.recipes), 'fabrication facade preserves the direct printable Blueprint SVG renderer');
 assert.equal(directMakeBlueprintPreviewSvg(twoFourBars, pkg.recipes), makeBlueprintPreviewSvg(twoFourBars, pkg.recipes), 'fabrication facade preserves the direct readable Blueprint preview renderer');
 assert.equal(selectBlueprintRecipe(pkg.recipes, null, 'b')?.mechanismId, 'b', 'Blueprint detail recipe selection follows the selected live mechanism when no recipe tile was clicked');
@@ -4071,7 +4262,8 @@ assert.equal(directMakeAssemblyGuideHtml(twoFourBars, pkg.recipes, pkg.warnings)
 assert.equal(directMakeAssemblyGuidePdf(twoFourBars, pkg.recipes, pkg.warnings), pkg.assemblyGuidePdf, 'fabrication package preserves the direct assembly guide PDF artifact');
 assert.equal(directMakeCustomPartsSvg(twoFourBars), pkg.customPartsSvg, 'fabrication package preserves the direct custom parts SVG artifact');
 assert.equal(directMakeCustomPartsPdf(twoFourBars), pkg.customPartsPdf, 'fabrication package preserves the direct custom parts PDF artifact');
-assert.equal(directMakeCustomPartsStl(twoFourBars), pkg.customPartsStl, 'fabrication package preserves the direct custom parts STL artifact');
+assert.equal(pkg.customPartsStl, '', 'ordinary fabrication packages omit the optional custom-parts STL');
+assert.equal(directMakeCustomPartsStl(twoFourBars), pkgWithExplicitStl.customPartsStl, 'an explicit fabrication package request preserves the direct custom parts STL artifact');
 assert(pkg.customPartsSvg.startsWith('<svg') && pkg.customPartsSvg.includes('custom-parts'), 'fabrication package includes custom parts SVG artifact');
 assert(pkg.customPartsSvg.includes(`width="${twoFourBars.settings.physicalKit.sheetWidthMm}mm"`) && pkg.customPartsSvg.includes(`data-character-print-page-count="${characterPrintLayout.pageCount}"`), 'character custom parts SVG is fixed to one or two letter-size pages');
 assert(pkg.customPartsSvg.includes(`viewBox="0 0 ${twoFourBars.settings.physicalKit.sheetWidthMm} ${twoFourBars.settings.physicalKit.sheetHeightMm * characterPrintLayout.pageCount}"`), 'character custom parts SVG uses stacked letter page coordinate systems');
@@ -4081,8 +4273,8 @@ visibleCharacterPartIds.forEach(partId => {
   assert(pkg.customPartsSvg.includes(`data-part-id="${partId}"`), `character custom parts SVG includes visible part ${partId} on the bounded character sheet`);
 });
 assert(pkg.customPartsPdf.startsWith('%PDF-') && pkg.customPartsPdf.includes('character-sheet-page-count'), 'fabrication package includes a bounded character PDF artifact');
-assert(pkg.customPartsStl.startsWith('solid motionsmith_custom_parts'), 'fabrication package includes custom parts STL artifact');
-assert(pkg.customPartsStl.includes('mm_holes') && (pkg.customPartsStl.match(/facet normal/g) ?? []).length > 100, 'custom parts STL meshes extruded plates with joint-hole voids');
+assert(pkgWithExplicitStl.customPartsStl.startsWith('solid motionsmith_custom_parts'), 'explicit fabrication packages include the custom parts STL artifact');
+assert(pkgWithExplicitStl.customPartsStl.includes('mm_holes') && (pkgWithExplicitStl.customPartsStl.match(/facet normal/g) ?? []).length > 100, 'custom parts STL meshes extruded plates with joint-hole voids');
 assert(pkg.metadataJson.includes('validationIssues'), 'fabrication metadata includes structured validation issues');
 assert(pkg.recipes.every(r => r.requiredParts.length > 0), 'fabrication recipes include explicit required parts');
 assert.deepEqual(pkg.recipes[0].requiredParts, mechanismRequiredParts(twoFourBars.mechanisms[0]), 'recipe required parts mirror mechanism metadata defaults');
@@ -4786,8 +4978,7 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
     onUseMechanism: () => undefined,
     onSelectMechanismType: () => undefined
   }));
-  const expectedMiniCardPathD = pointsToSvgPath(mappedOffsetCarrierTrace);
-  assert(offsetFoundryWorkflow.includes(`d="${expectedMiniCardPathD}"`), 'Foundry planetary template card path silhouette uses the same playback-mapped carrier trace as the main preview');
+  assert(!offsetFoundryWorkflow.includes('foundry-mini-simulation-planetary_gear'), 'Foundry hides the disabled planetary template card while retaining its renderer and imported-project contracts');
   Array.from({ length: 8 }, () => generateSmartConfig(undefined, 'planetary_gear')).forEach(config => {
     assert(Math.abs(config.groundLength - (config.crankLength + config.rockerLength)) < 1e-6, 'optimizer keeps generated planetary pitch circles tangent');
   });
@@ -4815,6 +5006,9 @@ const touchingLegacyGear = calculateLinkage({ ...gearDefault, groundLength: gear
 assertDistance(touchingLegacyGear.p1, touchingLegacyGear.p2, gearTrainPitchCenterDistance(gearDefault), 'legacy two-gear pitch-contact configs remain direct mesh');
 let exportedProject = applyProjectAction(fabricationSample, { type: 'set_export', fabricationPackage: createFabricationPackage(fabricationSample) });
 assert(exportedProject.lastExport, 'set_export stores generated fabrication package');
+const persistedExportedProject = JSON.parse(serializeProject(exportedProject)) as ProjectState;
+assert.equal(persistedExportedProject.lastExport, undefined, 'portable persistence omits transient generated fabrication files');
+assert.deepEqual(persistedExportedProject.mechanisms, JSON.parse(JSON.stringify(exportedProject.mechanisms)), 'omitting transient export files preserves canonical mechanism state');
 exportedProject = applyProjectAction(exportedProject, { type: 'upsert_mechanism', mechanism: { ...exportedProject.mechanisms[0], enabled: false } });
 assert.equal(exportedProject.lastExport, undefined, 'mechanism changes invalidate stale fabrication package download');
 const addedPart = applyProjectAction(sample, { type: 'upsert_part', part: { ...sample.parts.head, id: 'head-copy', name: 'Head copy', zIndex: 99 } });
@@ -5499,18 +5693,15 @@ const objectToggleHarness = renderMechanismActionHarness({
 objectToggleHarness.actions.updateMechanism('object-path-driver', { enabled: false });
 const objectToggleDispatch = objectToggleHarness.dispatches.at(-1) as { type: string; mechanism: MechanismConfig };
 assert.deepEqual(objectToggleDispatch.mechanism.generatedPath, objectGeneratedPathSentinel, 'metadata-only Design edits preserve fitted generatedPath samples');
-const objectOptimizeHarness = renderMechanismActionHarness({
-  project: { ...objectPathMechanismProject, settings: { ...objectPathMechanismProject.settings, performancePreset: 'fast' } },
-  selectedPart: objectPathMechanismProject.parts.head,
-  selectedPath: objectPathMechanismProject.paths['path-right-arm'],
-  selectedMechanism: objectPathMechanism,
-  selectedSceneObject: objectPathMechanismProject.sceneObjects['object-piggy']
-});
-await objectOptimizeHarness.actions.optimizeSelectedMechanism();
-const optimizedObjectDispatch = objectOptimizeHarness.dispatches.at(-1) as { type: string; mechanism: MechanismConfig };
-assert.equal(optimizedObjectDispatch.mechanism.targetSceneObjectId, 'object-piggy', 'Design Fit optimizes against the selected mechanism object target instead of the ambient selected part');
-assert.equal(optimizedObjectDispatch.mechanism.targetPartId, undefined, 'Design Fit keeps object-target mechanisms free of body-part retargeting');
-assert.equal(optimizedObjectDispatch.mechanism.targetPathId, 'path-object-piggy', 'Design Fit keeps the selected mechanism target path');
+const optimizedObjectResult = runMechanismOptimizerJob(createMechanismOptimizerJobInput(
+  { ...objectPathMechanismProject, settings: { ...objectPathMechanismProject.settings, performancePreset: 'fast' } },
+  objectPathMechanism,
+  'path-object-piggy',
+  1,
+));
+assert.equal(optimizedObjectResult.mechanism.targetSceneObjectId, 'object-piggy', 'Design Fit optimizes against the selected mechanism object target instead of the ambient selected part');
+assert.equal(optimizedObjectResult.mechanism.targetPartId, undefined, 'Design Fit keeps object-target mechanisms free of body-part retargeting');
+assert.equal(optimizedObjectResult.mechanism.targetPathId, 'path-object-piggy', 'Design Fit keeps the selected mechanism target path');
 const sampleMechanism = fabricationSample.mechanisms[0];
 assert(sampleMechanism, 'fabrication sample has a mechanism for driven-target checks');
 for (const phase of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
@@ -5541,11 +5732,8 @@ assert.equal(simulationSettingsProject.lastExport, undefined, 'simulation physic
 const indexHtml = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
 assert(!/https?:\/\//.test(indexHtml), 'index.html has no external CDN URLs');
 assert(!/importmap|tailwindcss/i.test(indexHtml), 'index.html does not rely on importmap or Tailwind CDN');
-assert(existsSync(join(process.cwd(), 'public/onnx/pose_model.onnx')), 'ONNX model asset is present for web runtime');
 if (existsSync(join(process.cwd(), 'dist'))) {
-  const distOnnxPath = join(process.cwd(), 'dist/onnx/pose_model.onnx');
-  assert(existsSync(distOnnxPath), 'production build copies ONNX model to dist');
-  assert(statSync(distOnnxPath).size > 1_000_000 && !readFileSync(distOnnxPath).subarray(0, 64).toString('utf8').startsWith('version https://git-lfs'), 'production ONNX build output is real model bytes, not a Git LFS pointer');
+  execFileSync('bun', ['scripts/check-no-image-recognition.mjs', '--dist'], { cwd: process.cwd(), stdio: 'pipe' });
 }
 const staleExport = loadProjectSnapshot({ ...sample, lastExport: { id: 'stale-export' } });
 assert.equal(staleExport.lastExport, undefined, 'imported project snapshots clear stale fabrication exports');

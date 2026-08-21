@@ -50,9 +50,9 @@ const playerDock = source("components/shell/WorkspacePlayerDock.tsx");
 
 assert(playbackHook.includes("playbackClock.start") && !playbackHook.includes("requestAnimationFrame("), "the workspace hook delegates scheduling to the external clock");
 assert(!playbackHook.includes("setAngle("), "the workspace frame driver does not enqueue React phase state");
-assert(puppetPreview.includes("playback.clock.subscribe") && puppetPreview.includes("partMeshesRef.current"), "the 3D puppet preview updates retained transforms from the external clock");
-assert(foundryPreview.includes("playback.clock.subscribe") && foundryPreview.includes("renderDynamicRef"), "the shared Foundry renderer consumes sampled playback outside React");
-assert(foundryOverlay.includes("playback.clock.subscribe") && foundryOverlay.includes("foundry-velocity-vector") && foundryOverlay.includes("setAttribute"), "the Foundry SVG physics overlay updates existing nodes directly from the external clock");
+assert(puppetPreview.includes("subscribeCadencedPlaybackSampler") && puppetPreview.includes("partMeshesRef.current"), "the 3D puppet preview updates retained transforms from the cadenced external clock");
+assert(foundryPreview.includes("subscribeCadencedPlaybackSampler") && foundryPreview.includes("renderDynamicRef"), "the shared Foundry renderer consumes cadenced playback outside React");
+assert(foundryOverlay.includes("subscribeCadencedPlaybackSampler") && foundryOverlay.includes("foundry-velocity-vector") && foundryOverlay.includes("setAttribute"), "the Foundry SVG physics overlay updates existing nodes directly from the cadenced external clock");
 assert(playerDock.includes("time - lastControlUpdate < 100"), "the playback control readout is throttled to at most 10 Hz");
 
 console.log("b695 playback contract ok");

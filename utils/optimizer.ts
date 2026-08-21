@@ -454,7 +454,12 @@ const enforceSixBarConstraints = (conf: MechanismConfig) => {
     return conf;
 };
 
-export const generateSmartConfig = (targetPath?: Point[], forcedType?: MechanismType, excludedType?: MechanismType): MechanismConfig => {
+export const generateSmartConfig = (
+    targetPath?: Point[],
+    forcedType?: MechanismType,
+    excludedType?: MechanismType,
+    random: () => number = Math.random,
+): MechanismConfig => {
     let cx = 0, cy = 0, scale = 100;
 
     if (targetPath && targetPath.length > 0) {
@@ -464,7 +469,7 @@ export const generateSmartConfig = (targetPath?: Point[], forcedType?: Mechanism
         scale = Math.max(bounds.w, bounds.h);
     }
 
-    const s = (factor: number) => scale * factor * (0.5 + Math.random());
+    const s = (factor: number) => scale * factor * (0.5 + random());
 
     let availableTypes = OPTIMIZER_MECHANISM_TYPES;
     if (forcedType) {
@@ -473,13 +478,13 @@ export const generateSmartConfig = (targetPath?: Point[], forcedType?: Mechanism
         availableTypes = OPTIMIZER_MECHANISM_TYPES.filter(t => t !== excludedType);
     }
 
-    const type = availableTypes[Math.floor(Math.random() * availableTypes.length)];
+    const type = availableTypes[Math.floor(random() * availableTypes.length)];
 
-    let anchorX = cx + (Math.random() - 0.5) * scale * 3.0;
-    let anchorY = cy + (Math.random() - 0.5) * scale * 3.0;
+    let anchorX = cx + (random() - 0.5) * scale * 3.0;
+    let anchorY = cy + (random() - 0.5) * scale * 3.0;
 
     const config: MechanismConfig = {
-        id: Math.random().toString(36).substr(2, 9),
+        id: random().toString(36).substr(2, 9),
         type: type,
         visible: true,
         enabled: true,
@@ -487,7 +492,7 @@ export const generateSmartConfig = (targetPath?: Point[], forcedType?: Mechanism
 
         anchorX: anchorX,
         anchorY: anchorY,
-        groundAngle: Math.random() * 360,
+        groundAngle: random() * 360,
 
         groundLength: s(0.8),
         crankLength: s(0.3),
@@ -496,22 +501,22 @@ export const generateSmartConfig = (targetPath?: Point[], forcedType?: Mechanism
 
         sliderOffset: 0,
         couplerPointDist: s(0.5),
-        couplerPointAngle: Math.random() * 360,
+        couplerPointAngle: random() * 360,
 
         speed1: 1,
         speed2: 1,
         rodLength: s(1.0),
-        phase: Math.random() * Math.PI * 2
+        phase: random() * Math.PI * 2
     };
 
     // Type-specific initialization
     if (type === 'yoke') {
-        config.sliderOffset = (Math.random() - 0.5) * s(0.5);
+        config.sliderOffset = (random() - 0.5) * s(0.5);
     } else if (type === 'piston') {
-        config.sliderOffset = (Math.random() - 0.5) * s(0.5);
+        config.sliderOffset = (random() - 0.5) * s(0.5);
         config.couplerLength = Math.abs(config.sliderOffset) + config.crankLength + s(0.5);
     } else if (type === 'quick-return') {
-        config.sliderOffset = (Math.random() - 0.5) * s(1.0);
+        config.sliderOffset = (random() - 0.5) * s(1.0);
         config.groundLength = Math.max(s(0.5), config.crankLength + 10);
         config.rockerLength = s(1.5);
     } else if (type === 'cam') {
@@ -519,7 +524,7 @@ export const generateSmartConfig = (targetPath?: Point[], forcedType?: Mechanism
         config.groundLength = 0;
         config.couplerLength = 0;
         config.rockerLength = s(0.5);
-        config.sliderOffset = (Math.random() - 0.5) * s(0.4);
+        config.sliderOffset = (random() - 0.5) * s(0.4);
     } else if (type === 'rack-pinion') {
         config.groundAngle = 90;
         config.groundLength = 0;
@@ -568,12 +573,12 @@ export const generateSmartConfig = (targetPath?: Point[], forcedType?: Mechanism
         // Select gear ratio - prefer recommended ratio based on target path analysis
         let selectedRatio: { s1: number; s2: number };
 
-        if (targetPath && targetPath.length > 10 && Math.random() < 0.4) {
+        if (targetPath && targetPath.length > 10 && random() < 0.4) {
             // 40% chance to use recommended ratio based on target analysis
             selectedRatio = recommendGearRatio(targetPath);
         } else {
             // Random from proven harmonic ratios
-            const preset = FIVE_BAR_HARMONIC_RATIOS[Math.floor(Math.random() * FIVE_BAR_HARMONIC_RATIOS.length)];
+            const preset = FIVE_BAR_HARMONIC_RATIOS[Math.floor(random() * FIVE_BAR_HARMONIC_RATIOS.length)];
             selectedRatio = { s1: preset.s1, s2: preset.s2 };
         }
 
@@ -581,8 +586,8 @@ export const generateSmartConfig = (targetPath?: Point[], forcedType?: Mechanism
         config.speed2 = selectedRatio.s2;
 
         // Select phase from samples with some randomness
-        const basePhase = PHASE_SAMPLES[Math.floor(Math.random() * PHASE_SAMPLES.length)];
-        config.phase = basePhase + (Math.random() - 0.5) * 0.3;
+        const basePhase = PHASE_SAMPLES[Math.floor(random() * PHASE_SAMPLES.length)];
+        config.phase = basePhase + (random() - 0.5) * 0.3;
 
         // Position anchor strategically relative to target path
         if (targetPath && targetPath.length > 0) {
@@ -590,33 +595,33 @@ export const generateSmartConfig = (targetPath?: Point[], forcedType?: Mechanism
             const pathDiagonal = Math.hypot(bounds.w, bounds.h) || 100;
 
             // Place anchor offset from path center to create natural curve placement
-            const anchorAngle = Math.random() * Math.PI * 2;
-            const anchorDist = pathDiagonal * (0.3 + Math.random() * 0.5);
+            const anchorAngle = random() * Math.PI * 2;
+            const anchorDist = pathDiagonal * (0.3 + random() * 0.5);
             config.anchorX = bounds.cx + Math.cos(anchorAngle) * anchorDist;
             config.anchorY = bounds.cy + Math.sin(anchorAngle) * anchorDist;
 
             // Scale gear radii appropriately
-            config.crankLength = pathDiagonal * (0.15 + Math.random() * 0.2);
-            config.rockerLength = pathDiagonal * (0.15 + Math.random() * 0.2);
-            config.groundLength = pathDiagonal * (0.4 + Math.random() * 0.4);
+            config.crankLength = pathDiagonal * (0.15 + random() * 0.2);
+            config.rockerLength = pathDiagonal * (0.15 + random() * 0.2);
+            config.groundLength = pathDiagonal * (0.4 + random() * 0.4);
 
             // Arms should reach across the ground + cranks
             const reachNeeded = config.groundLength + config.crankLength + config.rockerLength;
-            const armLen = reachNeeded * (0.6 + Math.random() * 0.3);
+            const armLen = reachNeeded * (0.6 + random() * 0.3);
             config.couplerLength = armLen;
-            config.rodLength = armLen * (0.9 + Math.random() * 0.2);
+            config.rodLength = armLen * (0.9 + random() * 0.2);
 
             // Extension point
-            config.couplerPointDist = pathDiagonal * (0.1 + Math.random() * 0.3);
+            config.couplerPointDist = pathDiagonal * (0.1 + random() * 0.3);
         } else {
             config.groundLength = s(0.6);
             config.crankLength = s(0.3);
             config.rockerLength = s(0.3);
 
-            const avgArmLen = scale * (1.0 + Math.random() * 0.4);
+            const avgArmLen = scale * (1.0 + random() * 0.4);
             config.couplerLength = avgArmLen;
             config.rodLength = avgArmLen;
-            config.couplerPointDist = Math.random() * s(0.5);
+            config.couplerPointDist = random() * s(0.5);
         }
 
         enforceFiveBarConstraints(config);
@@ -625,32 +630,38 @@ export const generateSmartConfig = (targetPath?: Point[], forcedType?: Mechanism
     return normalizeMechanismToFabricationSet(config);
 };
 
-export const mutateConfig = (config: MechanismConfig, temperature: number = 1.0, fixedType: boolean = false, excludedType?: MechanismType): MechanismConfig => {
+export const mutateConfig = (
+    config: MechanismConfig,
+    temperature: number = 1.0,
+    fixedType: boolean = false,
+    excludedType?: MechanismType,
+    random: () => number = Math.random,
+): MechanismConfig => {
     const newConfig = { ...config };
 
     const mutate = (val: number, range: number = 0.2) => {
-        const change = val * range * temperature * (Math.random() - 0.5) * 2;
+        const change = val * range * temperature * (random() - 0.5) * 2;
         return val + change;
     };
 
     const mutateAbs = (val: number, amount: number) => {
-        return val + (Math.random() - 0.5) * amount * temperature;
+        return val + (random() - 0.5) * amount * temperature;
     }
 
     // Structure Mutation
-    if (!fixedType && temperature > 0.3 && Math.random() < 0.15) {
+    if (!fixedType && temperature > 0.3 && random() < 0.15) {
         let types = OPTIMIZER_MECHANISM_TYPES;
         if (excludedType) types = types.filter(t => t !== excludedType);
         types = types.filter(t => t !== config.type);
 
         if (types.length > 0) {
-            newConfig.type = types[Math.floor(Math.random() * types.length)];
+            newConfig.type = types[Math.floor(random() * types.length)];
         if (newConfig.type === '5bar') {
             // Use harmonic ratio preset
-            const ratio = FIVE_BAR_HARMONIC_RATIOS[Math.floor(Math.random() * FIVE_BAR_HARMONIC_RATIOS.length)];
+            const ratio = FIVE_BAR_HARMONIC_RATIOS[Math.floor(random() * FIVE_BAR_HARMONIC_RATIOS.length)];
             newConfig.speed1 = ratio.s1;
             newConfig.speed2 = ratio.s2;
-            newConfig.phase = PHASE_SAMPLES[Math.floor(Math.random() * PHASE_SAMPLES.length)];
+            newConfig.phase = PHASE_SAMPLES[Math.floor(random() * PHASE_SAMPLES.length)];
             newConfig.rodLength = newConfig.couplerLength;
         } else if (newConfig.type === '6bar') {
             newConfig.speed1 = 1;
@@ -669,8 +680,8 @@ export const mutateConfig = (config: MechanismConfig, temperature: number = 1.0,
     }
 
     // Global Scale Mutation
-    if (Math.random() < 0.15) {
-        const scaleFactor = 1.0 + (Math.random() - 0.5) * 0.5 * temperature;
+    if (random() < 0.15) {
+        const scaleFactor = 1.0 + (random() - 0.5) * 0.5 * temperature;
         newConfig.groundLength *= scaleFactor;
         newConfig.crankLength *= scaleFactor;
         newConfig.couplerLength *= scaleFactor;
@@ -682,42 +693,42 @@ export const mutateConfig = (config: MechanismConfig, temperature: number = 1.0,
     }
 
     // Position & Orientation
-    if (Math.random() < 0.7) newConfig.anchorX = mutateAbs(newConfig.anchorX!, 150);
-    if (Math.random() < 0.7) newConfig.anchorY = mutateAbs(newConfig.anchorY!, 150);
-    if (Math.random() < 0.7) newConfig.groundAngle = mutateAbs(newConfig.groundAngle!, 60);
+    if (random() < 0.7) newConfig.anchorX = mutateAbs(newConfig.anchorX!, 150);
+    if (random() < 0.7) newConfig.anchorY = mutateAbs(newConfig.anchorY!, 150);
+    if (random() < 0.7) newConfig.groundAngle = mutateAbs(newConfig.groundAngle!, 60);
 
     // Dimension Mutation
-    if (Math.random() < 0.7) newConfig.groundLength = mutate(newConfig.groundLength);
-    if (Math.random() < 0.7) newConfig.couplerLength = mutate(newConfig.couplerLength);
-    if (Math.random() < 0.7) newConfig.rockerLength = mutate(newConfig.rockerLength);
-    if (Math.random() < 0.7) newConfig.couplerPointDist = mutate(newConfig.couplerPointDist);
-    if (Math.random() < 0.7) newConfig.crankLength = mutate(newConfig.crankLength);
+    if (random() < 0.7) newConfig.groundLength = mutate(newConfig.groundLength);
+    if (random() < 0.7) newConfig.couplerLength = mutate(newConfig.couplerLength);
+    if (random() < 0.7) newConfig.rockerLength = mutate(newConfig.rockerLength);
+    if (random() < 0.7) newConfig.couplerPointDist = mutate(newConfig.couplerPointDist);
+    if (random() < 0.7) newConfig.crankLength = mutate(newConfig.crankLength);
 
     // 5-Bar Specific Mutation
     if (newConfig.type === '5bar') {
-        if (Math.random() < 0.7) newConfig.rodLength = mutate(newConfig.rodLength || 100);
+        if (random() < 0.7) newConfig.rodLength = mutate(newConfig.rodLength || 100);
 
         // Stronger phase mutation - phase is very important for 5-bar curves
-        if (Math.random() < 0.8) {
-            newConfig.phase = (newConfig.phase || 0) + (Math.random() - 0.5) * Math.PI * temperature;
+        if (random() < 0.8) {
+            newConfig.phase = (newConfig.phase || 0) + (random() - 0.5) * Math.PI * temperature;
         }
 
         // Occasionally jump to a completely different harmonic ratio (exploration)
-        if (Math.random() < 0.15 * temperature) {
-            const newRatio = FIVE_BAR_HARMONIC_RATIOS[Math.floor(Math.random() * FIVE_BAR_HARMONIC_RATIOS.length)];
+        if (random() < 0.15 * temperature) {
+            const newRatio = FIVE_BAR_HARMONIC_RATIOS[Math.floor(random() * FIVE_BAR_HARMONIC_RATIOS.length)];
             newConfig.speed1 = newRatio.s1;
             newConfig.speed2 = newRatio.s2;
             // Reset phase when changing ratios
-            newConfig.phase = PHASE_SAMPLES[Math.floor(Math.random() * PHASE_SAMPLES.length)];
+            newConfig.phase = PHASE_SAMPLES[Math.floor(random() * PHASE_SAMPLES.length)];
         }
     }
     if (newConfig.type === '6bar') {
-        if (Math.random() < 0.65) newConfig.rodLength = mutate(newConfig.rodLength || newConfig.couplerLength * 0.65);
+        if (random() < 0.65) newConfig.rodLength = mutate(newConfig.rodLength || newConfig.couplerLength * 0.65);
         newConfig.assemblyMode = 'open';
     }
 
-    if (Math.random() < 0.7) newConfig.sliderOffset = mutateAbs(newConfig.sliderOffset, 30);
-    if (Math.random() < 0.7) newConfig.couplerPointAngle = mutateAbs(newConfig.couplerPointAngle, 60);
+    if (random() < 0.7) newConfig.sliderOffset = mutateAbs(newConfig.sliderOffset, 30);
+    if (random() < 0.7) newConfig.couplerPointAngle = mutateAbs(newConfig.couplerPointAngle, 60);
 
     newConfig.groundLength = Math.max(5, Math.abs(newConfig.groundLength));
     newConfig.crankLength = Math.max(5, Math.abs(newConfig.crankLength));

@@ -298,7 +298,7 @@ Each workflow stage must answer exactly one novice question per region:
 
 #### Character
 
-- Owns body-part segmentation review, part artwork placement, skeleton joints, bend directions, anchors, ONNX/package status.
+- Owns local character-package review, part artwork placement, skeleton joints, bend directions, anchors, and package status.
 - Must show the character as fabrication-style plates with artwork decals when available.
 - Must not own hero marketing, starter gallery, or mechanism simulation.
 
@@ -518,9 +518,9 @@ Allowed only as another adapter over `ToonSceneProjection` and `PhysicsSession`.
 
 Allowed only behind `PhysicsSession`, `utils/physicsKernel.ts`, or a versioned replacement contract. Rapier is currently the installed contact/friction kernel; any replacement must pass the same deterministic contract probe, keep MotionSmith kinematics authoritative, and cannot write `ProjectState` except through explicit commands.
 
-### New AI/ONNX pipeline
+### Image recognition
 
-Must output editable project actions or a validated project snapshot. It cannot create private renderer-only body parts, joints, masks, paths, or anchors.
+Excluded from shipped browser and Tauri clients. A future proposal must first reopen product scope and remove or revise the source/build/deploy exclusion guard; it may not arrive as a private renderer-only pipeline.
 
 ### New export format
 

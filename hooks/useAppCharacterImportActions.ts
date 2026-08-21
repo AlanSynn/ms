@@ -1,18 +1,16 @@
-import { useState, type Dispatch, type SetStateAction } from "react";
-import type { StarterImageTemplate } from "../components/AppShell";
-import { processingLabel } from "../components/stages/character/ProgressBlock";
-import type { PendingCharacterReview } from "../components/stages/character/CharacterImportOverlays";
+import {
+  startTransition,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
 import type { AppStage, ProjectAction, ProjectState } from "../types";
+import { downloadText } from "../utils/project";
 import {
-  createProjectFromProcessed,
-  downloadText,
-  loadProjectSnapshot,
-} from "../utils/project";
-import {
-  processImageWithWebOnnx,
-  type WebOnnxCacheStatus,
-} from "../utils/webOnnx";
-import { loadCharacterPackage } from "../utils/packageLoader";
+  createCharacterImportProgressStore,
+  type CharacterImportProgressStore,
+} from "../runtime/import/characterImportProgressStore";
+import { createProjectImportWorkerClient } from "../runtime/import/projectImportWorkerClient";
 
 type SetProjectOptions = {
   history?: boolean;
@@ -21,145 +19,52 @@ type SetProjectOptions = {
 
 type UseAppCharacterImportActionsParams = {
   project: ProjectState;
-  stage: AppStage;
   dispatch: (action: ProjectAction) => void;
   setProject: (project: ProjectState, options?: SetProjectOptions) => void;
   setStage: (stage: AppStage) => void;
   setCommandStatus: (status: string) => void;
   setShowGettingStarted: (show: boolean) => void;
-  setOnnxCacheStatus: Dispatch<SetStateAction<WebOnnxCacheStatus>>;
+  characterImportProgress?: CharacterImportProgressStore;
 };
 
 export const useAppCharacterImportActions = ({
   project,
-  stage,
   dispatch,
   setProject,
   setStage,
   setCommandStatus,
   setShowGettingStarted,
-  setOnnxCacheStatus,
+  characterImportProgress,
 }: UseAppCharacterImportActionsParams) => {
-  const [pendingCharacter, setPendingCharacter] =
-    useState<PendingCharacterReview | null>(null);
+  const fallbackProgressRef = useRef<CharacterImportProgressStore | null>(null);
+  fallbackProgressRef.current ??= createCharacterImportProgressStore();
+  const progressStore = characterImportProgress ?? fallbackProgressRef.current;
+  const importClient = useMemo(() => createProjectImportWorkerClient(), []);
+
+  useEffect(() => () => {
+    importClient.dispose();
+    progressStore.publishProgress(null);
+    progressStore.publishPending(null);
+  }, [importClient, progressStore]);
 
   const queueCharacterReview = (next: ProjectState, summary: string) => {
-    setPendingCharacter({
-      project: next,
-      summary,
-      returnStage: "character",
+    progressStore.publishProgress({
+      stage: "ready",
+      message: "Check character",
+      progress: 100,
     });
-    dispatch({
-      type: "set_processing",
-      processing: {
-        stage: "ready",
-        message: "Check character",
-        progress: 100,
-      },
+    startTransition(() => {
+      progressStore.publishPending({
+        project: next,
+        summary,
+        returnStage: "character",
+      });
+      setStage("character");
     });
-    setStage("character");
   };
 
-  const runWebOnnx = async (file: File) => {
-    dispatch({
-      type: "set_processing",
-      processing: {
-        stage: "loading-model",
-        message: "Reading picture…",
-        progress: 10,
-      },
-    });
-    try {
-      const result = await processImageWithWebOnnx(
-        file,
-        (stageName, progress) => {
-          if (stageName === "downloading-model")
-            setOnnxCacheStatus((prev) => ({
-              ...prev,
-              stage: "downloading",
-              progress,
-            }));
-          if (stageName === "loading-model")
-            setOnnxCacheStatus((prev) => ({
-              ...prev,
-              stage: "cached",
-              progress: 100,
-            }));
-          const stageId = stageName as ProjectState["processing"]["stage"];
-          dispatch({
-            type: "set_processing",
-            processing: {
-              stage: stageId,
-              message: processingLabel(stageId, ""),
-              progress,
-            },
-          });
-        },
-      );
-      const next = createProjectFromProcessed({
-        name: file.name.replace(/\.[^.]+$/, "") || "Processed character",
-        sourceImageName: file.name,
-        skeleton: result.skeleton,
-        parts: result.parts,
-        textureUrl: result.textureUrl,
-        maskUrl: result.maskUrl,
-        keypoints: result.keypoints,
-        replacementContext: {
-          mode: "plain-load",
-          previousStage: stage,
-          rebindingSummary: "Clean start.",
-        },
-      });
-      queueCharacterReview(
-        next,
-        `${next.partOrder.length} parts · ${Object.keys(next.skeleton?.joints ?? {}).length} joints · ready`,
-      );
-    } catch (error) {
-      dispatch({
-        type: "set_processing",
-        processing: {
-          stage: "error",
-          message: "AI could not load on this network. Use a starter character or load a character file.",
-          progress: 0,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-    }
-  };
 
-  const loadStarterImage = async (template: StarterImageTemplate) => {
-    setCommandStatus(`Opening ${template.label}`);
-    dispatch({
-      type: "set_processing",
-      processing: {
-        stage: "loading-model",
-        message: `Opening ${template.label}`,
-        progress: 8,
-      },
-    });
-    try {
-      const response = await fetch(template.url);
-      if (!response.ok) throw new Error(`Could not load ${template.fileName}`);
-      const blob = await response.blob();
-      await runWebOnnx(
-        new File([blob], template.fileName, { type: blob.type || "image/png" }),
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      dispatch({
-        type: "set_processing",
-        processing: {
-          stage: "error",
-          message: "Starter failed",
-          progress: 0,
-          error: message,
-        },
-      });
-      setCommandStatus(`Starter failed: ${message}`);
-    }
-  };
-
-  const importCharacterPackage = async (files: FileList | File[]) => {
+  const importCharacterPackage = (files: FileList | File[]) => {
     dispatch({
       type: "set_processing",
       processing: {
@@ -168,45 +73,55 @@ export const useAppCharacterImportActions = ({
         progress: 20,
       },
     });
-    try {
-      queueCharacterReview(await loadCharacterPackage(files), "Ready to use.");
-    } catch (error) {
-      dispatch({
-        type: "set_processing",
-        processing: {
-          stage: "error",
-          message: "Couldn’t load character",
-          progress: 0,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-      setStage("character");
-    }
+    importClient.requestCharacterPackage(files, {
+      complete: ({ project: next }) =>
+        queueCharacterReview(next, "Ready to use."),
+      failed: (error) => {
+        dispatch({
+          type: "set_processing",
+          processing: {
+            stage: "error",
+            message: "Couldn’t load character",
+            progress: 0,
+            error: error.message,
+          },
+        });
+        setStage("character");
+      },
+    });
   };
 
-  const importProject = async (file: File) => {
-    try {
-      const raw = JSON.parse(await file.text());
-      setProject(loadProjectSnapshot(raw), { resetHistory: true });
-      setCommandStatus(`Loaded project ${file.name}`);
-      setShowGettingStarted(false);
-      setStage("path");
-    } catch (error) {
-      dispatch({
-        type: "set_processing",
-        processing: {
-          stage: "error",
-          message: "Project import failed",
-          progress: 0,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-      setCommandStatus(
-        `Project import failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      setShowGettingStarted(false);
-      setStage("character");
-    }
+  const importProject = (file: File) => {
+    dispatch({
+      type: "set_processing",
+      processing: {
+        stage: "loading-model",
+        message: "Loading project…",
+        progress: 20,
+      },
+    });
+    importClient.requestProject(file, {
+      complete: ({ project: next }) => startTransition(() => {
+        setProject(next, { resetHistory: true });
+        setCommandStatus(`Loaded project ${file.name}`);
+        setShowGettingStarted(false);
+        setStage("path");
+      }),
+      failed: (error) => {
+        dispatch({
+          type: "set_processing",
+          processing: {
+            stage: "error",
+            message: "Project import failed",
+            progress: 0,
+            error: error.message,
+          },
+        });
+        setCommandStatus(`Project import failed: ${error.message}`);
+        setShowGettingStarted(false);
+        setStage("character");
+      },
+    });
   };
 
   const editCharacterParts = () => {
@@ -230,26 +145,27 @@ export const useAppCharacterImportActions = ({
   };
 
   const acceptPendingCharacter = () => {
+    const pendingCharacter = progressStore.getPending();
     if (!pendingCharacter) return;
-    setProject(pendingCharacter.project, { resetHistory: true });
-    setPendingCharacter(null);
-    setShowGettingStarted(false);
-    setStage(pendingCharacter.returnStage);
+    startTransition(() => {
+      setProject(pendingCharacter.project, { resetHistory: true });
+      progressStore.publishPending(null);
+      progressStore.publishProgress(null);
+      setShowGettingStarted(false);
+      setStage(pendingCharacter.returnStage);
+    });
   };
 
-  const startFromStarterImage = (template: StarterImageTemplate) => {
-    setShowGettingStarted(false);
-    loadStarterImage(template);
+  const discardPendingCharacter = () => {
+    startTransition(() => {
+      progressStore.publishPending(null);
+      progressStore.publishProgress(null);
+    });
   };
 
   const startFromPackage = (files: FileList | File[]) => {
     setShowGettingStarted(false);
     importCharacterPackage(files);
-  };
-
-  const startFromImage = (file: File) => {
-    setShowGettingStarted(false);
-    runWebOnnx(file);
   };
 
   const startFromProject = (file: File) => {
@@ -258,18 +174,14 @@ export const useAppCharacterImportActions = ({
   };
 
   return {
-    pendingCharacter,
-    setPendingCharacter,
-    runWebOnnx,
-    loadStarterImage,
+    setPendingCharacter: progressStore.publishPending,
     importCharacterPackage,
     importProject,
     editCharacterParts,
     saveSkeleton,
     acceptPendingCharacter,
-    startFromStarterImage,
+    discardPendingCharacter,
     startFromPackage,
-    startFromImage,
     startFromProject,
   };
 };

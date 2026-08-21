@@ -1,15 +1,16 @@
 import React, { useMemo, useRef, useState } from "react";
 
-import {
-  ThreeFoundryPreview,
-  type FoundryPlaybackFrame,
-} from "../foundry/ThreeFoundryPreview";
+import { DeferredThreeFoundryPreview } from "../foundry/DeferredThreeFoundryPreview";
+import type { FoundryPlaybackFrame } from "../foundry/ThreeFoundryPreview";
 import type {
   MechanismConfig,
   Point,
   ProjectState,
 } from "../../../types";
-import { buildAutomataSceneModel } from "../../../utils/automataSceneModel";
+import {
+  reuseAutomataSceneRuntime,
+  sampleReusableAutomataSceneRuntime,
+} from "../../../utils/automataSceneModel";
 import {
   FOUNDRY_OVERLAY_SIZE,
   FOUNDRY_VIEW_PRESETS,
@@ -188,15 +189,13 @@ export const AssemblyCharacterThreePreview = ({
 }) => {
   const angle = step.phase === "test-character" ? progress * Math.PI * 2 : 0;
   const mechanism = assemblyMechanismForProject(project);
+  const sceneRuntime = useMemo(
+    () => reuseAutomataSceneRuntime(project, mechanism, "assembly-live"),
+    [mechanism, project],
+  );
   const sceneModel = useMemo(
-    () =>
-      buildAutomataSceneModel(
-        project,
-        mechanism,
-        angle,
-        "assembly-live",
-      ),
-    [angle, mechanism, project],
+    () => sampleReusableAutomataSceneRuntime(sceneRuntime, angle),
+    [angle, sceneRuntime],
   );
   const previewModel = sceneModel.foundryPreview;
   const {
@@ -218,6 +217,7 @@ export const AssemblyCharacterThreePreview = ({
             project,
             animatedParts: sceneModel.animatedParts,
             animatedSceneObjects: sceneModel.animatedSceneObjects,
+            geometrySkeleton: project.skeleton,
             skeleton: sceneModel.skeleton,
             paths: [],
             showCharacter: true,
@@ -232,12 +232,7 @@ export const AssemblyCharacterThreePreview = ({
       const sampleProgress = (((phase / (Math.PI * 2)) % 1) + 1) % 1;
       const sampleAngle =
         step.phase === "test-character" ? sampleProgress * Math.PI * 2 : 0;
-      const sampleModel = buildAutomataSceneModel(
-        project,
-        mechanism,
-        sampleAngle,
-        "assembly-live",
-      );
+      const sampleModel = sampleReusableAutomataSceneRuntime(sceneRuntime, sampleAngle);
       const samplePreview = sampleModel.foundryPreview;
       if (!samplePreview) return undefined;
       return {
@@ -246,6 +241,7 @@ export const AssemblyCharacterThreePreview = ({
           project,
           animatedParts: sampleModel.animatedParts,
           animatedSceneObjects: sampleModel.animatedSceneObjects,
+          geometrySkeleton: project.skeleton,
           skeleton: sampleModel.skeleton,
           paths: [],
           showCharacter: true,
@@ -255,7 +251,7 @@ export const AssemblyCharacterThreePreview = ({
         explode: stepLift(sceneFrame.motion, sampleProgress, playing),
       };
     },
-    [mechanism, playing, project, sceneFrame, step.phase],
+    [mechanism, playing, project, sceneFrame, sceneRuntime, step.phase],
   );
 
   if (!previewModel || !mechanism) {
@@ -266,7 +262,7 @@ export const AssemblyCharacterThreePreview = ({
         data-assembly-three-mode="character"
         data-assembly-three-phase={step.phase}
         data-assembly-three-progress={Math.round(progress * 100)}
-        data-automata-model-source="buildAutomataSceneModel"
+        data-automata-model-source="automata-scene-runtime"
       >
         Add a mechanism.
       </section>
@@ -290,7 +286,7 @@ export const AssemblyCharacterThreePreview = ({
       data-assembly-three-progress={Math.round(progress * 100)}
       data-assembly-frame-version={sceneFrame.version}
       data-assembly-motion-kind={sceneFrame.motion}
-      data-automata-model-source="buildAutomataSceneModel"
+      data-automata-model-source="automata-scene-runtime"
       data-assembly-explode-axis={sceneFrame.explodeAxis}
       data-active-board-coords={sceneFrame.activeBoardCoords.join(",")}
       data-floating-reference-count={sceneFrame.floatingReferencePoints?.length ?? 0}
@@ -299,8 +295,9 @@ export const AssemblyCharacterThreePreview = ({
       data-assembly-animated-object-count={Object.keys(sceneModel.animatedSceneObjects).length}
       aria-label="3D character assembly simulation"
     >
-      <ThreeFoundryPreview
+      <DeferredThreeFoundryPreview
         mechanism={designMechanism}
+        performancePreset={project.settings.performancePreset}
         simulation={physicalSimulation}
         kit={project.settings.physicalKit}
         camera={camera}
@@ -338,7 +335,6 @@ export const AssemblyCharacterThreePreview = ({
         playback={{
           clock: playbackClock,
           sample: playbackSample,
-          minFrameIntervalMs: 1000 / 30,
         }}
       >
         <div className="assembly-three-hud">3D build</div>
@@ -348,7 +344,7 @@ export const AssemblyCharacterThreePreview = ({
           className="foundry-preview-overlay"
           aria-hidden="true"
         />
-      </ThreeFoundryPreview>
+      </DeferredThreeFoundryPreview>
     </section>
   );
 };
@@ -384,9 +380,13 @@ export const AssemblyMechanismThreePreview = ({
     finishPointerMove,
     handleWheel,
   } = useAssemblyFoundryCamera();
+  const sceneRuntime = useMemo(
+    () => reuseAutomataSceneRuntime(project, mechanism, "assembly-live"),
+    [mechanism, project],
+  );
   const sceneModel = useMemo(
-    () => buildAutomataSceneModel(project, mechanism, angle, "assembly-live"),
-    [angle, mechanism, project],
+    () => sampleReusableAutomataSceneRuntime(sceneRuntime, angle),
+    [angle, sceneRuntime],
   );
   const previewModel = sceneModel.foundryPreview;
   const showAutomataContext =
@@ -398,6 +398,7 @@ export const AssemblyMechanismThreePreview = ({
             project,
             animatedParts: sceneModel.animatedParts,
             animatedSceneObjects: sceneModel.animatedSceneObjects,
+            geometrySkeleton: project.skeleton,
             skeleton: sceneModel.skeleton,
             paths: [],
             showCharacter: showAutomataContext,
@@ -409,11 +410,9 @@ export const AssemblyMechanismThreePreview = ({
   const playbackSample = useMemo(
     () => (phase: number): FoundryPlaybackFrame | undefined => {
       const sampleProgress = (((phase / (Math.PI * 2)) % 1) + 1) % 1;
-      const sampleModel = buildAutomataSceneModel(
-        project,
-        mechanism,
+      const sampleModel = sampleReusableAutomataSceneRuntime(
+        sceneRuntime,
         sampleProgress * Math.PI * 2,
-        "assembly-live",
       );
       const samplePreview = sampleModel.foundryPreview;
       if (!samplePreview) return undefined;
@@ -425,6 +424,7 @@ export const AssemblyMechanismThreePreview = ({
           project,
           animatedParts: sampleModel.animatedParts,
           animatedSceneObjects: sampleModel.animatedSceneObjects,
+          geometrySkeleton: project.skeleton,
           skeleton: sampleModel.skeleton,
           paths: [],
           showCharacter: sampleShowAutomataContext,
@@ -434,7 +434,7 @@ export const AssemblyMechanismThreePreview = ({
         explode: stepLift(sceneFrame.motion, sampleProgress, playing),
       };
     },
-    [mechanism, playing, project, sceneFrame, step.phase],
+    [mechanism, playing, project, sceneFrame, sceneRuntime, step.phase],
   );
 
   if (!previewModel) {
@@ -445,7 +445,7 @@ export const AssemblyMechanismThreePreview = ({
         data-assembly-three-mode="mechanism"
         data-assembly-three-phase={step.phase}
         data-assembly-three-progress={Math.round(progress * 100)}
-        data-automata-model-source="buildAutomataSceneModel"
+        data-automata-model-source="automata-scene-runtime"
       >
         Add a mechanism.
       </section>
@@ -468,7 +468,7 @@ export const AssemblyMechanismThreePreview = ({
       data-assembly-three-phase={step.phase}
       data-assembly-three-progress={Math.round(progress * 100)}
       data-assembly-three-explode={Math.round(explode * 100)}
-      data-automata-model-source="buildAutomataSceneModel"
+      data-automata-model-source="automata-scene-runtime"
       data-assembly-one-scene-automata={
         showAutomataContext ? "shown" : "mechanism-only"
       }
@@ -486,8 +486,9 @@ export const AssemblyMechanismThreePreview = ({
       data-assembly-animated-object-count={Object.keys(sceneModel.animatedSceneObjects).length}
       aria-label="3D mechanism assembly simulation"
     >
-      <ThreeFoundryPreview
+      <DeferredThreeFoundryPreview
         mechanism={designMechanism}
+        performancePreset={project.settings.performancePreset}
         simulation={physicalSimulation}
         kit={project.settings.physicalKit}
         camera={camera}
@@ -525,7 +526,6 @@ export const AssemblyMechanismThreePreview = ({
         playback={{
           clock: playbackClock,
           sample: playbackSample,
-          minFrameIntervalMs: 1000 / 30,
         }}
       >
         <div className="assembly-three-hud">Build animation</div>
@@ -535,7 +535,7 @@ export const AssemblyMechanismThreePreview = ({
           className="foundry-preview-overlay"
           aria-hidden="true"
         />
-      </ThreeFoundryPreview>
+      </DeferredThreeFoundryPreview>
     </section>
   );
 };

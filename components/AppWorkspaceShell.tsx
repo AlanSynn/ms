@@ -1,26 +1,32 @@
-import type { ReactNode, RefObject } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { Download, Upload } from "lucide-react";
 
 import { AppStageRouter, type AppStageRouterProps } from "./AppStageRouter";
 import {
   AboutDialog,
   GettingStartedDialog,
-  OnnxCacheStatusPill,
   STAGES,
   ShortcutHelpDialog,
   TopCommandBar,
   WorkflowRail,
   WorkflowStatusStrip,
   type GuidedLessonTile,
-  type StarterImageTemplate,
 } from "./AppShell";
-import { MechanismRecommendationSheet } from "./stages/path/MechanismRecommendationSheet";
-import { TrackingModal } from "./TrackingModal";
-import motionSmithIconUrl from "../resources/icons/AppIcon.png?url";
-import type { AppStage, MechanismConfig, Point, ProjectState } from "../types";
+import motionSmithIconUrl from "../src-tauri/icons/icon.png?url";
+import type { AppStage, Point, ProjectState } from "../types";
 import type { AppCommandHandlerMap } from "../utils/appCommands";
-import type { WebOnnxCacheStatus } from "../utils/webOnnx";
 import type { WorkflowStatus } from "../utils/workflowStatus";
+
+const loadTrackingModal = () => import("./TrackingModal");
+const TrackingModal = lazy(async () => ({
+  default: (await loadTrackingModal()).TrackingModal,
+}));
 
 export type AppWorkspaceShellProps = {
   themeClass: string;
@@ -35,17 +41,12 @@ export type AppWorkspaceShellProps = {
   stageRouterProps: AppStageRouterProps;
   workflowStatus: WorkflowStatus;
   commandStatus: string;
-  onnxCacheStatus: WebOnnxCacheStatus;
-  cacheOnnxModel: () => void | Promise<void>;
   showGettingStarted: boolean;
   hideGettingStartedThisSession: boolean;
-  starterTemplates: StarterImageTemplate[];
   guidedLessons: readonly GuidedLessonTile[];
-  onLesson: (lessonId: string) => void;
-  onStarterImage: (template: StarterImageTemplate) => void;
-  onSample: () => void;
+  onLesson: (lessonId: string, preparedProject?: ProjectState) => void;
+  onSample: (preparedProject?: ProjectState) => void;
   onPackage: (files: FileList | File[]) => void | Promise<void>;
-  onProcess: (file: File) => void | Promise<void>;
   onImport: (file: File) => void | Promise<void>;
   onHideGettingStartedThisSessionChange: (hidden: boolean) => void;
   onCloseGettingStarted: () => void;
@@ -53,9 +54,6 @@ export type AppWorkspaceShellProps = {
   onCloseShortcuts: () => void;
   showAbout: boolean;
   onCloseAbout: () => void;
-  showRecommendations: boolean;
-  onCloseRecommendations: () => void;
-  onApplyRecommendation: (mechanism: MechanismConfig) => void;
   showTracking: boolean;
   onCloseTracking: () => void;
   onTransferTracking: (path: Point[]) => void;
@@ -82,17 +80,12 @@ export const AppWorkspaceShell = ({
   stageRouterProps,
   workflowStatus,
   commandStatus,
-  onnxCacheStatus,
-  cacheOnnxModel,
   showGettingStarted,
   hideGettingStartedThisSession,
-  starterTemplates,
   guidedLessons,
   onLesson,
-  onStarterImage,
   onSample,
   onPackage,
-  onProcess,
   onImport,
   onHideGettingStartedThisSessionChange,
   onCloseGettingStarted,
@@ -100,15 +93,32 @@ export const AppWorkspaceShell = ({
   onCloseShortcuts,
   showAbout,
   onCloseAbout,
-  showRecommendations,
-  onCloseRecommendations,
-  onApplyRecommendation,
   showTracking,
   onCloseTracking,
   onTransferTracking,
 }: AppWorkspaceShellProps) => {
   const stageMeta = STAGES.find((item) => item.id === stage);
   const playerDock: ReactNode = stageRouterProps.playerDock;
+
+  useEffect(() => {
+    if (stage !== "path" || showTracking) return;
+    const host = window as typeof window & {
+      requestIdleCallback?: (
+        callback: () => void,
+        options?: { timeout: number },
+      ) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    if (host.requestIdleCallback) {
+      const handle = host.requestIdleCallback(
+        () => void loadTrackingModal(),
+        { timeout: 2_000 },
+      );
+      return () => host.cancelIdleCallback?.(handle);
+    }
+    const handle = window.setTimeout(() => void loadTrackingModal(), 500);
+    return () => window.clearTimeout(handle);
+  }, [showTracking, stage]);
 
   return (
     <main
@@ -189,26 +199,24 @@ export const AppWorkspaceShell = ({
             }
           />
 
-          <AppStageRouter {...stageRouterProps} playerDock={playerDock} />
+          <AppStageRouter
+            {...stageRouterProps}
+            playerDock={playerDock}
+            suspendStageContent={showGettingStarted}
+          />
           <WorkflowStatusStrip {...workflowStatus} />
           <footer className="status-bar" data-testid="status-bar">
             <span>{commandStatus}</span>
-            <OnnxCacheStatusPill
-              status={onnxCacheStatus}
-              onDownload={cacheOnnxModel}
-            />
           </footer>
         </section>
       </div>
       {showGettingStarted && (
         <GettingStartedDialog
-          starterTemplates={starterTemplates}
           guidedLessons={guidedLessons}
           hideForSession={hideGettingStartedThisSession}
           onLesson={onLesson}
-          onStarterImage={onStarterImage}
           onSample={onSample}
-          onProcess={onProcess}
+          onPackage={onPackage}
           onImport={onImport}
           onHideForSessionChange={onHideGettingStartedThisSessionChange}
           onClose={onCloseGettingStarted}
@@ -216,19 +224,16 @@ export const AppWorkspaceShell = ({
       )}
       {showShortcuts && <ShortcutHelpDialog onClose={onCloseShortcuts} />}
       {showAbout && <AboutDialog onClose={onCloseAbout} />}
-      <MechanismRecommendationSheet
-        isOpen={showRecommendations}
-        project={project}
-        selectedPart={stageRouterProps.selectedPart}
-        selectedPath={stageRouterProps.selectedPath}
-        onClose={onCloseRecommendations}
-        onApply={onApplyRecommendation}
-      />
-      <TrackingModal
-        isOpen={showTracking}
-        onClose={onCloseTracking}
-        onTransfer={onTransferTracking}
-      />
+      {showTracking && (
+        <Suspense fallback={null}>
+          <TrackingModal
+            isOpen
+            onClose={onCloseTracking}
+            onTransfer={onTransferTracking}
+            performancePreset={project.settings.performancePreset}
+          />
+        </Suspense>
+      )}
     </main>
   );
 };

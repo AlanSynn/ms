@@ -1,7 +1,7 @@
 # Classroom Field Support Plan
 
 Status: active implementation pass
-Last refreshed: 2026-06-29
+Last refreshed: 2026-08-20
 Scope: web-first classroom entry, guided templates, sensemaking, reset recovery, blueprint, and assembly guide.
 
 ## Field-study signal
@@ -28,9 +28,9 @@ Key notes translated into product constraints:
 
 | Area | Supported now | Gap to close |
 | --- | --- | --- |
-| Web deployment | GitHub Pages workflow, `/ms/` base path, tag-gated release, local ONNX asset checks, and release facts in `docs/deployment.md`. | Add automated test gates before deploy, or keep a mandatory manual release gate. |
+| Web deployment | GitHub Pages workflow, `/ms/` base path, tag-gated release, image-recognition exclusion checks, and release facts in `docs/deployment.md`. | Keep the automated exclusion and bundle gates before deploy. |
 | Guided entry | Splash + compact result-first Getting Started dialog; `Guide` opens the guided project library. | Keep guided projects prominent without crowding the first modal. |
-| Templates | Humanoid, Girl/Boy tiny-thumbnail starters, image/package import, and serializable lesson baselines. | Keep expanding teacher-ready motion objectives with starter path and compatible mechanism option. |
+| Templates | Humanoid starter, local package import, and serializable lesson baselines. Recognition starters are not shipped. | Keep expanding teacher-ready motion objectives with starter path and compatible mechanism option. |
 | Sensemaking | Foundry/Design/Assembly show sensemaking, assessment prompts, generated-loop examples, and short warnings. | Keep the right pane compact so explanation does not displace direct controls. |
 | Stable reset | `Reset Lesson` restores lesson baseline while preserving app settings; Foundry reset returns to finite preview state. | Keep every new template/mechanism resettable to a known-good range. |
 | Blueprint | Printable cut sheet, export package, board preview, metadata, and local downloads. | Keep Blueprint file-focused; route build teaching to Assembly. |
@@ -47,7 +47,7 @@ Current pass uses existing ProjectState/command/test seams only; no new dependen
 - `Reset Lesson` restores the active lesson baseline while preserving browser app settings.
 - Foundry `Reset` now clears manual anchor/picking/playback/overlay state and rebuilds a finite preview from the selected mechanism type.
 - Left pane checklist is derived from current `ProjectState`; it never owns separate tutorial state.
-- About/deployment docs state static web, no account, no upload, local ONNX, browser autosave, and local downloads.
+- About/deployment docs state static web, no account, no upload, no image-recognition download, browser autosave, and local downloads.
 
 ## Product requirements
 
@@ -57,8 +57,8 @@ MotionSmith must present itself as a static web tool first.
 
 Acceptance:
 
-- `docs/deployment.md` and About copy state: static web, no account, no backend upload, browser-local ONNX, browser autosave, local downloads.
-- Release checklist covers: version tag, `/ms/` path, ONNX LFS bytes, static asset load, no runtime CDN, no `/api/` calls.
+- `docs/deployment.md` and About copy state: static web, no account, no backend upload, no image-recognition model/runtime, browser autosave, and local downloads.
+- Release checklist covers: version tag, `/ms/` path, image-recognition exclusion, static asset load, no runtime CDN, and no `/api/` calls.
 - App shell must not show sign-in, cloud save, sync, team, or teacher dashboard language.
 
 Non-goal:
@@ -75,7 +75,7 @@ Minimum classroom templates:
 2. `Walking legs` — humanoid lower-limb paths, paired mechanism recommendation.
 3. `Bobbing head` — head path, cam follower recommendation.
 4. `Spinning sign` — gear train recommendation.
-5. `Blank character` — user package/image import, no fake mechanism.
+5. `Blank character` — user package import, no fake mechanism.
 
 Acceptance:
 
@@ -122,7 +122,7 @@ Acceptance:
 - Foundry `Reset` returns selected mechanism to stable normal range, finite vectors, paused phase `0`, visible stack, and valid preset ratio.
 - Template `Reset lesson` restores starter character/path/mechanism recommendation while preserving browser app settings.
 - Stage-level resets exist where safe: reset path, reset mechanism fit, reset viewport, reset assembly step.
-- Errors such as `No rotation possible`, ONNX load failure, invalid package, or non-fabricable recipe show one recovery action.
+- Errors such as `No rotation possible`, invalid package, or non-fabricable recipe show one recovery action.
 
 ### R6 — Blueprint as build-file screen
 
@@ -175,7 +175,7 @@ Done when:
 ### Phase 1 — Classroom-safe About and deployment copy
 
 - Update About/deployment surfaces with classroom-safe facts.
-- Add release checklist section: `/ms/`, ONNX LFS, tag match, no CDN, no `/api/`.
+- Add release checklist section: `/ms/`, image-recognition exclusion, tag match, no CDN, no `/api/`.
 - Keep copy short; put details in docs, not center canvas.
 
 Done when:

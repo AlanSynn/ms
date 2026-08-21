@@ -15,17 +15,17 @@ import {
     StandardSkeleton,
     Transform
 } from '../types';
-import { defaultPhysicalKit, localPivotOffsetForScene, SCENE_PX_PER_MM, sceneBoundsForSheet } from './coordinates';
+import { boardToScene, defaultPhysicalKit, localPivotOffsetForScene, SCENE_PX_PER_MM, sceneBoundsForSheet, sceneToBoardRaw } from './coordinates';
 import { FABRICATION_GEAR_SPECS, FABRICATION_RING_GEAR_SPEC } from './fabricationContract';
 import { REFERENCE_DEFAULTS, isReferenceFoundryVisible, normalizeMechanismToFabricationSet, normalizeMechanismToReference, referenceRequiredPartsForMechanism } from './mechanismReference';
 import { defaultCamProfileSamples, gearTrainOutputRatio, generateCurvePoints, normalizeCamProfileSamples, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from './kinematics';
-import { primaryFoundryPlaybackPath } from './foundryPlayback';
+import { generateFoundryPlaybackPointTraces, primaryFoundryPlaybackPath } from './foundryPlayback';
 import { clampNumber, finiteNumber, sanitizeHexColor, sanitizeMechanismType, sanitizePoint } from './sanitize';
 import { isUsableContourPoints } from './partGeometry';
 import { DEFAULT_CLASSROOM_ASSESSMENT_KEY, normalizeClassroomAssessmentKey } from './classroomContent';
-import { fitFourBarKitMechanismToPath, rejectedFourBarPathFit } from './fourBarPathFit';
+import { APP_STATE_VERSION, serializeProject } from './projectSerialization';
 
-export const APP_STATE_VERSION = 1;
+export { APP_STATE_VERSION, serializeProject, serializeProjectCompact } from './projectSerialization';
 
 const DEFAULT_DRIVE_GEAR_RADIUS = REFERENCE_DEFAULTS.gearTrain.driveRadius; // reference G3 / 24T
 const DEFAULT_OUTPUT_GEAR_RADIUS = REFERENCE_DEFAULTS.gearTrain.outputRadius; // reference G3 / 24T
@@ -119,11 +119,12 @@ export const buildSkeleton = (joints: StandardJoint[]): StandardSkeleton => {
     const bones: [string, string][] = [];
     const rootJointIds: string[] = [];
     const jointMap: Record<string, string> = {};
+    const jointIds = new Set(joints.map(item => item.id));
 
     joints.forEach(j => {
         map[j.id] = { ...j, bendDirection: j.bendDirection ?? 1 };
         jointMap[j.name.replaceAll(' ', '_')] = j.id;
-        if (j.parentId && joints.some(other => other.id === j.parentId)) {
+        if (j.parentId && jointIds.has(j.parentId)) {
             bones.push([j.parentId, j.id]);
             hierarchy[j.parentId] = [...(hierarchy[j.parentId] ?? []), j.id];
         } else {
@@ -737,6 +738,109 @@ export type ClassroomLessonTemplate = typeof CLASSROOM_LESSONS[number];
 export const classroomLessonById = (id?: string): ClassroomLessonTemplate | undefined =>
     CLASSROOM_LESSONS.find(lesson => lesson.id === id);
 
+const createBoardReadyLessonFourBar = (
+    project: ProjectState,
+    mechanism: MechanismConfig,
+    path: ProjectMotionPath,
+    placement: {
+        col: number;
+        row: number;
+        groundAngle: number;
+        groundCells: number;
+        crankCells: number;
+        couplerCells: number;
+        rockerCells: number;
+        assemblyMode: NonNullable<MechanismConfig['assemblyMode']>;
+        outputTraceId: 'B' | 'C';
+        phaseOffset: number;
+        direction: 1 | -1;
+    }
+) => {
+    const kit = project.settings.physicalKit;
+    const cell = kit.gridPitchMm * SCENE_PX_PER_MM;
+    const sceneAnchor = boardToScene(placement.col, placement.row, kit);
+    const candidate = normalizeMechanismToFabricationSet({
+        ...mechanism,
+        anchorX: sceneAnchor.x,
+        anchorY: sceneAnchor.y,
+        groundAngle: placement.groundAngle,
+        groundLength: cell * placement.groundCells,
+        crankLength: cell * placement.crankCells,
+        couplerLength: cell * placement.couplerCells,
+        rockerLength: cell * placement.rockerCells,
+        assemblyMode: placement.assemblyMode,
+        speed1: placement.direction,
+        driverPhaseOffset: placement.phaseOffset,
+        transform: { x: sceneAnchor.x, y: sceneAnchor.y, rotation: placement.groundAngle, scale: 1 },
+        sceneAnchor,
+        source: 'optimized'
+    });
+    const traceSet = generateFoundryPlaybackPointTraces(candidate, 96);
+    const generatedPath = traceSet.traces.find(trace => trace.id === placement.outputTraceId)?.points ?? [];
+    const board = sceneToBoardRaw(sceneAnchor, kit);
+    const groundRadians = (candidate.groundAngle * Math.PI) / 180;
+    const groundBoard = sceneToBoardRaw({
+        x: sceneAnchor.x + candidate.groundLength * Math.cos(groundRadians),
+        y: sceneAnchor.y + candidate.groundLength * Math.sin(groundRadians)
+    }, kit);
+    const halfSpan = ((kit.boardCells - 1) / 2) * cell;
+    const traceLeavesBoard = traceSet.traces.some(trace =>
+        trace.points.some(point =>
+            Math.abs(point.x) > halfSpan + 1e-6 || Math.abs(point.y) > halfSpan + 1e-6
+        )
+    );
+    if (
+        !board.valid ||
+        !groundBoard.valid ||
+        traceSet.percentValid < 0.999 ||
+        generatedPath.length < 90 ||
+        traceLeavesBoard
+    ) {
+        throw new Error(`Classroom lesson ${mechanism.id} is outside the ${kit.boardCells}x${kit.boardCells} board contract.`);
+    }
+    const outputPath = generatedPath.map(point => ({ ...point }));
+    const duration = Math.max(1, finiteNumber(path.duration, 1));
+    const fitted = mechanismWithGeneratedPath({
+        ...candidate,
+        generatedPath: outputPath,
+        warnings: [],
+        fabricationMetadata: {
+            ...(candidate.fabricationMetadata ?? {}),
+            boardCoordinate: board.label,
+            gridPitchMm: kit.gridPitchMm,
+            sceneAnchor,
+            targetPathId: path.id,
+            warnings: [],
+            pathFit: {
+                status: 'fit',
+                targetPathId: path.id,
+                outputTraceId: placement.outputTraceId,
+                phaseOffset: placement.phaseOffset,
+                direction: placement.direction,
+                error: 0,
+                maxError: 0,
+                tangentError: 0,
+                maxTangentError: 0,
+                tolerance: Math.max(12, kit.gridPitchMm * SCENE_PX_PER_MM * 0.75),
+                kitProfileKey: kit.profileKey
+            }
+        }
+    }, { preserveGeneratedPath: true });
+    return {
+        mechanism: fitted,
+        path: {
+            ...path,
+            points: outputPath.map(point => ({ ...point })),
+            timedPoints: outputPath.map((point, index) => ({
+                ...point,
+                time: (index / outputPath.length) * duration
+            })),
+            closed: true,
+            warnings: []
+        }
+    };
+};
+
 export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState => {
     const lesson = classroomLessonById(lessonId);
     if (!lesson) throw new Error(`Unknown classroom lesson: ${lessonId}`);
@@ -751,35 +855,46 @@ export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState =
 
     if (lesson.id === 'waving-arm') {
         const armPath = paths['path-right-arm'];
-        if (armPath) {
-            paths = {
-                ...paths,
-                [armPath.id]: {
+        const armFourBar = mechanisms[0];
+        if (armPath && armFourBar) {
+            const baseline = createBoardReadyLessonFourBar(
+                project,
+                {
+                    ...armFourBar,
+                    presetId: 'lesson-waving-arm-board-fit',
+                    recommendation: lesson.description,
+                    targetPartId: 'right_hand_part',
+                    targetPathId: armPath.id,
+                    targetAnchorJointId: 'right_hand',
+                    activeVisualPartIds: ['right_hand_part']
+                },
+                {
                     ...armPath,
                     partId: 'right_hand_part',
                     targetAnchorJointId: 'right_hand',
                     chainRootJointId: 'right_shoulder'
+                },
+                // H13 -> H5 is the closest sampled board-valid output motion
+                // to the authored wave while keeping the arm comfortably reachable.
+                {
+                    col: 7,
+                    row: 12,
+                    groundAngle: 90,
+                    groundCells: 8,
+                    crankCells: 2,
+                    couplerCells: 8,
+                    rockerCells: 4,
+                    assemblyMode: 'crossed',
+                    outputTraceId: 'C',
+                    phaseOffset: (8 / 36) * Math.PI * 2,
+                    direction: -1
                 }
-            };
+            );
+            paths = { ...paths, [armPath.id]: baseline.path };
+            mechanisms = [baseline.mechanism];
             selectedPartId = 'right_hand_part';
             selectedPathId = armPath.id;
-        }
-        const armFourBar = mechanisms[0];
-        if (armFourBar) {
-            Object.assign(armFourBar, {
-                anchorX: 200,
-                anchorY: 80,
-                groundAngle: 180,
-                transform: { x: 200, y: 80, rotation: 180, scale: 1 },
-                sceneAnchor: { x: 200, y: 80 },
-                targetPartId: 'right_hand_part',
-                targetPathId: 'path-right-arm',
-                targetAnchorJointId: 'right_hand',
-                activeVisualPartIds: ['right_hand_part'],
-                recommendation: lesson.description
-            } satisfies Partial<MechanismConfig>);
-            mechanisms = [mechanismWithGeneratedPath(armFourBar)];
-            selectedMechanismId = armFourBar.id;
+            selectedMechanismId = baseline.mechanism.id;
         }
     } else if (lesson.id === 'head-bob') {
         const pathId = 'path-head-bob';
@@ -835,21 +950,36 @@ export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState =
             }
         };
         const legFourBar = createDefaultMechanism('4bar', 'mech-walking-leg');
-        Object.assign(legFourBar, {
-            anchorX: 160,
-            anchorY: -120,
-            groundAngle: 180,
-            transform: { x: 160, y: -120, rotation: 180, scale: 1 },
-            sceneAnchor: { x: 160, y: -120 },
-            targetPartId: 'right_foot_part',
-            targetPathId: pathId,
-            targetAnchorJointId: 'right_foot',
-            activeVisualPartIds: ['right_foot_part'],
-            source: 'manual',
-            presetId: 'lesson-walking-leg',
-            recommendation: lesson.description
-        } satisfies Partial<MechanismConfig>);
-        mechanisms = [mechanismWithGeneratedPath(legFourBar)];
+        const baseline = createBoardReadyLessonFourBar(
+            project,
+            {
+                ...legFourBar,
+                targetPartId: 'right_foot_part',
+                targetPathId: pathId,
+                targetAnchorJointId: 'right_foot',
+                activeVisualPartIds: ['right_foot_part'],
+                presetId: 'lesson-walking-leg-board-fit',
+                recommendation: lesson.description
+            },
+            paths[pathId],
+            // F13 -> F5 is the closest sampled board-valid output motion
+            // to the authored step while keeping the leg comfortably reachable.
+            {
+                col: 5,
+                row: 12,
+                groundAngle: 90,
+                groundCells: 8,
+                crankCells: 2,
+                couplerCells: 4,
+                rockerCells: 8,
+                assemblyMode: 'crossed',
+                outputTraceId: 'C',
+                phaseOffset: (21 / 36) * Math.PI * 2,
+                direction: 1
+            }
+        );
+        paths = { [pathId]: baseline.path };
+        mechanisms = [baseline.mechanism];
         selectedPartId = 'right_foot_part';
         selectedPathId = pathId;
         selectedMechanismId = legFourBar.id;
@@ -927,20 +1057,6 @@ export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState =
         } : project.characterPackage,
         processing: { stage: 'ready', message: `${lesson.shortLabel} ready`, progress: 100 }
     };
-    const lessonMechanism = lessonProject.mechanisms[0];
-    const lessonPath = lessonMechanism?.targetPathId
-        ? lessonProject.paths[lessonMechanism.targetPathId]
-        : undefined;
-    if (lessonMechanism?.type === '4bar' && lessonPath) {
-        const fitted = fitFourBarKitMechanismToPath(
-            lessonProject,
-            lessonMechanism,
-            lessonPath,
-        );
-        lessonProject.mechanisms = [
-            fitted ?? rejectedFourBarPathFit(lessonProject, lessonMechanism, lessonPath),
-        ];
-    }
     return lessonProject;
 };
 
@@ -1151,7 +1267,7 @@ const normalizeSkeletonToSheet = (skeleton: StandardSkeleton, scale: number, cen
     return normalized;
 };
 
-export const createProjectFromProcessed = (input: {
+export const createProjectFromCharacterPackage = (input: {
     name: string;
     sourceImageName: string;
     skeleton: StandardSkeleton;
@@ -1168,7 +1284,7 @@ export const createProjectFromProcessed = (input: {
         id: `char-${Date.now().toString(36)}`,
         createdAt: nowIso(),
         sourceImageName: input.sourceImageName,
-        outputDir: `web-onnx://${input.sourceImageName}`,
+        outputDir: `local-package://${input.sourceImageName}`,
         partsInfo: {
             parts: Object.fromEntries(normalized.parts.map(p => [p.id, {
                 name: p.name,
@@ -1467,9 +1583,6 @@ export const validatePath = (path: ProjectMotionPath): ProjectMotionPath => {
     };
 };
 
-export const serializeProject = (project: ProjectState): string => JSON.stringify({ ...project, version: APP_STATE_VERSION }, null, 2);
-
-
 const normalizeSkeletonSnapshot = (skeleton: unknown): StandardSkeleton | null => {
     if (!skeleton || typeof skeleton !== 'object') return null;
     const raw = skeleton as Partial<StandardSkeleton> & { skeleton?: Array<{ name?: string; loc?: [number, number]; parent?: string | null }> };
@@ -1726,8 +1839,7 @@ export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
 
 export const loadProjectSnapshot = (raw: unknown): ProjectState => migrateProjectSnapshot(raw);
 
-export const downloadText = (filename: string, text: string, type = 'application/json') => {
-    const blob = new Blob([text], { type });
+export const downloadBlob = (filename: string, blob: Blob) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -1737,6 +1849,9 @@ export const downloadText = (filename: string, text: string, type = 'application
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 };
+
+export const downloadText = (filename: string, text: string, type = 'application/json') =>
+    downloadBlob(filename, new Blob([text], { type }));
 
 export const projectSelfCheck = () => {
     const sample = createSampleProject();

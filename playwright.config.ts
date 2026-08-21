@@ -14,10 +14,15 @@ const parseWorkerCount = (value: string | undefined) => {
 };
 const workerCount = parseWorkerCount(process.env.PLAYWRIGHT_WORKERS);
 const serverMode = process.env.PLAYWRIGHT_SERVER ?? 'preview';
+const auditEnabled = process.env.CHROMEBOOK_AUDIT === '1';
+const serverPort = Number(process.env.PLAYWRIGHT_PORT ?? 5173);
+if (!Number.isInteger(serverPort) || serverPort < 1 || serverPort > 65535) {
+  throw new Error('PLAYWRIGHT_PORT must be a valid TCP port');
+}
 const cleanColorEnv = 'env -u NO_COLOR ';
 const webServerCommand = serverMode === 'preview'
-  ? `${cleanColorEnv}bun run preview -- --host 127.0.0.1 --port 5173 --strictPort`
-  : `${cleanColorEnv}bun run dev -- --host 127.0.0.1 --port 5173`;
+  ? `${cleanColorEnv}bun run preview -- --host 127.0.0.1 --port ${serverPort} --strictPort`
+  : `${cleanColorEnv}bun run dev -- --host 127.0.0.1 --port ${serverPort}`;
 
 export default defineConfig({
   testDir: './tests/browser',
@@ -27,19 +32,26 @@ export default defineConfig({
   workers: workerCount,
   reporter: [['list']],
   use: {
-    baseURL: 'http://127.0.0.1:5173',
+    baseURL: `http://127.0.0.1:${serverPort}`,
     acceptDownloads: true,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    ...devices['Desktop Chrome']
+    ...devices['Desktop Chrome'],
+    ...(auditEnabled ? {
+      channel: 'chrome',
+      viewport: { width: 1366, height: 768 },
+      screen: { width: 1366, height: 768 },
+      deviceScaleFactor: 1,
+      launchOptions: { args: ['--enable-precise-memory-info'] },
+    } : {}),
   },
   webServer: {
     command: webServerCommand,
-    url: 'http://127.0.0.1:5173',
-    reuseExistingServer: !process.env.CI,
+    url: `http://127.0.0.1:${serverPort}`,
+    reuseExistingServer: !process.env.CI && !auditEnabled,
     timeout: 120_000
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } }
+    { name: auditEnabled ? 'chrome-audit' : 'chromium' }
   ]
 });

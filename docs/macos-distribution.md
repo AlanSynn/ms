@@ -16,7 +16,7 @@ bun run build:dmg
 Before distributing, verify:
 
 - `bun run test` passes.
-- `dist/onnx/pose_model.onnx` is present.
+- `bun run test:no-image-recognition` passes and no image-recognition model/runtime is present in `dist/`.
 - `resources/icons/AppIcon.png` / `.icns` are the canonical app icon assets, and `src-tauri/icons/icon.png`, `.ico`, and `.icns` are regenerated package copies.
 - The app opens without network access.
 - Blueprint export downloads JSON, SVG, HTML, metadata JSON, and PDF artifacts.

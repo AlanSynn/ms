@@ -3,7 +3,6 @@ export type HelpLocale = "en";
 export type ContextHelpId =
   | "character.loadCharacterFile"
   | "character.loadObjectFile"
-  | "character.createFromImage"
   | "character.bodySides"
   | "path.draw"
   | "path.smoothness"
@@ -39,12 +38,6 @@ export const CONTEXT_HELP: Record<
     en: {
       title: "Object",
       body: "Load one prop image here. Other tabs can move it, not create it.",
-    },
-  },
-  "character.createFromImage": {
-    en: {
-      title: "Image",
-      body: "Turn one picture into editable parts and joints on this device.",
     },
   },
   "character.bodySides": {

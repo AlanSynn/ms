@@ -1,5 +1,12 @@
 import { EditorStageFrame, canvasPane, inspectorPane, workflowPane } from "../stageLayout";
-import type { AppStage, MechanismConfig, ProjectAction, ProjectState } from "../../../types";
+import type {
+  AppStage,
+  BodyPartLayer,
+  MechanismConfig,
+  ProjectAction,
+  ProjectMotionPath,
+  ProjectState,
+} from "../../../types";
 import { DesignFoundryPreview } from "./DesignFoundryPreview";
 import { DesignInspectorPanel } from "./DesignInspectorPanel";
 import { DesignWorkflowPanel } from "./DesignWorkflowPanel";
@@ -7,6 +14,8 @@ import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackCl
 
 export const MechanismDesign = ({
   project,
+  selectedPart,
+  selectedPath,
   selectedMechanism,
   updateMechanism,
   dispatch,
@@ -16,7 +25,8 @@ export const MechanismDesign = ({
   angle,
   playbackClock,
   onOptimize,
-  onRecommendations,
+  onCancelOptimize,
+  onApplyRecommendation,
   optimizerBusy,
   exportSvg,
   exportDxf,
@@ -24,6 +34,8 @@ export const MechanismDesign = ({
   goStage,
 }: {
   project: ProjectState;
+  selectedPart?: BodyPartLayer;
+  selectedPath?: ProjectMotionPath;
   selectedMechanism?: MechanismConfig;
   updateMechanism: (id: string, updates: Partial<MechanismConfig>) => void;
   dispatch: (action: ProjectAction) => void;
@@ -33,7 +45,8 @@ export const MechanismDesign = ({
   angle: number;
   playbackClock: PlaybackClock;
   onOptimize: () => void;
-  onRecommendations: () => void;
+  onCancelOptimize: () => void;
+  onApplyRecommendation: (mechanism: MechanismConfig) => void;
   optimizerBusy: boolean;
   exportSvg: () => void;
   exportDxf: () => void;
@@ -47,10 +60,12 @@ export const MechanismDesign = ({
       workflow: workflowPane(
         <DesignWorkflowPanel
           project={project}
+          selectedPart={selectedPart}
+          selectedPath={selectedPath}
           selectedMechanism={selectedMechanism}
           showTrace={showTrace}
           setShowTrace={setShowTrace}
-          onRecommendations={onRecommendations}
+          onApplyRecommendation={onApplyRecommendation}
           onBlueprint={onBlueprint}
           goStage={goStage}
           dispatch={dispatch}
@@ -75,6 +90,7 @@ export const MechanismDesign = ({
           dispatch={dispatch}
           optimizerBusy={optimizerBusy}
           onOptimize={onOptimize}
+          onCancelOptimize={onCancelOptimize}
           exportSvg={exportSvg}
           exportDxf={exportDxf}
           onBlueprint={onBlueprint}

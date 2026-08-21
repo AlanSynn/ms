@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from "react";
+import React, { useMemo, useRef, useState } from "react";
 
 import type { MechanismConfig } from "../../../types";
 import { SCENE_PX_PER_MM } from "../../../utils/coordinates";
@@ -212,6 +212,9 @@ const CamProfileEditor = ({
   const svgRef = useRef<SVGSVGElement | null>(null);
   const activeIndexRef = useRef<number | null>(null);
   const profile = useMemo(() => normalizeCamProfileSamples(samples), [samples]);
+  const draftProfileRef = useRef<number[] | null>(null);
+  const [draftProfile, setDraftProfile] = useState<number[] | null>(null);
+  const visibleProfile = draftProfile ?? profile;
   const width = 240;
   const height = 88;
   const pad = 12;
@@ -220,7 +223,7 @@ const CamProfileEditor = ({
     (1 - (value - CAM_PROFILE_MIN) / (CAM_PROFILE_MAX - CAM_PROFILE_MIN)) *
       (height - pad * 2);
   const pointX = (index: number) =>
-    pad + (index / Math.max(1, profile.length - 1)) * (width - pad * 2);
+    pad + (index / Math.max(1, visibleProfile.length - 1)) * (width - pad * 2);
   const eventIndex = (event: React.PointerEvent<SVGElement>) => {
     const rect = svgRef.current?.getBoundingClientRect();
     if (!rect) return activeIndexRef.current ?? 0;
@@ -230,12 +233,15 @@ const CamProfileEditor = ({
     );
     return Math.max(
       0,
-      Math.min(profile.length - 1, Math.round(t * (profile.length - 1))),
+      Math.min(
+        visibleProfile.length - 1,
+        Math.round(t * (visibleProfile.length - 1)),
+      ),
     );
   };
   const eventValue = (event: React.PointerEvent<SVGElement>) => {
     const rect = svgRef.current?.getBoundingClientRect();
-    if (!rect) return profile[activeIndexRef.current ?? 0] ?? 1;
+    if (!rect) return visibleProfile[activeIndexRef.current ?? 0] ?? 1;
     const t = Math.max(
       0,
       Math.min(1, (event.clientY - rect.top) / Math.max(1, rect.height)),
@@ -244,13 +250,27 @@ const CamProfileEditor = ({
       CAM_PROFILE_MAX - t * (CAM_PROFILE_MAX - CAM_PROFILE_MIN),
     );
   };
-  const updatePoint = (index: number, value: number) =>
-    onChange(
-      profile.map((sample, sampleIndex) =>
+  const updatePoint = (index: number, value: number) => {
+    const next = (draftProfileRef.current ?? visibleProfile).map(
+      (sample, sampleIndex) =>
         sampleIndex === index ? clampCamProfileSample(value) : sample,
-      ),
     );
-  const profilePath = profile
+    draftProfileRef.current = next;
+    setDraftProfile(next);
+  };
+  const beginDraft = (index: number, value: number) => {
+    activeIndexRef.current = index;
+    draftProfileRef.current = [...visibleProfile];
+    updatePoint(index, value);
+  };
+  const commitDraft = () => {
+    const next = draftProfileRef.current;
+    activeIndexRef.current = null;
+    draftProfileRef.current = null;
+    setDraftProfile(null);
+    if (next) onChange(next);
+  };
+  const profilePath = visibleProfile
     .map(
       (value, index) =>
         `${index === 0 ? "M" : "L"} ${pointX(index).toFixed(1)} ${sampleToY(value).toFixed(1)}`,
@@ -282,9 +302,8 @@ const CamProfileEditor = ({
         onPointerDown={(event) => {
           event.preventDefault();
           const index = eventIndex(event);
-          activeIndexRef.current = index;
           event.currentTarget.setPointerCapture(event.pointerId);
-          updatePoint(index, eventValue(event));
+          beginDraft(index, eventValue(event));
         }}
         onPointerMove={(event) => {
           const index = activeIndexRef.current;
@@ -292,12 +311,8 @@ const CamProfileEditor = ({
           event.preventDefault();
           updatePoint(index, eventValue(event));
         }}
-        onPointerUp={() => {
-          activeIndexRef.current = null;
-        }}
-        onPointerLeave={() => {
-          activeIndexRef.current = null;
-        }}
+        onPointerUp={commitDraft}
+        onPointerCancel={commitDraft}
       >
         <path
           d={`M ${pad} ${height - pad} H ${width - pad}`}
@@ -312,7 +327,7 @@ const CamProfileEditor = ({
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        {profile.map((value, index) => (
+        {visibleProfile.map((value, index) => (
           <circle
             key={index}
             data-testid={`cam-profile-point-${index}`}
@@ -324,9 +339,9 @@ const CamProfileEditor = ({
             strokeWidth="2"
             onPointerDown={(event) => {
               event.preventDefault();
-              activeIndexRef.current = index;
+              event.stopPropagation();
               event.currentTarget.setPointerCapture(event.pointerId);
-              updatePoint(index, eventValue(event));
+              beginDraft(index, eventValue(event));
             }}
           />
         ))}

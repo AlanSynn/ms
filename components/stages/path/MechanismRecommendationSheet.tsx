@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import type {
   BodyPartLayer,
   MechanismConfig,
@@ -6,16 +6,20 @@ import type {
   ProjectState,
 } from "../../../types";
 import { mechanismWithGeneratedPath, uid } from "../../../utils/project";
+import type { MechanismRecommendation } from "../../../utils/mechanismRecommendations";
 import {
-  buildMechanismRecommendations,
-  type MechanismRecommendation,
-} from "../../../utils/mechanismRecommendations";
+  createMechanismRecommendationJobInput,
+} from "../../../runtime/recommendations/mechanismRecommendationJob";
+import type { MechanismRecommendationWorkerClient } from "../../../runtime/recommendations/mechanismRecommendationWorkerClient";
 import {
   createMechanismFitContext,
   fitMechanismSimulationWithContext,
   pointsToSvgPath,
 } from "../../../utils/mechanismPreview";
 import { MechanismLinkagePreview } from "../foundry/MechanismLinkagePreview";
+import { resolveRenderPerformancePolicy } from "../../../utils/renderPerformancePolicy";
+import { sampleIndexedValues } from "../../../utils/interactiveSampling";
+import { RecommendationMechanismSketch } from "./RecommendationMechanismSketch";
 
 type MechanismRecommendationSheetProps = {
   isOpen: boolean;
@@ -24,6 +28,7 @@ type MechanismRecommendationSheetProps = {
   selectedPath?: ProjectMotionPath;
   onClose: () => void;
   onApply: (mechanism: MechanismConfig) => void;
+  workerClient: MechanismRecommendationWorkerClient;
 };
 
 const RecommendationFitPreview = ({
@@ -35,32 +40,55 @@ const RecommendationFitPreview = ({
   project: ProjectState;
   selectedPath?: ProjectMotionPath;
 }) => {
+  const renderPolicy = resolveRenderPerformancePolicy(
+    project.settings.performancePreset,
+  );
+  const previewTraceSamples = renderPolicy.overlayQuality === "full"
+    ? renderPolicy.interactiveDetail.mechanismTraceSamples
+    : 12;
+  const previewPathPoints = useMemo(
+    () =>
+      sampleIndexedValues(
+        selectedPath?.points ?? [],
+        renderPolicy.interactiveDetail.maxPathHandles,
+      ).map(({ value }) => value),
+    [renderPolicy.interactiveDetail.maxPathHandles, selectedPath?.points],
+  );
   const context = useMemo(
     () =>
       createMechanismFitContext(
         option.mechanism,
         220,
         136,
-        96,
-        selectedPath?.points ?? [],
+        previewTraceSamples,
+        previewPathPoints,
       ),
-    [option.mechanism, selectedPath?.points],
+    [
+      option.mechanism,
+      previewTraceSamples,
+      previewPathPoints,
+    ],
   );
   const current = useMemo(
     () => fitMechanismSimulationWithContext(option.mechanism, 0, context),
     [context, option.mechanism],
   );
+  const showGhostFrames = renderPolicy.overlayQuality === "full";
   const ghost = useMemo(
-    () =>
-      [Math.PI * 0.65, Math.PI * 1.3].map((phase) =>
+    () => {
+      if (!showGhostFrames) return [];
+      return [Math.PI * 0.65, Math.PI * 1.3].map((phase) =>
         fitMechanismSimulationWithContext(option.mechanism, phase, context),
-      ),
-    [context, option.mechanism],
+      );
+    },
+    [context, option.mechanism, showGhostFrames],
   );
   const userPathD = useMemo(() => {
-    if (!selectedPath || selectedPath.points.length < 2) return "";
-    return pointsToSvgPath(selectedPath.points.map(context.map));
-  }, [context, selectedPath]);
+    if (previewPathPoints.length < 2) return "";
+    return pointsToSvgPath(
+      previewPathPoints.map((point) => context.map(point)),
+    );
+  }, [context, previewPathPoints]);
 
   return (
     <svg
@@ -71,6 +99,8 @@ const RecommendationFitPreview = ({
       data-board-cells={project.settings.physicalKit.boardCells}
       data-user-path-preview={userPathD ? "shown" : "hidden"}
       data-mechanism-path-preview={current.pathD ? "shown" : "hidden"}
+      data-ghost-preview={showGhostFrames ? "shown" : "hidden"}
+      data-trace-samples={previewTraceSamples}
     >
       <text x="10" y="18" fill="#64748b" fontSize="10" fontWeight="900">
         {project.settings.physicalKit.boardCells}×
@@ -111,13 +141,21 @@ const RecommendationFitPreview = ({
             />
           </g>
         ))}
-        <MechanismLinkagePreview
-          mechanism={option.mechanism}
-          simulation={current}
-          kit={project.settings.physicalKit}
-          testId={`recommendation-linkage-${option.type}`}
-          compact
-        />
+        {showGhostFrames ? (
+          <MechanismLinkagePreview
+            mechanism={option.mechanism}
+            simulation={current}
+            kit={project.settings.physicalKit}
+            testId={`recommendation-linkage-${option.type}`}
+            compact
+          />
+        ) : (
+          <RecommendationMechanismSketch
+            mechanism={option.mechanism}
+            simulation={current}
+            testId={`recommendation-linkage-${option.type}`}
+          />
+        )}
       </g>
       <circle
         cx={current.state.effector.x}
@@ -131,18 +169,139 @@ const RecommendationFitPreview = ({
   );
 };
 
-export const MechanismRecommendationSheet = ({
+type RecommendationLoadState = {
+  inputFingerprint: string;
+  status: "loading" | "ready" | "error";
+  recommendations: MechanismRecommendation[];
+  error?: string;
+};
+
+const OpenMechanismRecommendationSheet = ({
   isOpen,
   project,
   selectedPart,
   selectedPath,
   onClose,
   onApply,
+  workerClient,
 }: MechanismRecommendationSheetProps) => {
-  const recommendations = useMemo(
-    () => buildMechanismRecommendations(project, selectedPart, selectedPath),
-    [project, selectedPart, selectedPath],
+  const sheetRef = useRef<HTMLElement>(null);
+  const input = useMemo(
+    () =>
+      createMechanismRecommendationJobInput(
+        project,
+        selectedPart,
+        selectedPath?.id,
+      ),
+    [project, selectedPart, selectedPath?.id],
   );
+  const [loadState, setLoadState] = useState<RecommendationLoadState>(() => ({
+    inputFingerprint: input.inputFingerprint,
+    status: "loading",
+    recommendations: [],
+  }));
+
+  useEffect(() => {
+    if (!isOpen) {
+      if (sheetRef.current) {
+        sheetRef.current.dataset.recommendationWorkerRequest = "idle";
+      }
+      workerClient.cancel();
+      return;
+    }
+    setLoadState({
+      inputFingerprint: input.inputFingerprint,
+      status: "loading",
+      recommendations: [],
+    });
+    let cancelled = false;
+    let secondFrame = 0;
+    let firstFrame = requestAnimationFrame(() => {
+      firstFrame = 0;
+      secondFrame = requestAnimationFrame(() => {
+        secondFrame = 0;
+        if (cancelled) return;
+        if (sheetRef.current) {
+          sheetRef.current.dataset.recommendationWorkerRequest = "active";
+        }
+        workerClient.request(input, {
+          complete: (recommendations) => {
+            if (sheetRef.current) {
+              sheetRef.current.dataset.recommendationWorkerRequest = "settled";
+            }
+            startTransition(() => {
+              setLoadState({
+                inputFingerprint: input.inputFingerprint,
+                status: "ready",
+                recommendations,
+              });
+            });
+          },
+          failed: (error) => {
+            if (sheetRef.current) {
+              sheetRef.current.dataset.recommendationWorkerRequest = "settled";
+            }
+            setLoadState({
+              inputFingerprint: input.inputFingerprint,
+              status: "error",
+              recommendations: [],
+              error: error.message,
+            });
+          },
+        });
+      });
+    });
+    return () => {
+      cancelled = true;
+      if (firstFrame) cancelAnimationFrame(firstFrame);
+      if (secondFrame) cancelAnimationFrame(secondFrame);
+      if (sheetRef.current) {
+        sheetRef.current.dataset.recommendationWorkerRequest = "cancelled";
+      }
+      workerClient.cancel();
+    };
+  }, [input, isOpen, workerClient]);
+
+  const currentState =
+    loadState.inputFingerprint === input.inputFingerprint
+      ? loadState
+      : {
+          inputFingerprint: input.inputFingerprint,
+          status: "loading" as const,
+          recommendations: [],
+        };
+  const recommendations = currentState.recommendations;
+  const [visibleRecommendationStep, setVisibleRecommendationStep] = useState(0);
+  const visibleRecommendationCount = Math.min(
+    visibleRecommendationStep,
+    recommendations.length,
+  );
+  const visiblePreviewCount = Math.max(
+    0,
+    visibleRecommendationStep - recommendations.length,
+  );
+  const finalRecommendationStep = recommendations.length * 2;
+
+  useEffect(() => {
+    if (!isOpen || currentState.status !== "ready") {
+      if (visibleRecommendationStep !== 0) setVisibleRecommendationStep(0);
+      return;
+    }
+    if (visibleRecommendationStep >= finalRecommendationStep) return;
+    const frame = requestAnimationFrame(() => {
+      startTransition(() => {
+        setVisibleRecommendationStep((step) =>
+          Math.min(step + 1, finalRecommendationStep),
+        );
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [
+    currentState.status,
+    finalRecommendationStep,
+    isOpen,
+    visibleRecommendationStep,
+  ]);
 
   const apply = (option: MechanismRecommendation) => {
     onApply(
@@ -156,16 +315,23 @@ export const MechanismRecommendationSheet = ({
     );
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="modal-backdrop" role="presentation">
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      hidden={!isOpen}
+      style={isOpen ? undefined : { display: "none" }}
+    >
       <section
+        ref={sheetRef}
         className="modal-sheet recommendation-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="recommendation-dialog-title"
         data-testid="recommendation-sheet"
+        data-recommendation-state={currentState.status}
+        data-recommendation-worker-request="idle"
+        data-visible-recommendations={visibleRecommendationCount}
       >
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -176,7 +342,22 @@ export const MechanismRecommendationSheet = ({
             Close
           </button>
         </div>
-        {!recommendations.length ? (
+        {currentState.status === "loading" ? (
+          <div
+            className="recommendation-empty"
+            data-testid="recommendation-loading"
+          >
+            Finding fits…
+          </div>
+        ) : currentState.status === "error" ? (
+          <div
+            className="recommendation-empty"
+            data-testid="recommendation-error"
+            title={currentState.error}
+          >
+            Recommendations unavailable.
+          </div>
+        ) : !recommendations.length ? (
           <div
             className="recommendation-empty"
             data-testid="recommendation-empty"
@@ -185,46 +366,62 @@ export const MechanismRecommendationSheet = ({
           </div>
         ) : (
           <div className="recommendation-grid mt-5">
-            {recommendations.map((option) => (
-              <article
-                key={option.type}
-                className="recommendation-card recommendation-option"
-                data-testid={`recommendation-card-${option.type}`}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="font-bold text-slate-800">
-                      {option.label}
+            {recommendations
+              .slice(0, visibleRecommendationCount)
+              .map((option, index) => (
+                <article
+                  key={option.type}
+                  className="recommendation-card recommendation-option"
+                  data-testid={`recommendation-card-${option.type}`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="font-bold text-slate-800">
+                        {option.label}
+                      </div>
+                      <div className="text-xs font-black uppercase tracking-wider text-slate-500">
+                        Fit score {option.score}/100
+                      </div>
                     </div>
-                    <div className="text-xs font-black uppercase tracking-wider text-slate-500">
-                      Fit score {option.score}/100
-                    </div>
+                    <span className="recommendation-score">{option.score}</span>
                   </div>
-                  <span className="recommendation-score">{option.score}</span>
-                </div>
-                <RecommendationFitPreview
-                  option={option}
-                  project={project}
-                  selectedPath={selectedPath}
-                />
-                <p className="mt-3">{option.reason}</p>
-                <p
-                  className={`mt-2 text-xs ${option.fabricationErrors.length ? "font-bold text-amber-700" : "text-slate-500"}`}
-                >
-                  {option.feasibility}
-                </p>
-                <button
-                  className="btn-primary mt-4"
-                  disabled={!!option.fabricationErrors.length}
-                  onClick={() => apply(option)}
-                >
-                  Use
-                </button>
-              </article>
-            ))}
+                  {index < visiblePreviewCount ? (
+                    <RecommendationFitPreview
+                      option={option}
+                      project={project}
+                      selectedPath={selectedPath}
+                    />
+                  ) : (
+                    <div
+                      className="recommendation-preview mt-3"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <p className="mt-3">{option.reason}</p>
+                  <p
+                    className={`mt-2 text-xs ${option.fabricationErrors.length ? "font-bold text-amber-700" : "text-slate-500"}`}
+                  >
+                    {option.feasibility}
+                  </p>
+                  <button
+                    className="btn-primary mt-4"
+                    disabled={!!option.fabricationErrors.length}
+                    onClick={() => apply(option)}
+                  >
+                    Use
+                  </button>
+                </article>
+              ))}
           </div>
         )}
       </section>
     </div>
   );
+};
+
+export const MechanismRecommendationSheet = (
+  props: MechanismRecommendationSheetProps,
+) => {
+  if (!props.isOpen) return null;
+  return <OpenMechanismRecommendationSheet {...props} />;
 };

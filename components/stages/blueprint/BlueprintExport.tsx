@@ -1,10 +1,16 @@
-import React, { useState } from "react";
+import React, {
+  startTransition,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import type { AppStage, FabricationRecipe, ProjectAction, ProjectState } from "../../../types";
 import { FinalStudyArtifactGate } from "../../../hooks/useFinalStudyArtifact";
 import {
   buildBlueprintModel,
-  createBlueprintPackage,
 } from "../../../runtime/blueprint/BlueprintModel";
+import { createBlueprintPackageWorkerClient } from "../../../runtime/blueprint/blueprintPackageWorkerClient";
+import { downloadText } from "../../../utils/project";
 import {
   EditorStageFrame,
   canvasPane,
@@ -13,7 +19,7 @@ import {
 } from "../stageLayout";
 import { BlueprintControlPanel } from "./BlueprintControlPanel";
 import { BlueprintDetailPanel } from "./BlueprintDetailPanel";
-import { ThreePuppetPreview } from "../../ThreePuppetPreview";
+import { DeferredThreePuppetPreview } from "../../DeferredThreePuppetPreview";
 
 export const selectBlueprintRecipe = (
   recipes: FabricationRecipe[],
@@ -34,13 +40,64 @@ export const BlueprintExport = ({
   goStage: (stage: AppStage) => void;
 }) => {
   const { validation, pkg, recipes } = buildBlueprintModel(project);
-  const create = () =>
-    dispatch({
-      type: "set_export",
-      fabricationPackage: createBlueprintPackage(project),
+  const packageClient = useMemo(() => createBlueprintPackageWorkerClient(), []);
+  const [packageStatus, setPackageStatus] = useState<"idle" | "running">("idle");
+  const [stlStatus, setStlStatus] = useState<"idle" | "running">("idle");
+  const [packageError, setPackageError] = useState<string>();
+  const [stlError, setStlError] = useState<string>();
+  useEffect(() => () => packageClient.dispose(), [packageClient]);
+  const create = () => {
+    if (stlStatus === "running") return;
+    if (packageStatus === "running") {
+      packageClient.cancel();
+      setPackageStatus("idle");
+      return;
+    }
+    setPackageError(undefined);
+    setPackageStatus("running");
+    packageClient.request(project, {
+      complete: ({ fabricationPackage }) => {
+        setPackageStatus("idle");
+        startTransition(() => dispatch({
+          type: "set_export",
+          fabricationPackage,
+        }));
+      },
+      failed: (error) => {
+        setPackageStatus("idle");
+        setPackageError(error.message);
+      },
     });
+  };
+  const createStl = () => {
+    if (stlStatus === "running") {
+      packageClient.cancel();
+      setStlStatus("idle");
+      return;
+    }
+    if (packageStatus === "running" || !pkg) return;
+    setStlError(undefined);
+    setStlStatus("running");
+    packageClient.requestCustomPartsStl(project, {
+      complete: ({ customPartsStl }) => {
+        setStlStatus("idle");
+        downloadText(
+          `${pkg.id}-custom-parts.stl`,
+          customPartsStl,
+          "model/stl",
+        );
+      },
+      failed: (error) => {
+        setStlStatus("idle");
+        setStlError(error.message);
+      },
+    });
+  };
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const selectedRecipe = selectBlueprintRecipe(recipes, selectedRecipeId, project.selectedMechanismId);
+  const exposePackageDiagnostics = __MOTIONSMITH_E2E_DIAGNOSTICS__ && !(
+    window as Window & { __MOTIONSMITH_CHROMEBOOK_AUDIT__?: unknown }
+  ).__MOTIONSMITH_CHROMEBOOK_AUDIT__;
   return (
     <EditorStageFrame
       stage="blueprint"
@@ -52,6 +109,11 @@ export const BlueprintExport = ({
             goStage={goStage}
             validation={validation}
             create={create}
+            createStl={createStl}
+            packageStatus={packageStatus}
+            stlStatus={stlStatus}
+            packageError={packageError}
+            stlError={stlError}
             pkg={pkg}
             recipes={recipes}
             selectedRecipe={selectedRecipe}
@@ -70,7 +132,7 @@ export const BlueprintExport = ({
               <span><i className="blueprint-legend-swatch board" aria-hidden="true" />Board</span>
               <span><i className="blueprint-legend-swatch path" aria-hidden="true" />Motion path</span>
             </div>
-            <ThreePuppetPreview
+            <DeferredThreePuppetPreview
               project={project}
               skeleton={project.skeleton}
               mechanisms={project.mechanisms}
@@ -82,7 +144,7 @@ export const BlueprintExport = ({
               initialLayers={{ skeleton: false }}
               onSelectMechanism={setSelectedRecipeId}
             />
-            {pkg && (
+            {pkg && exposePackageDiagnostics && (
               <pre hidden data-testid="blueprint-export-package-json">
                 {JSON.stringify(pkg)}
               </pre>

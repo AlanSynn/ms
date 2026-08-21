@@ -26,6 +26,8 @@ export const AssemblyControlPanel = ({
   goStage,
   validationErrorCount,
   packageReady,
+  packageStatus,
+  packageError,
   onCreate,
   onPrint,
   onDownloadPdf,
@@ -46,6 +48,8 @@ export const AssemblyControlPanel = ({
   goStage: (stage: AppStage) => void;
   validationErrorCount: number;
   packageReady: boolean;
+  packageStatus: "idle" | "running";
+  packageError?: string;
   onCreate: () => void;
   onPrint: () => void;
   onDownloadPdf: () => void;
@@ -76,11 +80,13 @@ export const AssemblyControlPanel = ({
         </button>
         <button
           className="btn-primary"
-          aria-label={packageReady ? "Print" : "Generate package"}
-          disabled={!!validationErrorCount}
-          onClick={packageReady ? onPrint : onCreate}
+          aria-label={packageStatus === "running" ? "Cancel package" : packageReady ? "Print" : "Generate package"}
+          aria-busy={packageStatus === "running"}
+          disabled={!!validationErrorCount && packageStatus !== "running"}
+          onClick={packageStatus === "running" ? onCreate : packageReady ? onPrint : onCreate}
+          data-assembly-package-worker="on-demand"
         >
-          {packageReady ? "Print" : "Generate"}
+          {packageStatus === "running" ? "Cancel" : packageReady ? "Print" : "Generate"}
         </button>
         {packageReady && (
           <button className="btn-secondary" onClick={onDownloadPdf}>
@@ -93,6 +99,7 @@ export const AssemblyControlPanel = ({
           </button>
         )}
       </div>
+      {packageError && <div className="error mt-2">{packageError}</div>}
       {activeAssemblyMode === "mechanism" && (
         <div
           className="mt-4 flex flex-wrap gap-2"

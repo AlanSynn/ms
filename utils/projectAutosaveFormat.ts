@@ -1,5 +1,9 @@
 import type { ProjectState } from "../types";
 import { loadProjectSnapshot } from "./project";
+import {
+  autosaveByteLength,
+  autosaveFingerprint,
+} from "./autosaveFingerprint";
 
 export type ProjectSnapshotLoadResult =
   | { status: "loaded"; project: ProjectState; sourceVersion: 1 }
@@ -42,6 +46,7 @@ export type AutosaveWriteResult =
       status: "saved";
       bytes: number;
       generation: number;
+      retainedGenerations: 1 | 2;
       transactionId: string;
     }
   | {
@@ -108,6 +113,8 @@ export type AutosaveBase = {
 };
 
 export const AUTOSAVE_FORMAT_VERSION = 1 as const;
+export const AUTOSAVE_SNAPSHOT_MAX_BYTES = 6 * 1024 * 1024;
+export const AUTOSAVE_JOURNAL_MAX_BYTES = 8 * 1024 * 1024;
 let autosaveSequence = 0;
 export const autosaveWriterId = `tab-${Date.now()}-${++autosaveSequence}`;
 
@@ -175,20 +182,8 @@ export const persistenceError = (
   return error;
 };
 
-export const byteLength = (value: string) =>
-  typeof TextEncoder === "undefined"
-    ? value.length
-    : new TextEncoder().encode(value).byteLength;
-
-/** Deterministic integrity evidence; this is not used as a security hash. */
-export const fingerprint = (value: string) => {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(16).padStart(8, "0");
-};
+export const byteLength = autosaveByteLength;
+export const fingerprint = autosaveFingerprint;
 
 export const nextTransactionId = () => {
   autosaveSequence += 1;
@@ -372,13 +367,16 @@ export const metadataFor = (
   base: AutosaveBase,
   serialized: string,
   transactionId: string,
+  prepared?: { bytes: number; fingerprint: string },
+  retainPrevious = true,
 ): AutosaveMetadata => ({
   formatVersion: AUTOSAVE_FORMAT_VERSION,
   currentGeneration: base.generation + 1,
-  previousGeneration: base.currentFingerprint === null ? null : base.generation,
-  currentFingerprint: fingerprint(serialized),
-  previousFingerprint: base.currentFingerprint,
-  bytes: byteLength(serialized),
+  previousGeneration:
+    retainPrevious && base.currentFingerprint !== null ? base.generation : null,
+  currentFingerprint: prepared?.fingerprint ?? fingerprint(serialized),
+  previousFingerprint: retainPrevious ? base.currentFingerprint : null,
+  bytes: prepared?.bytes ?? byteLength(serialized),
   transactionId,
   writerId: autosaveWriterId,
   committedAt: Date.now(),

@@ -12,11 +12,10 @@ type BaseRouterProps = Pick<
 
 type CharacterRouterProps = Pick<
   AppStageRouterProps,
-  | "pendingCharacter"
+  | "characterImportProgress"
   | "onOpenGettingStarted"
   | "onAcceptPendingCharacter"
   | "onDiscardPendingCharacter"
-  | "onProcessCharacter"
   | "onPackageCharacter"
   | "onImportProject"
   | "onEditCharacter"
@@ -62,7 +61,8 @@ type MechanismRouterProps = Pick<
   | "showTrace"
   | "setShowTrace"
   | "onOptimize"
-  | "onRecommendations"
+  | "onCancelOptimize"
+  | "onApplyRecommendation"
   | "optimizerBusy"
   | "exportSvg"
   | "exportDxf"

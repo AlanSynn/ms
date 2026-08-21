@@ -82,7 +82,7 @@ Authorable/buildable mechanisms should appear first. Simulation-only mechanisms 
 
 ### Getting Started / lesson entry
 
-- Keep starter cards result-first: `Waving arm`, `Blank character`, `Girl`, `Boy`, `Image`, `Package`.
+- Keep first-landing starter cards result-first: `Guide`, `Starter rig`, `Image`, and `Open full project`; keep bundled Boy/Girl image starters out of this surface until a secondary starter library exists.
 - Add lesson cards only when they create real `ProjectState` data: character, path, compatible mechanism, and reset baseline.
 - Do not make users find meaning through a hidden exploration panel.
 

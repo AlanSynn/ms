@@ -23,6 +23,11 @@ export const BlueprintControlPanel = ({
   goStage,
   validation,
   create,
+  createStl,
+  packageStatus,
+  stlStatus,
+  packageError,
+  stlError,
   pkg,
   recipes,
   selectedRecipe,
@@ -32,6 +37,11 @@ export const BlueprintControlPanel = ({
   goStage: (stage: AppStage) => void;
   validation: BlueprintValidation;
   create: () => void;
+  createStl: () => void;
+  packageStatus: "idle" | "running";
+  stlStatus: "idle" | "running";
+  packageError?: string;
+  stlError?: string;
   pkg?: FabricationPackage;
   recipes: FabricationRecipe[];
   selectedRecipe?: FabricationRecipe;
@@ -94,11 +104,14 @@ export const BlueprintControlPanel = ({
           <button
             className="btn-primary"
             aria-label="Generate package"
-            disabled={!!validation.errors.length}
+            disabled={!!validation.errors.length || stlStatus === "running"}
             onClick={create}
+            aria-busy={packageStatus === "running"}
+            data-blueprint-package-worker="on-demand"
           >
-            Make files
+            {packageStatus === "running" ? "Cancel" : "Make files"}
           </button>
+          {packageError && <div className="error">{packageError}</div>}
           {pkg && (
             <div className="rounded-2xl bg-white p-3 text-sm text-slate-600 shadow-sm">
               <div className="font-bold text-slate-800">Files</div>
@@ -137,7 +150,21 @@ export const BlueprintControlPanel = ({
                     >
                       Character SVG
                     </button>
+                    <button
+                      className="btn-secondary justify-start"
+                      aria-label="Download character STL"
+                      aria-busy={stlStatus === "running"}
+                      disabled={
+                        packageStatus === "running" ||
+                        (!!validation.errors.length && stlStatus !== "running")
+                      }
+                      onClick={createStl}
+                      data-blueprint-stl-worker="on-demand"
+                    >
+                      {stlStatus === "running" ? "Cancel STL" : "Character STL"}
+                    </button>
                   </div>
+                  {stlError && <div className="error mt-2">{stlError}</div>}
                 </div>
               </div>
             </div>

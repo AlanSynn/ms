@@ -1,4 +1,4 @@
-import motionSmithIconUrl from '../../resources/icons/AppIcon.png?url';
+import motionSmithIconUrl from '../../src-tauri/icons/icon.png?url';
 import type { AppStage } from '../../types';
 import { STAGE_PANE_NAV_ITEMS, StagePaneNavIcon } from '../stages/stageLayout';
 import { STAGES, stageNavLabel } from './workflowStages';
@@ -14,7 +14,7 @@ export const WorkflowRail = ({ stage, goStage, onHome }: { stage: AppStage; goSt
     </button>
     {STAGES.map(item => {
       const navItem = STAGE_PANE_NAV_ITEMS.find(nav => nav.target === item.id);
-      return <button key={item.id} type="button" aria-label={item.label} aria-current={stage === item.id ? 'step' : undefined} onClick={() => goStage(item.id)} className={stage === item.id ? 'active' : ''}>
+      return <button key={item.id} type="button" data-testid={`workflow-stage-${item.id}`} aria-label={item.label} aria-current={stage === item.id ? 'step' : undefined} onClick={() => goStage(item.id)} className={stage === item.id ? 'active' : ''}>
         <span className="workflow-rail-mark" aria-hidden="true">{navItem && <StagePaneNavIcon icon={navItem.icon}/>}</span>
         <span className="workflow-rail-short">{stageNavLabel(item.id) ?? item.label}</span>
         <span className="workflow-rail-full">{item.label}</span>

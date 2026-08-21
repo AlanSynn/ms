@@ -10,7 +10,7 @@ bun run build
 bun run test
 ```
 
-`vite build` copies static ONNX assets from `public/onnx/` into `dist/onnx/`. The contract test asserts `dist/onnx/pose_model.onnx` exists and is real model data, not a Git LFS pointer.
+The build runs `scripts/check-no-image-recognition.mjs` before and after Vite. It fails if ONNX/ORT recognition source, a model, worker, dependency, or production asset returns. Rapier remains a separate optional physics chunk: ordinary startup and Foundry/Design entry do not request it. It loads only after the student turns on the Foundry `Push` physics diagnostic.
 
 
 ## GitHub Pages release deploy
@@ -25,7 +25,7 @@ git push origin main
 git push origin v$VERSION
 ```
 
-The workflow fetches the Git LFS ONNX model, rejects pointer files before and after build, verifies `v$VERSION == package.json.version`, builds with `VITE_BASE_PATH=/ms/`, and publishes `dist/` with GitHub Pages Actions.
+The workflow verifies `v$VERSION == package.json.version`, runs the complete checked unit manifest, builds and exercises the focused diagnostics preview (including WebGL recovery and optional Rapier loading), then creates a fresh `/ms/` production artifact. Bundle and image-recognition gates must pass before GitHub Pages can upload `dist/`.
 
 ## Classroom release checklist
 
@@ -33,10 +33,11 @@ Before a teacher-facing web release:
 
 - Tag must be `v<package.json version>`; the workflow must reject mismatched tags.
 - Build must use `VITE_BASE_PATH=/ms/` for `https://alansynn.com/ms/`.
-- `public/onnx/pose_model.onnx` and `dist/onnx/pose_model.onnx` must be real ONNX bytes, not Git LFS pointers.
+- `bun run test:no-image-recognition` must pass; no ONNX model, ORT/WASM recognition runtime, inference worker, or cache worker may exist in `dist/`.
+- Opening Foundry must not request the optional Rapier chunk; only the explicit `Push` diagnostic may load it.
 - Runtime HTML must not load CDN scripts, import maps, or external `https://` assets.
 - Browser QA must show no `/api/` requests, server login, upload, cloud sync, roster, analytics, dashboard, or hosted storage calls.
-- About/help copy must state: no account, no upload, local ONNX, browser autosave, local downloads.
+- About/help copy must state: no account, no upload, browser autosave, local downloads, and no image-recognition model download.
 - Teacher pack workflow stays file-based: teacher shares a project/package, students edit locally, then download snapshot, blueprint files, and assembly guide.
 
 ## CDN policy
@@ -45,4 +46,4 @@ Before a teacher-facing web release:
 
 ## Local-first scope
 
-MotionSmith ships as a static browser/Tauri workbench. Required-server features are intentionally excluded unless the product scope is reopened: backend/API services, cloud database, auth/RBAC, billing, team accounts, realtime collaboration, hosted asset storage, server-side ONNX inference, and server export jobs. Use browser-local ONNX, browser autosave, local snapshot downloads, and bundled/static assets instead of fake cloud surfaces.
+MotionSmith ships as a static browser/Tauri workbench. Required-server features are intentionally excluded unless the product scope is reopened: backend/API services, cloud database, auth/RBAC, billing, team accounts, realtime collaboration, hosted asset storage, server inference, and server export jobs. Image recognition is also excluded from shipped clients. Use guided starters, explicit local packages, browser autosave, local snapshot downloads, and bundled/static assets instead of fake cloud surfaces.

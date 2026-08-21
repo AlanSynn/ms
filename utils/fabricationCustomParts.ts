@@ -50,20 +50,26 @@ ${items}
 
 const stlNum = (value: number) => Number.isFinite(value) ? Number(value.toFixed(4)) : 0;
 
+export const CUSTOM_PARTS_STL_LIMITS = Object.freeze({
+    maxCells: 100_000,
+    maxFacets: 20_000,
+    maxBytes: 1_300_000
+});
+
 export const makeCustomPartsStl = (project: ProjectState) => {
     const thicknessMm = 2.4;
     const holeRadiusMm = Math.max(0.5, project.settings.physicalKit.holeDiameterMm / 2);
-    const cellMm = Math.max(1, Math.min(2, holeRadiusMm * 0.75));
-    const facets: string[] = [];
-    const vertex = (x: number, y: number, z: number) => `      vertex ${stlNum(x)} ${stlNum(y)} ${stlNum(z)}`;
-    const tri = (a: [number, number, number], b: [number, number, number], c: [number, number, number]) => {
-        facets.push(`  facet normal 0 0 0\n    outer loop\n${vertex(...a)}\n${vertex(...b)}\n${vertex(...c)}\n    endloop\n  endfacet`);
-    };
-    const edge = (a: [number, number], b: [number, number]) => {
-        tri([a[0], a[1], 0], [b[0], b[1], 0], [b[0], b[1], thicknessMm]);
-        tri([a[0], a[1], 0], [b[0], b[1], thicknessMm], [a[0], a[1], thicknessMm]);
-    };
-    let cursorX = 0;
+    const cellMm = Math.max(1.5, Math.min(2.75, holeRadiusMm * 1.375));
+    const header = `solid motionsmith_custom_parts_with_${project.settings.physicalKit.holeDiameterMm}mm_holes`;
+    const footer = 'endsolid motionsmith_custom_parts';
+    const plans: Array<{
+        outlineMm: Point[];
+        holesMm: Point[];
+        widthMm: number;
+        cols: number;
+        rows: number;
+    }> = [];
+    let totalCells = 0;
     project.partOrder.forEach(partId => {
         const part = project.parts[partId];
         if (!part?.visible) return;
@@ -71,12 +77,58 @@ export const makeCustomPartsStl = (project: ProjectState) => {
         const outline = fabricablePartOutlinePoints(part, landmarks);
         if (outline.length < 3) return;
         const bounds = partOutlineBounds(outline);
-        const outlineMm = outline.map(p => ({ x: (p.x - bounds.minX) / SCENE_PX_PER_MM, y: (p.y - bounds.minY) / SCENE_PX_PER_MM }));
-        const holesMm = landmarks
-            .filter(p => pointInsideOutline(p, outline, 0.5))
-            .map(p => ({ x: (p.x - bounds.minX) / SCENE_PX_PER_MM, y: (p.y - bounds.minY) / SCENE_PX_PER_MM }));
-        const cols = Math.ceil(bounds.width / SCENE_PX_PER_MM / cellMm);
-        const rows = Math.ceil(bounds.height / SCENE_PX_PER_MM / cellMm);
+        const widthMm = bounds.width / SCENE_PX_PER_MM;
+        const heightMm = bounds.height / SCENE_PX_PER_MM;
+        const cols = Math.ceil(widthMm / cellMm);
+        const rows = Math.ceil(heightMm / cellMm);
+        const partCells = cols * rows;
+        if (
+            !Number.isSafeInteger(partCells) ||
+            partCells < 0 ||
+            totalCells + partCells > CUSTOM_PARTS_STL_LIMITS.maxCells
+        ) {
+            throw new Error('STL exceeds the 100,000-cell classroom limit. Use SVG or PDF.');
+        }
+        totalCells += partCells;
+        plans.push({
+            outlineMm: outline.map(p => ({
+                x: (p.x - bounds.minX) / SCENE_PX_PER_MM,
+                y: (p.y - bounds.minY) / SCENE_PX_PER_MM
+            })),
+            holesMm: landmarks
+                .filter(p => pointInsideOutline(p, outline, 0.5))
+                .map(p => ({
+                    x: (p.x - bounds.minX) / SCENE_PX_PER_MM,
+                    y: (p.y - bounds.minY) / SCENE_PX_PER_MM
+                })),
+            widthMm,
+            cols,
+            rows
+        });
+    });
+
+    const facets: string[] = [];
+    let bodyBytes = 0;
+    const fixedBytes = header.length + footer.length + 3;
+    const vertex = (x: number, y: number, z: number) => `      vertex ${stlNum(x)} ${stlNum(y)} ${stlNum(z)}`;
+    const tri = (a: [number, number, number], b: [number, number, number], c: [number, number, number]) => {
+        if (facets.length >= CUSTOM_PARTS_STL_LIMITS.maxFacets) {
+            throw new Error('STL exceeds the 20,000-facet classroom limit. Use SVG or PDF.');
+        }
+        const facet = `  facet normal 0 0 0\n    outer loop\n${vertex(...a)}\n${vertex(...b)}\n${vertex(...c)}\n    endloop\n  endfacet`;
+        const nextBytes = bodyBytes + (facets.length ? 1 : 0) + facet.length;
+        if (fixedBytes + nextBytes > CUSTOM_PARTS_STL_LIMITS.maxBytes) {
+            throw new Error('STL exceeds the 1.3 MB classroom limit. Use SVG or PDF.');
+        }
+        bodyBytes = nextBytes;
+        facets.push(facet);
+    };
+    const edge = (a: [number, number], b: [number, number]) => {
+        tri([a[0], a[1], 0], [b[0], b[1], 0], [b[0], b[1], thicknessMm]);
+        tri([a[0], a[1], 0], [b[0], b[1], thicknessMm], [a[0], a[1], thicknessMm]);
+    };
+    let cursorX = 0;
+    plans.forEach(({ outlineMm, holesMm, widthMm, cols, rows }) => {
         const occupied = new Set<string>();
         const inside = (x: number, y: number) => pointInsideOutline({ x, y }, outlineMm, cellMm * 0.75)
             && !holesMm.some(hole => Math.hypot(x - hole.x, y - hole.y) < holeRadiusMm);
@@ -88,24 +140,58 @@ export const makeCustomPartsStl = (project: ProjectState) => {
             }
         }
         const hasCell = (col: number, row: number) => occupied.has(`${col}:${row}`);
-        occupied.forEach(key => {
-            const [col, row] = key.split(':').map(Number);
-            const x0 = cursorX + col * cellMm;
-            const y0 = row * cellMm;
-            const x1 = cursorX + (col + 1) * cellMm;
-            const y1 = (row + 1) * cellMm;
-            tri([x0, y0, thicknessMm], [x1, y0, thicknessMm], [x1, y1, thicknessMm]);
-            tri([x0, y0, thicknessMm], [x1, y1, thicknessMm], [x0, y1, thicknessMm]);
-            tri([x0, y0, 0], [x1, y1, 0], [x1, y0, 0]);
-            tri([x0, y0, 0], [x0, y1, 0], [x1, y1, 0]);
-            if (!hasCell(col - 1, row)) edge([x0, y0], [x0, y1]);
-            if (!hasCell(col + 1, row)) edge([x1, y1], [x1, y0]);
-            if (!hasCell(col, row - 1)) edge([x1, y0], [x0, y0]);
-            if (!hasCell(col, row + 1)) edge([x0, y1], [x1, y1]);
+        const runsByRow: Array<Array<{ start: number; end: number }>> = [];
+        for (let row = 0; row < rows; row += 1) {
+            const runs: Array<{ start: number; end: number }> = [];
+            let col = 0;
+            while (col < cols) {
+                while (col < cols && !hasCell(col, row)) col += 1;
+                if (col >= cols) break;
+                const startCol = col;
+                while (col < cols && hasCell(col, row)) col += 1;
+                runs.push({ start: startCol, end: col });
+            }
+            runsByRow.push(runs);
+        }
+        const boundaryColumns = new Set(
+            runsByRow.flatMap(runs => runs.flatMap(run => [run.start, run.end])),
+        );
+        runsByRow.forEach((runs, row) => {
+            for (const run of runs) {
+                const splitColumns = new Set([run.start, run.end]);
+                for (const column of boundaryColumns) {
+                    if (column > run.start && column < run.end) {
+                        splitColumns.add(column);
+                    }
+                }
+                const splits = [...splitColumns].sort((a, b) => a - b);
+                const y0 = row * cellMm;
+                const y1 = (row + 1) * cellMm;
+                edge(
+                    [cursorX + run.start * cellMm, y0],
+                    [cursorX + run.start * cellMm, y1],
+                );
+                edge(
+                    [cursorX + run.end * cellMm, y1],
+                    [cursorX + run.end * cellMm, y0],
+                );
+                for (let index = 0; index < splits.length - 1; index += 1) {
+                    const startCol = splits[index];
+                    const endCol = splits[index + 1];
+                    const x0 = cursorX + startCol * cellMm;
+                    const x1 = cursorX + endCol * cellMm;
+                    tri([x0, y0, thicknessMm], [x1, y0, thicknessMm], [x1, y1, thicknessMm]);
+                    tri([x0, y0, thicknessMm], [x1, y1, thicknessMm], [x0, y1, thicknessMm]);
+                    tri([x0, y0, 0], [x1, y1, 0], [x1, y0, 0]);
+                    tri([x0, y0, 0], [x0, y1, 0], [x1, y1, 0]);
+                    if (!hasCell(startCol, row - 1)) edge([x1, y0], [x0, y0]);
+                    if (!hasCell(startCol, row + 1)) edge([x0, y1], [x1, y1]);
+                }
+            }
         });
-        cursorX += bounds.width / SCENE_PX_PER_MM + 12;
+        cursorX += widthMm + 12;
     });
-    return `solid motionsmith_custom_parts_with_${project.settings.physicalKit.holeDiameterMm}mm_holes\n${facets.join('\n')}\nendsolid motionsmith_custom_parts\n`;
+    return `${header}\n${facets.join('\n')}\n${footer}\n`;
 };
 
 export const makeCustomPartsPdf = (project: ProjectState) => {

@@ -1,29 +1,25 @@
 import type { RefObject } from "react";
-import { BrainCircuit, FileJson, PackagePlus, Sparkles, Upload } from "lucide-react";
+import { FileJson, PackagePlus, Sparkles, Upload } from "lucide-react";
 
 import { ContextHelp } from "../../ui/ContextHelp";
 
 export const CharacterImportControls = ({
   packageInputRef,
   objectInputRef,
-  onnxInputRef,
   importInputRef,
   onOpenGettingStarted,
   onAddSceneObject,
   sceneObjectDisabled,
   onPackage,
-  onProcess,
   onImport,
 }: {
   packageInputRef: RefObject<HTMLInputElement | null>;
   objectInputRef: RefObject<HTMLInputElement | null>;
-  onnxInputRef: RefObject<HTMLInputElement | null>;
   importInputRef: RefObject<HTMLInputElement | null>;
   onOpenGettingStarted: () => void;
   onAddSceneObject: (file: File) => void;
   sceneObjectDisabled?: boolean;
   onPackage: (files: File[]) => void;
-  onProcess: (file: File) => void;
   onImport: (file: File) => void;
 }) => (
   <div className="mt-4 grid gap-2" data-testid="character-import-controls">
@@ -62,6 +58,7 @@ export const CharacterImportControls = ({
     <input
       ref={objectInputRef}
       data-testid="scene-object-image-input"
+      data-object-image-worker="on-demand"
       hidden
       type="file"
       disabled={sceneObjectDisabled}
@@ -85,27 +82,6 @@ export const CharacterImportControls = ({
           : [];
         e.currentTarget.value = "";
         if (files.length) onPackage(files);
-      }}
-    />
-    <div className="flex items-center gap-2">
-      <button
-        className="btn-secondary flex-1"
-        onClick={() => onnxInputRef.current?.click()}
-      >
-        <BrainCircuit size={16} /> Create from image
-      </button>
-      <ContextHelp helpId="character.createFromImage" />
-    </div>
-    <input
-      ref={onnxInputRef}
-      data-testid="onnx-input"
-      hidden
-      type="file"
-      accept="image/png,image/jpeg,image/webp"
-      onChange={(e) => {
-        const file = e.currentTarget.files?.[0];
-        e.currentTarget.value = "";
-        if (file) onProcess(file);
       }}
     />
     <button

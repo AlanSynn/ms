@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { ProjectState } from "../types";
+import type { AutosaveFailureReason } from "../utils/projectAutosaveFormat";
 import {
   commitAutosaveSnapshot,
   completeAutosaveSnapshot,
@@ -11,6 +12,7 @@ import {
   browserAutosaveIdleBoundary,
   createAutosaveTransaction,
   createBrowserAutosavePreparationDriver,
+  type AutosaveSerializedSnapshot,
   type AutosaveTransaction,
 } from "../runtime/persistence/autosaveTransaction";
 
@@ -54,6 +56,15 @@ export const createAutosaveLifecycleDisposal = (
 
 export type ProjectAutosaveOptions = {
   suspended?: boolean;
+  recoveredBaseline?: ProjectState;
+  onFailure?: (status: string) => void;
+};
+
+export const autosaveFailureStatus = (reason: AutosaveFailureReason) => {
+  if (reason === "quota") return "Autosave failed: Storage full";
+  if (reason === "unavailable") return "Autosave failed: Storage unavailable";
+  if (reason === "corruption") return "Autosave failed: Recover snapshot";
+  return "Autosave failed: Download snapshot";
 };
 
 export const useProjectAutosave = (
@@ -61,6 +72,11 @@ export const useProjectAutosave = (
   options: ProjectAutosaveOptions = {},
 ) => {
   const latestProjectRef = useRef<ProjectState>(project);
+  const initialProjectRef = useRef<ProjectState>(project);
+  const failureCallbackRef = useRef(options.onFailure);
+  failureCallbackRef.current = options.onFailure;
+  const reportFailure = (reason: AutosaveFailureReason) =>
+    failureCallbackRef.current?.(autosaveFailureStatus(reason));
 
   const transactionRef = useRef<ProjectAutosaveTransaction | null>(null);
   const lifecycleDisposalRef = useRef<AutosaveLifecycleDisposal | null>(null);
@@ -72,13 +88,23 @@ export const useProjectAutosave = (
         start: (nextProject, _generation, callbacks) => {
           const base = prepareAutosaveBase(nextProject);
           if (base.status !== "base-prepared") {
+            reportFailure(base.reason);
             callbacks.failed(base.error);
             return;
           }
           preparation.start(nextProject, _generation, {
-            ready: (serialized) =>
-              callbacks.ready(completeAutosaveSnapshot(base.base, serialized)),
-            failed: callbacks.failed,
+            ready: (prepared: AutosaveSerializedSnapshot) =>
+              callbacks.ready(
+                completeAutosaveSnapshot(
+                  base.base,
+                  prepared.serialized,
+                  prepared,
+                ),
+              ),
+            failed: (error) => {
+              reportFailure("serialization");
+              callbacks.failed(error);
+            },
           });
         },
         cancel: preparation.cancel,
@@ -86,10 +112,12 @@ export const useProjectAutosave = (
       },
       commit: (nextProject, plan) => {
         const result = commitAutosaveSnapshot(plan);
+        if (result.status === "failed") reportFailure(result.reason);
         return result.status === "saved";
       },
       markDirty: (nextProject) => {
-        markAutosaveDirty(nextProject);
+        const result = markAutosaveDirty(nextProject);
+        if (result.status === "failed") reportFailure(result.reason);
       },
     });
   }
@@ -107,11 +135,15 @@ export const useProjectAutosave = (
       transaction.cancel();
       return;
     }
+    if (
+      project === initialProjectRef.current ||
+      project === options.recoveredBaseline
+    ) return;
     // Accepted ProjectState updates only enqueue the latest value. Worker
     // preparation and the eventual journal write remain outside the gesture
     // and playback hot path.
     transaction.accept(project);
-  }, [project, transaction]);
+  }, [options.recoveredBaseline, project, transaction]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !project.settings.autosave) {

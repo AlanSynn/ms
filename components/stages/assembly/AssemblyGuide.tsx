@@ -1,11 +1,12 @@
-import { useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
 import { AssemblyCanvasPane } from "./AssemblyCanvasPane";
 import { AssemblyControlPanel } from "./AssemblyControlPanel";
 import { AssemblyInspectorPanel } from "./AssemblyInspectorPanel";
 import {
-  buildAssemblyGuideModel,
+  prepareAssemblyGuideModel,
+  selectAssemblyGuideStep,
   type AssemblyGuideMode,
 } from "./assemblyGuideModel";
 import { useAssemblyGuidePlayback } from "./useAssemblyGuidePlayback";
@@ -23,9 +24,9 @@ import {
   type AssemblyLane,
 } from "../../../utils/assemblyPlayback";
 import {
-  createFabricationPackage,
   validateForFabrication,
 } from "../../../utils/fabrication";
+import { createBlueprintPackageWorkerClient } from "../../../runtime/blueprint/blueprintPackageWorkerClient";
 
 export const AssemblyGuide = ({
   project,
@@ -52,18 +53,50 @@ export const AssemblyGuide = ({
   setStepCount: Dispatch<SetStateAction<number>>;
   playbackClock: PlaybackClock;
 }) => {
-  const validation = validateForFabrication(project);
-  const create = () =>
-    dispatch({
-      type: "set_export",
-      fabricationPackage: createFabricationPackage(project),
+  const validation = useMemo(() => validateForFabrication(project), [project]);
+  const packageClient = useMemo(() => createBlueprintPackageWorkerClient(), []);
+  const [packageStatus, setPackageStatus] = useState<"idle" | "running">("idle");
+  const [packageError, setPackageError] = useState<string>();
+  useEffect(() => () => packageClient.dispose(), [packageClient]);
+  const create = () => {
+    if (packageStatus === "running") {
+      packageClient.cancel();
+      setPackageStatus("idle");
+      return;
+    }
+    setPackageError(undefined);
+    setPackageStatus("running");
+    packageClient.request(project, {
+      complete: ({ fabricationPackage }) => {
+        setPackageStatus("idle");
+        startTransition(() => dispatch({
+          type: "set_export",
+          fabricationPackage,
+        }));
+      },
+      failed: (error) => {
+        setPackageStatus("idle");
+        setPackageError(error.message);
+      },
     });
+  };
   const pkg = project.lastExport;
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const [assemblyMode, setAssemblyMode] =
     useState<AssemblyGuideMode>("mechanism");
   const [lane, setLane] = useState<AssemblyLane>(() =>
     assemblyLaneForExportMode(project.settings.physicalKit.exportMode),
+  );
+  const preparedModel = useMemo(
+    () =>
+      prepareAssemblyGuideModel({
+        project,
+        pkg,
+        selectedRecipeId,
+        assemblyMode,
+        lane,
+      }),
+    [project, pkg, selectedRecipeId, assemblyMode, lane],
   );
   const {
     recipes,
@@ -73,21 +106,11 @@ export const AssemblyGuide = ({
     activeAssemblyMode,
     activePlaybackSteps,
     activeStepCount,
-    currentStep,
-    currentCharacterStep,
-    activeDisplayStep,
     resetKey,
-  } = useMemo(
-    () =>
-      buildAssemblyGuideModel({
-        project,
-        pkg,
-        selectedRecipeId,
-        assemblyMode,
-        lane,
-        stepIndex,
-      }),
-    [project, pkg, selectedRecipeId, assemblyMode, lane, stepIndex],
+  } = preparedModel;
+  const { currentStep, currentCharacterStep, activeDisplayStep } = useMemo(
+    () => selectAssemblyGuideStep(preparedModel, stepIndex),
+    [preparedModel, stepIndex],
   );
   const { goAssemblyStep } = useAssemblyGuidePlayback({
     activeStepCount,
@@ -139,6 +162,8 @@ export const AssemblyGuide = ({
             goStage={goStage}
             validationErrorCount={validation.errors.length}
             packageReady={!!pkg}
+            packageStatus={packageStatus}
+            packageError={packageError}
             onCreate={create}
             onPrint={printGuide}
             onDownloadPdf={downloadAssemblyPdf}

@@ -1,12 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { BrainCircuit, Sparkles, Upload } from 'lucide-react';
+import React, { startTransition, useEffect, useMemo, useRef, useState } from 'react';
+import { FileJson, Sparkles, Upload } from 'lucide-react';
 import type { BodyPartLayer, MechanismConfig, Point, ProjectState } from '../../types';
 import { pathFromPoints, sceneToSvg } from '../../utils/coordinates';
 import { gearTrainCenters, gearTrainPitchRadii } from '../../utils/kinematics';
-import { type ClassroomLessonId, createLessonProject } from '../../utils/project';
+import { type ClassroomLessonId, createLessonProject, createSampleProject } from '../../utils/project';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlinePathD } from '../../utils/partGeometry';
 
-export type StarterImageTemplate = { id: string; label: string; fileName: string; url: string; thumbUrl: string };
 export type GuidedLessonTile = {
     id: string;
     label: string;
@@ -88,8 +87,19 @@ const lessonPreviewProject = (lessonId: string): ProjectState | null => {
     }
 };
 
+const starterRigPreviewProject = (project: ProjectState): ProjectState => {
+    return {
+        ...project,
+        paths: {},
+        mechanisms: [],
+        selectedPartId: undefined,
+        selectedPathId: undefined,
+        selectedMechanismId: undefined
+    };
+};
+
 const GuidedLessonMotionPreview = ({ lessonId, project }: { lessonId: string; project: ProjectState | null }) => {
-    const visibleParts = project?.partOrder
+    const allVisibleParts = project?.partOrder
         .map(id => project.parts[id])
         .filter((part): part is BodyPartLayer => Boolean(part) && part.visible !== false) ?? [];
     const selectedPath = project?.selectedPathId ? project.paths[project.selectedPathId] : Object.values(project?.paths ?? {})[0];
@@ -97,7 +107,27 @@ const GuidedLessonMotionPreview = ({ lessonId, project }: { lessonId: string; pr
     const tracePoints = selectedPath?.points?.length ? selectedPath.points : generatedPath;
     const svgPoints: Point[] = [];
     const focusPoints: Point[] = [];
-    const highlightedPartIds = new Set([selectedPath?.partId, project?.selectedPartId].filter(Boolean));
+    const highlightedPartIds = new Set(
+        [selectedPath?.partId, project?.selectedPartId]
+            .filter((id): id is string => Boolean(id))
+    );
+    const previewPartIds = new Set(highlightedPartIds);
+    const preferredPreviewParts = [
+        'torso',
+        'head',
+        'left_arm_upper',
+        'right_arm_upper',
+        'left_leg_upper',
+        'right_leg_upper'
+    ];
+    for (const id of preferredPreviewParts) {
+        if (allVisibleParts.some(part => part.id === id)) previewPartIds.add(id);
+    }
+    for (const part of allVisibleParts) {
+        if (previewPartIds.size >= 8) break;
+        previewPartIds.add(part.id);
+    }
+    const visibleParts = allVisibleParts.filter(part => previewPartIds.has(part.id));
     const parts = visibleParts.map(part => {
         const landmarks = partLandmarkLocalPoints(part, project?.skeleton);
         const outline = fabricablePartOutlinePoints(part, landmarks);
@@ -164,16 +194,12 @@ const GuidedLessonMotionPreview = ({ lessonId, project }: { lessonId: string; pr
 
 const starterCopy = {
     guide: 'Pick a working motion project.',
-    humanoid: 'Start with a simple body.',
-    image: 'Turn one picture into parts.',
-    sample: 'Ready character art.'
+    humanoid: 'Start with a simple body.'
 } as const;
 
 const starterCues = {
     guide: ['Edit one move', 'Ready to build'],
-    humanoid: ['Move arms or legs', 'Add a path next'],
-    image: ['Upload image', 'Cut moving parts'],
-    sample: ['Edit the parts', 'Draw a path']
+    humanoid: ['Move arms or legs', 'Add a path next']
 } as const;
 
 const StarterCues = ({ items }: { items: readonly string[] }) => (
@@ -182,24 +208,62 @@ const StarterCues = ({ items }: { items: readonly string[] }) => (
     </span>
 );
 
-export const GettingStartedDialog = ({ starterTemplates, guidedLessons, hideForSession, onLesson, onSample, onStarterImage, onProcess, onImport, onHideForSessionChange, onClose }: {
-    starterTemplates: StarterImageTemplate[];
+export const GettingStartedDialog = ({ guidedLessons, hideForSession, onLesson, onSample, onPackage, onImport, onHideForSessionChange, onClose }: {
     guidedLessons: readonly GuidedLessonTile[];
     hideForSession: boolean;
-    onLesson: (lessonId: string) => void;
-    onSample: () => void;
-    onStarterImage: (template: StarterImageTemplate) => void;
-    onProcess: (file: File) => void;
+    onLesson: (lessonId: string, preparedProject?: ProjectState) => void;
+    onSample: (preparedProject?: ProjectState) => void;
+    onPackage: (files: File[]) => void;
     onImport: (file: File) => void;
     onHideForSessionChange: (hidden: boolean) => void;
     onClose: () => void;
 }) => {
     const dialogRef = useRef<HTMLElement>(null);
-    const onnxInputRef = useRef<HTMLInputElement>(null);
+    const packageInputRef = useRef<HTMLInputElement>(null);
     const importInputRef = useRef<HTMLInputElement>(null);
     const [showGuided, setShowGuided] = useState(false);
-    const previewProjects = useMemo(() => Object.fromEntries(guidedLessons.map(lesson => [lesson.id, lessonPreviewProject(lesson.id)])), [guidedLessons]);
+    const [previewProjects, setPreviewProjects] = useState<Record<string, ProjectState | null>>({});
+    const starterRigProject = useMemo(createSampleProject, []);
+    const starterRigPreview = useMemo(
+        () => starterRigPreviewProject(starterRigProject),
+        [starterRigProject]
+    );
     useEffect(() => { dialogRef.current?.focus(); }, []);
+    useEffect(() => {
+        if (!showGuided) return;
+        let cancelled = false;
+        let index = 0;
+        let idleHandle = 0;
+        let timeoutHandle = 0;
+        const host = window as typeof window & {
+            requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+            cancelIdleCallback?: (handle: number) => void;
+        };
+        const buildNext = () => {
+            if (cancelled || index >= guidedLessons.length) return;
+            const lesson = guidedLessons[index++];
+            const prepared = lessonPreviewProject(lesson.id);
+            startTransition(() => setPreviewProjects(current => ({
+                ...current,
+                [lesson.id]: prepared
+            })));
+            scheduleNext();
+        };
+        const scheduleNext = () => {
+            if (cancelled || index >= guidedLessons.length) return;
+            if (host.requestIdleCallback) {
+                idleHandle = host.requestIdleCallback(buildNext, { timeout: 1_500 });
+            } else {
+                timeoutHandle = window.setTimeout(buildNext, 160);
+            }
+        };
+        timeoutHandle = window.setTimeout(scheduleNext, 250);
+        return () => {
+            cancelled = true;
+            if (idleHandle) host.cancelIdleCallback?.(idleHandle);
+            if (timeoutHandle) window.clearTimeout(timeoutHandle);
+        };
+    }, [guidedLessons, showGuided]);
     const trapDialogFocus = (event: React.KeyboardEvent) => {
         if (event.key === 'Escape') {
             event.preventDefault();
@@ -236,7 +300,7 @@ export const GettingStartedDialog = ({ starterTemplates, guidedLessons, hideForS
                 <button type="button" className="btn-secondary" onClick={showGuided ? () => setShowGuided(false) : onClose}>{showGuided ? 'Starters' : 'Close'}</button>
             </div>
             {showGuided ? <div className="guided-project-library" data-testid="guided-project-library">
-                {guidedLessons.map(lesson => <button key={lesson.id} type="button" className="template-tile primary guided-project-card" data-testid={`guided-project-card-${lesson.id}`} aria-label={`${lesson.actionLabel}: ${lesson.outcome}`} data-change-cue={lesson.changeCue} data-build-cue={lesson.buildCue} data-direct-translation={lesson.sensemaking?.directTranslation ?? ''} data-evidence-cue={lesson.sensemaking?.evidenceCue ?? ''} data-expected-answer={lesson.sensemaking?.expectedAnswer ?? ''} data-clip-slot={lesson.sensemaking?.clipSlot ?? ''} onClick={() => onLesson(lesson.id)}>
+                {guidedLessons.map(lesson => <button key={lesson.id} type="button" className="template-tile primary guided-project-card" data-testid={`guided-project-card-${lesson.id}`} aria-label={`${lesson.actionLabel}: ${lesson.outcome}`} data-change-cue={lesson.changeCue} data-build-cue={lesson.buildCue} data-direct-translation={lesson.sensemaking?.directTranslation ?? ''} data-evidence-cue={lesson.sensemaking?.evidenceCue ?? ''} data-expected-answer={lesson.sensemaking?.expectedAnswer ?? ''} data-clip-slot={lesson.sensemaking?.clipSlot ?? ''} onClick={() => onLesson(lesson.id, previewProjects[lesson.id] ?? undefined)}>
                     <GuidedLessonMotionPreview lessonId={lesson.id} project={previewProjects[lesson.id]} />
                     <strong>{lesson.outcome}</strong>
                     <span className="guided-card-cues" aria-hidden="true">
@@ -248,51 +312,41 @@ export const GettingStartedDialog = ({ starterTemplates, guidedLessons, hideForS
             </div> : <>
                 <div className="template-gallery" data-testid="getting-started-gallery">
                     <button type="button" className="template-tile primary" data-testid="getting-started-card-guided" aria-label="Open Guide" onClick={() => setShowGuided(true)}>
-                        <span className="template-icon-slot"><Sparkles size={18}/></span>
+                        <span className="template-icon-slot guide-preview-slot" data-testid="getting-started-guide-preview">
+                            <GuidedLessonMotionPreview lessonId="starter-rig" project={starterRigPreview} />
+                        </span>
                         <strong>Guide</strong>
                         <small>{starterCopy.guide}</small>
                         <StarterCues items={starterCues.guide} />
                         <b><Sparkles size={16}/> Open</b>
                     </button>
-                    <button type="button" className="template-tile primary" data-testid="getting-started-card-humanoid" aria-label="Open starter rig" onClick={onSample}>
+                    <button type="button" className="template-tile primary" data-testid="getting-started-card-humanoid" aria-label="Open starter rig" onClick={() => onSample(starterRigProject)}>
                         <span className="template-icon-slot"><Sparkles size={18}/></span>
                         <strong>Starter rig</strong>
                         <small>{starterCopy.humanoid}</small>
                         <StarterCues items={starterCues.humanoid} />
                         <b><Sparkles size={16}/> Start</b>
                     </button>
-                    {starterTemplates.map(template => (
-                        <button key={template.id} type="button" className="template-tile starter cursor-pointer" data-testid={`getting-started-card-${template.id}`} aria-label={`Start ${template.label} starter`} onClick={() => onStarterImage(template)}>
-                            <span className="template-icon-slot"><img className="starter-thumb" src={template.thumbUrl} alt="" /></span>
-                            <strong>{template.label}</strong>
-                            <small>{starterCopy.sample}</small>
-                            <StarterCues items={starterCues.sample} />
-                            <b><Sparkles size={16}/> Start</b>
-                        </button>
-                    ))}
-                    <button type="button" className="template-tile cursor-pointer" data-testid="getting-started-card-image" aria-label="Choose image" onClick={() => onnxInputRef.current?.click()}>
-                        <span className="template-icon-slot"><BrainCircuit size={18}/></span>
-                        <strong>Image</strong>
-                        <small>{starterCopy.image}</small>
-                        <StarterCues items={starterCues.image} />
-                        <b><BrainCircuit size={16}/> Choose</b>
-                    </button>
-                    <input ref={onnxInputRef} data-testid="getting-started-onnx-input" hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={e => {
-                        const file = e.currentTarget.files?.[0];
-                        e.currentTarget.value = '';
-                        if (file) onProcess(file);
-                    }}/>
                 </div>
                 <div className="getting-started-foot">
                     <label className="flex items-center gap-2 text-sm font-bold text-slate-600" data-testid="getting-started-hide-session">
                         <input type="checkbox" checked={hideForSession} onChange={event => onHideForSessionChange(event.currentTarget.checked)}/>
                         Don&apos;t show again this session
                     </label>
-                    <button type="button" className="btn-secondary cursor-pointer" onClick={() => importInputRef.current?.click()}><Upload size={16}/> Open full project</button><input ref={importInputRef} data-testid="getting-started-import-input" hidden type="file" accept="application/json,.json" onChange={e => {
-                    const file = e.currentTarget.files?.[0];
-                    e.currentTarget.value = '';
-                    if (file) onImport(file);
-                    }}/>
+                    <div className="getting-started-file-actions" data-testid="getting-started-file-actions">
+                        <button type="button" className="btn-secondary cursor-pointer" data-testid="getting-started-open-character" onClick={() => packageInputRef.current?.click()}><FileJson size={16}/> Character file</button>
+                        <input ref={packageInputRef} data-testid="getting-started-package-input" hidden type="file" multiple accept=".json,.yaml,.yml,image/png,image/jpeg,image/webp,image/svg+xml" onChange={e => {
+                            const files = e.currentTarget.files ? Array.from(e.currentTarget.files) : [];
+                            e.currentTarget.value = '';
+                            if (files.length) onPackage(files);
+                        }}/>
+                        <button type="button" className="btn-secondary cursor-pointer" data-testid="getting-started-open-project" onClick={() => importInputRef.current?.click()}><Upload size={16}/> Open full project</button>
+                        <input ref={importInputRef} data-testid="getting-started-import-input" hidden type="file" accept="application/json,.json" onChange={e => {
+                            const file = e.currentTarget.files?.[0];
+                            e.currentTarget.value = '';
+                            if (file) onImport(file);
+                        }}/>
+                    </div>
                 </div>
             </>}
         </section>

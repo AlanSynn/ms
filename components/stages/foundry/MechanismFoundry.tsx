@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  startTransition,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { FoundryCanvasPane } from "./FoundryCanvasPane";
 import { useWorkspacePlaybackLoop } from "../../../hooks/useWorkspacePlaybackLoop";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
@@ -58,7 +64,6 @@ import {
   SCENE_VIEW,
 } from "../../../utils/coordinates";
 import {
-  FOUNDRY_ANIMATION_COMMIT_MS,
   FOUNDRY_OVERLAY_SIZE,
   FOUNDRY_VIEW_PRESETS,
   clampFoundryPitch,
@@ -70,9 +75,9 @@ import {
   type FoundryViewPreset,
 } from "../../../utils/foundryCamera";
 import {
-  FOUNDRY_MECHANISM_TYPES,
   FOUNDRY_PRESETS,
   MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY,
+  isMechanismTypeEnabled,
 } from "../../../utils/mechanismTemplates";
 import {
   createMechanismFitContext,
@@ -80,7 +85,6 @@ import {
   pointsToSvgPath,
 } from "../../../utils/mechanismPreview";
 import {
-  fitMechanismToTargetPath,
   normalizeGearMeshMechanism,
 } from "../../../utils/mechanismRecommendations";
 import { createDefaultMechanism, mechanismWithGeneratedPath, uid } from "../../../utils/project";
@@ -88,6 +92,12 @@ import {
   mechanismPathFitIsUsable,
   preferredMotionJointId,
 } from "../../../utils/motion";
+import { resolveRenderPerformancePolicy } from "../../../utils/renderPerformancePolicy";
+import { sampleIndexedValues } from "../../../utils/interactiveSampling";
+import { createCadencedGestureDraft } from "../../../runtime/interactions/cadencedGestureDraft";
+import { foundryMechanismForHandleGesture } from "./foundryHandleGesture";
+import { createMechanismFitJobInput } from "../../../runtime/fitting/mechanismFitJob";
+import { createMechanismFitWorkerClient } from "../../../runtime/fitting/mechanismFitWorkerClient";
 
 const traceDistanceToGeneratedPath = (
   trace: { points: Point[] },
@@ -110,7 +120,7 @@ const traceDistanceToGeneratedPath = (
 
 export const MechanismFoundry = ({
   project,
-  foundry,
+  foundry: committedFoundry,
   setFoundry,
   onDraftChange,
   selectedPart,
@@ -131,18 +141,53 @@ export const MechanismFoundry = ({
   goStage: (stage: AppStage) => void;
   onExport: (pkg: FoundryExportPackage) => void;
 }) => {
+  const renderPolicy = resolveRenderPerformancePolicy(
+    project.settings.performancePreset,
+  );
+  const foundryGestureDraft = useMemo(
+    () => createCadencedGestureDraft<MechanismConfig>({
+      minFrameIntervalMs: renderPolicy.minRenderIntervalMs,
+    }),
+    [renderPolicy.minRenderIntervalMs],
+  );
+  const [gestureFoundry, setGestureFoundry] =
+    useState<MechanismConfig | null>(null);
+  const foundry = gestureFoundry ?? committedFoundry;
+  useEffect(
+    () => foundryGestureDraft.subscribe(setGestureFoundry),
+    [foundryGestureDraft],
+  );
+  useEffect(() => {
+    foundryGestureDraft.clear();
+  }, [committedFoundry, foundryGestureDraft]);
+  useEffect(
+    () => () => foundryGestureDraft.dispose(),
+    [foundryGestureDraft],
+  );
+  const previewTraceSamples =
+    gestureFoundry
+      ? Math.min(16, renderPolicy.interactiveDetail.mechanismTraceSamples)
+      : renderPolicy.interactiveDetail.mechanismTraceSamples;
   const [foundryPlaying, setFoundryPlaying] = useState(false);
   const [foundryPhase, setFoundryPhase] = useState(0);
   const [isPickingAnchor, setIsPickingAnchor] = useState(false);
   const [manualAnchor, setManualAnchor] = useState<Point | null>(null);
-  const [showForces, setShowForces] = useState(true);
-  const [showVelocity, setShowVelocity] = useState(true);
+  const [showForces, setShowForces] = useState(false);
+  const [showVelocity, setShowVelocity] = useState(false);
   const [showTrail, setShowTrail] = useState(false);
   const [showUserPathPreview, setShowUserPathPreview] = useState(true);
   const [showPathPreview, setShowPathPreview] = useState(false);
   const [selectedOutputTraceId, setSelectedOutputTraceId] = useState<string | null>(null);
   const [showFoundryGrid, setShowFoundryGrid] = useState(true);
   const [showSensemaking, setShowSensemaking] = useState(false);
+  const [pathFitBusy, setPathFitBusy] = useState(false);
+  const [pathFitJobError, setPathFitJobError] = useState(false);
+  const pathFitClient = useMemo(() => createMechanismFitWorkerClient(), []);
+  useEffect(() => () => pathFitClient.dispose(), [pathFitClient]);
+  useEffect(() => {
+    pathFitClient.cancel();
+    setPathFitBusy(false);
+  }, [pathFitClient, project.metadata.updatedAt]);
   const [foundryExplode, setFoundryExplode] = useState(0);
   const [foundryCamera, setFoundryCamera] = useState<FoundryCamera>({
     ...FOUNDRY_VIEW_PRESETS.iso,
@@ -168,6 +213,8 @@ export const MechanismFoundry = ({
   const foundryParamDragRef = useRef<{
     pointerId: number;
     handle: FoundryParamHandleId;
+    draft: MechanismConfig;
+    dirty: boolean;
   } | null>(null);
   const targetReady = Boolean(
     selectedPath &&
@@ -223,7 +270,10 @@ export const MechanismFoundry = ({
     y: 120 - (landing.y / SCENE_VIEW.height) * 240,
   };
   const rawFoundryPointTraces = useMemo(() => {
-    const traces = generateFoundryPlaybackPointTraces(landedFoundry, 96).traces;
+    const traces = generateFoundryPlaybackPointTraces(
+      landedFoundry,
+      previewTraceSamples,
+    ).traces;
     const selectedTrace = selectedOutputTraceId
       ? traces.find((trace) => trace.id === selectedOutputTraceId)
       : undefined;
@@ -247,17 +297,17 @@ export const MechanismFoundry = ({
       ...trace,
       primary: trace.id === fittedTrace.id,
     }));
-  }, [landedFoundry, selectedOutputTraceId]);
+  }, [landedFoundry, previewTraceSamples, selectedOutputTraceId]);
   const preview = useMemo(
     () =>
       rawFoundryPointTraces.find((trace) => trace.primary)?.points ??
       rawFoundryPointTraces[0]?.points ??
-      generateCurvePoints(landedFoundry, 96).points,
-    [landedFoundry, rawFoundryPointTraces],
+      generateCurvePoints(landedFoundry, previewTraceSamples).points,
+    [landedFoundry, previewTraceSamples, rawFoundryPointTraces],
   );
   const range = useMemo(
-    () => sampleFeasibleRange(landedFoundry),
-    [landedFoundry],
+    () => sampleFeasibleRange(landedFoundry, gestureFoundry ? 24 : 96),
+    [gestureFoundry, landedFoundry],
   );
   const feasibilityStatus = feasibilityStatusForRange(range);
   const library = MECHANISM_LIBRARY[foundry.type];
@@ -274,12 +324,21 @@ export const MechanismFoundry = ({
         landedFoundry,
         360,
         240,
-        96,
-        selectedPath?.points ?? [],
+        previewTraceSamples,
+        selectedPath
+          ? sampleIndexedValues(
+              selectedPath.points,
+              renderPolicy.interactiveDetail.maxPathLinePoints,
+            ).map(({ value }) => value)
+          : [],
       ),
-    [landedFoundry, selectedPath?.points],
+    [
+      landedFoundry,
+      previewTraceSamples,
+      renderPolicy.interactiveDetail.maxPathLinePoints,
+      selectedPath,
+    ],
   );
-  const foundryPhaseRemainderRef = useRef(0);
   useWorkspacePlaybackLoop({
     stage: "foundry",
     isPlaying: foundryPlaying,
@@ -290,24 +349,13 @@ export const MechanismFoundry = ({
     animationSpeed: project.settings.animationSpeed,
     timingProfile: "linear",
     playbackClock,
-    phaseAdvance: (elapsedMs, previousPhase) => {
-      foundryPhaseRemainderRef.current += elapsedMs;
-      if (foundryPhaseRemainderRef.current < FOUNDRY_ANIMATION_COMMIT_MS)
-        return previousPhase;
-      const committedElapsed = foundryPhaseRemainderRef.current;
-      foundryPhaseRemainderRef.current %= FOUNDRY_ANIMATION_COMMIT_MS;
-      return (
-        previousPhase +
-        Math.min(96, committedElapsed) *
-          0.0025 *
-          project.settings.animationSpeed
-      );
-    },
+    phaseAdvance: (elapsedMs, previousPhase) =>
+      previousPhase +
+      Math.min(96, elapsedMs) *
+        0.0025 *
+        project.settings.animationSpeed,
     driverStage: "foundry",
   });
-  useEffect(() => {
-    if (!foundryPlaying) foundryPhaseRemainderRef.current = 0;
-  }, [foundryPlaying]);
   const foundryPlaybackFrame = useMemo(
     () =>
       createFoundryPlaybackFrame(
@@ -334,8 +382,17 @@ export const MechanismFoundry = ({
     [foundryPointTraces, preview],
   );
   const foundryUserPathPoints = useMemo(
-    () => selectedPath?.points.map(foundryFitContext.map) ?? [],
-    [foundryFitContext, selectedPath],
+    () => selectedPath
+      ? sampleIndexedValues(
+          selectedPath.points,
+          renderPolicy.interactiveDetail.maxPathLinePoints,
+        ).map(({ value }) => foundryFitContext.map(value))
+      : [],
+    [
+      foundryFitContext,
+      renderPolicy.interactiveDetail.maxPathLinePoints,
+      selectedPath,
+    ],
   );
   const selectedPhysicalSimulation = useMemo(
     () => ({
@@ -765,7 +822,10 @@ export const MechanismFoundry = ({
     const normalized = invalidatePathFit(normalizeGearMeshMechanism(mechanism));
     if (normalized.type !== "4bar" || !normalized.generatedPath?.length)
       return mechanismWithGeneratedPath(normalized);
-    const bcTraces = generateMechanismPointTraces(normalized, 96).traces.filter(
+    const bcTraces = generateMechanismPointTraces(
+      normalized,
+      previewTraceSamples,
+    ).traces.filter(
       (trace) => trace.id === "B" || trace.id === "C",
     );
     if (bcTraces.length === 0) return mechanismWithGeneratedPath(normalized);
@@ -840,52 +900,33 @@ export const MechanismFoundry = ({
     handle: FoundryParamHandleId,
     point: Point,
   ) => {
-    const s = selectedSimulation.state;
-    const scale = Math.max(0.001, selectedSimulation.scale);
-    const sceneDistance = (a: Point, b: Point) =>
-      Math.hypot(a.x - b.x, a.y - b.y) / scale;
-    if (handle === "M") {
-      applyAnchor({
-        x: landing.x + (point.x - s.p1.x) / scale,
-        y: landing.y - (point.y - s.p1.y) / scale,
-      });
-      return;
-    }
-    if (handle === "B") {
-      updateFoundryParam(
-        "crankLength",
-        clampMechanismParam("crankLength", sceneDistance(s.p1, point)),
-      );
-      return;
-    }
-    if (handle === "D") {
-      updateFoundryParams({
-        groundLength: clampMechanismParam(
-          "groundLength",
-          sceneDistance(s.p1, point),
-        ),
-        groundAngle:
-          (Math.atan2(point.y - s.p1.y, point.x - s.p1.x) * 180) / Math.PI,
-      });
-      return;
-    }
-    updateFoundryParams({
-      couplerLength: clampMechanismParam(
-        "couplerLength",
-        sceneDistance(s.j1, point),
-      ),
-      rockerLength: clampMechanismParam(
-        "rockerLength",
-        sceneDistance(s.p2, point),
-      ),
+    const drag = foundryParamDragRef.current;
+    if (!drag || drag.handle !== handle) return;
+    const next = foundryMechanismForHandleGesture({
+      mechanism: drag.draft,
+      handle,
+      point,
+      simulation: selectedSimulation,
+      landing,
+      kit: project.settings.physicalKit,
     });
+    drag.draft = next;
+    drag.dirty = true;
+    foundryGestureDraft.publish(next);
   };
   const handleFoundryParamPointerDown =
     (handle: FoundryParamHandleId) =>
     (event: React.PointerEvent<SVGCircleElement>) => {
       event.preventDefault();
       event.stopPropagation();
-      foundryParamDragRef.current = { pointerId: event.pointerId, handle };
+      if (handle === "M") setManualAnchor(null);
+      foundryParamDragRef.current = {
+        pointerId: event.pointerId,
+        handle,
+        draft: foundry,
+        dirty: false,
+      };
+      foundryGestureDraft.publish(foundry, true);
       setFoundryPlaying(false);
       event.currentTarget.setPointerCapture(event.pointerId);
     };
@@ -902,8 +943,15 @@ export const MechanismFoundry = ({
   const handleFoundryParamPointerUp = (
     event: React.PointerEvent<SVGCircleElement>,
   ) => {
-    if (foundryParamDragRef.current?.pointerId === event.pointerId) {
+    const drag = foundryParamDragRef.current;
+    if (drag?.pointerId === event.pointerId) {
       foundryParamDragRef.current = null;
+      if (event.type === "pointercancel" || !drag.dirty) {
+        foundryGestureDraft.clear();
+      } else {
+        foundryGestureDraft.flush();
+        setFoundryDraft(refreshEditedFoundryMechanism(drag.draft));
+      }
       if (event.currentTarget.hasPointerCapture(event.pointerId))
         event.currentTarget.releasePointerCapture(event.pointerId);
     }
@@ -926,23 +974,18 @@ export const MechanismFoundry = ({
   });
   const setAnchoredFoundry = (mechanism: MechanismConfig) =>
     setFoundryDraft(invalidatePathFit(normalizeGearMeshMechanism(keepCurrentAnchor(mechanism))));
-  const createPathFittedFoundry = (mechanism: MechanismConfig) => {
+  const createPathFitCandidate = (mechanism: MechanismConfig) => {
     const anchored = keepCurrentAnchor(mechanism);
-    if (!targetReady || !selectedPath) return normalizeGearMeshMechanism(anchored);
-    return fitMechanismToTargetPath(
-      project,
-      {
-        ...anchored,
-        targetPartId: selectedPath.sceneObjectId ? undefined : selectedPath.partId,
-        targetSceneObjectId: selectedPath.sceneObjectId,
-        targetPathId: selectedPath.id,
-        targetAnchorJointId: selectedPath.sceneObjectId ? undefined : targetIkJointId,
-        activeVisualPartIds: selectedPath.sceneObjectId ? [] : [selectedPath.partId],
-        source: "optimized",
-        recommendation: mechanism.recommendation ?? "Fit path",
-      },
-      selectedPath.id,
-    );
+    return normalizeGearMeshMechanism({
+      ...anchored,
+      targetPartId: selectedPath?.sceneObjectId ? undefined : selectedPath?.partId,
+      targetSceneObjectId: selectedPath?.sceneObjectId,
+      targetPathId: selectedPath?.id,
+      targetAnchorJointId: selectedPath?.sceneObjectId ? undefined : targetIkJointId,
+      activeVisualPartIds: selectedPath?.sceneObjectId ? [] : selectedPath ? [selectedPath.partId] : [],
+      source: "optimized",
+      recommendation: mechanism.recommendation ?? "Fit path",
+    });
   };
   const setFoundryPhaseAndClock = (phase: number) => {
     playbackClock.setPhase(phase);
@@ -953,13 +996,37 @@ export const MechanismFoundry = ({
     setFoundryPlaying((value) => !value);
   };
   const applyPathFit = (mechanism = foundry) => {
+    if (pathFitBusy) {
+      pathFitClient.cancel();
+      setPathFitBusy(false);
+      return;
+    }
     setFoundryPlaying(false);
     setFoundryPhaseAndClock(0);
     setManualAnchor(null);
     setSelectedOutputTraceId(null);
     setShowUserPathPreview(true);
     setShowPathPreview(true);
-    setFoundryDraft(createPathFittedFoundry(mechanism));
+    const candidate = createPathFitCandidate(mechanism);
+    if (!targetReady || !selectedPath) {
+      setFoundryDraft(candidate);
+      return;
+    }
+    setPathFitJobError(false);
+    setPathFitBusy(true);
+    pathFitClient.request(
+      createMechanismFitJobInput(project, candidate, "path", selectedPath.id),
+      {
+        complete: ({ mechanism: fitted }) => {
+          setPathFitBusy(false);
+          startTransition(() => setFoundryDraft(fitted));
+        },
+        failed: () => {
+          setPathFitBusy(false);
+          setPathFitJobError(true);
+        },
+      },
+    );
   };
   const resetFoundryPreview = () => {
     setFoundryPlaying(false);
@@ -967,8 +1034,8 @@ export const MechanismFoundry = ({
     setManualAnchor(null);
     setSelectedOutputTraceId(null);
     setIsPickingAnchor(false);
-    setShowForces(true);
-    setShowVelocity(true);
+    setShowForces(false);
+    setShowVelocity(false);
     setShowTrail(false);
     setShowUserPathPreview(true);
     setShowPathPreview(false);
@@ -1043,6 +1110,7 @@ export const MechanismFoundry = ({
   };
   const useFoundryMechanism = () => onExport(makePackage());
   const selectFoundryMechanismType = (type: MechanismType) => {
+    if (!isMechanismTypeEnabled(type)) return;
     setSelectedOutputTraceId(null);
     const next = {
       ...createDefaultMechanism(type, "foundry-preview"),
@@ -1085,6 +1153,8 @@ export const MechanismFoundry = ({
             fitState={foundry.fabricationMetadata?.pathFit?.status}
             fitError={effectivePathFit?.error}
             fitMaxError={effectivePathFit?.maxError}
+            fitBusy={pathFitBusy}
+            fitJobError={pathFitJobError}
             isPickingAnchor={isPickingAnchor}
             hardBlocked={hardBlocked}
             onToggleAnchorPick={() => setIsPickingAnchor((value) => !value)}
@@ -1111,7 +1181,6 @@ export const MechanismFoundry = ({
             playbackOverlay={{
               clock: playbackClock,
               sample: playbackOverlaySample,
-              minFrameIntervalMs: 1000 / 30,
             }}
             foundryCamera={foundryCamera}
             foundryCameraLabel={foundryCameraLabel}
@@ -1124,6 +1193,7 @@ export const MechanismFoundry = ({
             userPathPoints={foundryUserPathPoints}
             targetPathId={selectedPath?.id}
             kit={project.settings.physicalKit}
+            performancePreset={project.settings.performancePreset}
             showFoundryGrid={showFoundryGrid}
             showUserPathPreview={showUserPathPreview}
             showPathPreview={showPathPreview}
@@ -1157,6 +1227,8 @@ export const MechanismFoundry = ({
             foundryParamHandleZSummary={foundryParamHandleZSummary}
             hasManualAnchor={Boolean(manualAnchor)}
             landingBoardLabel={landingBoard.label}
+            gestureActive={Boolean(gestureFoundry)}
+            gestureEmissionCount={foundryGestureDraft.getEmissionCount()}
             onSetCameraPreset={setCameraPreset}
             onToggleGrid={() => setShowFoundryGrid((value) => !value)}
             onToggleUserPathPreview={() =>

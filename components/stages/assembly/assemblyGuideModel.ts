@@ -20,7 +20,7 @@ export type AssemblyGuideModelInput = {
   stepIndex: number;
 };
 
-export type AssemblyGuideModel = {
+export type PreparedAssemblyGuideModel = {
   recipes: FabricationRecipe[];
   selectedRecipe?: FabricationRecipe;
   characterAssemblyPlan: CharacterAssemblyPlan;
@@ -30,20 +30,25 @@ export type AssemblyGuideModel = {
   characterPlaybackSteps: CharacterAssemblyStep[];
   activePlaybackSteps: Array<AssemblyPlaybackStep | CharacterAssemblyStep>;
   activeStepCount: number;
-  currentStep?: AssemblyPlaybackStep;
-  currentCharacterStep?: CharacterAssemblyStep;
-  activeDisplayStep?: AssemblyPlaybackStep | CharacterAssemblyStep;
   resetKey: string;
 };
 
-export const buildAssemblyGuideModel = ({
+export type AssemblyGuideStepSelection = {
+  currentStep?: AssemblyPlaybackStep;
+  currentCharacterStep?: CharacterAssemblyStep;
+  activeDisplayStep?: AssemblyPlaybackStep | CharacterAssemblyStep;
+};
+
+export type AssemblyGuideModel = PreparedAssemblyGuideModel &
+  AssemblyGuideStepSelection;
+
+export const prepareAssemblyGuideModel = ({
   project,
   pkg,
   selectedRecipeId,
   assemblyMode,
   lane,
-  stepIndex,
-}: AssemblyGuideModelInput): AssemblyGuideModel => {
+}: Omit<AssemblyGuideModelInput, "stepIndex">): PreparedAssemblyGuideModel => {
   const activeMechanisms = project.mechanisms.filter(
     (mechanism) => mechanism.visible && mechanism.enabled !== false,
   );
@@ -74,14 +79,6 @@ export const buildAssemblyGuideModel = ({
   const activePlaybackSteps =
     activeAssemblyMode === "character" ? characterPlaybackSteps : playbackSteps;
   const activeStepCount = activePlaybackSteps.length;
-  const currentStep =
-    playbackSteps[Math.min(stepIndex, Math.max(0, playbackSteps.length - 1))];
-  const currentCharacterStep =
-    characterPlaybackSteps[
-      Math.min(stepIndex, Math.max(0, characterPlaybackSteps.length - 1))
-    ];
-  const activeDisplayStep =
-    activeAssemblyMode === "character" ? currentCharacterStep : currentStep;
 
   return {
     recipes,
@@ -93,9 +90,38 @@ export const buildAssemblyGuideModel = ({
     characterPlaybackSteps,
     activePlaybackSteps,
     activeStepCount,
+    resetKey: `${activeAssemblyMode}:${selectedRecipe?.mechanismId ?? "none"}:${lane}`,
+  };
+};
+
+export const selectAssemblyGuideStep = (
+  prepared: PreparedAssemblyGuideModel,
+  stepIndex: number,
+): AssemblyGuideStepSelection => {
+  const { playbackSteps, characterPlaybackSteps, activeAssemblyMode } = prepared;
+  const currentStep =
+    playbackSteps[Math.min(stepIndex, Math.max(0, playbackSteps.length - 1))];
+  const currentCharacterStep =
+    characterPlaybackSteps[
+      Math.min(stepIndex, Math.max(0, characterPlaybackSteps.length - 1))
+    ];
+  const activeDisplayStep =
+    activeAssemblyMode === "character" ? currentCharacterStep : currentStep;
+
+  return {
     currentStep,
     currentCharacterStep,
     activeDisplayStep,
-    resetKey: `${activeAssemblyMode}:${selectedRecipe?.mechanismId ?? "none"}:${lane}`,
+  };
+};
+
+export const buildAssemblyGuideModel = ({
+  stepIndex,
+  ...input
+}: AssemblyGuideModelInput): AssemblyGuideModel => {
+  const prepared = prepareAssemblyGuideModel(input);
+  return {
+    ...prepared,
+    ...selectAssemblyGuideStep(prepared, stepIndex),
   };
 };

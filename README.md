@@ -7,7 +7,7 @@ Live classroom web build: <https://alansynn.com/ms/>
 ## Classroom flow
 
 1. Open **Getting Started**.
-2. Choose **Guide**, **Starter rig**, a built-in image starter, **Image**, or **Character file**.
+2. Choose **Guide**, **Starter rig**, or **Character file**.
 3. Edit the character or add scene objects in **Character**.
 4. Draw a target motion in **Path**.
 5. Fit and study a mechanism in **Foundry**.
@@ -15,7 +15,7 @@ Live classroom web build: <https://alansynn.com/ms/>
 7. Generate local build files in **Blueprint**.
 8. Assemble from the Three-backed step view in **Assembly**.
 
-MotionSmith is static and local-first: no account, backend, cloud save, roster, dashboard, server inference, or server export job is required. Browser autosave, portable project snapshots, ONNX processing, blueprint downloads, and assembly guidance stay on the device.
+MotionSmith is static and local-first: no account, backend, cloud save, roster, dashboard, server inference, or server export job is required. Browser autosave, portable project snapshots, blueprint downloads, and assembly guidance stay on the device. The classroom build contains no image-recognition model or runtime, so school networks never download one.
 
 ## Current capabilities
 

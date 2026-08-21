@@ -3,7 +3,9 @@ import type {
   MechanismConfig,
   PhysicalKitSettings,
   Point,
+  ProjectState,
 } from "../../../types";
+import { resolveRenderPerformancePolicy } from "../../../utils/renderPerformancePolicy";
 import {
   projectFoundryOverlayPoint,
   type FoundryCamera,
@@ -23,7 +25,7 @@ import {
   type FoundryParamHandle,
   type FoundryParamHandleId,
 } from "./FoundryOverlayLayer";
-import { ThreeFoundryPreview } from "./ThreeFoundryPreview";
+import { DeferredThreeFoundryPreview } from "./DeferredThreeFoundryPreview";
 import type { FoundryPlaybackFrame } from "./ThreeFoundryPreview";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 
@@ -51,6 +53,7 @@ type FoundryCanvasPaneProps = {
   userPathPoints: Point[];
   targetPathId?: string;
   kit: PhysicalKitSettings;
+  performancePreset: ProjectState["settings"]["performancePreset"];
   showFoundryGrid: boolean;
   showUserPathPreview: boolean;
   showPathPreview: boolean;
@@ -84,6 +87,8 @@ type FoundryCanvasPaneProps = {
   foundryParamHandleZSummary: string;
   hasManualAnchor: boolean;
   landingBoardLabel: string;
+  gestureActive: boolean;
+  gestureEmissionCount: number;
   onSetCameraPreset: (preset: Exclude<FoundryViewPreset, "custom">) => void;
   onToggleGrid: () => void;
   onToggleUserPathPreview: () => void;
@@ -133,6 +138,7 @@ export const FoundryCanvasPane = ({
   userPathPoints,
   targetPathId,
   kit,
+  performancePreset,
   showFoundryGrid,
   showUserPathPreview,
   showPathPreview,
@@ -166,6 +172,8 @@ export const FoundryCanvasPane = ({
   foundryParamHandleZSummary,
   hasManualAnchor,
   landingBoardLabel,
+  gestureActive,
+  gestureEmissionCount,
   onSetCameraPreset,
   onToggleGrid,
   onToggleUserPathPreview,
@@ -189,6 +197,7 @@ export const FoundryCanvasPane = ({
   onParamPointerUp,
   playbackOverlay,
 }: FoundryCanvasPaneProps) => {
+  const renderPolicy = resolveRenderPerformancePolicy(performancePreset);
   const pathFitError = useMemo(() => {
     if (!userPathPoints.length || !previewPoints.length) return undefined;
     const total = userPathPoints.reduce((sum, userPoint) => {
@@ -257,6 +266,8 @@ export const FoundryCanvasPane = ({
       data-fit-board-cells={kit.boardCells}
       data-fit-anchor-grid={anchorGrid}
       data-fit-target-path={targetPathId ?? landedFoundry.targetPathId ?? ""}
+      data-foundry-gesture-draft={gestureActive ? "active" : "idle"}
+      data-foundry-gesture-emissions={gestureEmissionCount}
       data-user-to-mech-fit-error={
         pathFitError === undefined ? "missing" : pathFitError.toFixed(2)
       }
@@ -295,13 +306,13 @@ export const FoundryCanvasPane = ({
       onResetPreview={onResetPreview}
       onPhaseChange={onPhaseChange}
     />
-    <ThreeFoundryPreview
+    <DeferredThreeFoundryPreview
       mechanism={landedFoundry}
+      performancePreset={performancePreset}
       simulation={selectedPhysicalSimulation}
       playback={{
         clock: playbackClock,
         sample: playbackSample,
-        minFrameIntervalMs: 1000 / 30,
       }}
       kit={kit}
       camera={foundryCamera}
@@ -333,6 +344,7 @@ export const FoundryCanvasPane = ({
       onPointerCancel={onPointerCancel}
       onWheel={onWheel}
       onProjectionSizeChange={onProjectionSizeChange}
+      deferMechanismTopology={gestureActive}
     >
       {userPathD && (
         <svg
@@ -379,9 +391,12 @@ export const FoundryCanvasPane = ({
         onParamPointerDown={onParamPointerDown}
         onParamPointerMove={onParamPointerMove}
         onParamPointerUp={onParamPointerUp}
-        playback={playbackOverlay}
+        playback={{
+          ...playbackOverlay,
+          minFrameIntervalMs: renderPolicy.minOverlayIntervalMs,
+        }}
       />
-    </ThreeFoundryPreview>
+    </DeferredThreeFoundryPreview>
     <div hidden data-testid="foundry-toolbar-state">
       Toolbar: {foundryPlaying ? "playing" : "paused"} · grid{" "}
       {showFoundryGrid ? "shown" : "hidden"} · user path{" "}

@@ -54,7 +54,7 @@ Primary classroom route:
 Secondary routes:
 
 - `Starter rig` creates the ideal starter humanoid with no mechanism.
-- `Girl` and `Boy` use built-in image starters.
+- Built-in Boy/Girl image starters remain bundled for a later secondary starter surface; they are hidden from the first landing modal.
 - `Image` imports user art through browser-local processing.
 - `Character file` imports a portable character package.
 - `Open full project` imports a full local project snapshot.
@@ -244,7 +244,7 @@ Completed first production slice:
 - `Waving arm` creates real editable lesson state through `createLessonProject`, lands on Character, preserves reset baseline behavior, and carries outcome/build-cue/sensemaking metadata.
 - Minimum guided cards now create real editable, export-ready motion state: arm wave/four-bar, head bob/cam, foot step/four-bar, and gear spin/gear pair.
 - Blank humanoid starts stay available through the secondary `Starter rig`, built-in character, image, and character-file routes instead of the visible Guide project set.
-- Starter/import routes remain available as secondary entry points: starter rig, Girl, Boy, Image, Character file, and full project import.
+- Starter/import routes remain available as secondary entry points: starter rig, Image, Character file, and full project import. Bundled Boy/Girl assets remain reserved for a later starter surface rather than the first landing modal.
 - Browser coverage verifies guided project open -> Character -> Foundry sensemaking without fake project data.
 
 Remaining expansion:

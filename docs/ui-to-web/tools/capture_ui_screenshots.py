@@ -118,7 +118,7 @@ def main() -> int:
 
         image = Path("resources/examples/raw/girl.png")
         if not image.exists():
-            image = Path("resources/examples/raw/boy.PNG")
+            image = Path("resources/examples/raw/boy.png")
         dlg = InteractiveSegmentationEditor(str(image), skeleton_data={"joints": []})
         results.append(("manual-segmentation-editor", save_widget(dlg, "93-manual-segmentation-editor", app, (1180, 760)), "ok"))
     except Exception as exc:  # noqa: BLE001

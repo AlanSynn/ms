@@ -8,7 +8,7 @@ Every visible control must do one of these things immediately in the browser:
 
 1. mutate `ProjectState` or editor viewport state,
 2. open a real file/input/modal workflow,
-3. run ONNX/tracking/simulation/fit/export code,
+3. run tracking/simulation/fit/export code,
 4. navigate to another implemented stage, or
 5. be an honest disabled guard with the reason visible nearby.
 
@@ -20,8 +20,8 @@ If a control does not meet one of those conditions, remove it instead of adding 
 | --- | --- | --- |
 | App shell menus | All menu entries resolve through a typed command registry and one `App.tsx` handler. | Implemented by `utils/appCommands.ts` + `commandHandlers satisfies Record<AppCommandId, () => void>`. Contract tests compare menu ids to handler ids. |
 | Top command bar | File/Edit/View/Go/Options/Help menus execute the same registry commands as shortcuts. | Implemented. Keep all new toolbar/menu actions registry-backed. |
-| Welcome / Getting Started | Starter, package load, local ONNX image import, project import, and “do not show again” must open real workflows. | Implemented. Hardware camera capture remains absent. |
-| Character | Load package, create from image, accept/discard generated package, part/outline/art/skeleton editing, save skeleton. | Implemented. Copy was compacted from “placeholder plates” to “gray plates” to avoid placeholder-like wording. |
+| Welcome / Getting Started | Guide, starter rig, character package load, project import, and “do not show again” must open real workflows. | Implemented. Image recognition and hardware camera capture remain absent. |
+| Character | Load/review a package, add an ordinary scene-object image, edit part/outline/art/skeleton data, and save the skeleton. | Implemented. Image-to-rig recognition was removed from the shipped app. |
 | Path | Draw/clear path, track video/GIF, play/reset, visibility/enabled state, selected point deletion, target selection, and path topology. | Implemented. Rig creation/editing controls are Character-owned; Path no longer exposes Add layer, Remove layer, or New handle controls. |
 | Mechanism Foundry | Mechanism type selection, anchor picking, layer toggles, play/reset, parameters, and “Use mechanism” export a real mechanism package. | Implemented and covered by existing browser tests. Keep future mechanism buttons backed by `mechanismFeatureRegistry`/fabrication recipes. |
 | Mechanism Design | Playback/trace, library insertion, fit-path optimization, recommendation generation, delete, and blueprint navigation. | Implemented. Fit/recommendation controls run optimizer/recommendation code and are not static cards. |
