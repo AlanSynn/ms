@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-21T01:00:23.095Z",
+  "generatedAt": "2026-08-21T00:58:43.253Z",
   "resultLabel": "6x CPU emulation",
   "productionBuild": true,
   "actualChromebookTested": false,
-  "workload": "foundry-playback",
+  "workload": "path-playback",
   "environment": {
     "browser": "chrome",
     "viewport": {
@@ -26,28 +26,28 @@
   },
   "actions": [
     {
-      "label": "foundry-play",
+      "label": "path-play",
       "kind": "click",
-      "durationMs": 40.90000003576279
+      "durationMs": 32.5
     },
     {
-      "label": "foundry-pause",
+      "label": "path-pause",
       "kind": "click",
-      "durationMs": 34.200000047683716
+      "durationMs": 16.30000001192093
     }
   ],
   "interactionLatencyMs": {
-    "p50": 34.200000047683716,
-    "p95": 40.90000003576279,
-    "p99": 40.90000003576279
+    "p50": 16.30000001192093,
+    "p95": 32.5,
+    "p99": 32.5
   },
   "playback": {
-    "durationMs": 15012.399999976158,
-    "frameCount": 1794,
+    "durationMs": 5005.899999976158,
+    "frameCount": 601,
     "frameIntervalMs": {
       "p50": 8.300000000000182,
       "p95": 9.199999999999818,
-      "p99": 9.300000000001091
+      "p99": 9.300000000000182
     },
     "framesOver50": 0,
     "framesOver50Percent": 0,
@@ -66,8 +66,8 @@
     "heap": {
       "supported": true,
       "samples": 22,
-      "firstBytes": 11557377,
-      "lastBytes": 11557377,
+      "firstBytes": 12849199,
+      "lastBytes": 12849199,
       "growthBytes": 0,
       "allowedGrowthBytes": 8388608,
       "tailRangeBytes": 0,
@@ -81,26 +81,26 @@
         "attachedCanvases": 1,
         "resources": {
           "buffer": {
-            "created": 84,
-            "deleted": 46,
-            "live": 38,
-            "peakLive": 46
+            "created": 208,
+            "deleted": 48,
+            "live": 160,
+            "peakLive": 160
           },
           "texture": {
-            "created": 5,
+            "created": 18,
             "deleted": 0,
-            "live": 5,
-            "peakLive": 5
+            "live": 18,
+            "peakLive": 18
           },
           "program": {
-            "created": 5,
+            "created": 9,
             "deleted": 3,
-            "live": 2,
-            "peakLive": 3
+            "live": 6,
+            "peakLive": 6
           },
           "shader": {
-            "created": 10,
-            "deleted": 10,
+            "created": 18,
+            "deleted": 18,
             "live": 0,
             "peakLive": 2
           },
@@ -117,10 +117,10 @@
             "peakLive": 0
           },
           "vertexArray": {
-            "created": 45,
-            "deleted": 34,
-            "live": 11,
-            "peakLive": 34
+            "created": 120,
+            "deleted": 36,
+            "live": 84,
+            "peakLive": 84
           },
           "query": {
             "created": 0,
@@ -155,26 +155,26 @@
         "attachedCanvases": 1,
         "resources": {
           "buffer": {
-            "created": 84,
-            "deleted": 46,
-            "live": 38,
-            "peakLive": 46
+            "created": 208,
+            "deleted": 48,
+            "live": 160,
+            "peakLive": 160
           },
           "texture": {
-            "created": 5,
+            "created": 18,
             "deleted": 0,
-            "live": 5,
-            "peakLive": 5
+            "live": 18,
+            "peakLive": 18
           },
           "program": {
-            "created": 5,
+            "created": 9,
             "deleted": 3,
-            "live": 2,
-            "peakLive": 3
+            "live": 6,
+            "peakLive": 6
           },
           "shader": {
-            "created": 10,
-            "deleted": 10,
+            "created": 18,
+            "deleted": 18,
             "live": 0,
             "peakLive": 2
           },
@@ -191,10 +191,10 @@
             "peakLive": 0
           },
           "vertexArray": {
-            "created": 45,
-            "deleted": 34,
-            "live": 11,
-            "peakLive": 34
+            "created": 120,
+            "deleted": 36,
+            "live": 84,
+            "peakLive": 84
           },
           "query": {
             "created": 0,
@@ -242,7 +242,7 @@
     },
     "frameP99": {
       "passed": true,
-      "observed": 9.300000000001091,
+      "observed": 9.300000000000182,
       "limit": 75
     },
     "framesOver50": {
@@ -257,7 +257,7 @@
     },
     "interactionLatency": {
       "passed": true,
-      "observed": 40.90000003576279,
+      "observed": 32.5,
       "limit": 100
     },
     "heapStable": {
@@ -300,5 +300,7 @@
       "observed": true,
       "limit": true
     }
-  }
+  },
+  "networkRequests": [],
+  "forbiddenRuntimeRequests": []
 }

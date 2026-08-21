@@ -223,6 +223,7 @@ assert(packageJson.scripts["test:chromebook-audit"].startsWith("bun run build &&
 assert(!packageJson.scripts["test:chromebook-audit"].includes("build:e2e"), "acceptance excludes diagnostic-build overhead");
 assert(packageJson.scripts["test:chromebook-audit"].includes("chromebook-features-audit.spec.ts"), "production-preview acceptance includes the M3 feature audit");
 assert(packageJson.scripts["test:chromebook-audit"].includes("chromebook-stage-switch-audit.spec.ts"), "production-preview acceptance includes repeated stage ownership checks");
+assert(packageJson.scripts["test:chromebook-audit"].includes("chromebook-simulation-audit.spec.ts"), "production-preview acceptance covers every animated classroom stage");
 assert.equal(packageJson.scripts["test:chromebook-audit:real-ai"], undefined, "the removed image-recognition workload has no audit command");
 assert(!packageJson.scripts["test:chromebook-audit"].includes("chromebook-audit.spec.ts"), "the short per-feature audit is the primary gate");
 assert(packageJson.scripts["test:chromebook-audit:full"].includes("chromebook-audit.spec.ts"), "the full workflow and soak remain available separately");
@@ -232,6 +233,7 @@ assert(config.includes("reuseExistingServer: !process.env.CI && !auditEnabled"),
 const spec = read("tests/browser/chromebook-audit.spec.ts");
 const featureSpec = read("tests/browser/chromebook-features-audit.spec.ts");
 const stageSwitchSpec = read("tests/browser/chromebook-stage-switch-audit.spec.ts");
+const simulationSpec = read("tests/browser/chromebook-simulation-audit.spec.ts");
 const workflowRail = read("components/shell/WorkflowRail.tsx");
 assert(workflowRail.includes("workflow-stage-${item.id}"), "stage timing uses stable rail controls without accessibility-tree traversal overhead");
 const stageRouter = read("components/AppStageRouter.tsx");
@@ -254,6 +256,10 @@ assert(stageSwitchSpec.includes("await runCycles(warmSequence, 1, 3, samples)"),
 assert(stageSwitchSpec.includes("coldLongTaskMax") && stageSwitchSpec.includes("warmBaseline"));
 assert(stageSwitchSpec.includes("warmCycleEndLiveResources") && stageSwitchSpec.includes("resourcePlateau"));
 assert(stageSwitchSpec.includes("resourcesReturned") && stageSwitchSpec.includes("noContextLoss"));
+for (const stage of ["path", "design", "assembly"]) {
+  assert(simulationSpec.includes(`\"${stage}\"`), `simulation audit measures ${stage} playback`);
+}
+assert(simulationSpec.includes("collectPlaybackAudit") && simulationSpec.includes("forbiddenRuntimeRequests"));
 assert(
   stageSwitchSpec.indexOf("await openWavingArm(page)") < stageSwitchSpec.indexOf("applyChromebookEmulation(page)"),
   "the stage audit throttles only measured stage interactions",

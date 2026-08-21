@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-21T01:00:23.095Z",
+  "generatedAt": "2026-08-21T00:58:58.801Z",
   "resultLabel": "6x CPU emulation",
   "productionBuild": true,
   "actualChromebookTested": false,
-  "workload": "foundry-playback",
+  "workload": "assembly-playback",
   "environment": {
     "browser": "chrome",
     "viewport": {
@@ -26,28 +26,28 @@
   },
   "actions": [
     {
-      "label": "foundry-play",
+      "label": "assembly-play",
       "kind": "click",
-      "durationMs": 40.90000003576279
+      "durationMs": 28
     },
     {
-      "label": "foundry-pause",
+      "label": "assembly-pause",
       "kind": "click",
-      "durationMs": 34.200000047683716
+      "durationMs": 21.900000035762787
     }
   ],
   "interactionLatencyMs": {
-    "p50": 34.200000047683716,
-    "p95": 40.90000003576279,
-    "p99": 40.90000003576279
+    "p50": 21.900000035762787,
+    "p95": 28,
+    "p99": 28
   },
   "playback": {
-    "durationMs": 15012.399999976158,
-    "frameCount": 1794,
+    "durationMs": 5010.199999988079,
+    "frameCount": 595,
     "frameIntervalMs": {
       "p50": 8.300000000000182,
-      "p95": 9.199999999999818,
-      "p99": 9.300000000001091
+      "p95": 9.299999999999272,
+      "p99": 16
     },
     "framesOver50": 0,
     "framesOver50Percent": 0,
@@ -66,8 +66,8 @@
     "heap": {
       "supported": true,
       "samples": 22,
-      "firstBytes": 11557377,
-      "lastBytes": 11557377,
+      "firstBytes": 20297486,
+      "lastBytes": 20297486,
       "growthBytes": 0,
       "allowedGrowthBytes": 8388608,
       "tailRangeBytes": 0,
@@ -237,12 +237,12 @@
     },
     "frameP95": {
       "passed": true,
-      "observed": 9.199999999999818,
+      "observed": 9.299999999999272,
       "limit": 42
     },
     "frameP99": {
       "passed": true,
-      "observed": 9.300000000001091,
+      "observed": 16,
       "limit": 75
     },
     "framesOver50": {
@@ -257,7 +257,7 @@
     },
     "interactionLatency": {
       "passed": true,
-      "observed": 40.90000003576279,
+      "observed": 28,
       "limit": 100
     },
     "heapStable": {
@@ -300,5 +300,7 @@
       "observed": true,
       "limit": true
     }
-  }
+  },
+  "networkRequests": [],
+  "forbiddenRuntimeRequests": []
 }

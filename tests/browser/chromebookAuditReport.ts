@@ -133,7 +133,11 @@ export type ChromebookPlaybackAuditReport = {
   resultLabel: "6x CPU emulation";
   productionBuild: true;
   actualChromebookTested: false;
-  workload: "foundry-playback";
+  workload:
+    | "foundry-playback"
+    | "path-playback"
+    | "design-playback"
+    | "assembly-playback";
   environment: typeof CHROMEBOOK_AUDIT_ENVIRONMENT & {
     browserVersion: string;
     userAgent: string;
