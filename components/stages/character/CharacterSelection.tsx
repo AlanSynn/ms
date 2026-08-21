@@ -1,4 +1,11 @@
-import { useRef, type Dispatch, type SetStateAction } from "react";
+import {
+  startTransition,
+  useEffect,
+  useMemo,
+  useRef,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import type {
   AppStage,
   BodyPartLayer,
@@ -8,7 +15,7 @@ import type {
   SceneObject,
 } from "../../../types";
 import { type ClassroomLessonTemplate, uid } from "../../../utils/project";
-import { sceneObjectFromImageFile } from "../../../utils/sceneObjectImage";
+import { createSceneObjectImageWorkerClient } from "../../../runtime/import/sceneObjectImageWorkerClient";
 import { CanvasZoomToolbar } from "../../AppShell";
 import { ThreePuppetPreview } from "../../ThreePuppetPreview";
 import {
@@ -65,6 +72,11 @@ export const CharacterSelection = ({
   const packageInputRef = useRef<HTMLInputElement>(null);
   const objectInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const objectImageClient = useMemo(
+    () => createSceneObjectImageWorkerClient(),
+    [],
+  );
+  useEffect(() => () => objectImageClient.dispose(), [objectImageClient]);
   const partPanelProject = project;
   const partPanelDisabled = false;
   const editableParts = partPanelProject.partOrder
@@ -82,18 +94,20 @@ export const CharacterSelection = ({
       : undefined) ?? editableParts[0];
   const selectedPartId = selectedEditablePart?.id ?? "";
   const addSceneObject = (file: File) => {
-    sceneObjectFromImageFile(file, uid("object"))
-      .then((object) => dispatch({ type: "upsert_scene_object", object }))
-      .catch((error) =>
+    objectImageClient.request(file, uid("object"), {
+      complete: ({ object }) => startTransition(() =>
+        dispatch({ type: "upsert_scene_object", object }),
+      ),
+      failed: (error) =>
         dispatch({
           type: "set_processing",
           processing: {
             stage: "error",
-            message: error instanceof Error ? error.message : "Object image could not load.",
+            message: error.message,
             progress: 0,
           },
         }),
-      );
+    });
   };
   return (
     <>

@@ -58,6 +58,7 @@ export const CharacterImportControls = ({
     <input
       ref={objectInputRef}
       data-testid="scene-object-image-input"
+      data-object-image-worker="on-demand"
       hidden
       type="file"
       disabled={sceneObjectDisabled}

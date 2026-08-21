@@ -28,6 +28,7 @@ const UNIT_TEST_FILES = [
   'project-contract.test.ts',
   'project-import-worker.test.ts',
   'render-performance-policy.test.ts',
+  'scene-object-image-worker.test.ts',
   'three-resource-retention.test.ts',
   'tracking-media-policy.test.ts',
 ];
