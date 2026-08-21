@@ -1,0 +1,973 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-21T01:14:02.130Z",
+  "resultLabel": "6x CPU emulation",
+  "productionBuild": true,
+  "actualChromebookTested": false,
+  "runtimeProbe": "browser-api-ownership-v1",
+  "workload": "production-interaction",
+  "environment": {
+    "browser": "chrome",
+    "browserVersion": "151.0.7922.172",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.7827.55 Safari/537.36",
+    "viewport": {
+      "width": 1366,
+      "height": 768
+    },
+    "deviceScaleFactor": 1,
+    "cpuThrottlingRate": 6,
+    "throttlingScope": "feature-action",
+    "network": {
+      "name": "bounded-classroom-wifi",
+      "latencyMs": 40,
+      "downloadBytesPerSecond": 1310720,
+      "uploadBytesPerSecond": 655360
+    }
+  },
+  "feature": {
+    "name": "pathGestures",
+    "actions": [
+      {
+        "label": "path-point-down",
+        "cycle": 1,
+        "outcome": "completed",
+        "nextPaintMs": 30.600000023841858,
+        "settleMs": 76.30000001192093,
+        "longTasks": {
+          "durationsMs": [],
+          "latencyMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "totalMs": 0,
+          "maxMs": 0
+        },
+        "puppetTopologyDurationsMs": [],
+        "before": {
+          "atMs": 2035.5999999642372,
+          "heapBytes": 10796793,
+          "longTaskCount": 3,
+          "puppetTopologyCount": 21,
+          "lifecycle": {
+            "probeSupport": {
+              "workers": true,
+              "imageBitmaps": true,
+              "objectUrls": true
+            },
+            "workers": {
+              "acquired": 1,
+              "released": 1,
+              "active": 0,
+              "peakActive": 1
+            },
+            "imageBitmaps": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            },
+            "objectUrls": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            }
+          }
+        },
+        "after": {
+          "atMs": 2145.5,
+          "heapBytes": 10472135,
+          "longTaskCount": 3,
+          "puppetTopologyCount": 21,
+          "lifecycle": {
+            "probeSupport": {
+              "workers": true,
+              "imageBitmaps": true,
+              "objectUrls": true
+            },
+            "workers": {
+              "acquired": 1,
+              "released": 1,
+              "active": 0,
+              "peakActive": 1
+            },
+            "imageBitmaps": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            },
+            "objectUrls": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            }
+          }
+        }
+      },
+      {
+        "label": "path-point-move",
+        "cycle": 1,
+        "outcome": "completed",
+        "nextPaintMs": 9,
+        "settleMs": 99,
+        "longTasks": {
+          "durationsMs": [],
+          "latencyMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "totalMs": 0,
+          "maxMs": 0
+        },
+        "puppetTopologyDurationsMs": [],
+        "before": {
+          "atMs": 2156.199999988079,
+          "heapBytes": 10944627,
+          "longTaskCount": 3,
+          "puppetTopologyCount": 21,
+          "lifecycle": {
+            "probeSupport": {
+              "workers": true,
+              "imageBitmaps": true,
+              "objectUrls": true
+            },
+            "workers": {
+              "acquired": 1,
+              "released": 1,
+              "active": 0,
+              "peakActive": 1
+            },
+            "imageBitmaps": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            },
+            "objectUrls": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            }
+          }
+        },
+        "after": {
+          "atMs": 2284.099999964237,
+          "heapBytes": 10808091,
+          "longTaskCount": 3,
+          "puppetTopologyCount": 21,
+          "lifecycle": {
+            "probeSupport": {
+              "workers": true,
+              "imageBitmaps": true,
+              "objectUrls": true
+            },
+            "workers": {
+              "acquired": 1,
+              "released": 1,
+              "active": 0,
+              "peakActive": 1
+            },
+            "imageBitmaps": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            },
+            "objectUrls": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            }
+          }
+        }
+      },
+      {
+        "label": "path-point-commit",
+        "cycle": 1,
+        "outcome": "completed",
+        "nextPaintMs": 32.90000003576279,
+        "settleMs": 77.60000002384186,
+        "longTasks": {
+          "durationsMs": [],
+          "latencyMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "totalMs": 0,
+          "maxMs": 0
+        },
+        "puppetTopologyDurationsMs": [],
+        "before": {
+          "atMs": 2293,
+          "heapBytes": 10354643,
+          "longTaskCount": 3,
+          "puppetTopologyCount": 21,
+          "lifecycle": {
+            "probeSupport": {
+              "workers": true,
+              "imageBitmaps": true,
+              "objectUrls": true
+            },
+            "workers": {
+              "acquired": 1,
+              "released": 1,
+              "active": 0,
+              "peakActive": 1
+            },
+            "imageBitmaps": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            },
+            "objectUrls": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            }
+          }
+        },
+        "after": {
+          "atMs": 2393.399999976158,
+          "heapBytes": 11077174,
+          "longTaskCount": 3,
+          "puppetTopologyCount": 21,
+          "lifecycle": {
+            "probeSupport": {
+              "workers": true,
+              "imageBitmaps": true,
+              "objectUrls": true
+            },
+            "workers": {
+              "acquired": 1,
+              "released": 1,
+              "active": 0,
+              "peakActive": 1
+            },
+            "imageBitmaps": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            },
+            "objectUrls": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            }
+          }
+        }
+      },
+      {
+        "label": "path-draw-mode",
+        "cycle": 2,
+        "outcome": "completed",
+        "nextPaintMs": 24.30000001192093,
+        "settleMs": 37.59999996423721,
+        "longTasks": {
+          "durationsMs": [],
+          "latencyMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "totalMs": 0,
+          "maxMs": 0
+        },
+        "puppetTopologyDurationsMs": [],
+        "before": {
+          "atMs": 2405.199999988079,
+          "heapBytes": 10589622,
+          "longTaskCount": 3,
+          "puppetTopologyCount": 21,
+          "lifecycle": {
+            "probeSupport": {
+              "workers": true,
+              "imageBitmaps": true,
+              "objectUrls": true
+            },
+            "workers": {
+              "acquired": 1,
+              "released": 1,
+              "active": 0,
+              "peakActive": 1
+            },
+            "imageBitmaps": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            },
+            "objectUrls": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            }
+          }
+        },
+        "after": {
+          "atMs": 2564.599999964237,
+          "heapBytes": 12280375,
+          "longTaskCount": 3,
+          "puppetTopologyCount": 21,
+          "lifecycle": {
+            "probeSupport": {
+              "workers": true,
+              "imageBitmaps": true,
+              "objectUrls": true
+            },
+            "workers": {
+              "acquired": 2,
+              "released": 2,
+              "active": 0,
+              "peakActive": 1
+            },
+            "imageBitmaps": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            },
+            "objectUrls": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            }
+          }
+        }
+      },
+      {
+        "label": "path-stroke-down",
+        "cycle": 2,
+        "outcome": "completed",
+        "nextPaintMs": 21.69999998807907,
+        "settleMs": 67,
+        "longTasks": {
+          "durationsMs": [],
+          "latencyMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "totalMs": 0,
+          "maxMs": 0
+        },
+        "puppetTopologyDurationsMs": [],
+        "before": {
+          "atMs": 2628,
+          "heapBytes": 11921137,
+          "longTaskCount": 3,
+          "puppetTopologyCount": 21,
+          "lifecycle": {
+            "probeSupport": {
+              "workers": true,
+              "imageBitmaps": true,
+              "objectUrls": true
+            },
+            "workers": {
+              "acquired": 2,
+              "released": 2,
+              "active": 0,
+              "peakActive": 1
+            },
+            "imageBitmaps": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            },
+            "objectUrls": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            }
+          }
+        },
+        "after": {
+          "atMs": 2741.099999964237,
+          "heapBytes": 11962877,
+          "longTaskCount": 3,
+          "puppetTopologyCount": 21,
+          "lifecycle": {
+            "probeSupport": {
+              "workers": true,
+              "imageBitmaps": true,
+              "objectUrls": true
+            },
+            "workers": {
+              "acquired": 2,
+              "released": 2,
+              "active": 0,
+              "peakActive": 1
+            },
+            "imageBitmaps": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            },
+            "objectUrls": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            }
+          }
+        }
+      },
+      {
+        "label": "path-stroke-move",
+        "cycle": 2,
+        "outcome": "completed",
+        "nextPaintMs": 8.5,
+        "settleMs": 103.29999995231628,
+        "longTasks": {
+          "durationsMs": [],
+          "latencyMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "totalMs": 0,
+          "maxMs": 0
+        },
+        "puppetTopologyDurationsMs": [],
+        "before": {
+          "atMs": 2750.099999964237,
+          "heapBytes": 12433253,
+          "longTaskCount": 3,
+          "puppetTopologyCount": 21,
+          "lifecycle": {
+            "probeSupport": {
+              "workers": true,
+              "imageBitmaps": true,
+              "objectUrls": true
+            },
+            "workers": {
+              "acquired": 2,
+              "released": 2,
+              "active": 0,
+              "peakActive": 1
+            },
+            "imageBitmaps": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            },
+            "objectUrls": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            }
+          }
+        },
+        "after": {
+          "atMs": 2881.099999964237,
+          "heapBytes": 11216691,
+          "longTaskCount": 3,
+          "puppetTopologyCount": 21,
+          "lifecycle": {
+            "probeSupport": {
+              "workers": true,
+              "imageBitmaps": true,
+              "objectUrls": true
+            },
+            "workers": {
+              "acquired": 2,
+              "released": 2,
+              "active": 0,
+              "peakActive": 1
+            },
+            "imageBitmaps": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            },
+            "objectUrls": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            }
+          }
+        }
+      },
+      {
+        "label": "path-stroke-commit",
+        "cycle": 2,
+        "outcome": "completed",
+        "nextPaintMs": 36.30000001192093,
+        "settleMs": 88.40000003576279,
+        "longTasks": {
+          "durationsMs": [],
+          "latencyMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0
+          },
+          "totalMs": 0,
+          "maxMs": 0
+        },
+        "puppetTopologyDurationsMs": [],
+        "before": {
+          "atMs": 2890.399999976158,
+          "heapBytes": 11672591,
+          "longTaskCount": 3,
+          "puppetTopologyCount": 21,
+          "lifecycle": {
+            "probeSupport": {
+              "workers": true,
+              "imageBitmaps": true,
+              "objectUrls": true
+            },
+            "workers": {
+              "acquired": 2,
+              "released": 2,
+              "active": 0,
+              "peakActive": 1
+            },
+            "imageBitmaps": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            },
+            "objectUrls": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            }
+          }
+        },
+        "after": {
+          "atMs": 3009.199999988079,
+          "heapBytes": 11952278,
+          "longTaskCount": 3,
+          "puppetTopologyCount": 21,
+          "lifecycle": {
+            "probeSupport": {
+              "workers": true,
+              "imageBitmaps": true,
+              "objectUrls": true
+            },
+            "workers": {
+              "acquired": 2,
+              "released": 2,
+              "active": 0,
+              "peakActive": 1
+            },
+            "imageBitmaps": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            },
+            "objectUrls": {
+              "acquired": 0,
+              "released": 0,
+              "active": 0,
+              "peakActive": 0
+            }
+          }
+        }
+      }
+    ],
+    "nextPaintLatencyMs": {
+      "p50": 24.30000001192093,
+      "p95": 36.30000001192093,
+      "p99": 36.30000001192093
+    },
+    "jobCompletionLatencyMs": {
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "settleLatencyMs": {
+      "p50": 77.60000002384186,
+      "p95": 103.29999995231628,
+      "p99": 103.29999995231628
+    },
+    "mainThreadLongTaskLatencyMs": {
+      "p50": 0,
+      "p95": 0,
+      "p99": 0
+    },
+    "lifecycle": {
+      "baseline": {
+        "probeSupport": {
+          "workers": true,
+          "imageBitmaps": true,
+          "objectUrls": true
+        },
+        "workers": {
+          "acquired": 1,
+          "released": 1,
+          "active": 0,
+          "peakActive": 1
+        },
+        "imageBitmaps": {
+          "acquired": 0,
+          "released": 0,
+          "active": 0,
+          "peakActive": 0
+        },
+        "objectUrls": {
+          "acquired": 0,
+          "released": 0,
+          "active": 0,
+          "peakActive": 0
+        }
+      },
+      "final": {
+        "probeSupport": {
+          "workers": true,
+          "imageBitmaps": true,
+          "objectUrls": true
+        },
+        "workers": {
+          "acquired": 3,
+          "released": 3,
+          "active": 0,
+          "peakActive": 1
+        },
+        "imageBitmaps": {
+          "acquired": 0,
+          "released": 0,
+          "active": 0,
+          "peakActive": 0
+        },
+        "objectUrls": {
+          "acquired": 0,
+          "released": 0,
+          "active": 0,
+          "peakActive": 0
+        }
+      },
+      "workerCreations": 2,
+      "imageBitmapAcquisitions": 0,
+      "objectUrlCreations": 0
+    },
+    "heap": {
+      "supported": true,
+      "baselineBytes": 10489363,
+      "finalBytes": 11652299,
+      "growthBytes": 1162936,
+      "allowedGrowthBytes": 8388608,
+      "finalSamplesBytes": [
+        11566819,
+        11626835,
+        11652299
+      ],
+      "tailRangeBytes": 85480,
+      "stable": true
+    },
+    "acceptance": {
+      "nextPaintP95": {
+        "passed": true,
+        "observed": 36.30000001192093,
+        "limit": 100
+      },
+      "mainThreadLongTaskP95": {
+        "passed": true,
+        "observed": 0,
+        "limit": 50
+      },
+      "workerProbeSupported": {
+        "passed": true,
+        "observed": true,
+        "limit": true
+      },
+      "imageBitmapProbeSupported": {
+        "passed": true,
+        "observed": true,
+        "limit": true
+      },
+      "objectUrlProbeSupported": {
+        "passed": true,
+        "observed": true,
+        "limit": true
+      },
+      "workersReturnedToBaseline": {
+        "passed": true,
+        "observed": 0,
+        "limit": 0
+      },
+      "imageBitmapsReturnedToBaseline": {
+        "passed": true,
+        "observed": 0,
+        "limit": 0
+      },
+      "objectUrlsReturnedToBaseline": {
+        "passed": true,
+        "observed": 0,
+        "limit": 0
+      },
+      "workerCyclesExercised": {
+        "passed": true,
+        "observed": 2,
+        "limit": ">=0"
+      },
+      "imageBitmapOwnershipExercised": {
+        "passed": true,
+        "observed": 0,
+        "limit": ">=0"
+      },
+      "objectUrlOwnershipExercised": {
+        "passed": true,
+        "observed": 0,
+        "limit": ">=0"
+      },
+      "completedCycle": {
+        "passed": true,
+        "observed": 7,
+        "limit": ">=1"
+      },
+      "cancelledCycle": {
+        "passed": true,
+        "observed": 0,
+        "limit": ">=0"
+      },
+      "heapBounded": {
+        "passed": true,
+        "observed": 1162936,
+        "limit": 8388608
+      },
+      "heapStable": {
+        "passed": true,
+        "observed": 85480,
+        "limit": 8388608
+      },
+      "passed": {
+        "passed": true,
+        "observed": true,
+        "limit": true
+      },
+      "webglContextsStable": {
+        "passed": true,
+        "observed": 0,
+        "limit": 0
+      },
+      "foundryTopologyBounded": {
+        "passed": true,
+        "observed": 0,
+        "limit": 0
+      },
+      "webglResourceGrowthBounded": {
+        "passed": true,
+        "observed": 4,
+        "limit": 8
+      },
+      "geometryCacheGrowthBounded": {
+        "passed": true,
+        "observed": 0,
+        "limit": 0
+      },
+      "materialCacheGrowthBounded": {
+        "passed": true,
+        "observed": 0,
+        "limit": 0
+      },
+      "puppetTopologyP95": {
+        "passed": true,
+        "observed": 0,
+        "limit": 50
+      }
+    },
+    "visual": {
+      "baseline": {
+        "reactCommits": 11,
+        "foundryTopologyBuilds": 0,
+        "foundryGeometryCacheSize": 0,
+        "foundryMaterialCacheSize": 0,
+        "webgl": {
+          "contextsCreated": 1,
+          "contextsLost": 0,
+          "contextsRestored": 0,
+          "attachedCanvases": 0,
+          "resources": {
+            "buffer": {
+              "created": 216,
+              "deleted": 48,
+              "live": 168,
+              "peakLive": 168
+            },
+            "texture": {
+              "created": 19,
+              "deleted": 0,
+              "live": 19,
+              "peakLive": 19
+            },
+            "program": {
+              "created": 9,
+              "deleted": 3,
+              "live": 6,
+              "peakLive": 6
+            },
+            "shader": {
+              "created": 18,
+              "deleted": 18,
+              "live": 0,
+              "peakLive": 2
+            },
+            "framebuffer": {
+              "created": 3,
+              "deleted": 0,
+              "live": 3,
+              "peakLive": 3
+            },
+            "renderbuffer": {
+              "created": 0,
+              "deleted": 0,
+              "live": 0,
+              "peakLive": 0
+            },
+            "vertexArray": {
+              "created": 124,
+              "deleted": 36,
+              "live": 88,
+              "peakLive": 88
+            },
+            "query": {
+              "created": 0,
+              "deleted": 0,
+              "live": 0,
+              "peakLive": 0
+            },
+            "sampler": {
+              "created": 0,
+              "deleted": 0,
+              "live": 0,
+              "peakLive": 0
+            },
+            "transformFeedback": {
+              "created": 0,
+              "deleted": 0,
+              "live": 0,
+              "peakLive": 0
+            },
+            "sync": {
+              "created": 0,
+              "deleted": 0,
+              "live": 0,
+              "peakLive": 0
+            }
+          }
+        }
+      },
+      "final": {
+        "reactCommits": 18,
+        "foundryTopologyBuilds": 0,
+        "foundryGeometryCacheSize": 0,
+        "foundryMaterialCacheSize": 0,
+        "webgl": {
+          "contextsCreated": 1,
+          "contextsLost": 0,
+          "contextsRestored": 0,
+          "attachedCanvases": 0,
+          "resources": {
+            "buffer": {
+              "created": 224,
+              "deleted": 54,
+              "live": 170,
+              "peakLive": 170
+            },
+            "texture": {
+              "created": 19,
+              "deleted": 0,
+              "live": 19,
+              "peakLive": 19
+            },
+            "program": {
+              "created": 9,
+              "deleted": 3,
+              "live": 6,
+              "peakLive": 6
+            },
+            "shader": {
+              "created": 18,
+              "deleted": 18,
+              "live": 0,
+              "peakLive": 2
+            },
+            "framebuffer": {
+              "created": 3,
+              "deleted": 0,
+              "live": 3,
+              "peakLive": 3
+            },
+            "renderbuffer": {
+              "created": 0,
+              "deleted": 0,
+              "live": 0,
+              "peakLive": 0
+            },
+            "vertexArray": {
+              "created": 132,
+              "deleted": 42,
+              "live": 90,
+              "peakLive": 90
+            },
+            "query": {
+              "created": 0,
+              "deleted": 0,
+              "live": 0,
+              "peakLive": 0
+            },
+            "sampler": {
+              "created": 0,
+              "deleted": 0,
+              "live": 0,
+              "peakLive": 0
+            },
+            "transformFeedback": {
+              "created": 0,
+              "deleted": 0,
+              "live": 0,
+              "peakLive": 0
+            },
+            "sync": {
+              "created": 0,
+              "deleted": 0,
+              "live": 0,
+              "peakLive": 0
+            }
+          }
+        }
+      },
+      "liveResourceDelta": 4,
+      "contextDelta": 0,
+      "topologyBuildDelta": 0,
+      "geometryCacheDelta": 0,
+      "materialCacheDelta": 0,
+      "reactCommitDelta": 7,
+      "puppetTopologyLatencyMs": {
+        "p50": 0,
+        "p95": 0,
+        "p99": 0
+      }
+    }
+  },
+  "acceptance": {
+    "passed": {
+      "passed": true,
+      "observed": true,
+      "limit": true
+    }
+  }
+}

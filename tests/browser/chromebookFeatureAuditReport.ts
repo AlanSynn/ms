@@ -9,6 +9,9 @@ export const CHROMEBOOK_FEATURE_NAMES = [
   "recommend",
   "designFit",
   "traceGif",
+  "pathGestures",
+  "foundryGestures",
+  "designControls",
 ] as const;
 
 export type ChromebookFeatureName = (typeof CHROMEBOOK_FEATURE_NAMES)[number];
@@ -109,7 +112,7 @@ export type ChromebookFeatureAuditReport = {
   productionBuild: true;
   actualChromebookTested: false;
   runtimeProbe: "browser-api-ownership-v1";
-  workload: "production-feature";
+  workload: "production-feature" | "production-interaction";
   environment: {
     browser: "chrome";
     browserVersion: string;
