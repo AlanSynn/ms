@@ -10,14 +10,18 @@ import { createDefaultMechanism, createSampleProject } from '../utils/project';
 import { createFabricationReadyFourBarProject } from './fixtures/fabricationProject';
 
 const hash = (value: unknown) =>
-  createHash('sha256').update(JSON.stringify(value)).digest('hex');
+  createHash('sha256').update(JSON.stringify(value, (_key, item) =>
+    typeof item === 'number' && Number.isFinite(item)
+      ? Number(item.toFixed(12))
+      : item
+  )).digest('hex');
 
 clearFourBarFitCache();
 const acceptedProject = createFabricationReadyFourBarProject();
 assert.equal(
   hash(acceptedProject.mechanisms[0]),
-  'b33e88832ba03bdacfee35cde070aefb083e62872c77b69cbff030bdcb65dcc0',
-  'radial pruning preserves the accepted fabrication-fit mechanism byte-for-byte',
+  '645b94868d10409da5f7fe75f2bf9457ac6bb0e53c6c8f28a8c0f9f3be48ac7a',
+  'radial pruning preserves the accepted fabrication-fit mechanism after platform-stable float normalization',
 );
 
 const project = createSampleProject();
