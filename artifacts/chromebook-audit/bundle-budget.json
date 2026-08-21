@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-21T14:45:08.757Z",
+  "generatedAt": "2026-08-21T15:02:41.024Z",
   "basis": "static compressed production shell",
   "imageRecognitionRuntime": "absent",
   "entryJs": {

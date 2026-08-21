@@ -1,9 +1,16 @@
 {
-  "schemaVersion": 1,
-  "generatedAt": "2026-08-21T03:21:21.920Z",
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-21T14:51:07.147Z",
   "resultLabel": "6x CPU emulation",
   "productionBuild": true,
   "actualChromebookTested": false,
+  "provenance": {
+    "sourceRevision": "9b720ed1d614c8b94c7acb4957f574f3563492fe",
+    "sourceTreeDirty": false,
+    "distSha256": "a3ca6f792b2a7150584dd5d71a20e5ab2cf8ca767514821d30a78f84fde950fa",
+    "buildProfile": "e2e-diagnostics",
+    "baseURL": "http://127.0.0.1:5317"
+  },
   "workload": "foundry-playback",
   "environment": {
     "browser": "chrome",
@@ -28,30 +35,42 @@
     {
       "label": "foundry-play",
       "kind": "click",
-      "durationMs": 43.19999998807907
+      "durationMs": 39.69999998807907
     },
     {
       "label": "foundry-pause",
       "kind": "click",
-      "durationMs": 36.60000002384186
+      "durationMs": 40.5
     }
   ],
   "interactionLatencyMs": {
-    "p50": 36.60000002384186,
-    "p95": 43.19999998807907,
-    "p99": 43.19999998807907
+    "p50": 39.69999998807907,
+    "p95": 40.5,
+    "p99": 40.5
   },
   "playback": {
-    "durationMs": 15009.400000035763,
-    "frameCount": 1793,
+    "frameSource": "webgl-clear-submission",
+    "durationMs": 5001.800000011921,
+    "frameCount": 201,
     "frameIntervalMs": {
-      "p50": 8.300000000001091,
-      "p95": 9.199999999999818,
-      "p99": 9.300000000001091
+      "p50": 25,
+      "p95": 33.69999998807907,
+      "p99": 35.30000001192093
     },
     "framesOver50": 0,
     "framesOver50Percent": 0,
     "framesOver200": 0,
+    "eventLoopRaf": {
+      "sampleCount": 596,
+      "intervalMs": {
+        "p50": 8.300000000000182,
+        "p95": 9.299999999999727,
+        "p99": 9.399999999999636
+      },
+      "intervalsOver50": 0,
+      "intervalsOver50Percent": 0,
+      "intervalsOver200": 0
+    },
     "longTasks": {
       "count": 0,
       "totalMs": 0,
@@ -65,9 +84,9 @@
     "reactCommits": 0,
     "heap": {
       "supported": true,
-      "samples": 22,
-      "firstBytes": 11615663,
-      "lastBytes": 11615663,
+      "samples": 21,
+      "firstBytes": 12605156,
+      "lastBytes": 12605156,
       "growthBytes": 0,
       "allowedGrowthBytes": 8388608,
       "tailRangeBytes": 0,
@@ -81,10 +100,10 @@
         "attachedCanvases": 1,
         "resources": {
           "buffer": {
-            "created": 84,
-            "deleted": 46,
+            "created": 38,
+            "deleted": 0,
             "live": 38,
-            "peakLive": 46
+            "peakLive": 38
           },
           "texture": {
             "created": 5,
@@ -93,14 +112,14 @@
             "peakLive": 5
           },
           "program": {
-            "created": 5,
-            "deleted": 3,
+            "created": 2,
+            "deleted": 0,
             "live": 2,
-            "peakLive": 3
+            "peakLive": 2
           },
           "shader": {
-            "created": 10,
-            "deleted": 10,
+            "created": 4,
+            "deleted": 4,
             "live": 0,
             "peakLive": 2
           },
@@ -117,10 +136,10 @@
             "peakLive": 0
           },
           "vertexArray": {
-            "created": 45,
-            "deleted": 34,
+            "created": 11,
+            "deleted": 0,
             "live": 11,
-            "peakLive": 34
+            "peakLive": 11
           },
           "query": {
             "created": 0,
@@ -155,10 +174,10 @@
         "attachedCanvases": 1,
         "resources": {
           "buffer": {
-            "created": 84,
-            "deleted": 46,
+            "created": 38,
+            "deleted": 0,
             "live": 38,
-            "peakLive": 46
+            "peakLive": 38
           },
           "texture": {
             "created": 5,
@@ -167,14 +186,14 @@
             "peakLive": 5
           },
           "program": {
-            "created": 5,
-            "deleted": 3,
+            "created": 2,
+            "deleted": 0,
             "live": 2,
-            "peakLive": 3
+            "peakLive": 2
           },
           "shader": {
-            "created": 10,
-            "deleted": 10,
+            "created": 4,
+            "deleted": 4,
             "live": 0,
             "peakLive": 2
           },
@@ -191,10 +210,10 @@
             "peakLive": 0
           },
           "vertexArray": {
-            "created": 45,
-            "deleted": 34,
+            "created": 11,
+            "deleted": 0,
             "live": 11,
-            "peakLive": 34
+            "peakLive": 11
           },
           "query": {
             "created": 0,
@@ -224,25 +243,37 @@
       },
       "liveResourceDelta": 0,
       "contextDelta": 0,
+      "contextLossDelta": 0,
+      "contextRestoreDelta": 0,
       "topologyBuildDelta": 0,
       "geometryCacheDelta": 0,
       "materialCacheDelta": 0
     }
   },
   "acceptance": {
+    "actualRenderTelemetry": {
+      "passed": true,
+      "observed": true,
+      "limit": true
+    },
+    "renderSubmissionsObserved": {
+      "passed": true,
+      "observed": 201,
+      "limit": ">=2"
+    },
     "frameP50": {
       "passed": true,
-      "observed": 8.300000000001091,
+      "observed": 25,
       "limit": 33.3
     },
     "frameP95": {
       "passed": true,
-      "observed": 9.199999999999818,
+      "observed": 33.69999998807907,
       "limit": 42
     },
     "frameP99": {
       "passed": true,
-      "observed": 9.300000000001091,
+      "observed": 35.30000001192093,
       "limit": 75
     },
     "framesOver50": {
@@ -257,8 +288,13 @@
     },
     "interactionLatency": {
       "passed": true,
-      "observed": 43.19999998807907,
+      "observed": 40.5,
       "limit": 100
+    },
+    "heapSupported": {
+      "passed": true,
+      "observed": true,
+      "limit": true
     },
     "heapStable": {
       "passed": true,
@@ -276,6 +312,16 @@
       "limit": 0
     },
     "webglContextsStable": {
+      "passed": true,
+      "observed": 0,
+      "limit": 0
+    },
+    "webglContextLossAbsent": {
+      "passed": true,
+      "observed": 0,
+      "limit": 0
+    },
+    "webglContextRestorationAbsent": {
       "passed": true,
       "observed": 0,
       "limit": 0

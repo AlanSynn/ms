@@ -1,0 +1,1961 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-21T14:41:12.883Z",
+  "resultLabel": "Chrome production preview, CDP CPU 6x (not a physical Chromebook)",
+  "productionBuild": true,
+  "baseURL": "http://127.0.0.1:4187/",
+  "playbackDurationMs": 2000,
+  "viewport": {
+    "width": 1366,
+    "height": 768
+  },
+  "frameSource": "instrumented WebGL clear submissions",
+  "drawCallSource": "instrumented WebGL drawArrays/drawElements/instanced methods",
+  "configs": [
+    {
+      "config": {
+        "id": "high-dpr1",
+        "preset": "high",
+        "deviceScaleFactor": 1
+      },
+      "environment": {
+        "browserVersion": "151.0.7922.172",
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+        "viewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "devicePixelRatio": 1,
+        "cpuThrottlingRate": 6,
+        "networkThrottling": "none (localhost production preview)"
+      },
+      "configuredProbe": {
+        "atMs": 10068.899999976158,
+        "heapBytes": 10752947,
+        "longTaskCount": 10,
+        "reactCommits": 20,
+        "webglSubmissionCount": 5,
+        "contextsCreated": 1,
+        "contextsLost": 0,
+        "contextsRestored": 0,
+        "resources": {
+          "buffer": {
+            "created": 139,
+            "deleted": 39,
+            "live": 100,
+            "peakLive": 139
+          },
+          "texture": {
+            "created": 18,
+            "deleted": 13,
+            "live": 5,
+            "peakLive": 18
+          },
+          "program": {
+            "created": 6,
+            "deleted": 6,
+            "live": 0,
+            "peakLive": 6
+          },
+          "shader": {
+            "created": 12,
+            "deleted": 12,
+            "live": 0,
+            "peakLive": 2
+          },
+          "framebuffer": {
+            "created": 3,
+            "deleted": 0,
+            "live": 3,
+            "peakLive": 3
+          },
+          "renderbuffer": {
+            "created": 0,
+            "deleted": 0,
+            "live": 0,
+            "peakLive": 0
+          },
+          "vertexArray": {
+            "created": 63,
+            "deleted": 63,
+            "live": 0,
+            "peakLive": 63
+          },
+          "query": {
+            "created": 0,
+            "deleted": 0,
+            "live": 0,
+            "peakLive": 0
+          },
+          "sampler": {
+            "created": 0,
+            "deleted": 0,
+            "live": 0,
+            "peakLive": 0
+          },
+          "transformFeedback": {
+            "created": 0,
+            "deleted": 0,
+            "live": 0,
+            "peakLive": 0
+          },
+          "sync": {
+            "created": 0,
+            "deleted": 0,
+            "live": 0,
+            "peakLive": 0
+          }
+        },
+        "foundryTopologyBuilds": 0,
+        "foundryGeometryCacheSize": 0,
+        "foundryMaterialCacheSize": 0,
+        "draw": {
+          "total": 159,
+          "byMethod": {
+            "drawElementsInstanced": 30,
+            "drawElements": 74,
+            "drawArrays": 55
+          },
+          "contexts": 1
+        }
+      },
+      "finalProbe": {
+        "atMs": 39895.19999998808,
+        "heapBytes": 15159476,
+        "longTaskCount": 30,
+        "reactCommits": 273,
+        "webglSubmissionCount": 432,
+        "contextsCreated": 1,
+        "contextsLost": 0,
+        "contextsRestored": 0,
+        "resources": {
+          "buffer": {
+            "created": 502,
+            "deleted": 249,
+            "live": 253,
+            "peakLive": 308
+          },
+          "texture": {
+            "created": 73,
+            "deleted": 68,
+            "live": 5,
+            "peakLive": 19
+          },
+          "program": {
+            "created": 33,
+            "deleted": 31,
+            "live": 2,
+            "peakLive": 10
+          },
+          "shader": {
+            "created": 66,
+            "deleted": 66,
+            "live": 0,
+            "peakLive": 2
+          },
+          "framebuffer": {
+            "created": 3,
+            "deleted": 0,
+            "live": 3,
+            "peakLive": 3
+          },
+          "renderbuffer": {
+            "created": 0,
+            "deleted": 0,
+            "live": 0,
+            "peakLive": 0
+          },
+          "vertexArray": {
+            "created": 316,
+            "deleted": 288,
+            "live": 28,
+            "peakLive": 102
+          },
+          "query": {
+            "created": 0,
+            "deleted": 0,
+            "live": 0,
+            "peakLive": 0
+          },
+          "sampler": {
+            "created": 0,
+            "deleted": 0,
+            "live": 0,
+            "peakLive": 0
+          },
+          "transformFeedback": {
+            "created": 0,
+            "deleted": 0,
+            "live": 0,
+            "peakLive": 0
+          },
+          "sync": {
+            "created": 0,
+            "deleted": 0,
+            "live": 0,
+            "peakLive": 0
+          }
+        },
+        "foundryTopologyBuilds": 4,
+        "foundryGeometryCacheSize": 40,
+        "foundryMaterialCacheSize": 20,
+        "draw": {
+          "total": 26189,
+          "byMethod": {
+            "drawElementsInstanced": 3691,
+            "drawElements": 11920,
+            "drawArrays": 10578
+          },
+          "contexts": 1
+        }
+      },
+      "overallDelta": {
+        "heapBytes": 4406529,
+        "longTasks": 20,
+        "reactCommits": 253,
+        "webglSubmissions": 427,
+        "contextsCreated": 0,
+        "contextsLost": 0,
+        "contextsRestored": 0,
+        "liveResources": 183,
+        "foundryTopologyBuilds": 4,
+        "foundryGeometryCacheSize": 40,
+        "foundryMaterialCacheSize": 20,
+        "drawCalls": 26030,
+        "drawCallsByMethod": {
+          "drawArrays": 10523,
+          "drawElements": 11846,
+          "drawElementsInstanced": 3661
+        }
+      },
+      "stages": {
+        "character": {
+          "workload": "continuous-orbit-interaction",
+          "entryNextPaintMs": 24.600000023841858,
+          "entryEventTaskEndMs": 14.399999976158142,
+          "playNextPaintMs": 16.600000023841858,
+          "playEventTaskEndMs": 4.100000023841858,
+          "pauseNextPaintMs": 12.300000011920929,
+          "pauseEventTaskEndMs": 3.599999964237213,
+          "canvas": {
+            "cssWidth": 621.625,
+            "cssHeight": 607.609375,
+            "canvasWidth": 622,
+            "canvasHeight": 608,
+            "drawingBufferWidth": 622,
+            "drawingBufferHeight": 608,
+            "drawingBufferPixels": 378176,
+            "effectivePixelRatioX": 1.0006032575909913,
+            "effectivePixelRatioY": 1.0006428883688636,
+            "devicePixelRatio": 1,
+            "antialias": false,
+            "maxRenderbufferDimension": 8192,
+            "glVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+            "glVendor": "Google Inc. (Google)",
+            "glRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)"
+          },
+          "entryDelta": {
+            "heapBytes": -483589,
+            "longTasks": 3,
+            "reactCommits": 6,
+            "webglSubmissions": 4,
+            "contextsCreated": 0,
+            "contextsLost": 0,
+            "contextsRestored": 0,
+            "liveResources": 116,
+            "foundryTopologyBuilds": 0,
+            "foundryGeometryCacheSize": 0,
+            "foundryMaterialCacheSize": 0,
+            "drawCalls": 135,
+            "drawCallsByMethod": {
+              "drawArrays": 43,
+              "drawElements": 68,
+              "drawElementsInstanced": 24
+            }
+          },
+          "playback": {
+            "frameSource": "webgl-clear-submission",
+            "durationMs": 2040.3999999761581,
+            "frameCount": 36,
+            "frameIntervalMs": {
+              "p50": 47.19999998807907,
+              "p95": 156.70000004768372,
+              "p99": 186.5999999642372
+            },
+            "framesOver50": 9,
+            "framesOver50Percent": 24.324324324324326,
+            "framesOver200": 0,
+            "eventLoopRaf": {
+              "sampleCount": 63,
+              "intervalMs": {
+                "p50": 41.100000000000364,
+                "p95": 50.100000000000364,
+                "p99": 150.89999999999964
+              },
+              "intervalsOver50": 5,
+              "intervalsOver50Percent": 7.936507936507936,
+              "intervalsOver200": 0
+            },
+            "longTasks": {
+              "count": 0,
+              "totalMs": 0,
+              "maxMs": 0
+            },
+            "browserEventLatencyMs": {
+              "p50": 144,
+              "p95": 144,
+              "p99": 144
+            },
+            "reactCommits": 39,
+            "heap": {
+              "supported": true,
+              "samples": 10,
+              "firstBytes": 10624131,
+              "lastBytes": 10624131,
+              "growthBytes": 0,
+              "allowedGrowthBytes": 8388608,
+              "tailRangeBytes": 0,
+              "stable": true
+            },
+            "webgl": {
+              "before": {
+                "contextsCreated": 1,
+                "contextsLost": 0,
+                "contextsRestored": 0,
+                "attachedCanvases": 1,
+                "resources": {
+                  "buffer": {
+                    "created": 215,
+                    "deleted": 66,
+                    "live": 149,
+                    "peakLive": 149
+                  },
+                  "texture": {
+                    "created": 32,
+                    "deleted": 13,
+                    "live": 19,
+                    "peakLive": 19
+                  },
+                  "program": {
+                    "created": 12,
+                    "deleted": 6,
+                    "live": 6,
+                    "peakLive": 6
+                  },
+                  "shader": {
+                    "created": 24,
+                    "deleted": 24,
+                    "live": 0,
+                    "peakLive": 2
+                  },
+                  "framebuffer": {
+                    "created": 3,
+                    "deleted": 0,
+                    "live": 3,
+                    "peakLive": 3
+                  },
+                  "renderbuffer": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "vertexArray": {
+                    "created": 126,
+                    "deleted": 63,
+                    "live": 63,
+                    "peakLive": 63
+                  },
+                  "query": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sampler": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "transformFeedback": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sync": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  }
+                }
+              },
+              "after": {
+                "contextsCreated": 1,
+                "contextsLost": 0,
+                "contextsRestored": 0,
+                "attachedCanvases": 1,
+                "resources": {
+                  "buffer": {
+                    "created": 215,
+                    "deleted": 66,
+                    "live": 149,
+                    "peakLive": 149
+                  },
+                  "texture": {
+                    "created": 32,
+                    "deleted": 13,
+                    "live": 19,
+                    "peakLive": 19
+                  },
+                  "program": {
+                    "created": 12,
+                    "deleted": 6,
+                    "live": 6,
+                    "peakLive": 6
+                  },
+                  "shader": {
+                    "created": 24,
+                    "deleted": 24,
+                    "live": 0,
+                    "peakLive": 2
+                  },
+                  "framebuffer": {
+                    "created": 3,
+                    "deleted": 0,
+                    "live": 3,
+                    "peakLive": 3
+                  },
+                  "renderbuffer": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "vertexArray": {
+                    "created": 126,
+                    "deleted": 63,
+                    "live": 63,
+                    "peakLive": 63
+                  },
+                  "query": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sampler": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "transformFeedback": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sync": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  }
+                }
+              },
+              "liveResourceDelta": 0,
+              "contextDelta": 0,
+              "contextLossDelta": 0,
+              "contextRestoreDelta": 0,
+              "topologyBuildDelta": 0,
+              "geometryCacheDelta": 0,
+              "materialCacheDelta": 0
+            }
+          },
+          "playbackDraw": {
+            "calls": 6846,
+            "callsByMethod": {
+              "drawArrays": 2612,
+              "drawElements": 2826,
+              "drawElementsInstanced": 1408
+            },
+            "callsPerSubmission": 190.16666666666666
+          },
+          "fullSliceDelta": {
+            "heapBytes": 1715124,
+            "longTasks": 3,
+            "reactCommits": 110,
+            "webglSubmissions": 104,
+            "contextsCreated": 0,
+            "contextsLost": 0,
+            "contextsRestored": 0,
+            "liveResources": 132,
+            "foundryTopologyBuilds": 0,
+            "foundryGeometryCacheSize": 0,
+            "foundryMaterialCacheSize": 0,
+            "drawCalls": 7126,
+            "drawCallsByMethod": {
+              "drawArrays": 2711,
+              "drawElements": 2953,
+              "drawElementsInstanced": 1462
+            }
+          }
+        },
+        "path": {
+          "workload": "playback",
+          "entryNextPaintMs": 185.89999997615814,
+          "entryEventTaskEndMs": 127.19999998807907,
+          "playNextPaintMs": 28.400000035762787,
+          "playEventTaskEndMs": 13.5,
+          "pauseNextPaintMs": 57.80000001192093,
+          "pauseEventTaskEndMs": 13.5,
+          "canvas": {
+            "cssWidth": 623.625,
+            "cssHeight": 609.609375,
+            "canvasWidth": 624,
+            "canvasHeight": 610,
+            "drawingBufferWidth": 624,
+            "drawingBufferHeight": 610,
+            "drawingBufferPixels": 380640,
+            "effectivePixelRatioX": 1.000601322910403,
+            "effectivePixelRatioY": 1.000640779187492,
+            "devicePixelRatio": 1,
+            "antialias": false,
+            "maxRenderbufferDimension": 8192,
+            "glVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+            "glVendor": "Google Inc. (Google)",
+            "glRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)"
+          },
+          "entryDelta": {
+            "heapBytes": -1689064,
+            "longTasks": 4,
+            "reactCommits": 5,
+            "webglSubmissions": 8,
+            "contextsCreated": 0,
+            "contextsLost": 0,
+            "contextsRestored": 0,
+            "liveResources": -5,
+            "foundryTopologyBuilds": 0,
+            "foundryGeometryCacheSize": 0,
+            "foundryMaterialCacheSize": 0,
+            "drawCalls": 363,
+            "drawCallsByMethod": {
+              "drawArrays": 133,
+              "drawElements": 157,
+              "drawElementsInstanced": 73
+            }
+          },
+          "playback": {
+            "frameSource": "webgl-clear-submission",
+            "durationMs": 2026,
+            "frameCount": 45,
+            "frameIntervalMs": {
+              "p50": 44.40000003576279,
+              "p95": 50.39999997615814,
+              "p99": 66.59999996423721
+            },
+            "framesOver50": 3,
+            "framesOver50Percent": 6.521739130434782,
+            "framesOver200": 0,
+            "eventLoopRaf": {
+              "sampleCount": 47,
+              "intervalMs": {
+                "p50": 42,
+                "p95": 50.70000000000073,
+                "p99": 75.70000000000073
+              },
+              "intervalsOver50": 8,
+              "intervalsOver50Percent": 17.02127659574468,
+              "intervalsOver200": 0
+            },
+            "longTasks": {
+              "count": 0,
+              "totalMs": 0,
+              "maxMs": 0
+            },
+            "browserEventLatencyMs": {
+              "p50": 0,
+              "p95": 0,
+              "p99": 0
+            },
+            "reactCommits": 0,
+            "heap": {
+              "supported": true,
+              "samples": 10,
+              "firstBytes": 11308379,
+              "lastBytes": 11308379,
+              "growthBytes": 0,
+              "allowedGrowthBytes": 8388608,
+              "tailRangeBytes": 0,
+              "stable": true
+            },
+            "webgl": {
+              "before": {
+                "contextsCreated": 1,
+                "contextsLost": 0,
+                "contextsRestored": 0,
+                "attachedCanvases": 1,
+                "resources": {
+                  "buffer": {
+                    "created": 258,
+                    "deleted": 106,
+                    "live": 152,
+                    "peakLive": 152
+                  },
+                  "texture": {
+                    "created": 44,
+                    "deleted": 27,
+                    "live": 17,
+                    "peakLive": 19
+                  },
+                  "program": {
+                    "created": 19,
+                    "deleted": 12,
+                    "live": 7,
+                    "peakLive": 7
+                  },
+                  "shader": {
+                    "created": 38,
+                    "deleted": 38,
+                    "live": 0,
+                    "peakLive": 2
+                  },
+                  "framebuffer": {
+                    "created": 3,
+                    "deleted": 0,
+                    "live": 3,
+                    "peakLive": 3
+                  },
+                  "renderbuffer": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "vertexArray": {
+                    "created": 184,
+                    "deleted": 128,
+                    "live": 56,
+                    "peakLive": 63
+                  },
+                  "query": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sampler": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "transformFeedback": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sync": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  }
+                }
+              },
+              "after": {
+                "contextsCreated": 1,
+                "contextsLost": 0,
+                "contextsRestored": 0,
+                "attachedCanvases": 1,
+                "resources": {
+                  "buffer": {
+                    "created": 259,
+                    "deleted": 106,
+                    "live": 153,
+                    "peakLive": 153
+                  },
+                  "texture": {
+                    "created": 45,
+                    "deleted": 27,
+                    "live": 18,
+                    "peakLive": 19
+                  },
+                  "program": {
+                    "created": 19,
+                    "deleted": 12,
+                    "live": 7,
+                    "peakLive": 7
+                  },
+                  "shader": {
+                    "created": 38,
+                    "deleted": 38,
+                    "live": 0,
+                    "peakLive": 2
+                  },
+                  "framebuffer": {
+                    "created": 3,
+                    "deleted": 0,
+                    "live": 3,
+                    "peakLive": 3
+                  },
+                  "renderbuffer": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "vertexArray": {
+                    "created": 188,
+                    "deleted": 128,
+                    "live": 60,
+                    "peakLive": 63
+                  },
+                  "query": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sampler": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "transformFeedback": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sync": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  }
+                }
+              },
+              "liveResourceDelta": 6,
+              "contextDelta": 0,
+              "contextLossDelta": 0,
+              "contextRestoreDelta": 0,
+              "topologyBuildDelta": 0,
+              "geometryCacheDelta": 0,
+              "materialCacheDelta": 0
+            }
+          },
+          "playbackDraw": {
+            "calls": 3155,
+            "callsByMethod": {
+              "drawArrays": 1220,
+              "drawElements": 1285,
+              "drawElementsInstanced": 650
+            },
+            "callsPerSubmission": 70.11111111111111
+          },
+          "fullSliceDelta": {
+            "heapBytes": -829000,
+            "longTasks": 4,
+            "reactCommits": 8,
+            "webglSubmissions": 57,
+            "contextsCreated": 0,
+            "contextsLost": 0,
+            "contextsRestored": 0,
+            "liveResources": 1,
+            "foundryTopologyBuilds": 0,
+            "foundryGeometryCacheSize": 0,
+            "foundryMaterialCacheSize": 0,
+            "drawCalls": 3790,
+            "drawCallsByMethod": {
+              "drawArrays": 1457,
+              "drawElements": 1554,
+              "drawElementsInstanced": 779
+            }
+          },
+          "pathClockSamples": [
+            {
+              "elapsed": 203.9000000357628,
+              "scrubber": "13",
+              "submissions": 125,
+              "drawMode": "idle",
+              "hidden": false
+            },
+            {
+              "elapsed": 400.2000000476837,
+              "scrubber": "22",
+              "submissions": 128,
+              "drawMode": "idle",
+              "hidden": false
+            },
+            {
+              "elapsed": 600.8000000119209,
+              "scrubber": "29",
+              "submissions": 133,
+              "drawMode": "idle",
+              "hidden": false
+            },
+            {
+              "elapsed": 800.6000000238419,
+              "scrubber": "44",
+              "submissions": 137,
+              "drawMode": "idle",
+              "hidden": false
+            },
+            {
+              "elapsed": 1000.8000000119209,
+              "scrubber": "52",
+              "submissions": 142,
+              "drawMode": "idle",
+              "hidden": false
+            },
+            {
+              "elapsed": 1200.2000000476837,
+              "scrubber": "67",
+              "submissions": 146,
+              "drawMode": "idle",
+              "hidden": false
+            },
+            {
+              "elapsed": 1402.6000000238419,
+              "scrubber": "74",
+              "submissions": 151,
+              "drawMode": "idle",
+              "hidden": false
+            },
+            {
+              "elapsed": 1600.4000000357628,
+              "scrubber": "90",
+              "submissions": 155,
+              "drawMode": "idle",
+              "hidden": false
+            },
+            {
+              "elapsed": 1803.300000011921,
+              "scrubber": "97",
+              "submissions": 160,
+              "drawMode": "idle",
+              "hidden": false
+            },
+            {
+              "elapsed": 2000.4000000357628,
+              "scrubber": "12",
+              "submissions": 164,
+              "drawMode": "idle",
+              "hidden": false
+            }
+          ]
+        },
+        "foundry": {
+          "workload": "playback",
+          "entryNextPaintMs": 121.30000001192093,
+          "entryEventTaskEndMs": 105.19999998807907,
+          "playNextPaintMs": 62.09999996423721,
+          "playEventTaskEndMs": 16.599999964237213,
+          "pauseNextPaintMs": 84,
+          "pauseEventTaskEndMs": 18.200000047683716,
+          "canvas": {
+            "cssWidth": 621.625,
+            "cssHeight": 607.609375,
+            "canvasWidth": 622,
+            "canvasHeight": 608,
+            "drawingBufferWidth": 622,
+            "drawingBufferHeight": 608,
+            "drawingBufferPixels": 378176,
+            "effectivePixelRatioX": 1.0006032575909913,
+            "effectivePixelRatioY": 1.0006428883688636,
+            "devicePixelRatio": 1,
+            "antialias": false,
+            "maxRenderbufferDimension": 8192,
+            "glVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+            "glVendor": "Google Inc. (Google)",
+            "glRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)"
+          },
+          "entryDelta": {
+            "heapBytes": 204012,
+            "longTasks": 4,
+            "reactCommits": 7,
+            "webglSubmissions": 4,
+            "contextsCreated": 0,
+            "contextsLost": 0,
+            "contextsRestored": 0,
+            "liveResources": -69,
+            "foundryTopologyBuilds": 1,
+            "foundryGeometryCacheSize": 9,
+            "foundryMaterialCacheSize": 9,
+            "drawCalls": 80,
+            "drawCallsByMethod": {
+              "drawArrays": 18,
+              "drawElements": 62,
+              "drawElementsInstanced": 0
+            }
+          },
+          "playback": {
+            "frameSource": "webgl-clear-submission",
+            "durationMs": 2037,
+            "frameCount": 34,
+            "frameIntervalMs": {
+              "p50": 59.60000002384186,
+              "p95": 69,
+              "p99": 89.19999998807907
+            },
+            "framesOver50": 32,
+            "framesOver50Percent": 91.42857142857143,
+            "framesOver200": 0,
+            "eventLoopRaf": {
+              "sampleCount": 34,
+              "intervalMs": {
+                "p50": 58.400000000001455,
+                "p95": 67.59999999999854,
+                "p99": 91.70000000000073
+              },
+              "intervalsOver50": 29,
+              "intervalsOver50Percent": 85.29411764705883,
+              "intervalsOver200": 0
+            },
+            "longTasks": {
+              "count": 0,
+              "totalMs": 0,
+              "maxMs": 0
+            },
+            "browserEventLatencyMs": {
+              "p50": 0,
+              "p95": 0,
+              "p99": 0
+            },
+            "reactCommits": 0,
+            "heap": {
+              "supported": true,
+              "samples": 10,
+              "firstBytes": 13454136,
+              "lastBytes": 13454136,
+              "growthBytes": 0,
+              "allowedGrowthBytes": 8388608,
+              "tailRangeBytes": 0,
+              "stable": true
+            },
+            "webgl": {
+              "before": {
+                "contextsCreated": 1,
+                "contextsLost": 0,
+                "contextsRestored": 0,
+                "attachedCanvases": 1,
+                "resources": {
+                  "buffer": {
+                    "created": 299,
+                    "deleted": 148,
+                    "live": 151,
+                    "peakLive": 153
+                  },
+                  "texture": {
+                    "created": 45,
+                    "deleted": 40,
+                    "live": 5,
+                    "peakLive": 19
+                  },
+                  "program": {
+                    "created": 21,
+                    "deleted": 19,
+                    "live": 2,
+                    "peakLive": 7
+                  },
+                  "shader": {
+                    "created": 42,
+                    "deleted": 42,
+                    "live": 0,
+                    "peakLive": 2
+                  },
+                  "framebuffer": {
+                    "created": 3,
+                    "deleted": 0,
+                    "live": 3,
+                    "peakLive": 3
+                  },
+                  "renderbuffer": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "vertexArray": {
+                    "created": 201,
+                    "deleted": 190,
+                    "live": 11,
+                    "peakLive": 63
+                  },
+                  "query": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sampler": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "transformFeedback": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sync": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  }
+                }
+              },
+              "after": {
+                "contextsCreated": 1,
+                "contextsLost": 0,
+                "contextsRestored": 0,
+                "attachedCanvases": 1,
+                "resources": {
+                  "buffer": {
+                    "created": 299,
+                    "deleted": 148,
+                    "live": 151,
+                    "peakLive": 153
+                  },
+                  "texture": {
+                    "created": 45,
+                    "deleted": 40,
+                    "live": 5,
+                    "peakLive": 19
+                  },
+                  "program": {
+                    "created": 21,
+                    "deleted": 19,
+                    "live": 2,
+                    "peakLive": 7
+                  },
+                  "shader": {
+                    "created": 42,
+                    "deleted": 42,
+                    "live": 0,
+                    "peakLive": 2
+                  },
+                  "framebuffer": {
+                    "created": 3,
+                    "deleted": 0,
+                    "live": 3,
+                    "peakLive": 3
+                  },
+                  "renderbuffer": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "vertexArray": {
+                    "created": 201,
+                    "deleted": 190,
+                    "live": 11,
+                    "peakLive": 63
+                  },
+                  "query": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sampler": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "transformFeedback": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sync": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  }
+                }
+              },
+              "liveResourceDelta": 0,
+              "contextDelta": 0,
+              "contextLossDelta": 0,
+              "contextRestoreDelta": 0,
+              "topologyBuildDelta": 0,
+              "geometryCacheDelta": 0,
+              "materialCacheDelta": 0
+            }
+          },
+          "playbackDraw": {
+            "calls": 1292,
+            "callsByMethod": {
+              "drawArrays": 272,
+              "drawElements": 1020,
+              "drawElementsInstanced": 0
+            },
+            "callsPerSubmission": 38
+          },
+          "fullSliceDelta": {
+            "heapBytes": 1094037,
+            "longTasks": 4,
+            "reactCommits": 9,
+            "webglSubmissions": 42,
+            "contextsCreated": 0,
+            "contextsLost": 0,
+            "contextsRestored": 0,
+            "liveResources": -69,
+            "foundryTopologyBuilds": 1,
+            "foundryGeometryCacheSize": 9,
+            "foundryMaterialCacheSize": 9,
+            "drawCalls": 1524,
+            "drawCallsByMethod": {
+              "drawArrays": 322,
+              "drawElements": 1202,
+              "drawElementsInstanced": 0
+            }
+          }
+        },
+        "design": {
+          "workload": "playback",
+          "entryNextPaintMs": 300.19999998807907,
+          "entryEventTaskEndMs": 272.39999997615814,
+          "playNextPaintMs": 29,
+          "playEventTaskEndMs": 11.899999976158142,
+          "pauseNextPaintMs": 61.09999996423721,
+          "pauseEventTaskEndMs": 12.099999964237213,
+          "canvas": {
+            "cssWidth": 621.625,
+            "cssHeight": 518,
+            "canvasWidth": 622,
+            "canvasHeight": 518,
+            "drawingBufferWidth": 622,
+            "drawingBufferHeight": 518,
+            "drawingBufferPixels": 322196,
+            "effectivePixelRatioX": 1.0006032575909913,
+            "effectivePixelRatioY": 1,
+            "devicePixelRatio": 1,
+            "antialias": false,
+            "maxRenderbufferDimension": 8192,
+            "glVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+            "glVendor": "Google Inc. (Google)",
+            "glRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)"
+          },
+          "entryDelta": {
+            "heapBytes": -100533,
+            "longTasks": 3,
+            "reactCommits": 6,
+            "webglSubmissions": 19,
+            "contextsCreated": 0,
+            "contextsLost": 0,
+            "contextsRestored": 0,
+            "liveResources": 167,
+            "foundryTopologyBuilds": 2,
+            "foundryGeometryCacheSize": 31,
+            "foundryMaterialCacheSize": 11,
+            "drawCalls": 1138,
+            "drawCallsByMethod": {
+              "drawArrays": 416,
+              "drawElements": 722,
+              "drawElementsInstanced": 0
+            }
+          },
+          "playback": {
+            "frameSource": "webgl-clear-submission",
+            "durationMs": 2038.699999988079,
+            "frameCount": 47,
+            "frameIntervalMs": {
+              "p50": 43.60000002384186,
+              "p95": 51.59999996423721,
+              "p99": 52.799999952316284
+            },
+            "framesOver50": 7,
+            "framesOver50Percent": 14.583333333333334,
+            "framesOver200": 0,
+            "eventLoopRaf": {
+              "sampleCount": 48,
+              "intervalMs": {
+                "p50": 42,
+                "p95": 50.89999999999782,
+                "p99": 58.29999999999927
+              },
+              "intervalsOver50": 9,
+              "intervalsOver50Percent": 18.75,
+              "intervalsOver200": 0
+            },
+            "longTasks": {
+              "count": 0,
+              "totalMs": 0,
+              "maxMs": 0
+            },
+            "browserEventLatencyMs": {
+              "p50": 0,
+              "p95": 0,
+              "p99": 0
+            },
+            "reactCommits": 0,
+            "heap": {
+              "supported": true,
+              "samples": 10,
+              "firstBytes": 13954733,
+              "lastBytes": 13954733,
+              "growthBytes": 0,
+              "allowedGrowthBytes": 8388608,
+              "tailRangeBytes": 0,
+              "stable": true
+            },
+            "webgl": {
+              "before": {
+                "contextsCreated": 1,
+                "contextsLost": 0,
+                "contextsRestored": 0,
+                "attachedCanvases": 1,
+                "resources": {
+                  "buffer": {
+                    "created": 420,
+                    "deleted": 154,
+                    "live": 266,
+                    "peakLive": 266
+                  },
+                  "texture": {
+                    "created": 59,
+                    "deleted": 40,
+                    "live": 19,
+                    "peakLive": 19
+                  },
+                  "program": {
+                    "created": 25,
+                    "deleted": 20,
+                    "live": 5,
+                    "peakLive": 7
+                  },
+                  "shader": {
+                    "created": 50,
+                    "deleted": 50,
+                    "live": 0,
+                    "peakLive": 2
+                  },
+                  "framebuffer": {
+                    "created": 3,
+                    "deleted": 0,
+                    "live": 3,
+                    "peakLive": 3
+                  },
+                  "renderbuffer": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "vertexArray": {
+                    "created": 238,
+                    "deleted": 192,
+                    "live": 46,
+                    "peakLive": 63
+                  },
+                  "query": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sampler": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "transformFeedback": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sync": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  }
+                }
+              },
+              "after": {
+                "contextsCreated": 1,
+                "contextsLost": 0,
+                "contextsRestored": 0,
+                "attachedCanvases": 1,
+                "resources": {
+                  "buffer": {
+                    "created": 420,
+                    "deleted": 154,
+                    "live": 266,
+                    "peakLive": 266
+                  },
+                  "texture": {
+                    "created": 59,
+                    "deleted": 40,
+                    "live": 19,
+                    "peakLive": 19
+                  },
+                  "program": {
+                    "created": 25,
+                    "deleted": 20,
+                    "live": 5,
+                    "peakLive": 7
+                  },
+                  "shader": {
+                    "created": 50,
+                    "deleted": 50,
+                    "live": 0,
+                    "peakLive": 2
+                  },
+                  "framebuffer": {
+                    "created": 3,
+                    "deleted": 0,
+                    "live": 3,
+                    "peakLive": 3
+                  },
+                  "renderbuffer": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "vertexArray": {
+                    "created": 238,
+                    "deleted": 192,
+                    "live": 46,
+                    "peakLive": 63
+                  },
+                  "query": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sampler": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "transformFeedback": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sync": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  }
+                }
+              },
+              "liveResourceDelta": 0,
+              "contextDelta": 0,
+              "contextLossDelta": 0,
+              "contextRestoreDelta": 0,
+              "topologyBuildDelta": 0,
+              "geometryCacheDelta": 0,
+              "materialCacheDelta": 0
+            }
+          },
+          "playbackDraw": {
+            "calls": 3360,
+            "callsByMethod": {
+              "drawArrays": 1248,
+              "drawElements": 2112,
+              "drawElementsInstanced": 0
+            },
+            "callsPerSubmission": 71.48936170212765
+          },
+          "fullSliceDelta": {
+            "heapBytes": 874753,
+            "longTasks": 3,
+            "reactCommits": 9,
+            "webglSubmissions": 69,
+            "contextsCreated": 0,
+            "contextsLost": 0,
+            "contextsRestored": 0,
+            "liveResources": 167,
+            "foundryTopologyBuilds": 2,
+            "foundryGeometryCacheSize": 31,
+            "foundryMaterialCacheSize": 11,
+            "drawCalls": 4638,
+            "drawCallsByMethod": {
+              "drawArrays": 1716,
+              "drawElements": 2922,
+              "drawElementsInstanced": 0
+            }
+          }
+        },
+        "blueprint": {
+          "workload": "continuous-orbit-interaction",
+          "entryNextPaintMs": 116,
+          "entryEventTaskEndMs": 102.09999996423721,
+          "playNextPaintMs": 5.199999988079071,
+          "playEventTaskEndMs": 2,
+          "pauseNextPaintMs": 10.099999964237213,
+          "pauseEventTaskEndMs": 3,
+          "canvas": {
+            "cssWidth": 621.625,
+            "cssHeight": 607.609375,
+            "canvasWidth": 622,
+            "canvasHeight": 608,
+            "drawingBufferWidth": 622,
+            "drawingBufferHeight": 608,
+            "drawingBufferPixels": 378176,
+            "effectivePixelRatioX": 1.0006032575909913,
+            "effectivePixelRatioY": 1.0006428883688636,
+            "devicePixelRatio": 1,
+            "antialias": false,
+            "maxRenderbufferDimension": 8192,
+            "glVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+            "glVendor": "Google Inc. (Google)",
+            "glRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)"
+          },
+          "entryDelta": {
+            "heapBytes": -543110,
+            "longTasks": 4,
+            "reactCommits": 5,
+            "webglSubmissions": 7,
+            "contextsCreated": 0,
+            "contextsLost": 0,
+            "contextsRestored": 0,
+            "liveResources": 103,
+            "foundryTopologyBuilds": 0,
+            "foundryGeometryCacheSize": 0,
+            "foundryMaterialCacheSize": 0,
+            "drawCalls": 319,
+            "drawCallsByMethod": {
+              "drawArrays": 172,
+              "drawElements": 86,
+              "drawElementsInstanced": 61
+            }
+          },
+          "playback": {
+            "frameSource": "webgl-clear-submission",
+            "durationMs": 2007.800000011921,
+            "frameCount": 42,
+            "frameIntervalMs": {
+              "p50": 49.39999997615814,
+              "p95": 51.69999998807907,
+              "p99": 59.30000001192093
+            },
+            "framesOver50": 13,
+            "framesOver50Percent": 30.23255813953488,
+            "framesOver200": 0,
+            "eventLoopRaf": {
+              "sampleCount": 153,
+              "intervalMs": {
+                "p50": 8.600000000002183,
+                "p95": 32.599999999998545,
+                "p99": 33.5
+              },
+              "intervalsOver50": 0,
+              "intervalsOver50Percent": 0,
+              "intervalsOver200": 0
+            },
+            "longTasks": {
+              "count": 0,
+              "totalMs": 0,
+              "maxMs": 0
+            },
+            "browserEventLatencyMs": {
+              "p50": 0,
+              "p95": 0,
+              "p99": 0
+            },
+            "reactCommits": 44,
+            "heap": {
+              "supported": true,
+              "samples": 10,
+              "firstBytes": 14152175,
+              "lastBytes": 14152175,
+              "growthBytes": 0,
+              "allowedGrowthBytes": 8388608,
+              "tailRangeBytes": 0,
+              "stable": true
+            },
+            "webgl": {
+              "before": {
+                "contextsCreated": 1,
+                "contextsLost": 0,
+                "contextsRestored": 0,
+                "attachedCanvases": 1,
+                "resources": {
+                  "buffer": {
+                    "created": 496,
+                    "deleted": 188,
+                    "live": 308,
+                    "peakLive": 308
+                  },
+                  "texture": {
+                    "created": 73,
+                    "deleted": 54,
+                    "live": 19,
+                    "peakLive": 19
+                  },
+                  "program": {
+                    "created": 32,
+                    "deleted": 22,
+                    "live": 10,
+                    "peakLive": 10
+                  },
+                  "shader": {
+                    "created": 64,
+                    "deleted": 64,
+                    "live": 0,
+                    "peakLive": 2
+                  },
+                  "framebuffer": {
+                    "created": 3,
+                    "deleted": 0,
+                    "live": 3,
+                    "peakLive": 3
+                  },
+                  "renderbuffer": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "vertexArray": {
+                    "created": 314,
+                    "deleted": 212,
+                    "live": 102,
+                    "peakLive": 102
+                  },
+                  "query": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sampler": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "transformFeedback": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sync": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  }
+                }
+              },
+              "after": {
+                "contextsCreated": 1,
+                "contextsLost": 0,
+                "contextsRestored": 0,
+                "attachedCanvases": 1,
+                "resources": {
+                  "buffer": {
+                    "created": 496,
+                    "deleted": 188,
+                    "live": 308,
+                    "peakLive": 308
+                  },
+                  "texture": {
+                    "created": 73,
+                    "deleted": 54,
+                    "live": 19,
+                    "peakLive": 19
+                  },
+                  "program": {
+                    "created": 32,
+                    "deleted": 22,
+                    "live": 10,
+                    "peakLive": 10
+                  },
+                  "shader": {
+                    "created": 64,
+                    "deleted": 64,
+                    "live": 0,
+                    "peakLive": 2
+                  },
+                  "framebuffer": {
+                    "created": 3,
+                    "deleted": 0,
+                    "live": 3,
+                    "peakLive": 3
+                  },
+                  "renderbuffer": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "vertexArray": {
+                    "created": 314,
+                    "deleted": 212,
+                    "live": 102,
+                    "peakLive": 102
+                  },
+                  "query": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sampler": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "transformFeedback": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sync": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  }
+                }
+              },
+              "liveResourceDelta": 0,
+              "contextDelta": 0,
+              "contextLossDelta": 0,
+              "contextRestoreDelta": 0,
+              "topologyBuildDelta": 0,
+              "geometryCacheDelta": 0,
+              "materialCacheDelta": 0
+            }
+          },
+          "playbackDraw": {
+            "calls": 6853,
+            "callsByMethod": {
+              "drawArrays": 3747,
+              "drawElements": 1760,
+              "drawElementsInstanced": 1346
+            },
+            "callsPerSubmission": 163.16666666666666
+          },
+          "fullSliceDelta": {
+            "heapBytes": 947572,
+            "longTasks": 4,
+            "reactCommits": 109,
+            "webglSubmissions": 108,
+            "contextsCreated": 0,
+            "contextsLost": 0,
+            "contextsRestored": 0,
+            "liveResources": 103,
+            "foundryTopologyBuilds": 0,
+            "foundryGeometryCacheSize": 0,
+            "foundryMaterialCacheSize": 0,
+            "drawCalls": 7238,
+            "drawCallsByMethod": {
+              "drawArrays": 3955,
+              "drawElements": 1863,
+              "drawElementsInstanced": 1420
+            }
+          }
+        },
+        "assembly": {
+          "workload": "playback",
+          "entryNextPaintMs": 96.69999998807907,
+          "entryEventTaskEndMs": 81.39999997615814,
+          "playNextPaintMs": 27.69999998807907,
+          "playEventTaskEndMs": 11.599999964237213,
+          "pauseNextPaintMs": 66.30000001192093,
+          "pauseEventTaskEndMs": 9.899999976158142,
+          "canvas": {
+            "cssWidth": 602.4375,
+            "cssHeight": 287.84375,
+            "canvasWidth": 602,
+            "canvasHeight": 288,
+            "drawingBufferWidth": 602,
+            "drawingBufferHeight": 288,
+            "drawingBufferPixels": 173376,
+            "effectivePixelRatioX": 0.9992737835875091,
+            "effectivePixelRatioY": 1.0005428292259255,
+            "devicePixelRatio": 1,
+            "antialias": false,
+            "maxRenderbufferDimension": 8192,
+            "glVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+            "glVendor": "Google Inc. (Google)",
+            "glRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)"
+          },
+          "entryDelta": {
+            "heapBytes": -1468123,
+            "longTasks": 2,
+            "reactCommits": 6,
+            "webglSubmissions": 4,
+            "contextsCreated": 0,
+            "contextsLost": 0,
+            "contextsRestored": 0,
+            "liveResources": -151,
+            "foundryTopologyBuilds": 1,
+            "foundryGeometryCacheSize": 0,
+            "foundryMaterialCacheSize": 0,
+            "drawCalls": 80,
+            "drawCallsByMethod": {
+              "drawArrays": 18,
+              "drawElements": 62,
+              "drawElementsInstanced": 0
+            }
+          },
+          "playback": {
+            "frameSource": "webgl-clear-submission",
+            "durationMs": 2021.5999999642372,
+            "frameCount": 39,
+            "frameIntervalMs": {
+              "p50": 52.299999952316284,
+              "p95": 55.59999996423721,
+              "p99": 62
+            },
+            "framesOver50": 35,
+            "framesOver50Percent": 87.5,
+            "framesOver200": 0,
+            "eventLoopRaf": {
+              "sampleCount": 39,
+              "intervalMs": {
+                "p50": 50.400000000001455,
+                "p95": 59.099999999998545,
+                "p99": 59.099999999998545
+              },
+              "intervalsOver50": 23,
+              "intervalsOver50Percent": 58.97435897435898,
+              "intervalsOver200": 0
+            },
+            "longTasks": {
+              "count": 0,
+              "totalMs": 0,
+              "maxMs": 0
+            },
+            "browserEventLatencyMs": {
+              "p50": 0,
+              "p95": 0,
+              "p99": 0
+            },
+            "reactCommits": 0,
+            "heap": {
+              "supported": true,
+              "samples": 10,
+              "firstBytes": 15528477,
+              "lastBytes": 15528477,
+              "growthBytes": 0,
+              "allowedGrowthBytes": 8388608,
+              "tailRangeBytes": 0,
+              "stable": true
+            },
+            "webgl": {
+              "before": {
+                "contextsCreated": 1,
+                "contextsLost": 0,
+                "contextsRestored": 0,
+                "attachedCanvases": 1,
+                "resources": {
+                  "buffer": {
+                    "created": 502,
+                    "deleted": 249,
+                    "live": 253,
+                    "peakLive": 308
+                  },
+                  "texture": {
+                    "created": 73,
+                    "deleted": 68,
+                    "live": 5,
+                    "peakLive": 19
+                  },
+                  "program": {
+                    "created": 33,
+                    "deleted": 31,
+                    "live": 2,
+                    "peakLive": 10
+                  },
+                  "shader": {
+                    "created": 66,
+                    "deleted": 66,
+                    "live": 0,
+                    "peakLive": 2
+                  },
+                  "framebuffer": {
+                    "created": 3,
+                    "deleted": 0,
+                    "live": 3,
+                    "peakLive": 3
+                  },
+                  "renderbuffer": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "vertexArray": {
+                    "created": 316,
+                    "deleted": 288,
+                    "live": 28,
+                    "peakLive": 102
+                  },
+                  "query": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sampler": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "transformFeedback": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sync": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  }
+                }
+              },
+              "after": {
+                "contextsCreated": 1,
+                "contextsLost": 0,
+                "contextsRestored": 0,
+                "attachedCanvases": 1,
+                "resources": {
+                  "buffer": {
+                    "created": 502,
+                    "deleted": 249,
+                    "live": 253,
+                    "peakLive": 308
+                  },
+                  "texture": {
+                    "created": 73,
+                    "deleted": 68,
+                    "live": 5,
+                    "peakLive": 19
+                  },
+                  "program": {
+                    "created": 33,
+                    "deleted": 31,
+                    "live": 2,
+                    "peakLive": 10
+                  },
+                  "shader": {
+                    "created": 66,
+                    "deleted": 66,
+                    "live": 0,
+                    "peakLive": 2
+                  },
+                  "framebuffer": {
+                    "created": 3,
+                    "deleted": 0,
+                    "live": 3,
+                    "peakLive": 3
+                  },
+                  "renderbuffer": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "vertexArray": {
+                    "created": 316,
+                    "deleted": 288,
+                    "live": 28,
+                    "peakLive": 102
+                  },
+                  "query": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sampler": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "transformFeedback": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  },
+                  "sync": {
+                    "created": 0,
+                    "deleted": 0,
+                    "live": 0,
+                    "peakLive": 0
+                  }
+                }
+              },
+              "liveResourceDelta": 0,
+              "contextDelta": 0,
+              "contextLossDelta": 0,
+              "contextRestoreDelta": 0,
+              "topologyBuildDelta": 0,
+              "geometryCacheDelta": 0,
+              "materialCacheDelta": 0
+            }
+          },
+          "playbackDraw": {
+            "calls": 1482,
+            "callsByMethod": {
+              "drawArrays": 312,
+              "drawElements": 1170,
+              "drawElementsInstanced": 0
+            },
+            "callsPerSubmission": 38
+          },
+          "fullSliceDelta": {
+            "heapBytes": 124799,
+            "longTasks": 2,
+            "reactCommits": 8,
+            "webglSubmissions": 47,
+            "contextsCreated": 0,
+            "contextsLost": 0,
+            "contextsRestored": 0,
+            "liveResources": -151,
+            "foundryTopologyBuilds": 1,
+            "foundryGeometryCacheSize": 0,
+            "foundryMaterialCacheSize": 0,
+            "drawCalls": 1714,
+            "drawCallsByMethod": {
+              "drawArrays": 362,
+              "drawElements": 1352,
+              "drawElementsInstanced": 0
+            }
+          }
+        }
+      },
+      "pageErrors": [],
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ]
+    }
+  ]
+}

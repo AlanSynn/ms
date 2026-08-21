@@ -835,7 +835,8 @@ assert(!ciWorkflowText.includes('deploy-pages') && !performanceWorkflowText.incl
 assert(docsMap.includes('chromebook-feature-audit.md'), 'docs map registers the current Chromebook feature evidence');
 assert(chromebookAuditDoc.includes('Actual Chromebook tested: no') && chromebookAuditDoc.includes('6× CPU emulation'), 'Chromebook evidence does not claim untested physical hardware');
 assert(chromebookAuditDoc.includes('does not establish ten-minute heap stabilization') && chromebookAuditDoc.includes('No physical Chromebook was tested'), 'short memory evidence keeps the physical-device and ten-minute boundaries explicit');
-assert(chromebookAuditDoc.includes('393,510 compressed bytes') && chromebookAuditDoc.includes('454,568 compressed bytes'), 'audit document records the checked production bundle evidence');
+assert(chromebookAuditDoc.includes('147,074 gzip bytes') && chromebookAuditDoc.includes('208,130 compressed bytes'), 'audit document records the checked production bundle evidence');
+assert(chromebookAuditDoc.includes('webgl-clear-submission') && chromebookAuditDoc.includes('High is not claimed safe') && chromebookAuditDoc.includes('remains opt-in'), 'audit documentation distinguishes actual renderer telemetry and the opt-in High-resolution boundary');
 assert(dockerfileText.includes('FROM oven/bun:1.3.14-alpine') && dockerfileText.includes('bun install --frozen-lockfile') && dockerfileText.includes('\"preview\"'), 'Docker image uses Bun install, build, and preview runtime');
 assert.equal(tauriConfig.build.beforeDevCommand, 'bun run dev', 'Tauri dev hook uses Bun');
 assert.equal(tauriConfig.build.beforeBuildCommand, 'bun run build:tauri-frontend', 'Tauri build hook uses Bun');
