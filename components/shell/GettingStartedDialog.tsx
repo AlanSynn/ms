@@ -87,8 +87,7 @@ const lessonPreviewProject = (lessonId: string): ProjectState | null => {
     }
 };
 
-const starterRigPreviewProject = (): ProjectState => {
-    const project = createSampleProject();
+const starterRigPreviewProject = (project: ProjectState): ProjectState => {
     return {
         ...project,
         paths: {},
@@ -224,7 +223,11 @@ export const GettingStartedDialog = ({ guidedLessons, hideForSession, onLesson, 
     const importInputRef = useRef<HTMLInputElement>(null);
     const [showGuided, setShowGuided] = useState(false);
     const [previewProjects, setPreviewProjects] = useState<Record<string, ProjectState | null>>({});
-    const starterRigPreview = useMemo(starterRigPreviewProject, []);
+    const starterRigProject = useMemo(createSampleProject, []);
+    const starterRigPreview = useMemo(
+        () => starterRigPreviewProject(starterRigProject),
+        [starterRigProject]
+    );
     useEffect(() => { dialogRef.current?.focus(); }, []);
     useEffect(() => {
         if (!showGuided) return;
@@ -317,7 +320,7 @@ export const GettingStartedDialog = ({ guidedLessons, hideForSession, onLesson, 
                         <StarterCues items={starterCues.guide} />
                         <b><Sparkles size={16}/> Open</b>
                     </button>
-                    <button type="button" className="template-tile primary" data-testid="getting-started-card-humanoid" aria-label="Open starter rig" onClick={() => onSample(starterRigPreview)}>
+                    <button type="button" className="template-tile primary" data-testid="getting-started-card-humanoid" aria-label="Open starter rig" onClick={() => onSample(starterRigProject)}>
                         <span className="template-icon-slot"><Sparkles size={18}/></span>
                         <strong>Starter rig</strong>
                         <small>{starterCopy.humanoid}</small>
