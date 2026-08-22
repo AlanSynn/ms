@@ -1,4 +1,4 @@
-name: Deploy classroom web
+name: Deploy to GitHub Pages
 
 on:
   push:
@@ -7,12 +7,11 @@ on:
 
 permissions:
   contents: read
-  deployments: write
   pages: write
   id-token: write
 
 concurrency:
-  group: "classroom-release-${{ github.ref_name }}"
+  group: "pages-${{ github.ref_name }}"
   cancel-in-progress: true
 
 jobs:
@@ -65,42 +64,23 @@ jobs:
           --grep
           'Recommendation worker and job stay unloaded|Design Fit runs'
 
-      - name: Build GitHub Pages artifact
+      - name: Build release artifact
         env:
           VITE_BASE_PATH: /ms/
         run: bun run build
 
-      - name: Check GitHub Pages bundle budget
+      - name: Check production bundle budget
         run: bun run test:bundle-budget
 
-      - name: Check GitHub Pages classroom exclusions
+      - name: Check classroom build exclusions
         run: bun run test:no-image-recognition
 
-      - name: Upload GitHub Pages artifact
+      - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
         with:
           path: ./dist
 
-      - name: Build Cloudflare root artifact
-        env:
-          VITE_BASE_PATH: /
-        run: bun run build
-
-      - name: Check Cloudflare bundle budget
-        run: bun run test:bundle-budget
-
-      - name: Check Cloudflare classroom exclusions
-        run: bun run test:no-image-recognition
-
-      - name: Upload Cloudflare artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: cloudflare-static
-          path: ./dist
-          if-no-files-found: error
-          retention-days: 7
-
-  deploy-pages:
+  deploy:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -110,45 +90,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
-
-  deploy-cloudflare:
-    environment:
-      name: cloudflare-production
-      url: https://motionsmith.org/
-    runs-on: ubuntu-latest
-    needs: [build, deploy-pages]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Download Cloudflare artifact
-        uses: actions/download-artifact@v5
-        with:
-          name: cloudflare-static
-          path: ./dist
-
-      - name: Deploy to motionsmith.org
-        id: cloudflare
-        uses: cloudflare/wrangler-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: 4.112.0
-          packageManager: npm
-          command: deploy --config wrangler.jsonc
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Bun for live verification
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.14
-
-      - name: Install live verification browser
-        run: |
-          bun install --frozen-lockfile
-          bunx playwright install --with-deps chromium
-
-      - name: Verify motionsmith.org classroom deployment
-        env:
-          CLOUDFLARE_CLASSROOM_URL: https://motionsmith.org/
-        run: bun run test:cloudflare-live

@@ -10,7 +10,7 @@ Teachers and students do not need another engineering console. They need a web w
 
 Key notes translated into product constraints:
 
-- **Web is mandatory for classrooms.** Software installation creates IT/department approval burden. Hosted static web at `https://motionsmith.org/` is the default path; `https://alansynn.com/ms/` remains a release mirror. Tauri remains optional.
+- **Web is mandatory for classrooms.** Software installation creates IT/department approval burden. Hosted static web at `https://alansynn.com/ms/` is the default path. Tauri remains optional.
 - **Guided entry beats open exploration.** Free exploration stays available after a starter exists, but first entry should be theme/template-led.
 - **Motion templates need scaffolding.** Elementary students need working human figures and pre-made motion examples before advanced tuning.
 - **Details must be visible at the moment of action.** Hidden panels and general instructions fail; students need direct cause/action hints near the workflow.
@@ -20,7 +20,7 @@ Key notes translated into product constraints:
 ## Agent review synthesis
 
 - `analyst`: current system partially supports web, onboarding, blueprint, and assembly, but lacks classroom approval checklist, lesson templates, stable lesson reset, and teacher-friendly local package flow.
-- `explore`: existing anchors are `WelcomeDialog`, `GettingStartedDialog`, `ShortcutHelpDialog`, `AboutDialog`, Foundry/Design reset controls, `BlueprintExport`, `AssemblyGuide`/`AssemblySceneFrame`, `utils/appCommands.ts`, `docs/deployment.md`, and the tag-gated classroom deployment workflow.
+- `explore`: existing anchors are `WelcomeDialog`, `GettingStartedDialog`, `ShortcutHelpDialog`, `AboutDialog`, Foundry/Design reset controls, `BlueprintExport`, `AssemblyGuide`/`AssemblySceneFrame`, `utils/appCommands.ts`, `docs/deployment.md`, and tag-gated GitHub Pages workflow.
 - `designer`: keep splash tiny; keep Getting Started to three setup choices; put classroom lessons in a secondary lesson/library path; left pane acts as tutorial conductor; center canvas remains pure workbench; right pane stays inspector; assembly uses low-text exploded animation.
 - `test-engineer`: add contract/browser coverage for `/ms/` static deploy, guided real starter flow, sensemaking discoverability, stable Foundry reset, animated Assembly, and no server/cloud calls.
 
@@ -28,7 +28,7 @@ Key notes translated into product constraints:
 
 | Area | Supported now | Gap to close |
 | --- | --- | --- |
-| Web deployment | Cloudflare root deployment plus GitHub Pages `/ms/` mirror, one tag-gated release, image-recognition exclusion checks, and release facts in `docs/deployment.md`. | Keep the automated exclusion and bundle gates before both deploys. |
+| Web deployment | GitHub Pages workflow, `/ms/` base path, tag-gated release, image-recognition exclusion checks, and release facts in `docs/deployment.md`. | Keep the automated exclusion and bundle gates before deploy. |
 | Guided entry | Splash + compact result-first Getting Started dialog; `Guide` opens the guided project library. | Keep guided projects prominent without crowding the first modal. |
 | Templates | Humanoid starter, local package import, and serializable lesson baselines. Recognition starters are not shipped. | Keep expanding teacher-ready motion objectives with starter path and compatible mechanism option. |
 | Sensemaking | Foundry/Design/Assembly show sensemaking, assessment prompts, generated-loop examples, and short warnings. | Keep the right pane compact so explanation does not displace direct controls. |
@@ -58,7 +58,7 @@ MotionSmith must present itself as a static web tool first.
 Acceptance:
 
 - `docs/deployment.md` and About copy state: static web, no account, no backend upload, no image-recognition model/runtime, browser autosave, and local downloads.
-- Release checklist covers: version tag, root and `/ms/` paths, image-recognition exclusion, static asset load, no runtime CDN, and no `/api/` calls.
+- Release checklist covers: version tag, `/ms/` path, image-recognition exclusion, static asset load, no runtime CDN, and no `/api/` calls.
 - App shell must not show sign-in, cloud save, sync, team, or teacher dashboard language.
 
 Non-goal:
@@ -281,4 +281,4 @@ Manual checks:
 
 ## Stop condition
 
-This plan is complete when a novice can open `https://motionsmith.org/`, choose a classroom starter, edit character/path, fit a real mechanism, reset safely after failure, generate blueprint files, and follow animated assembly to build the mechanism + character without server accounts, paper-only instructions, or hidden fake state.
+This plan is complete when a novice can open `https://alansynn.com/ms/`, choose a classroom starter, edit character/path, fit a real mechanism, reset safely after failure, generate blueprint files, and follow animated assembly to build the mechanism + character without server accounts, paper-only instructions, or hidden fake state.
