@@ -2,9 +2,7 @@
 
 MotionSmith is a local-first browser/Tauri workbench for classroom automata projects. Students start from a working character or guided template, draw one visible motion path, fit a buildable mechanism, preview the automata, then export blueprint files and a step-by-step assembly guide.
 
-Live classroom web build: <https://motionsmith.org/>
-
-Release mirror: <https://alansynn.com/ms/>
+Live classroom web build: <https://alansynn.com/ms/>
 
 ## Classroom flow
 
