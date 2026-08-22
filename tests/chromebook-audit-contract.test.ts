@@ -2100,7 +2100,10 @@ assert.equal(
   "a global GL clear from another canvas cannot satisfy Foundry move coverage",
 );
 
-const artifactParent = join(tmpdir(), "chromebook-audit");
+const artifactParent = join(
+  process.env.RUNNER_TEMP ?? tmpdir(),
+  "chromebook-audit",
+);
 mkdirSync(artifactParent, { recursive: true });
 const artifactRoot = mkdtempSync(join(artifactParent, "contract-"));
 try {
