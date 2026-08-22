@@ -1,38 +1,38 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-22T05:31:30.251Z",
+  "generatedAt": "2026-08-22T21:31:53.191Z",
   "basis": "static compressed production shell",
   "imageRecognitionRuntime": "absent",
   "entryJs": {
     "files": [
-      "assets/index-Jhnr8urC.js",
-      "assets/App-ChQPMhAm.js"
+      "assets/index-PfjQXGk5.js",
+      "assets/App-SxvPtY-1.js"
     ],
-    "gzipBytes": 85579
+    "gzipBytes": 85568
   },
   "coreJs": {
     "basis": "entry plus recursive emitted static-import closure",
     "files": [
-      "assets/App-ChQPMhAm.js",
-      "assets/AppShell-D22L_yZv.js",
-      "assets/ContextHelp-IRzymiO0.js",
-      "assets/DeferredThreePuppetPreview-P9UW2S2v.js",
+      "assets/App-SxvPtY-1.js",
+      "assets/AppShell-DTwbTrQA.js",
+      "assets/ContextHelp-Db_Y4Ic-.js",
+      "assets/DeferredThreePuppetPreview-W06oB8If.js",
       "assets/classroomContent-bGvikOLx.js",
-      "assets/createLucideIcon-KWNWOhNu.js",
+      "assets/createLucideIcon-CBA9c79J.js",
       "assets/exporter-DPJie3iD.js",
       "assets/fabrication-BkJY_8G_.js",
-      "assets/index-Jhnr8urC.js",
-      "assets/mechanismFitWorkerClient-Dc-f_QZV.js",
-      "assets/mechanismRecommendations-0AnjlJgx.js",
+      "assets/index-PfjQXGk5.js",
+      "assets/mechanismFitWorkerClient-B1ce1-7_.js",
+      "assets/mechanismRecommendations-BPHH4vWi.js",
       "assets/motion-BQ1L6zXS.js",
       "assets/performanceAudit-ClyPmtwb.js",
-      "assets/sparkles-BmM7SfaD.js",
-      "assets/stageLayout-DK6ThEw5.js",
-      "assets/upload-Cn5ztwM5.js",
-      "assets/useWorkspacePlaybackLoop-U1AwIJ5n.js",
+      "assets/sparkles-Dmdfo1Mz.js",
+      "assets/stageLayout-Drdg4Ot5.js",
+      "assets/upload-BkoGvBst.js",
+      "assets/useWorkspacePlaybackLoop-BqHr9agY.js",
       "assets/viewport-D1Xm5WR1.js"
     ],
-    "gzipBytes": 156148,
+    "gzipBytes": 156137,
     "limitBytes": 200000,
     "passed": true
   },
@@ -40,31 +40,31 @@
     "assets": [
       {
         "file": "index.html",
-        "compressedBytes": 15350
+        "compressedBytes": 15347
       },
       {
-        "file": "assets/App-ChQPMhAm.js",
-        "compressedBytes": 23864
+        "file": "assets/App-SxvPtY-1.js",
+        "compressedBytes": 23857
       },
       {
-        "file": "assets/AppShell-D22L_yZv.js",
-        "compressedBytes": 7646
+        "file": "assets/AppShell-DTwbTrQA.js",
+        "compressedBytes": 7642
       },
       {
-        "file": "assets/ContextHelp-IRzymiO0.js",
-        "compressedBytes": 1979
+        "file": "assets/ContextHelp-Db_Y4Ic-.js",
+        "compressedBytes": 1981
       },
       {
-        "file": "assets/DeferredThreePuppetPreview-P9UW2S2v.js",
-        "compressedBytes": 950
+        "file": "assets/DeferredThreePuppetPreview-W06oB8If.js",
+        "compressedBytes": 949
       },
       {
         "file": "assets/classroomContent-bGvikOLx.js",
         "compressedBytes": 14224
       },
       {
-        "file": "assets/createLucideIcon-KWNWOhNu.js",
-        "compressedBytes": 789
+        "file": "assets/createLucideIcon-CBA9c79J.js",
+        "compressedBytes": 792
       },
       {
         "file": "assets/exporter-DPJie3iD.js",
@@ -75,16 +75,16 @@
         "compressedBytes": 9874
       },
       {
-        "file": "assets/index-Jhnr8urC.js",
-        "compressedBytes": 61715
+        "file": "assets/index-PfjQXGk5.js",
+        "compressedBytes": 61711
       },
       {
-        "file": "assets/mechanismFitWorkerClient-Dc-f_QZV.js",
-        "compressedBytes": 1338
+        "file": "assets/mechanismFitWorkerClient-B1ce1-7_.js",
+        "compressedBytes": 1337
       },
       {
-        "file": "assets/mechanismRecommendations-0AnjlJgx.js",
-        "compressedBytes": 2240
+        "file": "assets/mechanismRecommendations-BPHH4vWi.js",
+        "compressedBytes": 2238
       },
       {
         "file": "assets/motion-BQ1L6zXS.js",
@@ -95,20 +95,20 @@
         "compressedBytes": 301
       },
       {
-        "file": "assets/sparkles-BmM7SfaD.js",
-        "compressedBytes": 286
+        "file": "assets/sparkles-Dmdfo1Mz.js",
+        "compressedBytes": 287
       },
       {
-        "file": "assets/stageLayout-DK6ThEw5.js",
-        "compressedBytes": 2644
+        "file": "assets/stageLayout-Drdg4Ot5.js",
+        "compressedBytes": 2646
       },
       {
-        "file": "assets/upload-Cn5ztwM5.js",
-        "compressedBytes": 195
+        "file": "assets/upload-BkoGvBst.js",
+        "compressedBytes": 194
       },
       {
-        "file": "assets/useWorkspacePlaybackLoop-U1AwIJ5n.js",
-        "compressedBytes": 567
+        "file": "assets/useWorkspacePlaybackLoop-BqHr9agY.js",
+        "compressedBytes": 568
       },
       {
         "file": "assets/viewport-D1Xm5WR1.js",
@@ -123,7 +123,7 @@
         "compressedBytes": 32183
       }
     ],
-    "compressedBytes": 217425,
+    "compressedBytes": 217411,
     "limitBytes": 300000,
     "passed": true
   },
@@ -131,22 +131,22 @@
     "basis": "emitted JavaScript outside the recursive static-import closure",
     "files": [
       {
-        "file": "assets/adaptiveHighResolutionController-BWDgsrFw.js",
-        "gzipBytes": 147564,
+        "file": "assets/adaptiveHighResolutionController-C22n2NyV.js",
+        "gzipBytes": 147566,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
       },
       {
-        "file": "assets/AssemblyGuide-DR4sG03_.js",
-        "gzipBytes": 7967,
+        "file": "assets/AssemblyGuide-L7X2QrVi.js",
+        "gzipBytes": 7969,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
       },
       {
-        "file": "assets/automataSceneModel-cks-XllZ.js",
-        "gzipBytes": 2656,
+        "file": "assets/automataSceneModel-BN3TdOUC.js",
+        "gzipBytes": 2658,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
@@ -173,8 +173,8 @@
         "passed": true
       },
       {
-        "file": "assets/BlueprintExport-C25MC60K.js",
-        "gzipBytes": 2820,
+        "file": "assets/BlueprintExport-DA-D-ltX.js",
+        "gzipBytes": 2818,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
@@ -194,8 +194,8 @@
         "passed": true
       },
       {
-        "file": "assets/blueprintPackageWorkerClient-BvwQjb4I.js",
-        "gzipBytes": 2852,
+        "file": "assets/blueprintPackageWorkerClient-CzRMJutt.js",
+        "gzipBytes": 2850,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
@@ -215,43 +215,43 @@
         "passed": true
       },
       {
-        "file": "assets/CharacterImportOverlays-BF4P4k9Q.js",
-        "gzipBytes": 1893,
+        "file": "assets/CharacterImportOverlays-n0GdqZyv.js",
+        "gzipBytes": 1898,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
       },
       {
-        "file": "assets/CharacterSetupPanel-DBOPjTRT.js",
+        "file": "assets/CharacterSetupPanel-DB4S7bei.js",
         "gzipBytes": 6507,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
       },
       {
-        "file": "assets/circle-alert-Dpu7aXqb.js",
+        "file": "assets/circle-alert-D7AX0H1i.js",
         "gzipBytes": 192,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
       },
       {
-        "file": "assets/ClassroomExampleVideo-CYhMyp38.js",
-        "gzipBytes": 3574,
+        "file": "assets/ClassroomExampleVideo-D-0sLs0k.js",
+        "gzipBytes": 3577,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
       },
       {
-        "file": "assets/DeferredClassroomExampleVideo-C1hi4xQU.js",
-        "gzipBytes": 1974,
+        "file": "assets/DeferredClassroomExampleVideo-CMRxRRWg.js",
+        "gzipBytes": 1973,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
       },
       {
-        "file": "assets/foundryCamera-Cqx7_btI.js",
-        "gzipBytes": 722,
+        "file": "assets/foundryCamera-xO2l1tUa.js",
+        "gzipBytes": 721,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
@@ -278,8 +278,8 @@
         "passed": true
       },
       {
-        "file": "assets/InspectorControls-CvFtNI90.js",
-        "gzipBytes": 774,
+        "file": "assets/InspectorControls-D6UxM2GH.js",
+        "gzipBytes": 776,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
@@ -292,22 +292,22 @@
         "passed": true
       },
       {
-        "file": "assets/loader-circle-CvtG8Rds.js",
-        "gzipBytes": 162,
+        "file": "assets/loader-circle-5LYxYupq.js",
+        "gzipBytes": 161,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
       },
       {
-        "file": "assets/MechanismDesign-BsPXewiR.js",
-        "gzipBytes": 8779,
+        "file": "assets/MechanismDesign-BCLKlGqd.js",
+        "gzipBytes": 8777,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
       },
       {
-        "file": "assets/MechanismFeasibilityStatus-CNGkCZT_.js",
-        "gzipBytes": 2828,
+        "file": "assets/MechanismFeasibilityStatus-Bzl5Uh6F.js",
+        "gzipBytes": 2829,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
@@ -327,15 +327,15 @@
         "passed": true
       },
       {
-        "file": "assets/MechanismFoundry-D6i5JPO-.js",
+        "file": "assets/MechanismFoundry-zvzasADc.js",
         "gzipBytes": 13240,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
       },
       {
-        "file": "assets/MechanismLinkagePreview-vq_d2Hog.js",
-        "gzipBytes": 3676,
+        "file": "assets/MechanismLinkagePreview-DK-GszK3.js",
+        "gzipBytes": 3677,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
@@ -376,22 +376,22 @@
         "passed": true
       },
       {
-        "file": "assets/Options-CR7ppkw7.js",
-        "gzipBytes": 2593,
+        "file": "assets/Options-CKIxWbrp.js",
+        "gzipBytes": 2595,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
       },
       {
-        "file": "assets/PathEditor-DJIoNxxw.js",
+        "file": "assets/PathEditor-BubfLqiW.js",
         "gzipBytes": 4781,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
       },
       {
-        "file": "assets/play-BYS7iT5o.js",
-        "gzipBytes": 186,
+        "file": "assets/play-DcDkTqeh.js",
+        "gzipBytes": 185,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
@@ -453,36 +453,36 @@
         "passed": true
       },
       {
-        "file": "assets/SceneObjectInspector-CWe4rK76.js",
-        "gzipBytes": 1054,
+        "file": "assets/SceneObjectInspector-BhlHPLmI.js",
+        "gzipBytes": 1057,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
       },
       {
-        "file": "assets/ThreeFoundryPreview-BtGqNNtA.js",
-        "gzipBytes": 17034,
+        "file": "assets/ThreeFoundryPreview-C2Fw2xoO.js",
+        "gzipBytes": 17033,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
       },
       {
-        "file": "assets/ThreePuppetPreview-B9lTfw3f.js",
-        "gzipBytes": 20758,
+        "file": "assets/ThreePuppetPreview-DeuDjCEO.js",
+        "gzipBytes": 20757,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
       },
       {
-        "file": "assets/threeResourceKit-VGA_FF8n.js",
-        "gzipBytes": 2567,
+        "file": "assets/threeResourceKit-CNOi7NJ0.js",
+        "gzipBytes": 2568,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
       },
       {
-        "file": "assets/TrackingModal-B5yWoemd.js",
-        "gzipBytes": 6120,
+        "file": "assets/TrackingModal-BPSrXkox.js",
+        "gzipBytes": 6118,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
@@ -495,8 +495,8 @@
         "passed": true
       },
       {
-        "file": "assets/trash-2-BeQR_9A_.js",
-        "gzipBytes": 221,
+        "file": "assets/trash-2-DUdn4YEr.js",
+        "gzipBytes": 224,
         "class": "optional",
         "limitBytes": 200000,
         "passed": true
