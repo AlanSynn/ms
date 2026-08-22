@@ -5,6 +5,9 @@ import { join } from "node:path";
 import {
   createMechanismRecommendationJobInput,
   createRecommendationRandom,
+  recommendationProjectSnapshot,
+  recommendationProjectSnapshotChunked,
+  runMechanismRecommendationJob,
   type MechanismRecommendationWorkerResponse,
 } from "../runtime/recommendations/mechanismRecommendationJob";
 import {
@@ -44,31 +47,18 @@ const repeatedInput = createMechanismRecommendationJobInput(
 );
 
 assert.equal(
-  firstInput.project.parts[selectedPart.id].textureUrl,
-  undefined,
-  "worker snapshots omit retained part texture bytes",
+  firstInput.project,
+  projectWithMedia,
+  "creating a request performs no eager projection or domain sort",
 );
-assert.equal(
-  firstInput.project.parts[selectedPart.id].maskUrl,
-  undefined,
-  "worker snapshots omit retained part mask bytes",
-);
-assert.equal(firstInput.project.lastExport, undefined);
-assert.equal(firstInput.project.lastFoundryExport, undefined);
-assert.equal(firstInput.project.characterPackage, undefined);
 assert.doesNotThrow(
   () => structuredClone(firstInput),
   "recommendation input is serializable with structured clone",
 );
 assert.equal(
-  repeatedInput.inputFingerprint,
-  firstInput.inputFingerprint,
-  "identical recommendation domain inputs keep one stable fingerprint",
-);
-assert.equal(
-  repeatedInput.seed,
-  firstInput.seed,
-  "identical recommendation domain inputs keep one stable RNG seed",
+  repeatedInput.requestFingerprint,
+  firstInput.requestFingerprint,
+  "one ProjectState reference keeps one stable request identity",
 );
 
 const movedPathProject = {
@@ -89,9 +79,53 @@ const movedInput = createMechanismRecommendationJobInput(
   selectedPathId,
 );
 assert.notEqual(
-  movedInput.inputFingerprint,
-  firstInput.inputFingerprint,
-  "path edits create a new worker generation fingerprint",
+  movedInput.requestFingerprint,
+  firstInput.requestFingerprint,
+  "a replacement ProjectState receives a distinct stale-result identity",
+);
+
+let projectionClock = 0;
+let projectionYields = 0;
+const projectedInput = {
+  ...firstInput,
+  project: await recommendationProjectSnapshotChunked(firstInput.project, {
+    now: () => projectionClock++,
+    yieldToMain: async () => {
+      projectionYields += 1;
+    },
+  }),
+};
+assert(projectionYields > 0, "near-bound projection yields at the 8 ms budget");
+assert.equal(
+  projectedInput.project.parts[selectedPart.id].textureUrl,
+  undefined,
+  "chunked worker snapshots omit retained part texture bytes",
+);
+assert.equal(projectedInput.project.parts[selectedPart.id].maskUrl, undefined);
+assert.equal(projectedInput.project.lastExport, undefined);
+assert.equal(projectedInput.project.lastFoundryExport, undefined);
+assert.equal(projectedInput.project.characterPackage, undefined);
+
+const firstJob = runMechanismRecommendationJob(projectedInput);
+const repeatedJob = runMechanismRecommendationJob(projectedInput);
+assert.equal(
+  repeatedJob.inputFingerprint,
+  firstJob.inputFingerprint,
+  "the worker derives a deterministic domain fingerprint",
+);
+assert.deepEqual(
+  repeatedJob.recommendations,
+  firstJob.recommendations,
+  "the worker-owned fingerprint seeds deterministic recommendation fitting",
+);
+const movedJob = runMechanismRecommendationJob({
+  ...movedInput,
+  project: recommendationProjectSnapshot(movedInput.project),
+});
+assert.notEqual(
+  movedJob.inputFingerprint,
+  firstJob.inputFingerprint,
+  "path coordinates participate in the worker-owned fingerprint",
 );
 
 const sequence = (seed: number) => {
@@ -142,16 +176,21 @@ const client = createMechanismRecommendationWorkerClient(() => {
   const worker = new FakeRecommendationWorker();
   workers.push(worker);
   return worker;
-});
+}, async (input) => ({
+  ...input,
+  project: recommendationProjectSnapshot(input.project),
+}));
 const callbacks = (label: string) => ({
   complete: () => completed.push(label),
   failed: (error: Error) => failed.push(error.message),
 });
 
 const firstGeneration = client.request(firstInput, callbacks("stale"));
+await Promise.resolve();
 const firstWorker = workers[0];
 const staleHandler = firstWorker.onmessage;
 const secondGeneration = client.request(movedInput, callbacks("latest"));
+await Promise.resolve();
 const secondWorker = workers[1];
 assert(firstWorker.terminated, "superseding input terminates the active fit worker");
 assert(secondGeneration > firstGeneration, "request generations increase monotonically");
@@ -160,7 +199,8 @@ staleHandler?.({
   data: {
     type: "result",
     generationId: firstGeneration,
-    inputFingerprint: firstInput.inputFingerprint,
+    requestFingerprint: firstInput.requestFingerprint,
+    inputFingerprint: firstJob.inputFingerprint,
     recommendations: [],
   },
 } as unknown as MessageEvent<MechanismRecommendationWorkerResponse>);
@@ -169,16 +209,18 @@ assert.deepEqual(completed, [], "a terminated stale generation cannot update UI 
 secondWorker.respond({
   type: "result",
   generationId: secondGeneration,
-  inputFingerprint: firstInput.inputFingerprint,
+  requestFingerprint: firstInput.requestFingerprint,
+  inputFingerprint: movedJob.inputFingerprint,
   recommendations: [],
 });
-assert.deepEqual(completed, [], "a mismatched input fingerprint is ignored");
+assert.deepEqual(completed, [], "a mismatched request fingerprint is ignored");
 assert.equal(secondWorker.terminated, false, "ignored messages do not release the current job");
 
 secondWorker.respond({
   type: "result",
   generationId: secondGeneration,
-  inputFingerprint: movedInput.inputFingerprint,
+  requestFingerprint: movedInput.requestFingerprint,
+  inputFingerprint: movedJob.inputFingerprint,
   recommendations: [],
 });
 assert.deepEqual(completed, ["latest"], "only the latest matching generation completes");
@@ -186,9 +228,37 @@ assert.deepEqual(failed, []);
 assert(secondWorker.terminated, "a completed worker releases its fit cache and heap");
 
 client.request(firstInput, callbacks("disposed"));
+await Promise.resolve();
 const disposableWorker = workers[2];
 client.dispose();
 assert(disposableWorker.terminated, "unmount disposal terminates active recommendation work");
+
+let releaseProjection: (() => void) | undefined;
+const deferredWorkers: FakeRecommendationWorker[] = [];
+const deferredClient = createMechanismRecommendationWorkerClient(
+  () => {
+    const worker = new FakeRecommendationWorker();
+    deferredWorkers.push(worker);
+    return worker;
+  },
+  async (input, shouldContinue) => {
+    await new Promise<void>((resolve) => {
+      releaseProjection = resolve;
+    });
+    if (!shouldContinue()) throw new DOMException("superseded", "AbortError");
+    return { ...input, project: recommendationProjectSnapshot(input.project) };
+  },
+);
+deferredClient.request(firstInput, callbacks("projected-after-cancel"));
+deferredClient.cancel();
+releaseProjection?.();
+await Promise.resolve();
+await Promise.resolve();
+assert.equal(
+  deferredWorkers.length,
+  0,
+  "cancelling chunked projection creates no worker or structured clone",
+);
 
 const componentSource = readFileSync(
   join(
@@ -234,6 +304,7 @@ assert(
   "the worker entry stays small and loads the recommendation job after it owns the request",
 );
 assert(workerSource.includes("generationId: data.generationId"));
-assert(workerSource.includes("inputFingerprint: data.input.inputFingerprint"));
+assert(workerSource.includes("requestFingerprint: data.input.requestFingerprint"));
+assert(workerSource.includes("inputFingerprint: result.inputFingerprint"));
 
 console.log("mechanism recommendation worker contract ok");

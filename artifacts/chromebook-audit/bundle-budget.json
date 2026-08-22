@@ -1,104 +1,114 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-21T15:02:41.024Z",
+  "generatedAt": "2026-08-22T05:31:30.251Z",
   "basis": "static compressed production shell",
   "imageRecognitionRuntime": "absent",
   "entryJs": {
     "files": [
-      "assets/index-x3HeaC9U.js",
-      "assets/App-C4sZXU_X.js"
+      "assets/index-Jhnr8urC.js",
+      "assets/App-ChQPMhAm.js"
     ],
-    "gzipBytes": 81544
+    "gzipBytes": 85579
   },
   "coreJs": {
     "basis": "entry plus recursive emitted static-import closure",
     "files": [
-      "assets/App-C4sZXU_X.js",
-      "assets/AppShell-BBuaZnl3.js",
+      "assets/App-ChQPMhAm.js",
+      "assets/AppShell-D22L_yZv.js",
+      "assets/ContextHelp-IRzymiO0.js",
+      "assets/DeferredThreePuppetPreview-P9UW2S2v.js",
       "assets/classroomContent-bGvikOLx.js",
-      "assets/createLucideIcon-CtltyBLo.js",
-      "assets/fabrication-Ce-i4zDG.js",
-      "assets/index-x3HeaC9U.js",
-      "assets/mechanismFitWorkerClient-D77L5wY7.js",
-      "assets/mechanismRecommendations-CIS6QGr6.js",
-      "assets/motion-DUyEu3NF.js",
-      "assets/performanceAudit-DvFcPLLy.js",
-      "assets/project-CJLYokjz.js",
-      "assets/sparkles-CVGGkVV5.js",
-      "assets/stageLayout-Ckuh8APd.js",
-      "assets/upload-CyIPiRdk.js",
-      "assets/useWorkspacePlaybackLoop-BypO7u0_.js",
+      "assets/createLucideIcon-KWNWOhNu.js",
+      "assets/exporter-DPJie3iD.js",
+      "assets/fabrication-BkJY_8G_.js",
+      "assets/index-Jhnr8urC.js",
+      "assets/mechanismFitWorkerClient-Dc-f_QZV.js",
+      "assets/mechanismRecommendations-0AnjlJgx.js",
+      "assets/motion-BQ1L6zXS.js",
+      "assets/performanceAudit-ClyPmtwb.js",
+      "assets/sparkles-BmM7SfaD.js",
+      "assets/stageLayout-DK6ThEw5.js",
+      "assets/upload-Cn5ztwM5.js",
+      "assets/useWorkspacePlaybackLoop-U1AwIJ5n.js",
       "assets/viewport-D1Xm5WR1.js"
     ],
-    "gzipBytes": 147074,
-    "limitBytes": 450000,
+    "gzipBytes": 156148,
+    "limitBytes": 200000,
     "passed": true
   },
   "initialShell": {
     "assets": [
       {
         "file": "index.html",
-        "compressedBytes": 15129
+        "compressedBytes": 15350
       },
       {
-        "file": "assets/App-C4sZXU_X.js",
-        "compressedBytes": 19879
+        "file": "assets/App-ChQPMhAm.js",
+        "compressedBytes": 23864
       },
       {
-        "file": "assets/AppShell-BBuaZnl3.js",
-        "compressedBytes": 7643
+        "file": "assets/AppShell-D22L_yZv.js",
+        "compressedBytes": 7646
+      },
+      {
+        "file": "assets/ContextHelp-IRzymiO0.js",
+        "compressedBytes": 1979
+      },
+      {
+        "file": "assets/DeferredThreePuppetPreview-P9UW2S2v.js",
+        "compressedBytes": 950
       },
       {
         "file": "assets/classroomContent-bGvikOLx.js",
         "compressedBytes": 14224
       },
       {
-        "file": "assets/createLucideIcon-CtltyBLo.js",
-        "compressedBytes": 787
+        "file": "assets/createLucideIcon-KWNWOhNu.js",
+        "compressedBytes": 789
       },
       {
-        "file": "assets/fabrication-Ce-i4zDG.js",
-        "compressedBytes": 9815
+        "file": "assets/exporter-DPJie3iD.js",
+        "compressedBytes": 2296
       },
       {
-        "file": "assets/index-x3HeaC9U.js",
-        "compressedBytes": 61665
+        "file": "assets/fabrication-BkJY_8G_.js",
+        "compressedBytes": 9874
       },
       {
-        "file": "assets/mechanismFitWorkerClient-D77L5wY7.js",
-        "compressedBytes": 1242
+        "file": "assets/index-Jhnr8urC.js",
+        "compressedBytes": 61715
       },
       {
-        "file": "assets/mechanismRecommendations-CIS6QGr6.js",
-        "compressedBytes": 3192
+        "file": "assets/mechanismFitWorkerClient-Dc-f_QZV.js",
+        "compressedBytes": 1338
       },
       {
-        "file": "assets/motion-DUyEu3NF.js",
-        "compressedBytes": 5740
+        "file": "assets/mechanismRecommendations-0AnjlJgx.js",
+        "compressedBytes": 2240
       },
       {
-        "file": "assets/performanceAudit-DvFcPLLy.js",
-        "compressedBytes": 255
+        "file": "assets/motion-BQ1L6zXS.js",
+        "compressedBytes": 25011
       },
       {
-        "file": "assets/project-CJLYokjz.js",
-        "compressedBytes": 19083
+        "file": "assets/performanceAudit-ClyPmtwb.js",
+        "compressedBytes": 301
       },
       {
-        "file": "assets/sparkles-CVGGkVV5.js",
-        "compressedBytes": 284
+        "file": "assets/sparkles-BmM7SfaD.js",
+        "compressedBytes": 286
       },
       {
-        "file": "assets/stageLayout-Ckuh8APd.js",
-        "compressedBytes": 2274
+        "file": "assets/stageLayout-DK6ThEw5.js",
+        "compressedBytes": 2644
       },
       {
-        "file": "assets/upload-CyIPiRdk.js",
-        "compressedBytes": 193
+        "file": "assets/upload-Cn5ztwM5.js",
+        "compressedBytes": 195
       },
       {
-        "file": "assets/useWorkspacePlaybackLoop-BypO7u0_.js",
-        "compressedBytes": 569
+        "file": "assets/useWorkspacePlaybackLoop-U1AwIJ5n.js",
+        "compressedBytes": 567
       },
       {
         "file": "assets/viewport-D1Xm5WR1.js",
@@ -113,8 +123,385 @@
         "compressedBytes": 32183
       }
     ],
-    "compressedBytes": 208130,
-    "limitBytes": 1500000,
+    "compressedBytes": 217425,
+    "limitBytes": 300000,
+    "passed": true
+  },
+  "optionalJs": {
+    "basis": "emitted JavaScript outside the recursive static-import closure",
+    "files": [
+      {
+        "file": "assets/adaptiveHighResolutionController-BWDgsrFw.js",
+        "gzipBytes": 147564,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/AssemblyGuide-DR4sG03_.js",
+        "gzipBytes": 7967,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/automataSceneModel-cks-XllZ.js",
+        "gzipBytes": 2656,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/autosaveRecoveryJob-BJw_pUOW.js",
+        "gzipBytes": 23819,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/autosaveRecoveryWorker-DHLa4K1G.js",
+        "gzipBytes": 279,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/autosaveWorker-D4IJj9wK.js",
+        "gzipBytes": 508,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/BlueprintExport-C25MC60K.js",
+        "gzipBytes": 2820,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/blueprintPackageJob-DFRSX4oa.js",
+        "gzipBytes": 34841,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/blueprintPackageWorker-BoAOPq_m.js",
+        "gzipBytes": 517,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/blueprintPackageWorkerClient-BvwQjb4I.js",
+        "gzipBytes": 2852,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/cadencedGestureDraft-DFxbwrlL.js",
+        "gzipBytes": 487,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/cadencedPlaybackSampler-CbKFWVIQ.js",
+        "gzipBytes": 342,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/CharacterImportOverlays-BF4P4k9Q.js",
+        "gzipBytes": 1893,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/CharacterSetupPanel-DBOPjTRT.js",
+        "gzipBytes": 6507,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/circle-alert-Dpu7aXqb.js",
+        "gzipBytes": 192,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/ClassroomExampleVideo-CYhMyp38.js",
+        "gzipBytes": 3574,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/DeferredClassroomExampleVideo-C1hi4xQU.js",
+        "gzipBytes": 1974,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/foundryCamera-Cqx7_btI.js",
+        "gzipBytes": 722,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/foundryHandleGesture-ByEp6S93.js",
+        "gzipBytes": 2737,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/foundryPreviewGeometry--nCWq8uu.js",
+        "gzipBytes": 226,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/gifFrameWorker-DzC5vPfM.js",
+        "gzipBytes": 3357,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/InspectorControls-CvFtNI90.js",
+        "gzipBytes": 774,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/lib-D5pjWqAp.js",
+        "gzipBytes": 2944,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/loader-circle-CvtG8Rds.js",
+        "gzipBytes": 162,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/MechanismDesign-BsPXewiR.js",
+        "gzipBytes": 8779,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/MechanismFeasibilityStatus-CNGkCZT_.js",
+        "gzipBytes": 2828,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/mechanismFitJob-DtkcZxXu.js",
+        "gzipBytes": 33763,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/mechanismFitWorker-zGiwsKkl.js",
+        "gzipBytes": 285,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/MechanismFoundry-D6i5JPO-.js",
+        "gzipBytes": 13240,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/MechanismLinkagePreview-vq_d2Hog.js",
+        "gzipBytes": 3676,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/mechanismOptimizerJob-BKI5lRNe.js",
+        "gzipBytes": 36053,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/mechanismOptimizerWorker-JWQAOZyp.js",
+        "gzipBytes": 327,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/mechanismParamPolicy-COoCXIXU.js",
+        "gzipBytes": 583,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/mechanismRecommendationJob-CdB8mk6y.js",
+        "gzipBytes": 36961,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/mechanismRecommendationWorker-D0caq1jN.js",
+        "gzipBytes": 314,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/Options-CR7ppkw7.js",
+        "gzipBytes": 2593,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/PathEditor-DJIoNxxw.js",
+        "gzipBytes": 4781,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/play-BYS7iT5o.js",
+        "gzipBytes": 186,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/projectDownloadJob-DNFpyFlx.js",
+        "gzipBytes": 194,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/projectDownloadWorker-6jQzIYd7.js",
+        "gzipBytes": 287,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/projectImportJob-jS5SOEdy.js",
+        "gzipBytes": 47944,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/projectImportWorker-CxrOQrUx.js",
+        "gzipBytes": 270,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/rapier-DS2Sl1i-.js",
+        "gzipBytes": 839325,
+        "class": "lazy-physics",
+        "limitBytes": 900000,
+        "passed": true
+      },
+      {
+        "file": "assets/renderPerformancePolicy-n-gwQOgG.js",
+        "gzipBytes": 691,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/sceneObjectImageJob-Dhu3VDdt.js",
+        "gzipBytes": 3412,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/sceneObjectImageWorker-Coy2ViPN.js",
+        "gzipBytes": 283,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/SceneObjectInspector-CWe4rK76.js",
+        "gzipBytes": 1054,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/ThreeFoundryPreview-BtGqNNtA.js",
+        "gzipBytes": 17034,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/ThreePuppetPreview-B9lTfw3f.js",
+        "gzipBytes": 20758,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/threeResourceKit-VGA_FF8n.js",
+        "gzipBytes": 2567,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/TrackingModal-B5yWoemd.js",
+        "gzipBytes": 6120,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/transientValueController-DGU1vJEQ.js",
+        "gzipBytes": 449,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      },
+      {
+        "file": "assets/trash-2-BeQR_9A_.js",
+        "gzipBytes": 221,
+        "class": "optional",
+        "limitBytes": 200000,
+        "passed": true
+      }
+    ],
     "passed": true
   }
 }

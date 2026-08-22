@@ -12,10 +12,12 @@ import {
 import {
   applyChromebookEmulation,
   collectPlaybackAudit,
+  collectChromebookRuntimeEnvironment,
   installChromebookAuditInstrumentation,
-  measureClickToNextPaint,
+  installChromebookAuditIsolation,
 } from './chromebookAuditHarness';
 import { collectChromebookAuditProvenance } from './chromebookAuditProvenance';
+import { CHROMEBOOK_AUDIT_PROFILE } from './chromebookAuditProfiles';
 
 const ENABLED = process.env.CHROMEBOOK_AUDIT === '1';
 const ENFORCE = process.env.CHROMEBOOK_AUDIT_ENFORCE !== '0';
@@ -73,6 +75,7 @@ test.describe('Chromebook Foundry playback audit', () => {
     });
     await installChromebookAuditInstrumentation(context);
     const page = await context.newPage();
+    const client = await installChromebookAuditIsolation(page);
     const pageErrors: string[] = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
 
@@ -86,45 +89,32 @@ test.describe('Chromebook Foundry playback audit', () => {
         'playback audit runs the production preview',
       ).toBe(0);
       await openWavingArmFoundry(page);
-      const client = await applyChromebookEmulation(page);
+      await applyChromebookEmulation(page, client);
 
       try {
         await client.send('HeapProfiler.collectGarbage').catch(() => undefined);
-        const runtimeEnvironment = await page.evaluate(() => ({
-          userAgent: navigator.userAgent,
-          viewport: { width: window.innerWidth, height: window.innerHeight },
-          deviceScaleFactor: window.devicePixelRatio,
-        }));
-        expect(runtimeEnvironment.viewport).toEqual(
-          CHROMEBOOK_AUDIT_ENVIRONMENT.viewport,
-        );
-        expect(runtimeEnvironment.deviceScaleFactor).toBe(
-          CHROMEBOOK_AUDIT_ENVIRONMENT.deviceScaleFactor,
-        );
-
         const actions: ActionLatency[] = [];
         const toolbar = page.getByTestId('foundry-toolbar');
         const play = toolbar.getByRole('button', { name: 'Play', exact: true });
-        const playTiming = await measureClickToNextPaint(play);
-        actions.push({
-          label: 'foundry-play',
-          kind: 'click',
-          durationMs: playTiming.nextPaintMs,
+        await expect(play).toBeVisible();
+        const playback = await collectPlaybackAudit(page, PLAYBACK_MS, {
+          controlsTestId: 'foundry-toolbar',
         });
-        await expect(
-          toolbar.getByRole('button', { name: 'Pause', exact: true }),
-        ).toBeVisible();
-        const playback = await collectPlaybackAudit(page, PLAYBACK_MS);
-        const pause = toolbar.getByRole('button', { name: 'Pause', exact: true });
-        const pauseTiming = await measureClickToNextPaint(pause);
-        actions.push({
-          label: 'foundry-pause',
-          kind: 'click',
-          durationMs: pauseTiming.nextPaintMs,
-        });
-        await expect(
-          toolbar.getByRole('button', { name: 'Play', exact: true }),
-        ).toBeVisible();
+        if (!playback.controlActions) {
+          throw new Error('Foundry playback audit did not record control latency');
+        }
+        actions.push(
+          {
+            label: 'foundry-play',
+            kind: 'click',
+            durationMs: playback.controlActions.playNextPaintMs,
+          },
+          {
+            label: 'foundry-pause',
+            kind: 'click',
+            durationMs: playback.controlActions.pauseNextPaintMs,
+          },
+        );
 
         const interactionLatencyMs = percentiles(
           actions.map((action) => action.durationMs),
@@ -138,20 +128,19 @@ test.describe('Chromebook Foundry playback audit', () => {
           throw new Error('Chromebook playback audit requires a preview base URL');
         }
         const report: ChromebookPlaybackAuditReport = {
-          schemaVersion: 2,
+          schemaVersion: 3,
           generatedAt: new Date().toISOString(),
-          resultLabel: '6x CPU emulation',
+          profile: CHROMEBOOK_AUDIT_PROFILE.name,
+          resultLabel: CHROMEBOOK_AUDIT_PROFILE.resultLabel,
           productionBuild: true,
           actualChromebookTested: false,
           provenance: await collectChromebookAuditProvenance(baseURL),
           workload: 'foundry-playback',
-          environment: {
-            ...CHROMEBOOK_AUDIT_ENVIRONMENT,
-            browserVersion: browser.version(),
-            userAgent: runtimeEnvironment.userAgent,
-            measuredDeviceScaleFactor: runtimeEnvironment.deviceScaleFactor,
-            throttlingScope: 'feature-action',
-          },
+          environment: await collectChromebookRuntimeEnvironment(
+            page,
+            browser.version(),
+            'feature-action',
+          ),
           actions,
           interactionLatencyMs,
           playback,

@@ -13,6 +13,7 @@ import {
   TRACKING_GIF_FALLBACK_MAX_RAW_FRAMES,
   TRACKING_GIF_MAX_COMPRESSED_BYTES,
   TRACKING_GIF_MAX_IN_FLIGHT_FRAMES,
+  TRACKING_GIF_MAX_SOURCE_PIXELS,
   TRACKING_MEDIA_MAX_FPS,
   TRACKING_MEDIA_MAX_SAMPLED_FRAMES,
   TRACKING_MANUAL_MAX_POINTS,
@@ -35,7 +36,8 @@ assert.equal(largePlan.sampledFrames, TRACKING_MEDIA_MAX_SAMPLED_FRAMES);
 assert.equal(largePlan.rawFrameIndices.at(-1), 4_999);
 assert(largePlan.width <= 1280 && largePlan.height <= 1280);
 assert.equal(TRACKING_GIF_MAX_IN_FLIGHT_FRAMES, 1);
-assert.equal(TRACKING_GIF_MAX_COMPRESSED_BYTES, 32 * 1024 * 1024);
+assert.equal(TRACKING_GIF_MAX_COMPRESSED_BYTES, 16 * 1024 * 1024);
+assert.equal(TRACKING_GIF_MAX_SOURCE_PIXELS, 1_638_400);
 assert.equal(TRACKING_VIDEO_MAX_COMPRESSED_BYTES, 48 * 1024 * 1024);
 assert.equal(TRACKING_MANUAL_MAX_POINTS, 128);
 assert.doesNotThrow(() => assertTrackingVideoMetadata({
@@ -113,10 +115,10 @@ const syntheticGif = (frames: number, width = 4000, height = 2000) => {
   return Uint8Array.from(bytes);
 };
 
-const scannedLargeGif = scanTrackingGifMetadata(syntheticGif(5_000));
+const scannedLargeGif = scanTrackingGifMetadata(syntheticGif(5_000, 640, 480));
 assert.deepEqual(scannedLargeGif, {
-  width: 4000,
-  height: 2000,
+  width: 640,
+  height: 480,
   rawFrames: 5_000,
   durationMs: 50_000,
 });
@@ -125,6 +127,18 @@ assert.throws(
   /600 frames or fewer/,
   'metadata-only scanning rejects oversized raw timelines before a decoder sees them',
 );
+const unsafeDimensions = scanTrackingGifMetadata(syntheticGif(1, 8_192, 8_192));
+assert.throws(
+  () => assertTrackingGifDecodeInput(unsafeDimensions),
+  /1280 px or smaller/,
+  'a tiny compressed 8192 by 8192 GIF header is rejected before decoder allocation',
+);
+assert.doesNotThrow(() => assertTrackingGifDecodeInput({
+  width: 1280,
+  height: 1280,
+  rawFrames: 600,
+  durationMs: 20_000,
+}));
 const scannedLargePlan = planTrackingGifFromMetadata({
   ...scannedLargeGif,
   rawFrames: TRACKING_MEDIA_MAX_SAMPLED_FRAMES,
@@ -138,7 +152,7 @@ assert.equal(
 assert.equal(scannedLargePlan.rawFrameIndices.at(-1), 599);
 assert.deepEqual(
   { width: scannedLargePlan.width, height: scannedLargePlan.height },
-  { width: 1280, height: 640 },
+  { width: 640, height: 480 },
   'the decoder receives the bounded target dimensions before allocating canvases',
 );
 

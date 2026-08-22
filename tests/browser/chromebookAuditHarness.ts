@@ -13,16 +13,40 @@ import {
   CHROMEBOOK_AUDIT_ENVIRONMENT,
   percentiles,
   type ActionLatency,
+  type AuditInternalMemoryMeasurementWindow,
   type BootAudit,
   type NetworkRequestRecord,
   type PlaybackAudit,
+  type PlaybackWarmPlateauEvidence,
   type WebGLAuditSnapshot,
+  type ChromebookRuntimeEnvironment,
 } from "./chromebookAuditReport";
 import type {
   FeatureActionAudit,
   FeatureRuntimeProbe,
   RuntimeLifecycleSnapshot,
 } from "./chromebookFeatureAuditReport";
+import { CHROMEBOOK_AUDIT_PROFILE } from "./chromebookAuditProfiles";
+
+export type ChromebookWebGLResourceDeletion = {
+  atMs: number;
+  kind: string;
+  contextIndex: number;
+  canvasClassName: string;
+  canvasConnected: boolean;
+  liveBefore: number;
+  liveAfter: number;
+};
+
+export type ChromebookWebGLResourceDeletionBatch = {
+  contextIndex: number;
+  canvasClassName: string;
+  canvasConnectedAtStart: boolean;
+  firstAtMs: number;
+  lastAtMs: number;
+  stackReturnedAtMs: number | null;
+  uniqueDeletionCount: number;
+};
 
 type BrowserAuditState = {
   longTasks: number[];
@@ -34,6 +58,10 @@ type BrowserAuditState = {
   foundryMaterialCacheSize: number;
   puppetTopologyDurations: number[];
   webglFrameSubmissions: number[];
+  webglResourceDeletions: ChromebookWebGLResourceDeletion[];
+  webglResourceDeletionBatches: ChromebookWebGLResourceDeletionBatch[];
+  foundryGestureVisualEmissions: number[];
+  auditInternalMemoryMeasurementWindows: AuditInternalMemoryMeasurementWindow[];
   externalFileAction: {
     sequence: number;
     startedAt: number;
@@ -41,6 +69,56 @@ type BrowserAuditState = {
   };
   runtime: RuntimeLifecycleSnapshot;
   webgl: WebGLAuditSnapshot;
+  graphicsContexts: Array<{
+    api: "webgl" | "webgl2" | "experimental-webgl";
+    createdAtMs: number;
+    gl: WebGLRenderingContext | WebGL2RenderingContext;
+    canvas: HTMLCanvasElement;
+    vendor: string;
+    renderer: string;
+    unmaskedVendor: string | null;
+    unmaskedRenderer: string | null;
+    maxRenderbufferDimension: number;
+    backingStore: {
+      mutations: Array<{
+        atMs: number;
+        changedDimension: "initial" | "width" | "height";
+        className: string;
+        width: number;
+        height: number;
+        pixels: number;
+      }>;
+      highWaterWidth: number;
+      highWaterHeight: number;
+      highWaterPixels: number;
+    };
+    frameSubmissions: Array<{
+      globalGlIndex: number;
+      atMs: number;
+      className: string;
+      drawingBufferWidth: number;
+      drawingBufferHeight: number;
+      requestedDprCap: number | null;
+      effectiveDpr: number | null;
+    }>;
+  }>;
+  backingStoreMutationProbeSupported: boolean;
+};
+
+export type ChromebookHighResolutionTelemetry = {
+  backingStoreMutationProbeSupported: boolean;
+  contextsLost: number;
+  contextsRestored: number;
+  longTaskEntries: Array<{ startTime: number; duration: number }>;
+  auditInternalMemoryMeasurementWindows:
+    BrowserAuditState["auditInternalMemoryMeasurementWindows"];
+  contexts: Array<{
+    contextIndex: number;
+    createdAtMs: number;
+    maxRenderbufferDimension: number;
+    backingStore: BrowserAuditState["graphicsContexts"][number]["backingStore"];
+    frameSubmissions: BrowserAuditState["graphicsContexts"][number]["frameSubmissions"];
+  }>;
 };
 
 export const installChromebookAuditInstrumentation = async (context: BrowserContext) => {
@@ -56,6 +134,10 @@ export const installChromebookAuditInstrumentation = async (context: BrowserCont
       foundryMaterialCacheSize: 0,
       puppetTopologyDurations: [],
       webglFrameSubmissions: [],
+      webglResourceDeletions: [],
+      webglResourceDeletionBatches: [],
+      foundryGestureVisualEmissions: [],
+      auditInternalMemoryMeasurementWindows: [],
       externalFileAction: { sequence: 0, startedAt: 0 },
       runtime: {
         probeSupport: {
@@ -74,10 +156,80 @@ export const installChromebookAuditInstrumentation = async (context: BrowserCont
         attachedCanvases: 0,
         resources,
       },
+      graphicsContexts: [],
+      backingStoreMutationProbeSupported: false,
     };
     (window as Window & { __MOTIONSMITH_CHROMEBOOK_AUDIT__?: BrowserAuditState })
       .__MOTIONSMITH_CHROMEBOOK_AUDIT__ = state;
     performance.setResourceTimingBufferSize(2_000);
+
+    const backingStores = new WeakMap<
+      HTMLCanvasElement,
+      BrowserAuditState["graphicsContexts"][number]["backingStore"]
+    >();
+    const canvasClassName = (canvas: HTMLCanvasElement) =>
+      typeof canvas.className === "string" ? canvas.className : "";
+    const backingStoreFor = (canvas: HTMLCanvasElement) => {
+      let backingStore = backingStores.get(canvas);
+      if (backingStore) return backingStore;
+      const width = canvas.width;
+      const height = canvas.height;
+      backingStore = {
+        mutations: [{
+          atMs: performance.now(),
+          changedDimension: "initial",
+          className: canvasClassName(canvas),
+          width,
+          height,
+          pixels: width * height,
+        }],
+        highWaterWidth: width,
+        highWaterHeight: height,
+        highWaterPixels: width * height,
+      };
+      backingStores.set(canvas, backingStore);
+      return backingStore;
+    };
+    const recordBackingStore = (
+      canvas: HTMLCanvasElement,
+      changedDimension: "width" | "height",
+    ) => {
+      const backingStore = backingStoreFor(canvas);
+      const width = canvas.width;
+      const height = canvas.height;
+      const pixels = width * height;
+      backingStore.mutations.push({
+        atMs: performance.now(),
+        changedDimension,
+        className: canvasClassName(canvas),
+        width,
+        height,
+        pixels,
+      });
+      backingStore.highWaterWidth = Math.max(backingStore.highWaterWidth, width);
+      backingStore.highWaterHeight = Math.max(backingStore.highWaterHeight, height);
+      backingStore.highWaterPixels = Math.max(backingStore.highWaterPixels, pixels);
+    };
+    const wrapCanvasDimension = (property: "width" | "height") => {
+      const descriptor = Object.getOwnPropertyDescriptor(
+        HTMLCanvasElement.prototype,
+        property,
+      );
+      if (!descriptor?.get || !descriptor.set || descriptor.configurable === false) {
+        return false;
+      }
+      Object.defineProperty(HTMLCanvasElement.prototype, property, {
+        ...descriptor,
+        get: descriptor.get,
+        set(this: HTMLCanvasElement, value: number) {
+          descriptor.set!.call(this, value);
+          recordBackingStore(this, property);
+        },
+      });
+      return true;
+    };
+    state.backingStoreMutationProbeSupported =
+      wrapCanvasDimension("width") && wrapCanvasDimension("height");
 
     document.addEventListener("change", (event) => {
       const input = event.target;
@@ -214,6 +366,10 @@ export const installChromebookAuditInstrumentation = async (context: BrowserCont
           if (!activeObjectUrls.has(url)) {
             activeObjectUrls.add(url);
             acquire(state.runtime.objectUrls);
+            window.dispatchEvent(new CustomEvent(
+              "motionsmith:chromebook-object-url-acquired",
+              { detail: { url } },
+            ));
           }
           return url;
         },
@@ -279,12 +435,69 @@ export const installChromebookAuditInstrumentation = async (context: BrowserCont
       ["sync", "fenceSync", "deleteSync"],
     ] as const;
     const seenContexts = new WeakSet<object>();
-    const instrumentContext = (gl: Record<string, unknown>, canvas: HTMLCanvasElement) => {
+    const instrumentContext = (
+      gl: Record<string, unknown>,
+      canvas: HTMLCanvasElement,
+      api: "webgl" | "webgl2" | "experimental-webgl",
+    ) => {
       if (seenContexts.has(gl)) return;
       seenContexts.add(gl);
       state.webgl.contextsCreated += 1;
+      const contextIndex = state.graphicsContexts.length;
+      const typedGl = gl as unknown as WebGLRenderingContext | WebGL2RenderingContext;
+      const debugInfo = typedGl.getExtension("WEBGL_debug_renderer_info") as {
+        UNMASKED_VENDOR_WEBGL: number;
+        UNMASKED_RENDERER_WEBGL: number;
+      } | null;
+      const graphicsContext: BrowserAuditState["graphicsContexts"][number] = {
+        api,
+        createdAtMs: performance.now(),
+        gl: typedGl,
+        canvas,
+        vendor: String(typedGl.getParameter(typedGl.VENDOR) ?? "unknown"),
+        renderer: String(typedGl.getParameter(typedGl.RENDERER) ?? "unknown"),
+        unmaskedVendor: debugInfo
+          ? String(typedGl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) ?? "unknown")
+          : null,
+        unmaskedRenderer: debugInfo
+          ? String(typedGl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) ?? "unknown")
+          : null,
+        maxRenderbufferDimension: Number(
+          typedGl.getParameter(typedGl.MAX_RENDERBUFFER_SIZE),
+        ),
+        backingStore: backingStoreFor(canvas),
+        frameSubmissions: [],
+      };
+      state.graphicsContexts.push(graphicsContext);
       canvas.addEventListener("webglcontextlost", () => { state.webgl.contextsLost += 1; });
       canvas.addEventListener("webglcontextrestored", () => { state.webgl.contextsRestored += 1; });
+      let activeDeletionBatch: ChromebookWebGLResourceDeletionBatch | null = null;
+      const recordDeletionBatch = (atMs: number) => {
+        const currentClassName = canvasClassName(canvas);
+        if (
+          activeDeletionBatch &&
+          activeDeletionBatch.canvasClassName === currentClassName
+        ) {
+          activeDeletionBatch.lastAtMs = atMs;
+          activeDeletionBatch.uniqueDeletionCount += 1;
+          return;
+        }
+        const batch: ChromebookWebGLResourceDeletionBatch = {
+          contextIndex,
+          canvasClassName: currentClassName,
+          canvasConnectedAtStart: canvas.isConnected,
+          firstAtMs: atMs,
+          lastAtMs: atMs,
+          stackReturnedAtMs: null,
+          uniqueDeletionCount: 1,
+        };
+        state.webglResourceDeletionBatches.push(batch);
+        activeDeletionBatch = batch;
+        queueMicrotask(() => {
+          batch.stackReturnedAtMs = performance.now();
+          if (activeDeletionBatch === batch) activeDeletionBatch = null;
+        });
+      };
       for (const [kind, createName, deleteName] of resourceMethods) {
         const create = gl[createName];
         const remove = gl[deleteName];
@@ -314,8 +527,20 @@ export const installChromebookAuditInstrumentation = async (context: BrowserCont
             ) {
               released.add(value as object);
               const count = resources[kind];
+              const liveBefore = count.live;
+              const atMs = performance.now();
               count.deleted += 1;
               count.live = Math.max(0, count.live - 1);
+              state.webglResourceDeletions.push({
+                atMs,
+                kind,
+                contextIndex,
+                canvasClassName: canvasClassName(canvas),
+                canvasConnected: canvas.isConnected,
+                liveBefore,
+                liveAfter: count.live,
+              });
+              recordDeletionBatch(atMs);
             }
             return Reflect.apply(remove, this, args);
           };
@@ -327,7 +552,22 @@ export const installChromebookAuditInstrumentation = async (context: BrowserCont
       if (typeof clear === "function") {
         try {
           gl.clear = function (this: unknown, ...args: unknown[]) {
-            state.webglFrameSubmissions.push(performance.now());
+            const atMs = performance.now();
+            const globalGlIndex = state.webglFrameSubmissions.length;
+            state.webglFrameSubmissions.push(atMs);
+            const requestedDprCap = Number(canvas.dataset.threeRequestedDprCap);
+            const effectiveDpr = Number(canvas.dataset.threeEffectiveDpr);
+            graphicsContext.frameSubmissions.push({
+              globalGlIndex,
+              atMs,
+              className: canvasClassName(canvas),
+              drawingBufferWidth: typedGl.drawingBufferWidth,
+              drawingBufferHeight: typedGl.drawingBufferHeight,
+              requestedDprCap: Number.isFinite(requestedDprCap)
+                ? requestedDprCap
+                : null,
+              effectiveDpr: Number.isFinite(effectiveDpr) ? effectiveDpr : null,
+            });
             return Reflect.apply(clear, this, args);
           };
         } catch {
@@ -343,21 +583,36 @@ export const installChromebookAuditInstrumentation = async (context: BrowserCont
     ) {
       const gl = Reflect.apply(getContext, this, [type, ...args]);
       if (gl && (type === "webgl" || type === "webgl2" || type === "experimental-webgl")) {
-        instrumentContext(gl as Record<string, unknown>, this);
+        instrumentContext(
+          gl as Record<string, unknown>,
+          this,
+          type,
+        );
       }
       return gl;
     } as typeof HTMLCanvasElement.prototype.getContext;
   });
 };
 
-export const applyChromebookEmulation = async (page: Page) => {
-  const client = await page.context().newCDPSession(page);
+export const installChromebookAuditIsolation = async (page: Page) => {
+  // The audit-only Vite preview owns COOP/COEP before navigation. Response-
+  // stage CDP header rewriting happens too late for Chrome to establish the
+  // agent cluster, so CDP is reserved for emulation and garbage collection.
+  return page.context().newCDPSession(page);
+};
+
+export const applyChromebookEmulation = async (
+  page: Page,
+  existingClient?: CDPSession,
+  overrides: { deviceScaleFactor?: 1 | 2 } = {},
+) => {
+  const client = existingClient ?? await installChromebookAuditIsolation(page);
   const profile = CHROMEBOOK_AUDIT_ENVIRONMENT;
   await client.send("Emulation.setCPUThrottlingRate", { rate: profile.cpuThrottlingRate });
   await client.send("Emulation.setDeviceMetricsOverride", {
     width: profile.viewport.width,
     height: profile.viewport.height,
-    deviceScaleFactor: profile.deviceScaleFactor,
+    deviceScaleFactor: overrides.deviceScaleFactor ?? profile.deviceScaleFactor,
     mobile: false,
   });
   await client.send("Network.enable");
@@ -369,6 +624,115 @@ export const applyChromebookEmulation = async (page: Page) => {
   });
   return client;
 };
+
+export const collectChromebookRuntimeEnvironment = async (
+  page: Page,
+  browserVersion: string,
+  throttlingScope: ChromebookRuntimeEnvironment["throttlingScope"],
+  overrides: { expectedDeviceScaleFactor?: 1 | 2 } = {},
+): Promise<ChromebookRuntimeEnvironment> => {
+  const runtime = await page.evaluate(() => {
+    const state = (window as Window & {
+      __MOTIONSMITH_CHROMEBOOK_AUDIT__?: BrowserAuditState;
+    }).__MOTIONSMITH_CHROMEBOOK_AUDIT__;
+    if (!state) throw new Error("Chromebook runtime probe is not installed");
+    const drawingBuffers = state.graphicsContexts.map((entry, canvasIndex) => {
+      const rect = entry.canvas.getBoundingClientRect();
+      const cssWidth = rect.width;
+      const cssHeight = rect.height;
+      return {
+        canvasIndex,
+        className: entry.canvas.className,
+        cssWidth,
+        cssHeight,
+        drawingBufferWidth: entry.gl.drawingBufferWidth,
+        drawingBufferHeight: entry.gl.drawingBufferHeight,
+        effectiveDprX: cssWidth > 0
+          ? entry.gl.drawingBufferWidth / cssWidth
+          : null,
+        effectiveDprY: cssHeight > 0
+          ? entry.gl.drawingBufferHeight / cssHeight
+          : null,
+        maxRenderbufferDimension: entry.maxRenderbufferDimension,
+        backingStoreHighWaterWidth: entry.backingStore.highWaterWidth,
+        backingStoreHighWaterHeight: entry.backingStore.highWaterHeight,
+        backingStoreHighWaterPixels: entry.backingStore.highWaterPixels,
+      };
+    });
+    const effectiveScales = drawingBuffers.flatMap((buffer) => [
+      buffer.effectiveDprX,
+      buffer.effectiveDprY,
+    ]).filter((value): value is number => value !== null && Number.isFinite(value));
+    return {
+      userAgent: navigator.userAgent,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      measuredDeviceScaleFactor: window.devicePixelRatio,
+      graphics: {
+        windowDevicePixelRatio: window.devicePixelRatio,
+        visualViewportScale: window.visualViewport?.scale ?? null,
+        effectiveRendererDpr: effectiveScales.length
+          ? Math.max(...effectiveScales)
+          : null,
+        contexts: state.graphicsContexts.map((entry) => ({
+          api: entry.api,
+          vendor: entry.vendor,
+          renderer: entry.renderer,
+          unmaskedVendor: entry.unmaskedVendor,
+          unmaskedRenderer: entry.unmaskedRenderer,
+          maxRenderbufferDimension: entry.maxRenderbufferDimension,
+        })),
+        drawingBuffers,
+      },
+      crossOriginIsolated,
+    };
+  });
+  expect(runtime.viewport).toEqual(CHROMEBOOK_AUDIT_ENVIRONMENT.viewport);
+  const expectedDeviceScaleFactor = overrides.expectedDeviceScaleFactor ??
+    CHROMEBOOK_AUDIT_ENVIRONMENT.deviceScaleFactor;
+  expect(runtime.measuredDeviceScaleFactor).toBe(expectedDeviceScaleFactor);
+  return {
+    ...CHROMEBOOK_AUDIT_ENVIRONMENT,
+    deviceScaleFactor: expectedDeviceScaleFactor,
+    browserVersion,
+    userAgent: runtime.userAgent,
+    measuredDeviceScaleFactor: runtime.measuredDeviceScaleFactor,
+    throttlingScope,
+    memoryIsolation: {
+      source: "diagnostic-preview-response-headers",
+      crossOriginOpenerPolicy: "same-origin",
+      crossOriginEmbedderPolicy: "require-corp",
+      crossOriginIsolated: runtime.crossOriginIsolated,
+    },
+    graphics: runtime.graphics,
+  };
+};
+
+export const collectChromebookHighResolutionTelemetry = (
+  page: Page,
+): Promise<ChromebookHighResolutionTelemetry> =>
+  page.evaluate(() => {
+    const state = (window as Window & {
+      __MOTIONSMITH_CHROMEBOOK_AUDIT__?: BrowserAuditState;
+    }).__MOTIONSMITH_CHROMEBOOK_AUDIT__;
+    if (!state) throw new Error("Chromebook runtime probe is not installed");
+    return {
+      backingStoreMutationProbeSupported:
+        state.backingStoreMutationProbeSupported,
+      contextsLost: state.webgl.contextsLost,
+      contextsRestored: state.webgl.contextsRestored,
+      longTaskEntries: structuredClone(state.longTaskEntries),
+      auditInternalMemoryMeasurementWindows: structuredClone(
+        state.auditInternalMemoryMeasurementWindows,
+      ),
+      contexts: state.graphicsContexts.map((entry, contextIndex) => ({
+        contextIndex,
+        createdAtMs: entry.createdAtMs,
+        maxRenderbufferDimension: entry.maxRenderbufferDimension,
+        backingStore: structuredClone(entry.backingStore),
+        frameSubmissions: structuredClone(entry.frameSubmissions),
+      })),
+    };
+  });
 
 export const attachNetworkRecorder = (page: Page) => {
   let phase: NetworkRequestRecord["phase"] = "cold-boot";
@@ -463,6 +827,21 @@ export type FeatureNextPaintTiming = {
   eventTaskEndMs?: number;
   firstRafMs?: number;
   nextPaintMs: number;
+  interactionClass?: "general" | "direct";
+  pointerEventOffsetsMs?: number[];
+  causal?: {
+    globalGlStartIndex: number;
+    causalGlobalGlIndex: number;
+    causalGlAtMs: number;
+    foundryCanvasGlStartCount: number;
+    foundryCanvasGlEndCount: number;
+    rigSubmissionStartCount: number;
+    rigSubmissionEndCount: number;
+    gestureEmissionStartCount?: number;
+    gestureEmissionCount?: number;
+    gestureEmissionAtMs?: number;
+    causalGlNotBeforeAtMs: number;
+  };
 };
 
 export const measureClickToNextPaint = async (
@@ -547,6 +926,14 @@ export const readFeatureRuntimeProbe = (
     return {
       atMs: performance.now(),
       heapBytes: memory?.usedJSHeapSize,
+      memory: {
+        source: memory
+          ? "performance-memory-diagnostic"
+          : "unsupported",
+        authoritative: false,
+        crossOriginIsolated,
+        bytes: memory?.usedJSHeapSize,
+      },
       longTaskCount: state.longTasks.length,
       puppetTopologyCount: state.puppetTopologyDurations.length,
       lifecycle: structuredClone(state.runtime),
@@ -570,6 +957,59 @@ export const collectFeatureGarbage = async (
   );
 };
 
+const measureFeatureMemory = (page: Page, sampleIndex: number) =>
+  page.evaluate(async (sampleIndex) => {
+    const extended = performance as Performance & {
+      memory?: { usedJSHeapSize: number };
+      measureUserAgentSpecificMemory?: () => Promise<{ bytes: number }>;
+    };
+    if (typeof extended.measureUserAgentSpecificMemory === "function") {
+      const state = (window as Window & {
+        __MOTIONSMITH_CHROMEBOOK_AUDIT__?: BrowserAuditState;
+      }).__MOTIONSMITH_CHROMEBOOK_AUDIT__;
+      const startedAtMs = performance.now();
+      try {
+        const measurement = await extended.measureUserAgentSpecificMemory();
+        return {
+          source: "measure-user-agent-specific-memory" as const,
+          authoritative: true,
+          crossOriginIsolated,
+          bytes: measurement.bytes,
+        };
+      } catch (error) {
+        const fallback = extended.memory?.usedJSHeapSize;
+        return {
+          source: fallback !== undefined
+            ? "performance-memory-diagnostic" as const
+            : "unsupported" as const,
+          authoritative: false,
+          crossOriginIsolated,
+          bytes: fallback,
+          userAgentSpecificMemoryError:
+            error instanceof Error ? error.message : String(error),
+        };
+      } finally {
+        state?.auditInternalMemoryMeasurementWindows.push({
+          owner: "feature-probe",
+          phase: "stable-probe",
+          sampleIndex,
+          startedAtMs,
+          endedAtMs: performance.now(),
+        });
+      }
+    }
+    const fallback = extended.memory?.usedJSHeapSize;
+    return {
+      source: fallback !== undefined
+        ? "performance-memory-diagnostic" as const
+        : "unsupported" as const,
+      authoritative: false,
+      crossOriginIsolated,
+      bytes: fallback,
+      userAgentSpecificMemoryError: "API unavailable",
+    };
+  }, sampleIndex);
+
 export const collectStableFeatureProbe = async (
   page: Page,
   client: CDPSession,
@@ -587,7 +1027,53 @@ export const collectStableFeatureProbe = async (
     }
   }
   if (!probe) throw new Error("Could not collect a stable feature probe");
-  return { ...probe, heapSamplesBytes: samples };
+  const memoryMeasurements = [await measureFeatureMemory(page, 0)];
+  if (memoryMeasurements[0].authoritative) {
+    for (let index = 1; index < 3; index += 1) {
+      await page.evaluate(() => new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }));
+      memoryMeasurements.push(await measureFeatureMemory(page, index));
+    }
+  }
+  const authoritativeSamples =
+    memoryMeasurements.length === 3 &&
+    memoryMeasurements.every(
+      (measurement) =>
+        measurement.source === "measure-user-agent-specific-memory" &&
+        measurement.authoritative &&
+        measurement.bytes !== undefined,
+    )
+    ? memoryMeasurements.flatMap((measurement) =>
+        measurement.bytes === undefined ? [] : [measurement.bytes]
+      )
+    : [];
+  const authoritativeMemory = authoritativeSamples.length === 3;
+  const diagnosticBytes = samples.at(-1);
+  const memoryError = memoryMeasurements.find(
+    (measurement) => measurement.userAgentSpecificMemoryError,
+  )?.userAgentSpecificMemoryError;
+  const measuredMemory = authoritativeMemory
+    ? memoryMeasurements.at(-1)!
+    : {
+        source: diagnosticBytes !== undefined
+          ? "performance-memory-diagnostic" as const
+          : "unsupported" as const,
+        authoritative: false,
+        crossOriginIsolated:
+          memoryMeasurements.at(-1)?.crossOriginIsolated ?? false,
+        bytes: diagnosticBytes,
+        userAgentSpecificMemoryError:
+          memoryError ?? "Authoritative memory sampling did not remain available",
+      };
+  return {
+    ...probe,
+    heapBytes: measuredMemory.bytes,
+    heapSamplesBytes: authoritativeMemory
+      ? authoritativeSamples
+      : samples,
+    memory: measuredMemory,
+  };
 };
 
 export const waitForLifecycleBaseline = async (
@@ -624,7 +1110,14 @@ export const finishFeatureAction = async (
 ): Promise<FeatureActionAudit> => {
   const settleMs = await elapsedFeatureTime(page, input.timing);
   const result = await page.evaluate(
-    ({ actionStartedAt, longTaskOffset, puppetTopologyOffset }) => {
+    ({
+      actionStartedAt,
+      causalGlNotBeforeAtMs,
+      causalGlobalGlIndex,
+      globalGlStartIndex,
+      longTaskOffset,
+      puppetTopologyOffset,
+    }) => {
       const state = (window as Window & {
         __MOTIONSMITH_CHROMEBOOK_AUDIT__?: BrowserAuditState;
       }).__MOTIONSMITH_CHROMEBOOK_AUDIT__;
@@ -651,26 +1144,64 @@ export const finishFeatureAction = async (
           ))
           .filter((duration) => duration > 0),
         puppetTopologyDurations: state.puppetTopologyDurations.slice(puppetTopologyOffset),
+        globalGlEndIndex: state.webglFrameSubmissions.length,
         renderSubmissionOffsetsMs: state.webglFrameSubmissions
-          .filter((submittedAt) => submittedAt >= actionStartedAt)
+          .slice(causalGlobalGlIndex ?? globalGlStartIndex)
+          .filter((submittedAt) => submittedAt >= causalGlNotBeforeAtMs)
           .map((submittedAt) => submittedAt - actionStartedAt),
       };
     },
     {
       actionStartedAt: input.timing.startedAt,
+      causalGlNotBeforeAtMs:
+        input.timing.causal?.causalGlNotBeforeAtMs ?? input.timing.startedAt,
+      causalGlobalGlIndex: input.timing.causal?.causalGlobalGlIndex,
+      globalGlStartIndex: input.timing.causal?.globalGlStartIndex ?? 0,
       longTaskOffset: input.before.longTaskCount,
       puppetTopologyOffset: input.before.puppetTopologyCount,
     },
   );
   const latencyMs = percentiles(result.longTasks);
+  const firstCausalGlOffsetMs = result.renderSubmissionOffsetsMs[0];
+  const gestureEmissionOffsetMs = input.timing.causal?.gestureEmissionAtMs === undefined
+    ? undefined
+    : input.timing.causal.gestureEmissionAtMs - input.timing.startedAt;
   return {
     label: input.label,
     cycle: input.cycle,
     outcome: input.outcome,
+    interactionClass: input.timing.interactionClass ?? "general",
     eventTaskEndMs: input.timing.eventTaskEndMs,
     firstRafMs: input.timing.firstRafMs,
     nextPaintMs: input.timing.nextPaintMs,
     renderSubmissionOffsetsMs: result.renderSubmissionOffsetsMs,
+    causality: input.timing.causal && firstCausalGlOffsetMs !== undefined
+      ? {
+          actionStartedAtMs: input.timing.startedAt,
+          globalGlStartIndex: input.timing.causal.globalGlStartIndex,
+          globalGlEndIndex: result.globalGlEndIndex,
+          causalGlobalGlIndex: input.timing.causal.causalGlobalGlIndex,
+          causalGlAtMs: input.timing.causal.causalGlAtMs,
+          foundryCanvasGlStartCount:
+            input.timing.causal.foundryCanvasGlStartCount,
+          foundryCanvasGlEndCount:
+            input.timing.causal.foundryCanvasGlEndCount,
+          rigSubmissionStartCount: input.timing.causal.rigSubmissionStartCount,
+          rigSubmissionEndCount: input.timing.causal.rigSubmissionEndCount,
+          gestureEmissionStartCount:
+            input.timing.causal.gestureEmissionStartCount,
+          gestureEmissionCount: input.timing.causal.gestureEmissionCount,
+          gestureEmissionAtMs: input.timing.causal.gestureEmissionAtMs,
+          pointerEventTimestampsMs: (input.timing.pointerEventOffsetsMs ?? [])
+            .map((offset) => input.timing.startedAt + offset),
+          pointerEventOffsetsMs: input.timing.pointerEventOffsetsMs ?? [],
+          eventToGestureEmissionMs: gestureEmissionOffsetMs,
+          gestureEmissionToFirstGlMs: gestureEmissionOffsetMs === undefined
+            ? undefined
+            : firstCausalGlOffsetMs - gestureEmissionOffsetMs,
+          eventToFirstGlMs: firstCausalGlOffsetMs,
+        }
+      : undefined,
     settleMs,
     jobCompletionMs: input.jobCompletionMs,
     longTasks: {
@@ -685,8 +1216,29 @@ export const finishFeatureAction = async (
   };
 };
 
-export const collectPlaybackAudit = async (page: Page, durationMs: number): Promise<PlaybackAudit> =>
-  page.evaluate(async ({ durationMs, growthRatio, growthFloor }) => {
+export type PlaybackAuditOptions = {
+  controlsTestId?: string;
+  warmPlateau?: PlaybackWarmPlateauEvidence;
+  syntheticPressure?: {
+    busyMs: number;
+    startDelayMs: number;
+  };
+};
+
+export const collectPlaybackAudit = async (
+  page: Page,
+  durationMs: number,
+  options: PlaybackAuditOptions = {},
+): Promise<PlaybackAudit> =>
+  page.evaluate(async ({
+    durationMs,
+    growthRatio,
+    growthFloor,
+    requireAuthoritativeMemory,
+    controlsTestId,
+    warmPlateau,
+    syntheticPressure,
+  }) => {
     const auditState = () => (window as Window & {
       __MOTIONSMITH_CHROMEBOOK_AUDIT__?: BrowserAuditState;
     }).__MOTIONSMITH_CHROMEBOOK_AUDIT__;
@@ -711,22 +1263,124 @@ export const collectPlaybackAudit = async (page: Page, durationMs: number): Prom
     };
     const probeNumber = (name: "foundryTopologyBuilds" | "foundryGeometryCacheSize" | "foundryMaterialCacheSize") =>
       Number(auditState()?.[name] ?? 0);
+    const extendedPerformance = performance as Performance & {
+      memory?: { usedJSHeapSize: number };
+      measureUserAgentSpecificMemory?: () => Promise<{ bytes: number }>;
+    };
+    const measureMemory = async (
+      phase: "baseline" | "tail",
+      sampleIndex: number,
+    ) => {
+      if (typeof extendedPerformance.measureUserAgentSpecificMemory === "function") {
+        const startedAtMs = performance.now();
+        try {
+          return {
+            source: "measure-user-agent-specific-memory" as const,
+            authoritative: true,
+            crossOriginIsolated,
+            bytes: (await extendedPerformance.measureUserAgentSpecificMemory()).bytes,
+          };
+        } catch (error) {
+          const fallback = extendedPerformance.memory?.usedJSHeapSize;
+          return {
+            source: fallback !== undefined
+              ? "performance-memory-diagnostic" as const
+              : "unsupported" as const,
+            authoritative: false,
+            crossOriginIsolated,
+            bytes: fallback,
+            userAgentSpecificMemoryError:
+              error instanceof Error ? error.message : String(error),
+          };
+        } finally {
+          auditState()?.auditInternalMemoryMeasurementWindows.push({
+            owner: "playback",
+            phase,
+            sampleIndex,
+            startedAtMs,
+            endedAtMs: performance.now(),
+          });
+        }
+      }
+      const fallback = extendedPerformance.memory?.usedJSHeapSize;
+      return {
+        source: fallback !== undefined
+          ? "performance-memory-diagnostic" as const
+          : "unsupported" as const,
+        authoritative: false,
+        crossOriginIsolated,
+        bytes: fallback,
+        userAgentSpecificMemoryError: "API unavailable",
+      };
+    };
+    const findControlButton = (name: "Play" | "Pause") => {
+      if (!controlsTestId) return undefined;
+      const root = [...document.querySelectorAll<HTMLElement>("[data-testid]")]
+        .find((element) => element.dataset.testid === controlsTestId);
+      if (!root) throw new Error(`Playback controls ${controlsTestId} are missing`);
+      const button = [...root.querySelectorAll<HTMLButtonElement>("button")]
+        .find((candidate) =>
+          candidate.getAttribute("aria-label") === name ||
+          candidate.textContent?.trim() === name
+        );
+      if (!button || button.disabled || button.getClientRects().length === 0) {
+        throw new Error(`${controlsTestId} ${name} is not interactive`);
+      }
+      return button;
+    };
+    // Authoritative memory can itself block for seconds. Keep it in an
+    // explicitly recorded, quiescent window before starting the renderer.
+    findControlButton("Play");
+    const memoryWindowOffset =
+      auditState()?.auditInternalMemoryMeasurementWindows.length ?? 0;
+    const firstMemory = await measureMemory("baseline", 0);
     const state = auditState();
+    const diagnosticMemory = extendedPerformance.memory;
+    const heap = diagnosticMemory ? [diagnosticMemory.usedJSHeapSize] : [];
+    let playNextPaintMs = 0;
+    if (controlsTestId) {
+      const playStartedAtMs = performance.now();
+      findControlButton("Play")?.click();
+      playNextPaintMs = await new Promise<number>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame((time) =>
+          resolve(time - playStartedAtMs)
+        ));
+      });
+      findControlButton("Pause");
+    }
+    // Control commits and ownership setup are deliberately outside the steady
+    // playback window. The caller must establish any cold-resource plateau
+    // before the paused memory baseline.
     const before = snapshotWebGL();
-    const beforeLongTasks = state?.longTasks.length ?? 0;
     const beforeEvents = state?.eventDurations.length ?? 0;
     const beforeCommits = state?.reactCommits ?? 0;
     const beforeTopology = probeNumber("foundryTopologyBuilds");
     const beforeGeometry = probeNumber("foundryGeometryCacheSize");
     const beforeMaterial = probeNumber("foundryMaterialCacheSize");
-    const memory = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory;
-    const heap = memory ? [memory.usedJSHeapSize] : [];
-    const heapTimer = window.setInterval(() => {
-      if (memory) heap.push(memory.usedJSHeapSize);
-    }, Math.min(5_000, Math.max(250, durationMs / 20)));
     const beforeFrameSubmissions = state?.webglFrameSubmissions.length ?? 0;
     const eventLoopIntervals: number[] = [];
     const start = performance.now();
+    const heapTimer = window.setInterval(() => {
+      if (diagnosticMemory) heap.push(diagnosticMemory.usedJSHeapSize);
+    }, Math.min(5_000, Math.max(250, durationMs / 20)));
+    let pressureActive = syntheticPressure !== undefined;
+    let pressureTimerTaskCount = 0;
+    let pressureTimer: number | undefined;
+    if (syntheticPressure) {
+      const pressureTick = () => {
+        if (!pressureActive) return;
+        const busyUntil = performance.now() + syntheticPressure.busyMs;
+        while (performance.now() < busyUntil) {
+          // Deliberately block below the 50ms application Long Task gate.
+        }
+        pressureTimerTaskCount += 1;
+        pressureTimer = window.setTimeout(pressureTick, 0);
+      };
+      pressureTimer = window.setTimeout(
+        pressureTick,
+        syntheticPressure.startDelayMs,
+      );
+    }
     let previous = start;
     await new Promise<void>((resolve) => {
       const tick = (time: number) => {
@@ -738,8 +1392,27 @@ export const collectPlaybackAudit = async (page: Page, durationMs: number): Prom
       requestAnimationFrame(tick);
     });
     const end = performance.now();
+    pressureActive = false;
+    if (pressureTimer !== undefined) clearTimeout(pressureTimer);
     clearInterval(heapTimer);
-    if (memory) heap.push(memory.usedJSHeapSize);
+    if (diagnosticMemory) heap.push(diagnosticMemory.usedJSHeapSize);
+    const after = snapshotWebGL();
+    const afterCommits = state?.reactCommits ?? 0;
+    const afterTopology = probeNumber("foundryTopologyBuilds");
+    const afterGeometry = probeNumber("foundryGeometryCacheSize");
+    const afterMaterial = probeNumber("foundryMaterialCacheSize");
+    const eventDurations = (state?.eventDurations ?? []).slice(beforeEvents);
+    let pauseNextPaintMs = 0;
+    if (controlsTestId) {
+      const pauseStartedAtMs = performance.now();
+      findControlButton("Pause")?.click();
+      pauseNextPaintMs = await new Promise<number>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame((time) =>
+          resolve(time - pauseStartedAtMs)
+        ));
+      });
+      findControlButton("Play");
+    }
     const frameSubmissions = (state?.webglFrameSubmissions ?? [])
       .slice(beforeFrameSubmissions)
       .filter((time) => time >= start && time <= end);
@@ -752,17 +1425,103 @@ export const collectPlaybackAudit = async (page: Page, durationMs: number): Prom
     submissionIntervals.push(end - priorSubmission);
     const validIntervals = submissionIntervals.filter((value) => value > 0);
     const validEventLoopIntervals = eventLoopIntervals.filter((value) => value > 0);
-    const longTasks = (state?.longTasks ?? []).slice(beforeLongTasks);
-    const eventDurations = (state?.eventDurations ?? []).slice(beforeEvents);
-    const firstBytes = heap[0] ?? 0;
-    const lastBytes = heap.at(-1) ?? firstBytes;
+    const longTasks = (state?.longTaskEntries ?? [])
+      .filter((entry) =>
+        entry.startTime < end && entry.startTime + entry.duration > start
+      )
+      .map((entry) => entry.duration);
+    // Tail measurements run only after playback and pressure are stopped.
+    const memoryTailMeasurements = [await measureMemory("tail", 0)];
+    if (
+      firstMemory.authoritative &&
+      memoryTailMeasurements[0].authoritative
+    ) {
+      memoryTailMeasurements.push(await measureMemory("tail", 1));
+      memoryTailMeasurements.push(await measureMemory("tail", 2));
+    }
+    const allMemoryMeasurements = [firstMemory, ...memoryTailMeasurements];
+    const lastMemory = memoryTailMeasurements.at(-1)!;
+    const sameMemorySource = allMemoryMeasurements.every(
+      (measurement) => measurement.source === firstMemory.source,
+    );
+    const memorySource = sameMemorySource && firstMemory.source !== "unsupported"
+      ? firstMemory.source
+      : "unsupported" as const;
+    const authoritative =
+      memorySource === "measure-user-agent-specific-memory" &&
+      allMemoryMeasurements.every(
+        (measurement) =>
+          measurement.authoritative && measurement.bytes !== undefined,
+      ) &&
+      crossOriginIsolated;
+    const diagnosticAvailable =
+      memorySource !== "unsupported" &&
+      allMemoryMeasurements.every(
+        (measurement) => measurement.bytes !== undefined,
+      );
+    const firstBytes = diagnosticAvailable ? firstMemory.bytes! : 0;
+    const lastBytes = diagnosticAvailable ? lastMemory.bytes! : 0;
     const allowedGrowthBytes = Math.max(growthFloor, firstBytes * growthRatio);
-    const tail = heap.slice(Math.max(0, Math.floor(heap.length * 0.8)));
+    const authoritativeTail = authoritative
+      ? memoryTailMeasurements.flatMap((measurement) =>
+          measurement.bytes === undefined ? [] : [measurement.bytes]
+        )
+      : [];
+    const diagnosticTail = memorySource === "performance-memory-diagnostic"
+      ? [
+          ...heap.slice(Math.max(0, Math.floor(heap.length * 0.8))),
+          ...(lastMemory.bytes === undefined ? [] : [lastMemory.bytes]),
+        ]
+      : [];
+    const tail = authoritativeTail.length >= 3
+      ? authoritativeTail
+      : diagnosticTail;
     const tailRangeBytes = tail.length ? Math.max(...tail) - Math.min(...tail) : 0;
-    const after = snapshotWebGL();
+    const memorySupported =
+      diagnosticAvailable && (!requireAuthoritativeMemory || authoritative);
+    const resourceKinds = new Set([
+      ...Object.keys(before.resources),
+      ...Object.keys(after.resources),
+    ]);
+    const resourceDeltaByKind = Object.fromEntries(
+      [...resourceKinds].sort().map((kind) => {
+        const beforeCounters = before.resources[kind] ?? {
+          created: 0,
+          deleted: 0,
+          live: 0,
+          peakLive: 0,
+        };
+        const afterCounters = after.resources[kind] ?? {
+          created: 0,
+          deleted: 0,
+          live: 0,
+          peakLive: 0,
+        };
+        return [kind, {
+          created: afterCounters.created - beforeCounters.created,
+          deleted: afterCounters.deleted - beforeCounters.deleted,
+          live: afterCounters.live - beforeCounters.live,
+        }];
+      }),
+    );
     const framesOver50 = validIntervals.filter((value) => value > 50).length;
     return {
       frameSource: "webgl-clear-submission" as const,
+      timedWindow: { startedAtMs: start, endedAtMs: end },
+      controlActions: controlsTestId
+        ? { controlsTestId, playNextPaintMs, pauseNextPaintMs }
+        : undefined,
+      warmPlateau,
+      memoryMeasurementWindows:
+        (auditState()?.auditInternalMemoryMeasurementWindows ?? [])
+          .slice(memoryWindowOffset),
+      syntheticPressure: syntheticPressure
+        ? {
+            startedAtMs: start,
+            endedAtMs: end,
+            timerTaskCount: pressureTimerTaskCount,
+          }
+        : undefined,
       durationMs: end - start,
       frameCount: frameSubmissions.length,
       frameIntervalMs: measurePercentiles(validIntervals),
@@ -785,31 +1544,50 @@ export const collectPlaybackAudit = async (page: Page, durationMs: number): Prom
         maxMs: longTasks.length ? Math.max(...longTasks) : 0,
       },
       browserEventLatencyMs: measurePercentiles(eventDurations),
-      reactCommits: Math.max(0, (state?.reactCommits ?? 0) - beforeCommits),
+      reactCommits: Math.max(0, afterCommits - beforeCommits),
       heap: {
-        supported: Boolean(memory),
-        samples: heap.length,
+        supported: memorySupported,
+        diagnosticAvailable,
+        metricSource: memorySource,
+        authoritative,
+        crossOriginIsolated,
+        userAgentSpecificMemoryError:
+          (!sameMemorySource
+            ? "Memory metric source changed between baseline and final"
+            : allMemoryMeasurements.find(
+                (measurement) => measurement.userAgentSpecificMemoryError,
+              )?.userAgentSpecificMemoryError),
+        samples: tail.length,
         firstBytes,
         lastBytes,
         growthBytes: lastBytes - firstBytes,
         allowedGrowthBytes,
         tailRangeBytes,
-        stable: Boolean(memory) && lastBytes - firstBytes <= allowedGrowthBytes && tailRangeBytes <= allowedGrowthBytes,
+        stable:
+          memorySupported &&
+          tail.length >= 3 &&
+          lastBytes - firstBytes <= allowedGrowthBytes &&
+          tailRangeBytes <= allowedGrowthBytes,
       },
       webgl: {
         before,
         after,
+        resourceDeltaByKind,
         liveResourceDelta: liveResources(after) - liveResources(before),
         contextDelta: after.contextsCreated - before.contextsCreated,
         contextLossDelta: after.contextsLost - before.contextsLost,
         contextRestoreDelta: after.contextsRestored - before.contextsRestored,
-        topologyBuildDelta: probeNumber("foundryTopologyBuilds") - beforeTopology,
-        geometryCacheDelta: probeNumber("foundryGeometryCacheSize") - beforeGeometry,
-        materialCacheDelta: probeNumber("foundryMaterialCacheSize") - beforeMaterial,
+        topologyBuildDelta: afterTopology - beforeTopology,
+        geometryCacheDelta: afterGeometry - beforeGeometry,
+        materialCacheDelta: afterMaterial - beforeMaterial,
       },
     };
   }, {
     durationMs,
     growthRatio: CHROMEBOOK_ACCEPTANCE_THRESHOLDS.heapGrowthRatio,
     growthFloor: CHROMEBOOK_ACCEPTANCE_THRESHOLDS.heapGrowthFloorBytes,
+    requireAuthoritativeMemory: CHROMEBOOK_AUDIT_PROFILE.officialAcceptance,
+    controlsTestId: options.controlsTestId,
+    warmPlateau: options.warmPlateau,
+    syntheticPressure: options.syntheticPressure,
   });

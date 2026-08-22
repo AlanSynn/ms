@@ -10,12 +10,15 @@ import {
   buildInteractionAudit,
   finalProbes,
   finishAction,
+  measureFoundryPointerMoveToNextPaint,
   measurePointerEventToNextPaint,
   measureRangeUpdate,
   measureSelectUpdate,
   openStage,
   openWavingArm,
+  readCanonicalProjectActionCount,
   readVisualProbe,
+  waitForFoundryInteractionBaseline,
   type InteractionAudit,
 } from "./chromebookInteractionAudit";
 
@@ -122,13 +125,32 @@ const dragFoundryHandle = async (
     measurePointerEventToNextPaint(page, "pointerdown", () => page.mouse.down()),
   ));
   actions.push(await finishAction(page, `${handleId}-move`, cycle, () =>
-    measurePointerEventToNextPaint(page, "pointermove", () =>
-      page.mouse.move(start.x + (handleId === "M" ? 56 : 28), start.y + 16, { steps: 6 })),
+    measureFoundryPointerMoveToNextPaint(
+      page,
+      () => page.mouse.move(
+        start.x + (handleId === "M" ? 56 : 28),
+        start.y + 16,
+        { steps: 6 },
+      ),
+      { trackGestureEmission: true },
+    ),
+    () => expect(page.getByTestId("foundry-canvas-pane"))
+      .toHaveAttribute("data-foundry-gesture-draft", "active"),
   ));
+  const canonicalCommitBefore = await readCanonicalProjectActionCount(
+    page,
+    "upsert_mechanism",
+  );
   actions.push(await finishAction(page, `${handleId}-commit`, cycle, () =>
     measurePointerEventToNextPaint(page, "pointerup", () => page.mouse.up()),
-    () => expect(page.getByTestId("foundry-canvas-pane"))
-      .toHaveAttribute("data-foundry-gesture-draft", "idle"),
+    async () => {
+      await expect(page.getByTestId("foundry-canvas-pane"))
+        .toHaveAttribute("data-foundry-gesture-draft", "idle");
+      await expect.poll(
+        () => readCanonicalProjectActionCount(page, "upsert_mechanism"),
+        { message: `${handleId} pointerup performs one canonical ProjectState commit` },
+      ).toBe(canonicalCommitBefore + 1);
+    },
   ));
 };
 
@@ -136,6 +158,7 @@ const auditFoundryGestures = async (
   page: Page,
   client: CDPSession,
 ): Promise<InteractionAudit> => {
+  await waitForFoundryInteractionBaseline(page);
   const baseline = await collectStableFeatureProbe(page, client);
   const visualBaseline = await readVisualProbe(page);
   const actions: FeatureActionAudit[] = [];
@@ -153,12 +176,18 @@ const auditFoundryGestures = async (
     measurePointerEventToNextPaint(page, "pointerdown", () => page.mouse.down()),
   ));
   actions.push(await finishAction(page, "orbit-move", 3, () =>
-    measurePointerEventToNextPaint(page, "pointermove", () =>
-      page.mouse.move(start.x + 72, start.y - 28, { steps: 6 })),
-    () => expect(rig).not.toHaveAttribute("data-camera-yaw", yaw ?? ""),
+    measureFoundryPointerMoveToNextPaint(
+      page,
+      () => page.mouse.move(start.x + 72, start.y - 28, { steps: 6 }),
+      { trackGestureEmission: false },
+    ),
   ));
   actions.push(await finishAction(page, "orbit-up", 3, () =>
     measurePointerEventToNextPaint(page, "pointerup", () => page.mouse.up()),
+    () => expect(
+      rig,
+      "Foundry commits the durable camera value when the gesture ends",
+    ).not.toHaveAttribute("data-camera-yaw", yaw ?? ""),
   ));
 
   const final = await finalProbes(page, client, baseline);

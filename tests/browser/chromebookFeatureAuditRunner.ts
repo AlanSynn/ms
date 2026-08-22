@@ -9,6 +9,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
 
 import { CHROMEBOOK_AUDIT_ENVIRONMENT } from "./chromebookAuditReport";
+import { CHROMEBOOK_AUDIT_PROFILE } from "./chromebookAuditProfiles";
 import {
   type ChromebookFeatureAuditReport,
   type ChromebookFeatureName,
@@ -16,7 +17,9 @@ import {
 } from "./chromebookFeatureAuditReport";
 import {
   applyChromebookEmulation,
+  collectChromebookRuntimeEnvironment,
   installChromebookAuditInstrumentation,
+  installChromebookAuditIsolation,
 } from "./chromebookAuditHarness";
 import { collectChromebookAuditProvenance } from "./chromebookAuditProvenance";
 
@@ -97,6 +100,7 @@ export const runChromebookFeatureAudit = async ({
   });
   await installChromebookAuditInstrumentation(context);
   const page = await context.newPage();
+  const client = await installChromebookAuditIsolation(page);
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
@@ -111,43 +115,27 @@ export const runChromebookFeatureAudit = async ({
       "feature audit runs the production preview",
     ).toBe(0);
     await prepare?.(page);
-    const client = await applyChromebookEmulation(page);
+    await applyChromebookEmulation(page, client);
 
     try {
-      const runtimeEnvironment = await page.evaluate(() => ({
-        userAgent: navigator.userAgent,
-        viewport: { width: window.innerWidth, height: window.innerHeight },
-        deviceScaleFactor: window.devicePixelRatio,
-      }));
-      expect(runtimeEnvironment.viewport).toEqual(
-        CHROMEBOOK_AUDIT_ENVIRONMENT.viewport,
-      );
-      expect(runtimeEnvironment.deviceScaleFactor).toBe(
-        CHROMEBOOK_AUDIT_ENVIRONMENT.deviceScaleFactor,
-      );
-
       const feature = await audit(page, client);
       expect(feature.name).toBe(name);
       const passed = feature.acceptance.passed.passed;
       const report: ChromebookFeatureAuditReport = {
-        schemaVersion: 2,
+        schemaVersion: 3,
         generatedAt: new Date().toISOString(),
-        resultLabel: "6x CPU emulation",
+        profile: CHROMEBOOK_AUDIT_PROFILE.name,
+        resultLabel: CHROMEBOOK_AUDIT_PROFILE.resultLabel,
         productionBuild: true,
         actualChromebookTested: false,
         provenance: await collectChromebookAuditProvenance(baseURL),
         runtimeProbe: "browser-api-ownership-v1",
         workload,
-        environment: {
-          browser: "chrome",
-          browserVersion: auditBrowser.version(),
-          userAgent: runtimeEnvironment.userAgent,
-          viewport: CHROMEBOOK_AUDIT_ENVIRONMENT.viewport,
-          deviceScaleFactor: runtimeEnvironment.deviceScaleFactor,
-          cpuThrottlingRate: CHROMEBOOK_AUDIT_ENVIRONMENT.cpuThrottlingRate,
-          throttlingScope: "feature-action",
-          network: CHROMEBOOK_AUDIT_ENVIRONMENT.network,
-        },
+        environment: await collectChromebookRuntimeEnvironment(
+          page,
+          auditBrowser.version(),
+          "feature-action",
+        ),
         feature,
         acceptance: {
           passed: { passed, observed: passed, limit: true },

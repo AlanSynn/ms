@@ -10,6 +10,7 @@ import {
 import {
   runProjectImportJob,
   validateCharacterPackageProjectPersistence,
+  validateImportedProjectPersistence,
   type ProjectImportWorkerResponse,
 } from "../runtime/import/projectImportJob";
 import {
@@ -33,6 +34,7 @@ import {
   createProjectFromPackageData,
   validateCharacterPackageAssetReferences,
 } from "../utils/packageLoader";
+import { mechanismBoardPlacementErrors } from "../utils/fabrication";
 
 const pngBytes = (
   width: number,
@@ -112,6 +114,23 @@ assert.throws(
   /Mechanisms exceeds the classroom limit/,
 );
 assert.throws(
+  () => validateProjectImportShape({ parts: [{ id: "arm" }] }),
+  /Parts must be an object/,
+  "an array cannot evade the part cardinality gate and expand during migration",
+);
+assert.throws(
+  () => validateProjectImportShape({
+    skeleton: { joints: Array.from({ length: 1_000 }, () => ({ id: "joint" })) },
+  }),
+  /Skeleton joints must be an object/,
+  "an array cannot evade the joint cardinality gate and expand during migration",
+);
+assert.throws(
+  () => validateProjectImportShape({ paths: [], mechanisms: {} }),
+  /Paths must be an object/,
+  "domain containers must match the ProjectState storage schema before migration",
+);
+assert.throws(
   () => validateProjectImportShape({
     parts: { arm: {} },
     partOrder: ["arm", "arm"],
@@ -131,6 +150,39 @@ assert.throws(
   }),
   /Path points exceeds the classroom limit/,
 );
+for (const [field, label] of [
+  ["warnings", "Mechanism warnings"],
+  ["activeVisualPartIds", "Mechanism visual part ids"],
+  ["gearTrainRadii", "Mechanism gear radii"],
+  ["camProfileSamples", "Mechanism cam samples"],
+] as const) {
+  assert.throws(
+    () => validateProjectImportShape({
+      mechanisms: [{
+        [field]: Array.from(
+          { length: PROJECT_IMPORT_LIMITS.auxiliaryListEntries + 1 },
+          () => 0,
+        ),
+      }],
+    }),
+    new RegExp(`${label} exceeds the classroom limit`),
+    `${field} is bounded before migration maps and truncates it`,
+  );
+}
+assert.throws(
+  () => validateProjectImportShape({
+    paths: {
+      hand: {
+        warnings: Array.from(
+          { length: PROJECT_IMPORT_LIMITS.auxiliaryListEntries + 1 },
+          () => "warning",
+        ),
+      },
+    },
+  }),
+  /Path warnings exceeds the classroom limit/,
+  "path warnings are bounded before migration maps and truncates them",
+);
 let deepMetadata: Record<string, unknown> = {};
 const deepMetadataRoot = deepMetadata;
 for (let depth = 0; depth <= PROJECT_IMPORT_LIMITS.metadataDepth; depth += 1) {
@@ -140,6 +192,92 @@ for (let depth = 0; depth <= PROJECT_IMPORT_LIMITS.metadataDepth; depth += 1) {
 assert.throws(
   () => validateProjectImportShape({ metadata: deepMetadataRoot }),
   /Project metadata exceeds the classroom depth limit/,
+);
+let fanoutReads = 0;
+let adversarialFanout: unknown = {};
+const fanoutDepth = Math.ceil(
+  PROJECT_IMPORT_LIMITS.objectGraphContainers /
+    PROJECT_IMPORT_LIMITS.objectGraphArrayEntries,
+);
+for (let depth = 0; depth < fanoutDepth; depth += 1) {
+  const next: unknown[] = Array.from(
+    { length: PROJECT_IMPORT_LIMITS.objectGraphArrayEntries },
+    () => ({}),
+  );
+  next[next.length - 1] = adversarialFanout;
+  adversarialFanout = new Proxy(next, {
+    get(target, property, receiver) {
+      if (typeof property === "string" && /^\d+$/.test(property)) {
+        fanoutReads += 1;
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
+}
+assert.throws(
+  () => validateProjectImportShape({
+    characterPackage: { partsInfo: adversarialFanout },
+  }),
+  /Project data containers exceeds the classroom limit/,
+  "wide container graphs fail while children are discovered, before an oversized pending queue is built",
+);
+assert(
+  fanoutReads <= PROJECT_IMPORT_LIMITS.objectGraphContainers,
+  "object graph traversal stops reading a wide input at the container ceiling",
+);
+let primitiveArrayReads = 0;
+const primitiveArray = new Proxy(
+  new Array(PROJECT_IMPORT_LIMITS.objectGraphArrayEntries + 1),
+  {
+    get(target, property, receiver) {
+      if (typeof property === "string" && /^\d+$/.test(property)) {
+        primitiveArrayReads += 1;
+        return 0;
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  },
+);
+assert.throws(
+  () => validateProjectImportShape({
+    characterPackage: { partsInfo: { padding: primitiveArray } },
+  }),
+  /Project data array entries exceeds the classroom limit/,
+  "large primitive arrays fail from length before every value is visited",
+);
+assert.equal(
+  primitiveArrayReads,
+  0,
+  "oversized primitive arrays are rejected without scanning their entries",
+);
+let primitiveRecordReads = 0;
+const primitiveRecordTarget: Record<string, number> = {};
+for (
+  let index = 0;
+  index < PROJECT_IMPORT_LIMITS.objectGraphRecordEntries + 1;
+  index += 1
+) {
+  primitiveRecordTarget[`value-${index}`] = index;
+}
+const primitiveRecord = new Proxy(primitiveRecordTarget, {
+  get(target, property, receiver) {
+    if (typeof property === "string" && property.startsWith("value-")) {
+      primitiveRecordReads += 1;
+    }
+    return Reflect.get(target, property, receiver);
+  },
+});
+assert.throws(
+  () => validateProjectImportShape({
+    characterPackage: { partsInfo: { padding: primitiveRecord } },
+  }),
+  /Project data record entries exceeds the classroom limit/,
+  "large primitive records stop at the per-container entry ceiling",
+);
+assert.equal(
+  primitiveRecordReads,
+  PROJECT_IMPORT_LIMITS.objectGraphRecordEntries,
+  "the entry beyond the record ceiling is rejected before its value is read",
 );
 
 const sample = createSampleProject();
@@ -152,6 +290,147 @@ const imported = await runProjectImportJob({
 assert.equal(imported.sourceName, "sample.motionsmith.json");
 assert.equal(imported.project.partOrder.length, sample.partOrder.length);
 assert.equal(imported.project.mechanisms.length, sample.mechanisms.length);
+
+const offBoardImportSource = createSampleProject({ includeMechanism: true });
+const offBoardImported = await runProjectImportJob({
+  kind: "project",
+  file: new File([JSON.stringify({
+    ...offBoardImportSource,
+    mechanisms: offBoardImportSource.mechanisms.map((mechanism) => ({
+      ...mechanism,
+      anchorX: 9_999,
+      anchorY: 9_999,
+    })),
+  })], "off-board.motionsmith.json", { type: "application/json" }),
+});
+assert(
+  offBoardImported.project.mechanisms.every((mechanism) =>
+    mechanismBoardPlacementErrors(offBoardImported.project, mechanism).length === 0
+  ),
+  "the import worker converges every mechanism to a board-valid placement",
+);
+assert.notEqual(
+  offBoardImported.project.mechanisms[0].anchorX,
+  9_999,
+  "import does not preserve an unsafe off-board anchor",
+);
+const reopenedBoardFit = await runProjectImportJob({
+  kind: "project",
+  file: new File(
+    [JSON.stringify(offBoardImported.project)],
+    "off-board-fitted.motionsmith.json",
+    { type: "application/json" },
+  ),
+});
+assert.deepEqual(
+  reopenedBoardFit.project.mechanisms.map(({ anchorX, anchorY }) => ({
+    anchorX,
+    anchorY,
+  })),
+  offBoardImported.project.mechanisms.map(({ anchorX, anchorY }) => ({
+    anchorX,
+    anchorY,
+  })),
+  "a successful board fit is stable across project reopen",
+);
+
+await assert.rejects(
+  runProjectImportJob({
+    kind: "project",
+    file: new File([JSON.stringify({
+      ...offBoardImportSource,
+      mechanisms: offBoardImportSource.mechanisms.map((mechanism) => ({
+        ...mechanism,
+        anchorX: 9_999,
+        anchorY: 9_999,
+        crankLength: 5_000,
+        groundLength: 5_000,
+        couplerLength: 5_000,
+        rockerLength: 5_000,
+        couplerPointDist: 5_000,
+      })),
+    })], "unplaceable.motionsmith.json", { type: "application/json" }),
+  }),
+  /Cannot import mech-1: no valid 15x15 board placement/,
+  "the import worker returns a direct blocker when no valid placement exists",
+);
+
+const unknownFieldsImported = await runProjectImportJob({
+  kind: "project",
+  file: new File([JSON.stringify({
+    ...sample,
+    arbitraryTopLevelPayload: "must-not-survive",
+    metadata: {
+      ...sample.metadata,
+      arbitraryMetadataPayload: "must-not-survive",
+    },
+  })], "canonical-shape.motionsmith.json", { type: "application/json" }),
+});
+assert.equal(
+  "arbitraryTopLevelPayload" in unknownFieldsImported.project,
+  false,
+  "post-migration ProjectState has no arbitrary top-level spread",
+);
+assert.equal(
+  "arbitraryMetadataPayload" in unknownFieldsImported.project.metadata,
+  false,
+  "post-migration metadata contains only declared ProjectState fields",
+);
+
+const remoteCharacterArtworkImported = await runProjectImportJob({
+  kind: "project",
+  file: new File([JSON.stringify({
+    ...sample,
+    characterPackage: {
+      id: "remote-artwork",
+      createdAt: new Date(0).toISOString(),
+      sourceImageName: "remote.png",
+      outputDir: "https://example.com/package",
+      partsInfo: {},
+      charCfg: {},
+      sourceTextureUrl: "https://example.com/huge.png",
+      maskUrl: "//example.com/huge-mask.png",
+    },
+  })], "remote-artwork.motionsmith.json", { type: "application/json" }),
+});
+assert.equal(
+  remoteCharacterArtworkImported.project.characterPackage?.sourceTextureUrl,
+  undefined,
+  "portable projects cannot retain remotely fetched character artwork",
+);
+assert.equal(
+  remoteCharacterArtworkImported.project.characterPackage?.maskUrl,
+  undefined,
+  "portable projects cannot retain remotely fetched character masks",
+);
+
+const oversizedMigratedProject = {
+  ...sample,
+  characterPackage: {
+    id: "oversized-import",
+    createdAt: new Date(0).toISOString(),
+    sourceImageName: "oversized.png",
+    outputDir: "portable",
+    partsInfo: { padding: "x".repeat(7 * 1024 * 1024) },
+    charCfg: {},
+  },
+};
+await assert.rejects(
+  runProjectImportJob({
+    kind: "project",
+    file: new File(
+      [JSON.stringify(oversizedMigratedProject)],
+      "oversized-expanded.motionsmith.json",
+      { type: "application/json" },
+    ),
+  }),
+  /Project expands beyond the 6 MB browser autosave limit/,
+  "ordinary project import is re-measured after migration",
+);
+assert(
+  validateImportedProjectPersistence(sample) < AUTOSAVE_SNAPSHOT_MAX_BYTES,
+  "a canonical ordinary project remains below the persistence ceiling",
+);
 
 const sharedRasterUrl = pngHeaderDataUrl(2_000, 2_000);
 assert.deepEqual(

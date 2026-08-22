@@ -13,11 +13,13 @@ import {
   applyChromebookEmulation,
   attachNetworkRecorder,
   collectPlaybackAudit,
+  collectChromebookRuntimeEnvironment,
   installChromebookAuditInstrumentation,
   measureAction,
   measureBoot,
 } from "./chromebookAuditHarness";
 import { collectChromebookAuditProvenance } from "./chromebookAuditProvenance";
+import { CHROMEBOOK_AUDIT_PROFILE } from "./chromebookAuditProfiles";
 
 const ENABLED = process.env.CHROMEBOOK_AUDIT === "1";
 const ENFORCE = process.env.CHROMEBOOK_AUDIT_ENFORCE !== "0";
@@ -58,7 +60,7 @@ test.describe("Chromebook workflow audit", () => {
   test.skip(!ENABLED, "run with CHROMEBOOK_AUDIT=1 against a production preview");
   test.describe.configure({ mode: "serial" });
 
-  test("audits cold/warm boot and Character through Assembly at 6x CPU", async ({ browser }, testInfo) => {
+  test(`audits cold/warm boot and Character through Assembly at ${CHROMEBOOK_AUDIT_ENVIRONMENT.cpuThrottlingRate}x CPU`, async ({ browser }, testInfo) => {
     test.setTimeout(0);
     const context = await browser.newContext({
       viewport: CHROMEBOOK_AUDIT_ENVIRONMENT.viewport,
@@ -86,14 +88,6 @@ test.describe("Chromebook workflow audit", () => {
       () => network.records.length,
     );
     network.setPhase("workflow");
-
-    const runtimeEnvironment = await page.evaluate(() => ({
-      userAgent: navigator.userAgent,
-      deviceScaleFactor: window.devicePixelRatio,
-      viewport: { width: window.innerWidth, height: window.innerHeight },
-    }));
-    expect(runtimeEnvironment.viewport).toEqual(CHROMEBOOK_AUDIT_ENVIRONMENT.viewport);
-    expect(runtimeEnvironment.deviceScaleFactor).toBe(CHROMEBOOK_AUDIT_ENVIRONMENT.deviceScaleFactor);
 
     const actions: ActionLatency[] = [];
     const dialog = page.getByTestId("getting-started-dialog");
@@ -126,24 +120,25 @@ test.describe("Chromebook workflow audit", () => {
 
     const toolbar = page.getByTestId("foundry-toolbar");
     const play = toolbar.getByRole("button", { name: "Play", exact: true });
-    actions.push(await measureAction(
-      page,
-      "foundry-play",
-      "click",
-      play,
-      () => play.click(),
-      () => expect(toolbar.getByRole("button", { name: "Pause", exact: true })).toBeVisible(),
-    ));
-    const playback = await collectPlaybackAudit(page, PLAYBACK_MS);
-    const pause = toolbar.getByRole("button", { name: "Pause", exact: true });
-    actions.push(await measureAction(
-      page,
-      "foundry-pause",
-      "click",
-      pause,
-      () => pause.click(),
-      () => expect(toolbar.getByRole("button", { name: "Play", exact: true })).toBeVisible(),
-    ));
+    await expect(play).toBeVisible();
+    const playback = await collectPlaybackAudit(page, PLAYBACK_MS, {
+      controlsTestId: "foundry-toolbar",
+    });
+    if (!playback.controlActions) {
+      throw new Error("Foundry playback did not record control latency");
+    }
+    actions.push(
+      {
+        label: "foundry-play",
+        kind: "click",
+        durationMs: playback.controlActions.playNextPaintMs,
+      },
+      {
+        label: "foundry-pause",
+        kind: "click",
+        durationMs: playback.controlActions.pauseNextPaintMs,
+      },
+    );
 
     const phase = page.getByLabel("Foundry phase");
     for (const value of [30, 90, 150, 210, 270]) {
@@ -192,24 +187,25 @@ test.describe("Chromebook workflow audit", () => {
       actionLatencyMs,
       tabSwitchLatencyMs,
       forbiddenImageRecognitionRequests.length,
+      { cold, warm },
     );
     const baseURL = testInfo.project.use.baseURL;
     if (typeof baseURL !== "string") {
       throw new Error("Chromebook workflow audit requires a preview base URL");
     }
     const report: ChromebookAuditReport = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       generatedAt: new Date().toISOString(),
-      resultLabel: "6x CPU emulation",
+      profile: CHROMEBOOK_AUDIT_PROFILE.name,
+      resultLabel: CHROMEBOOK_AUDIT_PROFILE.resultLabel,
       productionBuild: true,
       actualChromebookTested: false,
       provenance: await collectChromebookAuditProvenance(baseURL),
-      environment: {
-        ...CHROMEBOOK_AUDIT_ENVIRONMENT,
-        browserVersion: browser.version(),
-        userAgent: runtimeEnvironment.userAgent,
-        measuredDeviceScaleFactor: runtimeEnvironment.deviceScaleFactor,
-      },
+      environment: await collectChromebookRuntimeEnvironment(
+        page,
+        browser.version(),
+        "navigation-and-action",
+      ),
       boot: { cold, warm },
       actions,
       actionLatencyMs,

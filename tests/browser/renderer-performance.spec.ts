@@ -42,16 +42,31 @@ test('retained Three scenes batch the grid and submit one render per camera move
     await numericAttribute(characterState, 'data-three-grid-segment-count'),
     'the single grid draw object retains every physical board line',
   ).toBeGreaterThan(1);
-  const expectedCharacterTextures = await numericAttribute(
-    characterState,
-    'data-three-part-texture-count',
+  expect(
+    await numericAttribute(characterState, 'data-three-part-texture-count'),
+    'the guided Character retains real part artwork for the resource-settlement check',
+  ).toBeGreaterThan(0);
+  await expect(characterState).toHaveAttribute(
+    'data-three-pending-initial-scene-resources',
+    '0',
   );
-  await expect.poll(
-    () => numericAttribute(characterState, 'data-three-renderer-texture-count'),
-    { message: 'finish the declared Character texture uploads before measuring orbit' },
-  ).toBeGreaterThanOrEqual(expectedCharacterTextures);
+  await expect(characterState).toHaveAttribute(
+    'data-three-initial-scene-resource-upload',
+    'complete',
+  );
+  await stableSubmissionCount(page, characterState);
+  const characterResourcesBeforeOrbit = {
+    geometries: await numericAttribute(characterState, 'data-three-renderer-geometry-count'),
+    textures: await numericAttribute(characterState, 'data-three-renderer-texture-count'),
+  };
+  expect(characterResourcesBeforeOrbit.geometries).toBeGreaterThan(0);
+  expect(characterResourcesBeforeOrbit.textures).toBeGreaterThan(0);
 
   const characterPreview = page.getByTestId('character-three-puppet');
+  await expect(
+    characterPreview,
+    'the production preview publishes readiness only after its exact retained scene is submitted',
+  ).toHaveAttribute('data-three-initial-scene-ready', 'true');
   const characterHost = characterPreview.locator('.three-puppet-host');
   await expect(characterState).toHaveAttribute('data-three-render-submissions', /[1-9]\d*/);
   const characterBox = await characterHost.boundingBox();
@@ -65,7 +80,6 @@ test('retained Three scenes batch the grid and submit one render per camera move
   const characterBeforeMove = await stableSubmissionCount(page, characterState);
   const characterYawBefore = await characterState.getAttribute('data-camera-yaw');
   await page.mouse.move(characterStart.x + 64, characterStart.y - 24);
-  await expect(characterState).not.toHaveAttribute('data-camera-yaw', characterYawBefore ?? '');
   await expect.poll(
     () => numericAttribute(characterState, 'data-three-render-submissions'),
     { message: 'one Character camera move reaches the retained Three scene' },
@@ -76,6 +90,21 @@ test('retained Three scenes batch the grid and submit one render per camera move
     'Character camera invalidation is coalesced into one renderer submission',
   ).toBe(characterBeforeMove + 1);
   await page.mouse.up();
+  await expect(
+    characterState,
+    'Character commits the durable camera value once when the gesture ends',
+  ).not.toHaveAttribute('data-camera-yaw', characterYawBefore ?? '');
+  expect(
+    await numericAttribute(characterState, 'data-three-render-submissions'),
+    'the final React camera commit reuses the already-applied transient view',
+  ).toBe(characterBeforeMove + 1);
+  expect(
+    {
+      geometries: await numericAttribute(characterState, 'data-three-renderer-geometry-count'),
+      textures: await numericAttribute(characterState, 'data-three-renderer-texture-count'),
+    },
+    'the readiness upload leaves the complete retained resource set stable through first interaction',
+  ).toEqual(characterResourcesBeforeOrbit);
 
   await page.mouse.move(characterStart.x, characterStart.y);
   await page.mouse.down();
@@ -108,7 +137,6 @@ test('retained Three scenes batch the grid and submit one render per camera move
   const yawBefore = await rig.getAttribute('data-camera-yaw');
 
   await page.mouse.move(start.x + 64, start.y - 24);
-  await expect(rig).not.toHaveAttribute('data-camera-yaw', yawBefore ?? '');
   await expect.poll(
     () => numericAttribute(rig, 'data-three-render-submissions'),
     { message: 'one camera move reaches the retained Three scene' },
@@ -120,6 +148,10 @@ test('retained Three scenes batch the grid and submit one render per camera move
   ).toBe(beforeMove + 1);
 
   await page.mouse.up();
+  await expect(
+    rig,
+    'Foundry commits the durable camera value once when the gesture ends',
+  ).not.toHaveAttribute('data-camera-yaw', yawBefore ?? '');
   await nextTwoFrames(page);
   expect(
     await numericAttribute(rig, 'data-three-render-submissions'),

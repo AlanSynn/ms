@@ -45,8 +45,19 @@ assert.throws(
 );
 assert.throws(
   () => validateSceneObjectImageDimensions({ width: 8_000, height: 8_000 }),
-  /16 megapixel classroom limit/,
+  /2048 px or 4 megapixel classroom limit/,
 );
+assert.deepEqual(
+  validateSceneObjectImageDimensions({ width: 2_000, height: 2_000 }),
+  { width: 2_000, height: 2_000 },
+);
+assert.throws(
+  () => validateSceneObjectImageDimensions({ width: 8_192, height: 8_192 }),
+  /2048 px or 4 megapixel classroom limit/,
+  "a tiny compressed 8192 by 8192 header is rejected before image decode",
+);
+assert.equal(SCENE_OBJECT_IMAGE_LIMITS.maxSourceEdge, 2_048);
+assert.equal(SCENE_OBJECT_IMAGE_LIMITS.maxSourcePixels, 4_000_000);
 assert.deepEqual(
   fitSceneObjectImageDimensions({ width: 4_000, height: 2_000 }, 512),
   { width: 512, height: 256 },
@@ -58,6 +69,40 @@ assert.deepEqual(
 assert.throws(
   () => assertLocalSceneObjectSvg('<svg><image href="https://example.com/a.png"/></svg>'),
   /local artwork only/,
+);
+assert.throws(
+  () => assertLocalSceneObjectSvg(
+    '<svg width="1" height="1"><image href="data:image/png;base64,AAAA"/></svg>',
+  ),
+  /local artwork only/,
+  "embedded raster images cannot bypass decoded-pixel limits through SVG",
+);
+assert.throws(
+  () => assertLocalSceneObjectSvg(
+    '<svg width="1" height="1"><feImage href="data:image/png;base64,AAAA"/></svg>',
+  ),
+  /local artwork only/,
+  "SVG filter images cannot allocate an unbudgeted raster surface",
+);
+assert.throws(
+  () => assertLocalSceneObjectSvg(
+    '<svg><defs><path id="shape"/></defs><use href="external.svg#shape"/></svg>',
+  ),
+  /local artwork only/,
+  "relative SVG references cannot load an unvalidated app resource",
+);
+assert.throws(
+  () => assertLocalSceneObjectSvg(
+    '<svg><use href="h&#116;tps://example.com/art.svg#shape"/></svg>',
+  ),
+  /local artwork only/,
+  "XML character references cannot hide a remote SVG resource",
+);
+assert.doesNotThrow(
+  () => assertLocalSceneObjectSvg(
+    '<svg><defs><path id="shape"/><linearGradient id="paint"/></defs><use href="#shape" fill="url(#paint)"/></svg>',
+  ),
+  "self-contained fragment references remain compatible",
 );
 const decodeSvgDataUrl = (dataUrl: string) =>
   Buffer.from(dataUrl.split(",")[1], "base64").toString("utf8");

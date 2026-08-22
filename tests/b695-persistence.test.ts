@@ -202,6 +202,44 @@ const projectB = createEmptyProject();
 }
 
 {
+  const clock = manualBoundary();
+  const preparation = manualPreparation<ProjectState>();
+  const committed: ProjectState[] = [];
+  const dirty: ProjectState[] = [];
+  let finishFirstCommit: (saved: boolean) => void = () => undefined;
+  const transaction = createAutosaveTransaction<ProjectState, string>({
+    boundary: clock.boundary,
+    preparation: preparation.driver,
+    commit: (value) => {
+      committed.push(value);
+      if (committed.length > 1) return true;
+      return new Promise<boolean>((resolve) => {
+        finishFirstCommit = resolve;
+      });
+    },
+    markDirty: (value) => dirty.push(value),
+  });
+  transaction.accept(projectA);
+  clock.runNext();
+  preparation.starts[0].callbacks.ready("prepared-a");
+  clock.runNext();
+  assert.equal(transaction.hasPending(), true, "an IndexedDB commit remains pending until its transaction settles");
+
+  transaction.accept(projectB);
+  assert.equal(clock.pending(), 0, "a newer edit waits behind the atomic commit");
+  finishFirstCommit(true);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(clock.pending(), 1, "the newest edit is scheduled after the atomic commit");
+  clock.runNext();
+  preparation.starts[1].callbacks.ready("prepared-b");
+  clock.runNext();
+  assert.deepEqual(committed, [projectA, projectB]);
+  assert.deepEqual(dirty, []);
+  assert.equal(transaction.hasPending(), false);
+}
+
+{
   const fixture = transactionFixture();
   fixture.transaction.accept(projectA);
   fixture.clock.runNext();

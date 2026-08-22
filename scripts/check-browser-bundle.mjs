@@ -8,8 +8,10 @@ import { collectStaticImportClosure } from './browser-bundle-graph.mjs';
 const DIST = join(process.cwd(), 'dist');
 const OUTPUT = process.env.BUNDLE_BUDGET_OUTPUT
   ?? join(process.cwd(), 'artifacts/chromebook-audit/bundle-budget.json');
-const CORE_JS_GZIP_LIMIT_BYTES = 450_000;
-const SHELL_COMPRESSED_LIMIT_BYTES = 1_500_000;
+const CORE_JS_GZIP_LIMIT_BYTES = 200_000;
+const SHELL_COMPRESSED_LIMIT_BYTES = 300_000;
+const OPTIONAL_JS_GZIP_LIMIT_BYTES = 200_000;
+const RAPIER_JS_GZIP_LIMIT_BYTES = 900_000;
 
 const oneMatching = (files, pattern, label) => {
   const matches = files.filter((file) => pattern.test(file));
@@ -34,6 +36,7 @@ const entryCoreFiles = [
   join(DIST, 'assets', appJs),
 ];
 const coreFiles = await collectStaticImportClosure(entryCoreFiles);
+const coreFileSet = new Set(coreFiles);
 const coreJsGzipBytes = (await Promise.all(coreFiles.map(compressedBytes)))
   .reduce((sum, bytes) => sum + bytes, 0);
 const entryJsGzipBytes = (
@@ -60,6 +63,27 @@ const shellAssets = await Promise.all(shellPaths.map(async (file) => ({
 })));
 const shellCompressedBytes = shellAssets
   .reduce((sum, asset) => sum + asset.compressedBytes, 0);
+const optionalJs = await Promise.all(
+  assetFiles
+    .filter((file) => file.endsWith('.js'))
+    .map((file) => join(DIST, 'assets', file))
+    .filter((file) => !coreFileSet.has(file))
+    .map(async (file) => {
+      const gzipBytes = await compressedBytes(file);
+      const rapier = /^rapier-[\w-]+\.js$/.test(basename(file));
+      const limitBytes = rapier
+        ? RAPIER_JS_GZIP_LIMIT_BYTES
+        : OPTIONAL_JS_GZIP_LIMIT_BYTES;
+      return {
+        file: file.slice(DIST.length + 1),
+        gzipBytes,
+        class: rapier ? 'lazy-physics' : 'optional',
+        limitBytes,
+        passed: gzipBytes <= limitBytes,
+      };
+    }),
+);
+optionalJs.sort((left, right) => left.file.localeCompare(right.file));
 
 const report = {
   schemaVersion: 2,
@@ -83,10 +107,19 @@ const report = {
     limitBytes: SHELL_COMPRESSED_LIMIT_BYTES,
     passed: shellCompressedBytes <= SHELL_COMPRESSED_LIMIT_BYTES,
   },
+  optionalJs: {
+    basis: 'emitted JavaScript outside the recursive static-import closure',
+    files: optionalJs,
+    passed: optionalJs.every((chunk) => chunk.passed),
+  },
 };
 
 await mkdir(dirname(OUTPUT), { recursive: true });
 await writeFile(OUTPUT, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
 console.log(JSON.stringify(report, null, 2));
 
-if (!report.coreJs.passed || !report.initialShell.passed) process.exit(1);
+if (
+  !report.coreJs.passed ||
+  !report.initialShell.passed ||
+  !report.optionalJs.passed
+) process.exit(1);

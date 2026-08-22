@@ -13,12 +13,13 @@ const profileFlag = (name: string) => {
 };
 const studySummaryEnabled = profileFlag('MOTIONSMITH_SUMMARY');
 const e2eDiagnosticsEnabled = profileFlag('MOTIONSMITH_E2E_DIAGNOSTICS');
+const auditIsolationEnabled = profileFlag('MOTIONSMITH_AUDIT_ISOLATION');
 if (studySummaryEnabled && e2eDiagnosticsEnabled) {
   throw new Error('Study and E2E diagnostics profiles are mutually exclusive');
 }
 
 export default defineConfig(() => {
-  // Use relative paths for Tauri; build the classroom root and Pages mirror separately.
+  // Use relative paths for Tauri; allow GitHub Pages project paths for web builds.
   const isTauri = process.env.TAURI_PLATFORM !== undefined;
   const webBase = process.env.VITE_BASE_PATH ?? '/';
 
@@ -28,6 +29,12 @@ export default defineConfig(() => {
       port: 1420,
       strictPort: true,
     },
+    preview: auditIsolationEnabled ? {
+      headers: {
+        'Cross-Origin-Opener-Policy': 'same-origin',
+        'Cross-Origin-Embedder-Policy': 'require-corp',
+      },
+    } : undefined,
     envPrefix: ['VITE_', 'TAURI_'],
     define: {
       __APP_VERSION__: JSON.stringify(packageVersion),

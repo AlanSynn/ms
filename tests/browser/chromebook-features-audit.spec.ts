@@ -17,14 +17,20 @@ import {
   readFeatureRuntimeProbe,
   waitForLifecycleBaseline,
 } from "./chromebookAuditHarness";
+import { readBrowserAutosaveProject } from "./autosaveIndexedDbProbe";
 
 const ENABLED = process.env.CHROMEBOOK_AUDIT === "1";
 const GIF_FIXTURE = join(process.cwd(), "ref/animation.gif");
+const VIDEO_FIXTURE = join(process.cwd(), "ref/vid.mp4");
 
-const stageButton = (page: Page, name: "Character" | "Path" | "Design") => {
+const stageButton = (
+  page: Page,
+  name: "Character" | "Path" | "Foundry" | "Design",
+) => {
   const names = {
     Character: /^Character$/i,
     Path: /^Path Editor$/i,
+    Foundry: /Mechanism Foundry|Foundry/i,
     Design: /Mechanism Design|Design/i,
   } as const;
   return page
@@ -43,13 +49,15 @@ const openWavingArm = async (page: Page) => {
 
 const goToStage = async (
   page: Page,
-  name: "Character" | "Path" | "Design",
+  name: "Character" | "Path" | "Foundry" | "Design",
 ) => {
   await stageButton(page, name).click();
   const ready = name === "Character"
     ? page.getByRole("heading", { name: "Character" })
     : name === "Path"
       ? page.getByRole("heading", { name: "Path Editor" })
+      : name === "Foundry"
+        ? page.getByRole("heading", { name: "Foundry" })
       : page.getByRole("heading", { name: "Mechanism Design" });
   await expect(ready).toBeVisible();
   if (name === "Design") {
@@ -215,12 +223,12 @@ const auditDesignFit = async (
   const completedBefore = await readFeatureRuntimeProbe(page);
   const completedTiming = await measureClickToNextPaint(fit);
   await expect(fit).toBeEnabled({ timeout: 120_000 });
-  await expect.poll(() => page.evaluate(() => {
-    const saved = JSON.parse(localStorage.getItem("motionsmith.autosave") ?? "{}");
-    return saved.mechanisms?.find(
-      (mechanism: { id?: string }) => mechanism.id === saved.selectedMechanismId,
+  await expect.poll(async () => {
+    const saved = await readBrowserAutosaveProject(page);
+    return saved?.mechanisms?.find(
+      (mechanism: { id?: string }) => mechanism.id === saved?.selectedMechanismId,
     )?.source;
-  }), { message: "the completed optimizer result reaches canonical project state" })
+  }, { message: "the completed optimizer result reaches canonical project state" })
     .toBe("optimized");
   const jobCompletionMs = await elapsedFeatureTime(page, completedTiming);
   await waitForLifecycleBaseline(page, baseline.lifecycle);
@@ -336,6 +344,205 @@ const auditTraceGif = async (
   });
 };
 
+const auditTraceVideo = async (
+  page: Page,
+  client: CDPSession,
+): Promise<FeatureAudit> => {
+  const baseline = await stableProbe(page, client);
+  const actions: FeatureActionAudit[] = [];
+
+  const cancelledModal = await openTrace(page);
+  await cancelledModal.evaluate((modal) => {
+    const cancelOnUrl = () => {
+      window.removeEventListener(
+        "motionsmith:chromebook-object-url-acquired",
+        cancelOnUrl,
+      );
+      requestAnimationFrame(() => {
+        document.documentElement.dataset.auditVideoCancelledOnUrl = "true";
+        (modal.querySelector(
+          'button[aria-label="Close trace"]',
+        ) as HTMLButtonElement | null)?.click();
+      });
+    };
+    window.addEventListener(
+      "motionsmith:chromebook-object-url-acquired",
+      cancelOnUrl,
+    );
+  });
+  const cancelledBefore = await readFeatureRuntimeProbe(page);
+  const cancelledTiming = await measureExternalActionToNextPaint(
+    page,
+    () => cancelledModal.locator('input[type="file"]').setInputFiles(
+      VIDEO_FIXTURE,
+    ),
+  );
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-audit-video-cancelled-on-url",
+    "true",
+  );
+  await expect(cancelledModal).toHaveCount(0);
+  await waitForLifecycleBaseline(page, baseline.lifecycle);
+  actions.push(await finishFeatureAction(page, {
+    label: "trace-video-close-during-metadata",
+    cycle: 1,
+    outcome: "cancelled",
+    timing: cancelledTiming,
+    before: cancelledBefore,
+  }));
+
+  const completedModal = await openTrace(page);
+  const completedBefore = await readFeatureRuntimeProbe(page);
+  const completedTiming = await measureExternalActionToNextPaint(
+    page,
+    () => completedModal.locator('input[type="file"]').setInputFiles(
+      VIDEO_FIXTURE,
+    ),
+  );
+  const timeline = completedModal.locator('input[type="range"]');
+  await expect(timeline).toBeVisible();
+  await expect(completedModal.locator("canvas")).toHaveAttribute("width", "800");
+  await expect(completedModal.locator("canvas")).toHaveAttribute("height", "450");
+  expect(Number(await timeline.getAttribute("max"))).toBeLessThan(180);
+  const jobCompletionMs = await elapsedFeatureTime(page, completedTiming);
+  actions.push(await finishFeatureAction(page, {
+    label: "trace-video-metadata-complete",
+    cycle: 2,
+    outcome: "completed",
+    timing: completedTiming,
+    before: completedBefore,
+    jobCompletionMs,
+  }));
+
+  const play = completedModal.getByTitle("Play");
+  const frameLabel = completedModal.locator("span").filter({
+    hasText: /^Frame \d+ \/ \d+$/,
+  });
+  const frameBefore = await frameLabel.textContent();
+  const playbackBefore = await readFeatureRuntimeProbe(page);
+  const playbackTiming = await measureClickToNextPaint(play);
+  await expect.poll(() => frameLabel.textContent(), {
+    message: "video playback advances a delivered media frame",
+  }).not.toBe(frameBefore);
+  await completedModal.getByTitle("Stop").click();
+  await completedModal.getByRole("button", { name: "Close trace" }).click();
+  await expect(completedModal).toHaveCount(0);
+  await waitForLifecycleBaseline(page, baseline.lifecycle);
+  actions.push(await finishFeatureAction(page, {
+    label: "trace-video-play-close",
+    cycle: 3,
+    outcome: "completed",
+    timing: playbackTiming,
+    before: playbackBefore,
+  }));
+
+  const final = await finalProbe(page, client, baseline);
+  return buildChromebookFeatureAudit("traceVideo", actions, baseline, final, {
+    minimumWorkerCreations: 0,
+    minimumObjectUrlCreations: 2,
+    requireCompletedCycle: true,
+    requireCancelledCycle: true,
+  });
+};
+
+const auditRapierDiagnostics = async (
+  page: Page,
+  client: CDPSession,
+): Promise<FeatureAudit> => {
+  const requests: string[] = [];
+  page.on("request", (request) => requests.push(request.url()));
+  const baseline = await stableProbe(page, client);
+  const actions: FeatureActionAudit[] = [];
+  const rig = page.getByTestId("foundry-camera-rig");
+  const forces = page.getByTestId("foundry-toggle-forces");
+  await expect(rig).toHaveAttribute("data-physics-kernel-runtime", "idle");
+
+  const coldBefore = await readFeatureRuntimeProbe(page);
+  const coldTiming = await measureClickToNextPaint(forces);
+  await expect(rig).toHaveAttribute("data-physics-kernel-runtime", "ready", {
+    timeout: 120_000,
+  });
+  await expect(rig).toHaveAttribute(
+    "data-physics-kernel-version",
+    /\d+\.\d+\.\d+/,
+  );
+  const jobCompletionMs = await elapsedFeatureTime(page, coldTiming);
+  actions.push(await finishFeatureAction(page, {
+    label: "rapier-diagnostics-cold-load",
+    cycle: 1,
+    outcome: "completed",
+    timing: coldTiming,
+    before: coldBefore,
+    jobCompletionMs,
+  }));
+
+  const offBefore = await readFeatureRuntimeProbe(page);
+  const offTiming = await measureClickToNextPaint(forces);
+  await expect(forces).toHaveAttribute("aria-pressed", "false");
+  actions.push(await finishFeatureAction(page, {
+    label: "rapier-diagnostics-close",
+    cycle: 2,
+    outcome: "completed",
+    timing: offTiming,
+    before: offBefore,
+  }));
+
+  const warmBefore = await readFeatureRuntimeProbe(page);
+  const warmTiming = await measureClickToNextPaint(forces);
+  await expect(forces).toHaveAttribute("aria-pressed", "true");
+  await expect(rig).toHaveAttribute("data-physics-kernel-runtime", "ready");
+  actions.push(await finishFeatureAction(page, {
+    label: "rapier-diagnostics-warm-repeat",
+    cycle: 3,
+    outcome: "completed",
+    timing: warmTiming,
+    before: warmBefore,
+  }));
+  await forces.click();
+  await expect(forces).toHaveAttribute("aria-pressed", "false");
+
+  const final = await finalProbe(page, client, baseline);
+  const expectedRequests = requests.filter((url) =>
+    /\/assets\/rapier-[^/]+\.js(?:\?|$)/.test(url)
+  );
+  const forbiddenRequests = requests.filter((url) =>
+    /onnx|ort-wasm|u2net|character-segmentation/i.test(url)
+  );
+  const feature = buildChromebookFeatureAudit(
+    "rapierDiagnostics",
+    actions,
+    baseline,
+    final,
+    { minimumWorkerCreations: 0, requireCompletedCycle: true },
+  );
+  const rapierRequestedOnce = {
+    passed: expectedRequests.length === 1,
+    observed: expectedRequests.length,
+    limit: 1,
+  };
+  const forbiddenRuntimeAbsent = {
+    passed: forbiddenRequests.length === 0,
+    observed: forbiddenRequests.length,
+    limit: 0,
+  };
+  const checks = {
+    ...feature.acceptance,
+    rapierRequestedOnce,
+    forbiddenRuntimeAbsent,
+  };
+  const passed = Object.entries(checks)
+    .filter(([name]) => name !== "passed")
+    .every(([, check]) => check.passed);
+  return {
+    ...feature,
+    network: { requests, expectedRequests, forbiddenRequests },
+    acceptance: {
+      ...checks,
+      passed: { passed, observed: passed, limit: true },
+    },
+  };
+};
+
 test.describe("Chromebook M3 feature audit", () => {
   test.skip(!ENABLED, "run with CHROMEBOOK_AUDIT=1 against a production preview");
   test.describe.configure({ mode: "serial" });
@@ -386,6 +593,41 @@ test.describe("Chromebook M3 feature audit", () => {
         }).toBe(0);
       },
       audit: auditTraceGif,
+    });
+  });
+
+  test("Trace Video bounds playback and releases Object URLs", async ({ browser }, testInfo) => {
+    test.setTimeout(0);
+    await runChromebookFeatureAudit({
+      browser,
+      testInfo,
+      name: "traceVideo",
+      prepare: async (page) => {
+        await openWavingArm(page);
+        await goToStage(page, "Path");
+        await expect.poll(() => workerActive(page), {
+          message: "Video Trace begins after unrelated autosave work settles",
+        }).toBe(0);
+      },
+      audit: auditTraceVideo,
+    });
+  });
+
+  test("Rapier diagnostics lazily load once and remain interactive", async ({ browser }, testInfo) => {
+    test.setTimeout(0);
+    await runChromebookFeatureAudit({
+      browser,
+      testInfo,
+      name: "rapierDiagnostics",
+      prepare: async (page) => {
+        await openWavingArm(page);
+        await goToStage(page, "Foundry");
+        await expect(page.locator("canvas.foundry-three-canvas")).toBeVisible();
+        await expect.poll(() => workerActive(page), {
+          message: "Rapier audit begins after unrelated autosave work settles",
+        }).toBe(0);
+      },
+      audit: auditRapierDiagnostics,
     });
   });
 
