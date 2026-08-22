@@ -1,6 +1,6 @@
 # Chromebook Classroom Performance Audit
 
-Status: prior 6× CPU emulation evidence retained; tightened profile gates require a fresh run
+Status: full emulation audits are local-only; prior 6× CPU emulation evidence retained
 Evidence date: 2026-08-21
 Actual Chromebook tested: no
 
@@ -22,8 +22,8 @@ one clean production-preview build.
 
 ## Audit profiles and invocation
 
-The harness has two typed profiles. `regression-4x` is the pull-request signal;
-`acceptance-6x` is the release-candidate/nightly signal. Both use Chrome at
+The harness has two typed profiles. `regression-4x` is the local development
+signal; `acceptance-6x` is the local release-candidate signal. Both use Chrome at
 1366×768 and DPR 1 with the bounded classroom network profile. The commands are:
 
 ```sh
@@ -41,10 +41,19 @@ not calibrated to a physical Chromebook. Reports record host/CI identity,
 invocation, Chrome renderer strings, window DPR, and effective canvas drawing
 buffer scale so unlike runs are not silently compared.
 
-Each CI invocation empties a unique run directory before measurement and
+Each local invocation empties a unique run directory before measurement and
 validates an exact expected-report manifest afterward. Missing, unexpected,
 wrong-profile, stale-schema, or provenance-free JSON fails validation instead
-of uploading checked-in evidence as if it came from the run.
+of accepting checked-in evidence as if it came from the run.
+
+Full emulation audits are local-only. GitHub-hosted timing is not release
+evidence: shared runner CPU, software rendering, memory-probe latency, and
+serial fresh-context setup made the same suite take roughly six hours without
+making it more representative of a classroom Chromebook. Pull-request CI keeps
+the deterministic contracts, ordinary production build, bundle budget,
+image-recognition exclusion, and focused production-preview browser checks.
+Run the commands above on a controlled local host before a release candidate;
+retain the generated provenance-bound reports and validate their exact manifest.
 
 The primary acceptance scope is deliberately interaction-sized. Each feature
 runs in a fresh branded Chrome process so an earlier feature cannot warm or
@@ -242,9 +251,9 @@ See the
 
 ## Production bundle and image-recognition exclusion
 
-The ordinary static production build contains 147,074 gzip bytes of core
-JavaScript against the 450,000-byte limit and 208,130 compressed bytes in the
-initial shell against the 1,500,000-byte limit. Optional worker and Rapier
+The ordinary static production build contains 156,137 gzip bytes of core
+JavaScript against the 200,000-byte limit and 217,411 compressed bytes in the
+initial shell against the 300,000-byte limit. Optional worker and Rapier
 chunks are excluded from those initial-request totals.
 
 Image recognition was removed completely from the classroom product and build.
@@ -265,9 +274,9 @@ Blueprint export, and project round trip. These checks preserve data and
 recovery behavior, but their full-workflow wall time is not part of the primary
 performance gate.
 
-Classroom releases remain version-tag-only through GitHub Pages. Performance
-workflows cannot publish, and the production exclusion check must pass before
-the tagged artifact is uploaded.
+Classroom releases remain version-tag-only through GitHub Pages. The local
+performance harness cannot publish, and the production exclusion check must
+pass in CI before the tagged artifact is uploaded.
 
 ## Evidence boundaries
 
@@ -291,5 +300,5 @@ the tagged artifact is uploaded.
 - Cold first-entry stage creation has more headroom than warm interaction; the
   prior 94 ms maximum is now a failing datum, not an accepted exception.
 - The refreshed v0.0.14 playback evidence is local production-preview evidence.
-  GitHub-hosted CI is a separate release gate and does not turn this into a
+  GitHub-hosted timing is not release evidence and would not turn this into a
   physical-Chromebook result.

@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -2569,10 +2571,14 @@ assert(
     harness.includes("MAX_RENDERBUFFER_SIZE"),
   "High evidence records every diagnostic canvas allocation and its actual renderbuffer limit",
 );
-const performanceWorkflow = read(".github/workflows/performance-audit.yml");
-assert(performanceWorkflow.includes("regression-4x") && performanceWorkflow.includes("acceptance-6x"), "CI exposes separate regression and acceptance profiles");
-assert(performanceWorkflow.includes("chromebookAuditArtifacts.ts prepare") && performanceWorkflow.includes("chromebookAuditArtifacts.ts validate"), "CI empties and validates a run-specific evidence manifest");
-assert(performanceWorkflow.includes("CHROMEBOOK_HIGH_RESOLUTION_AUDIT_OUTPUT=${output_root}/high-resolution/chromebook-high-resolution-audit.json"), "CI writes adaptive High evidence into the strict run manifest");
+const githubWorkflowDirectory = join(process.cwd(), ".github", "workflows");
+const automatedWorkflowSource = readdirSync(githubWorkflowDirectory)
+  .filter((name) => name.endsWith(".yml") || name.endsWith(".yaml"))
+  .map((name) => read(`.github/workflows/${name}`))
+  .join("\n");
+assert(!existsSync(join(githubWorkflowDirectory, "performance-audit.yml")), "the multi-hour Chromebook workflow is removed from GitHub Actions");
+assert(!automatedWorkflowSource.includes("test:chromebook-audit") && !automatedWorkflowSource.includes("CHROMEBOOK_AUDIT=1"), "full 4x/6x browser emulation remains local-only instead of using host-variable CI timing");
+assert(automatedWorkflowSource.includes("bun run test:contracts") && automatedWorkflowSource.includes("bun run test:bundle-budget"), "lightweight CI retains deterministic performance contracts and production bundle budgets");
 assert(expectedChromebookAuditReports("feature").includes("high-resolution/chromebook-high-resolution-audit.json"), "the strict feature and full manifests require adaptive High evidence");
 const foundry = read("components/stages/foundry/ThreeFoundryPreview.tsx");
 assert(foundry.includes("recordFoundryTopologyBuild"), "normal production rendering exposes topology work only to an injected audit sink");
