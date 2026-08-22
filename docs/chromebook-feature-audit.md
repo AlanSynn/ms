@@ -1,18 +1,50 @@
 # Chromebook Classroom Performance Audit
 
-Status: 6× CPU emulation passed for short classroom feature and simulation gates
+Status: prior 6× CPU emulation evidence retained; tightened profile gates require a fresh run
 Evidence date: 2026-08-21
 Actual Chromebook tested: no
 
 ## Claim
 
-The default `Balanced` preset passes the measured production-preview gates at
-1366×768, DPR 1, Chrome CPU throttling 6×, 40 ms network latency, 10 Mbps
-download, and 5 Mbps upload. The evidence set contains 12 feature interactions
-and repeated stage switching from the v0.0.13 Balanced acceptance run, plus
-four actual-WebGL playback checks refreshed against the v0.0.14 release branch.
-Every recorded check passed. This is emulator evidence, not a
-physical-Chromebook result.
+The retained historical production-preview evidence was collected at 1366×768,
+DPR 1, Chrome CPU throttling 6×, 40 ms network latency, 10 Mbps download, and
+5 Mbps upload. It contains 12 feature interactions and repeated stage switching
+from the v0.0.13 Balanced run, plus four actual-WebGL playback checks refreshed
+against the v0.0.14 release branch. Those reports passed the gates in force at
+the time; they do not yet establish the tightened acceptance profile described
+below. This is emulator evidence, not a physical-Chromebook result.
+
+The tables below are retained historical evidence. They predate the strict
+50 ms maximum Long Task rule, the Video/Rapier feature gates, run-manifest
+validation, and the 20-sample entry gate. They must not be promoted as evidence
+for the tightened acceptance profile until those reports are regenerated from
+one clean production-preview build.
+
+## Audit profiles and invocation
+
+The harness has two typed profiles. `regression-4x` is the pull-request signal;
+`acceptance-6x` is the release-candidate/nightly signal. Both use Chrome at
+1366×768 and DPR 1 with the bounded classroom network profile. The commands are:
+
+```sh
+CHROMEBOOK_AUDIT_PROFILE=regression-4x bun run test:chromebook-audit
+CHROMEBOOK_AUDIT_PROFILE=acceptance-6x bun run test:chromebook-audit
+CHROMEBOOK_AUDIT_PROFILE=acceptance-6x bun run test:chromebook-audit:full
+```
+
+CDP applies the requested slowdown to the attached page target. Dedicated
+worker targets are not separately attached or calibrated, so a `4×` or `6×`
+label is a main-page regression/acceptance label, not a claim that worker CPU
+ran at that factor. Worker completion time is reported separately and is not
+used as click-response evidence. The slowdown is relative to the current host,
+not calibrated to a physical Chromebook. Reports record host/CI identity,
+invocation, Chrome renderer strings, window DPR, and effective canvas drawing
+buffer scale so unlike runs are not silently compared.
+
+Each CI invocation empties a unique run directory before measurement and
+validates an exact expected-report manifest afterward. Missing, unexpected,
+wrong-profile, stale-schema, or provenance-free JSON fails validation instead
+of uploading checked-in evidence as if it came from the run.
 
 The primary acceptance scope is deliberately interaction-sized. Each feature
 runs in a fresh branded Chrome process so an earlier feature cannot warm or
@@ -27,10 +59,14 @@ exclusion gates, so diagnostics code is not counted as classroom payload.
 
 ## Feature interaction and memory evidence
 
-Acceptance limits are next-screen paint p95 ≤100 ms, main-window Long Task p95
-≤50 ms, and post-cleanup heap growth no greater than the larger of 15% or
+Acceptance limits are next-screen paint p95 ≤100 ms, every measured main-window
+Long Task ≤50 ms, and post-cleanup heap growth no greater than the larger of 15% or
 8 MiB. Worker, `ImageBitmap`, and Object URL counts must return to their
 baseline after completion and cancellation.
+
+Direct manipulation (drag, orbit, and scrub/range updates) has a separate
+p95 ≤50 ms gate. Other click and stage actions retain the general p95 ≤100 ms
+limit.
 
 | Feature | Next paint p95 | Long Task p95 | Worker job p95 | Heap growth | Heap tail range | Result |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
@@ -53,6 +89,13 @@ decode use bounded workers. The final artifacts show all owned workers and
 media resources returned after their cancel/complete cycles; Trace exercised
 one transferred bitmap. Ordinary scene-object images and GIF Trace remain
 available. They are not image recognition.
+
+The refreshed feature set also includes bounded MP4 Trace and Rapier
+diagnostics. Video measures file-change paint, metadata completion, playback,
+cancellation, and Object URL return. Rapier measures the first lazy request,
+its separate completion time, a warm repeat, and verifies that the optional
+chunk is requested exactly once without recognition payloads. These two rows
+remain pending until the next clean 4×/6× evidence run.
 
 Evidence is stored under
 [`artifacts/chromebook-audit/features`](../artifacts/chromebook-audit/features/).
@@ -95,6 +138,54 @@ drawing-buffer-pixel budget. Cold character topology is phased in with smaller
 work slices under High so raising resolution does not add a larger synchronous
 construction task.
 
+The enforcing DPR2 audit keeps memory measurement outside active playback.
+Its Path timing starts only after the guided Character viewport reaches WebGL,
+finishes topology and initial-scene work, and records a real renderer
+submission; the Path probe must then prove that its context was created before
+the Path click. Character's cold renderer work is not discarded by this
+separation: the classroom-entry audit times starter and lesson clicks through
+that same final renderer boundary and keeps every overlapping Long Task under
+the existing 50 ms maximum.
+
+Adjacent-stage code warming also waits for the active viewport's production
+readiness signal before requesting browser idle time. Puppet stages publish
+readiness only after initial topology/resources and the restored canonical GL
+submission; Foundry-backed stages publish completed topology. WebGL-unavailable
+and explicit empty-stage views use a one-second quiet fallback before the same
+idle scheduler. Stage changes cancel observers, fallback timers, and idle work.
+Only the next adapter is warmed; Path may additionally warm that same adjacent
+Foundry adapter's renderer dependency. Workers, media payloads, physics, and
+export jobs remain on demand.
+
+Before each baseline it drives the surface until topology, React commits, and
+identity-aware WebGL ownership are unchanged across three actual submissions.
+Path's explicit pending initial-scene resource count must also reach zero.
+Declared part-art references and renderer texture counts remain diagnostics:
+shared URLs and visibility-dependent uploads mean they are not one-to-one.
+Their values and all identity-aware resource counters must nevertheless remain
+unchanged through the submitted-frame plateau and paused baseline, so a late
+upload still invalidates readiness. The cold-stage record separately preserves
+the trusted click, transition frame, stage and inspector mounts, relevant script
+response timing, renderer/context acquisition, first GL submission, topology
+readiness, and initial-scene resource drain. This attributes cold Long Tasks
+without excluding them, and rejects an eagerly mounted Foundry example while
+its Hint is collapsed. The renderer then pauses. The authoritative baseline is
+taken while paused; Play response is measured separately, and only after that
+response paints does the exact steady submission window begin. Pause ends the
+window, and tail samples run only after the renderer is quiescent. Raw Long
+Tasks, phase attribution, and memory-probe windows remain in the artifact. Only
+tasks fully contained by an isolated probe window are removed from the
+application-work maximum: cold stage, control, boundary-straddling, and
+steady-playback tasks all still fail above 50 ms.
+Steady windows also require zero per-kind WebGL creation/deletion, even when net
+live resources are unchanged. The 4× High run treats the one-time DPR1→DPR2 allocation separately,
+bounding it by 12 bytes per added backing-store pixel plus 1 MiB, then requires
+a new settled DPR2 Path run and a settled DPR2 Foundry run to pass the complete
+frame, heap, resource, context, and React-commit gates. This does not prove
+memory behavior for a canvas driven close to the 4,000,000-pixel ceiling; that
+limit remains a renderbuffer safety gate pending dedicated near-budget memory
+evidence.
+
 A supplementary six-stage local comparison used actual WebGL submissions at
 1366×768 with CPU throttling 6×. On ANGLE Metal with an Apple M1 Pro,
 Balanced DPR 1 and High DPR 1/DPR 2 all stayed within the short interaction
@@ -122,8 +213,8 @@ The cold stage-switch cycle recorded next-paint p95 78.3 ms and ready p95
 and Long Task p95 50 ms. Heap grew 3.87 MB, the WebGL context count stayed
 constant, and three warm cycles ended at the same live-resource count. Cold
 initialization still produced tasks up to 94 ms while first creating stage
-assets; this is the main measured headroom that remains, although the cold
-paint and ready gates passed.
+assets. That prior artifact no longer passes the tightened maximum-50-ms rule;
+it is diagnostic history, not current acceptance evidence.
 
 See the
 [`stage-switch artifact`](../artifacts/chromebook-audit/stages/chromebook-stage-switch-audit.json).
@@ -174,9 +265,9 @@ Blueprint export, and project round trip. These checks preserve data and
 recovery behavior, but their full-workflow wall time is not part of the primary
 performance gate.
 
-Classroom releases remain version-tag-only for both the Cloudflare root site and
-the GitHub Pages mirror. Performance workflows cannot publish, and the
-production exclusion check must pass before either tagged artifact is uploaded.
+Classroom releases remain version-tag-only through GitHub Pages. Performance
+workflows cannot publish, and the production exclusion check must pass before
+the tagged artifact is uploaded.
 
 ## Evidence boundaries
 
@@ -184,9 +275,21 @@ production exclusion check must pass before either tagged artifact is uploaded.
   emulation passed`.
 - The acceptance evidence uses short, isolated feature gates and 3–5 second
   playback samples. It does not establish ten-minute heap stabilization.
-- Cold first-entry stage creation has more headroom than warm interaction; its
-  observed Long Task maximum was 94 ms even though all cold switch acceptance
-  limits passed.
+- Memory reports prefer `measureUserAgentSpecificMemory()` when Chrome exposes
+  it under the required isolation policy. Otherwise they identify
+  `performance.memory.usedJSHeapSize` as a diagnostic fallback; the fallback is
+  not relabeled as a complete process-memory measurement. The 4× regression
+  profile may retain that diagnostic signal. The official 6× profile requires
+  cross-origin-isolated, authoritative `measureUserAgentSpecificMemory()`
+  baseline/final/tail samples from the same metric source and fails otherwise.
+  The diagnostics preview adds COOP `same-origin` and COEP `require-corp` only
+  when `MOTIONSMITH_AUDIT_ISOLATION=1`. This is recorded in each report; it
+  does not change or make a claim about shipping-site response headers.
+- Classroom entry defaults to 20 fresh-context samples and records trusted
+  click-to-next-paint separately from interactive readiness. A bounded
+  `CHROMEBOOK_ENTRY_SAMPLES` override exists only for focused local smoke.
+- Cold first-entry stage creation has more headroom than warm interaction; the
+  prior 94 ms maximum is now a failing datum, not an accepted exception.
 - The refreshed v0.0.14 playback evidence is local production-preview evidence.
   GitHub-hosted CI is a separate release gate and does not turn this into a
   physical-Chromebook result.

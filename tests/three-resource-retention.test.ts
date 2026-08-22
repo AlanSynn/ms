@@ -10,10 +10,26 @@ import {
 import {
   cachedThreeResource,
   collectThreeObjectResourceUsage,
+  configureThreeShaderDiagnostics,
   disposeThreeObjectGraph,
   pruneUnusedThreeResourceCache,
+  scheduleBoundedRendererIdleShrink,
+  SHARED_RENDERER_IDLE_PIXEL_BUDGET,
+  SHARED_RENDERER_IDLE_SHRINK_DELAY_MS,
 } from '../utils/threeResourceKit';
 import { scheduleIncrementalTopologyBuild } from '../runtime/render/incrementalTopologyBuild';
+import {
+  createInitialSceneReadinessGeneration,
+  realizeInitialSceneResources,
+  type InitialSceneResourceUploadRenderer,
+} from '../runtime/render/initialSceneResourceUpload';
+import {
+  createKeyedInitialTopologySettlement,
+  foundryInitialShaderSettlementSteps,
+  foundryInitialTopologySettlementSteps,
+  puppetInitialTopologyBatchPolicy,
+  puppetInitialTopologySettlementSteps,
+} from '../runtime/render/initialSceneSettlement';
 import {
   recordViewerDragDistance,
   VIEWER_CLICK_MAX_DISTANCE_PX,
@@ -27,7 +43,9 @@ import {
 import {
   createPartArtMaterial,
   disposePartArtMaterial,
+  isInitialSceneMaterialResourcePending,
 } from '../runtime/render/partArtMaterial';
+import { disposePuppetObjectGraph } from '../runtime/render/puppetSceneDisposal';
 import { warmPartTopologyPipeline } from '../runtime/render/warmPartTopology';
 import { resolveRenderPerformancePolicy } from '../utils/renderPerformancePolicy';
 import {
@@ -37,6 +55,80 @@ import {
 import type { BodyPartLayer, StandardSkeleton } from '../types';
 import { defaultPhysicalKit } from '../utils/coordinates';
 import { createDefaultMechanism } from '../utils/project';
+
+const rendererDiagnostics = { debug: { checkShaderErrors: true } };
+configureThreeShaderDiagnostics(rendererDiagnostics, false);
+assert.equal(
+  rendererDiagnostics.debug.checkShaderErrors,
+  false,
+  'production renderer setup avoids synchronous shader info-log diagnostics',
+);
+configureThreeShaderDiagnostics(rendererDiagnostics, true);
+assert.equal(
+  rendererDiagnostics.debug.checkShaderErrors,
+  true,
+  'development renderer setup retains shader diagnostics',
+);
+
+let pendingIdleShrink: (() => void) | undefined;
+let pendingIdleShrinkDelay = -1;
+let cancelledIdleShrinks = 0;
+let idleShrinkCalls = 0;
+const cancelIdleShrink = scheduleBoundedRendererIdleShrink({
+  retainedPixels: SHARED_RENDERER_IDLE_PIXEL_BUDGET,
+  shrink: () => { idleShrinkCalls += 1; },
+  scheduler: {
+    schedule: (callback, delayMs) => {
+      pendingIdleShrink = callback;
+      pendingIdleShrinkDelay = delayMs;
+      return 'idle-shrink';
+    },
+    cancel: (handle) => {
+      assert.equal(handle, 'idle-shrink');
+      cancelledIdleShrinks += 1;
+    },
+  },
+});
+assert.equal(
+  pendingIdleShrinkDelay,
+  SHARED_RENDERER_IDLE_SHRINK_DELAY_MS,
+  'an in-budget released renderer keeps its drawing buffer for one bounded reuse window',
+);
+cancelIdleShrink();
+pendingIdleShrink?.();
+assert.equal(cancelledIdleShrinks, 1, 'renderer reacquisition cancels the pending idle shrink');
+assert.equal(idleShrinkCalls, 0, 'a cancelled shrink cannot resize the reused drawing buffer');
+
+let completedIdleShrink: (() => void) | undefined;
+scheduleBoundedRendererIdleShrink({
+  retainedPixels: SHARED_RENDERER_IDLE_PIXEL_BUDGET,
+  shrink: () => { idleShrinkCalls += 1; },
+  scheduler: {
+    schedule: (callback) => {
+      completedIdleShrink = callback;
+      return 1;
+    },
+    cancel: () => undefined,
+  },
+});
+completedIdleShrink?.();
+completedIdleShrink?.();
+assert.equal(idleShrinkCalls, 1, 'an unused renderer shrinks exactly once after the reuse window');
+
+let oversizedIdleShrinkScheduled = false;
+scheduleBoundedRendererIdleShrink({
+  retainedPixels: SHARED_RENDERER_IDLE_PIXEL_BUDGET + 1,
+  shrink: () => { idleShrinkCalls += 1; },
+  scheduler: {
+    schedule: () => {
+      oversizedIdleShrinkScheduled = true;
+      return 1;
+    },
+    cancel: () => undefined,
+  },
+});
+assert.equal(oversizedIdleShrinkScheduled, false, 'an oversized idle drawing buffer is never retained');
+assert.equal(idleShrinkCalls, 2, 'an oversized idle drawing buffer shrinks synchronously');
 
 const returningOrbit = { x: 320, y: 240, maxDistance: 0 };
 recordViewerDragDistance(returningOrbit, 410, 270);
@@ -314,6 +406,113 @@ assert.equal(
 );
 assert.equal(retainedAcrossMountsDisposals, 1);
 
+const puppetCleanupEvents: string[] = [];
+const puppetCleanupRoot = new THREE.Group();
+let puppetCleanupTraversals = 0;
+const traversePuppetCleanupRoot = puppetCleanupRoot.traverse.bind(puppetCleanupRoot);
+puppetCleanupRoot.traverse = (callback) => {
+  puppetCleanupTraversals += 1;
+  traversePuppetCleanupRoot(callback);
+};
+
+const puppetSharedGeometry = new THREE.BoxGeometry(1, 1, 0.22);
+puppetSharedGeometry.userData.sharedFabricationGeometry = true;
+puppetSharedGeometry.addEventListener('dispose', () => {
+  puppetCleanupEvents.push('shared-geometry');
+});
+const puppetPrivateGeometry = new THREE.PlaneGeometry(1, 1);
+puppetPrivateGeometry.addEventListener('dispose', () => {
+  puppetCleanupEvents.push('private-geometry');
+});
+
+const partArtBitmap = {
+  close: () => puppetCleanupEvents.push('part-art-bitmap'),
+};
+const partArtTexture = new THREE.Texture(partArtBitmap);
+partArtTexture.addEventListener('dispose', () => {
+  puppetCleanupEvents.push('part-art-texture');
+});
+const ownedPartArtMaterial = new THREE.MeshBasicMaterial({ map: partArtTexture });
+ownedPartArtMaterial.userData.ownedByPartArt = true;
+ownedPartArtMaterial.userData.initialSceneResourcePending = true;
+ownedPartArtMaterial.addEventListener('dispose', () => {
+  assert.equal(ownedPartArtMaterial.map, null, 'part-art cleanup releases its texture before its material');
+  puppetCleanupEvents.push('part-art-material');
+});
+
+const sceneObjectTexture = new THREE.Texture();
+const ownedSceneObjectMaterial = new THREE.MeshBasicMaterial({ map: sceneObjectTexture });
+ownedSceneObjectMaterial.userData.ownedBySceneObject = true;
+ownedSceneObjectMaterial.userData.initialSceneResourcePending = true;
+sceneObjectTexture.addEventListener('dispose', () => {
+  assert.equal(ownedSceneObjectMaterial.userData.sceneObjectDisposed, true);
+  assert.equal(ownedSceneObjectMaterial.userData.initialSceneResourcePending, false);
+  puppetCleanupEvents.push('scene-object-texture');
+});
+ownedSceneObjectMaterial.addEventListener('dispose', () => {
+  puppetCleanupEvents.push('scene-object-material');
+});
+
+const retainedMaterialKitEntry = new THREE.MeshBasicMaterial();
+retainedMaterialKitEntry.addEventListener('dispose', () => {
+  puppetCleanupEvents.push('material-kit');
+});
+const cleanupInstancedMesh = new THREE.InstancedMesh(
+  puppetSharedGeometry,
+  retainedMaterialKitEntry,
+  1,
+);
+cleanupInstancedMesh.addEventListener('dispose', () => {
+  puppetCleanupEvents.push('instanced-buffers');
+});
+puppetCleanupRoot.add(
+  new THREE.Mesh(puppetSharedGeometry, ownedPartArtMaterial),
+  new THREE.Mesh(puppetPrivateGeometry, ownedSceneObjectMaterial),
+  cleanupInstancedMesh,
+);
+
+disposePuppetObjectGraph(puppetCleanupRoot);
+assert.equal(
+  puppetCleanupTraversals,
+  1,
+  'Puppet teardown releases owned resources and private geometry in one Object3D traversal',
+);
+assert.deepEqual(
+  puppetCleanupEvents,
+  [
+    'part-art-bitmap',
+    'part-art-texture',
+    'part-art-material',
+    'private-geometry',
+    'scene-object-texture',
+    'scene-object-material',
+    'instanced-buffers',
+  ],
+  'Puppet teardown synchronously releases owned texture/material and instance resources exactly once',
+);
+assert.equal(
+  ownedPartArtMaterial.userData.initialSceneResourcePending,
+  false,
+  'part-art teardown cannot leave initial-resource readiness pending',
+);
+assert.equal(
+  puppetSharedGeometry.userData.sharedFabricationGeometry,
+  true,
+  'shared fabrication geometry remains retained for the warm cache',
+);
+assert.equal(
+  puppetCleanupEvents.includes('material-kit'),
+  false,
+  'the graph walk leaves the caller-owned material kit for the ordered outer cleanup',
+);
+retainedMaterialKitEntry.dispose();
+assert.equal(
+  puppetCleanupEvents.at(-1),
+  'material-kit',
+  'the caller can dispose retained kit materials after the scene graph has released its owned resources',
+);
+puppetSharedGeometry.dispose();
+
 const instancedGeometry = new THREE.BoxGeometry(1, 1, 1);
 const instancedMaterial = new THREE.MeshBasicMaterial();
 const instanced = new THREE.InstancedMesh(
@@ -568,6 +767,447 @@ assert.deepEqual(
 );
 assert.equal(batchedCompletionCount, 1, 'the final bounded batch completes once');
 
+for (const preset of ['fast', 'balanced', 'high'] as const) {
+  assert.deepEqual(
+    puppetInitialTopologyBatchPolicy(preset),
+    {
+      maxItemsPerFrame: 1,
+      frameBudgetMs: 4,
+      interBatchDelayFrames: 1,
+    },
+    `${preset} cold Puppet topology builds one exact part and leaves a submission frame before the next part`,
+  );
+}
+
+const coldPartSteps = puppetInitialTopologySettlementSteps(
+  ['torso', 'arm'],
+  { hasOutline: true, hasArt: true, hasHardware: true },
+  true,
+);
+assert.deepEqual(
+  coldPartSteps,
+  [
+    { item: 'torso', phase: 'base', finalForPart: false },
+    { item: 'torso', phase: 'outline', finalForPart: false },
+    { item: 'torso', phase: 'art', finalForPart: false },
+    { item: 'torso', phase: 'hardware', finalForPart: true },
+    { item: 'arm', phase: 'complete', finalForPart: true },
+  ],
+  'the first cold Puppet part separates every program/resource variant while later parts keep one bounded batch',
+);
+assert.deepEqual(
+  puppetInitialTopologySettlementSteps(
+    ['arm'],
+    { hasOutline: true, hasArt: true, hasHardware: true },
+    false,
+  ),
+  [{ item: 'arm', phase: 'complete', finalForPart: true }],
+  'an incremental warm topology change retains the ordinary exact one-part path',
+);
+
+const coldPartEvents: string[] = [];
+scheduleIncrementalTopologyBuild(
+  coldPartSteps,
+  (step) => coldPartEvents.push(`build:${step.item}:${step.phase}`),
+  {
+    scheduler,
+    maxItemsPerFrame: 1,
+    interBatchDelayFrames: 1,
+    onBatchComplete: ({ builtTotal }) => {
+      const phase = coldPartSteps[builtTotal - 1]?.phase;
+      scheduler.request(() => coldPartEvents.push(`submit:${phase}`));
+    },
+  },
+);
+while (scheduledFrames.size > 0) runNextFrame();
+assert.deepEqual(
+  coldPartEvents.slice(0, 8),
+  [
+    'build:torso:base',
+    'submit:base',
+    'build:torso:outline',
+    'submit:outline',
+    'build:torso:art',
+    'submit:art',
+    'build:torso:hardware',
+    'submit:hardware',
+  ],
+  'each first-part visual/resource phase reaches its own submission before the next phase is constructed',
+);
+assert(
+  coldPartEvents.indexOf('submit:hardware') <
+    coldPartEvents.indexOf('build:arm:complete'),
+  'the remaining exact parts start only after the first part has reached its final hardware submission',
+);
+
+const alternatingItems: string[] = [];
+const alternatingEvents: string[] = [];
+let alternatingComplete = 0;
+scheduleIncrementalTopologyBuild(
+  ['torso', 'arm'],
+  (item) => {
+    alternatingItems.push(item);
+    alternatingEvents.push(`build:${item}`);
+  },
+  {
+    scheduler,
+    maxItemsPerFrame: 1,
+    interBatchDelayFrames: 1,
+    onBatchComplete: ({ builtTotal, complete }) => {
+      alternatingEvents.push(`batch:${builtTotal}:${complete}`);
+      scheduler.request(() => alternatingEvents.push(`submit:${builtTotal}`));
+    },
+    onComplete: () => { alternatingComplete += 1; },
+  },
+);
+runNextFrame();
+assert.deepEqual(alternatingItems, ['torso'], 'the first cold part owns one construction frame');
+runNextFrame();
+assert.deepEqual(
+  alternatingEvents.slice(0, 3),
+  ['build:torso', 'batch:1:false', 'submit:1'],
+  'the completed slice submits before another topology item can start',
+);
+runNextFrame();
+assert.deepEqual(alternatingItems, ['torso'], 'the inter-batch yield keeps GPU submission and the next build in separate frame callbacks');
+runNextFrame();
+assert.deepEqual(alternatingItems, ['torso', 'arm'], 'the next exact part starts after the submission boundary');
+runNextFrame();
+assert.equal(alternatingComplete, 1, 'alternating topology settlement completes exactly once');
+
+const foundrySettlement = foundryInitialTopologySettlementSteps(3, 2);
+assert.deepEqual(
+  foundrySettlement,
+  [
+    { visibleLayerCount: 1, visiblePinStackCount: 0, complete: false },
+    { visibleLayerCount: 2, visiblePinStackCount: 0, complete: false },
+    { visibleLayerCount: 3, visiblePinStackCount: 0, complete: false },
+    { visibleLayerCount: 3, visiblePinStackCount: 1, complete: false },
+    { visibleLayerCount: 3, visiblePinStackCount: 2, complete: true },
+  ],
+  'cold Foundry settlement grows one canonical layer or pin stack per submitted frame',
+);
+assert.deepEqual(
+  foundryInitialTopologySettlementSteps(0, 0),
+  [{ visibleLayerCount: 0, visiblePinStackCount: 0, complete: true }],
+  'an empty valid Foundry scene still owns one exact completion boundary',
+);
+
+const foundryShaderSettlement = foundryInitialShaderSettlementSteps();
+assert.deepEqual(
+  foundryShaderSettlement,
+  [
+    { gridLines: true, workSurface: false, complete: false },
+    { gridLines: true, workSurface: true, complete: true },
+  ],
+  'cold Foundry settlement separates the line and lit-surface shader families while ending on the exact static scene',
+);
+const foundryShaderEvents: string[] = [];
+const [firstFoundryShaderFamily, ...remainingFoundryShaderFamilies] =
+  foundryShaderSettlement;
+assert(firstFoundryShaderFamily);
+foundryShaderEvents.push(
+  `submit:${firstFoundryShaderFamily.gridLines}:${firstFoundryShaderFamily.workSurface}`,
+);
+scheduleIncrementalTopologyBuild(
+  remainingFoundryShaderFamilies,
+  (step) =>
+    foundryShaderEvents.push(`submit:${step.gridLines}:${step.workSurface}`),
+  {
+    scheduler,
+    maxItemsPerFrame: 1,
+    frameBudgetMs: 4,
+    onComplete: () => foundryShaderEvents.push('ready'),
+  },
+);
+assert.deepEqual(
+  foundryShaderEvents,
+  ['submit:true:false'],
+  'the first line-only submission is delivered before the next frame',
+);
+runNextFrame();
+assert.deepEqual(
+  foundryShaderEvents,
+  ['submit:true:false', 'submit:true:true', 'ready'],
+  'the next frame submits the exact grid-and-surface scene before readiness',
+);
+
+type SettlementFrame = { revision: string; phase: number };
+type SettlementJob = {
+  steps: readonly string[];
+  visit: (step: string) => void;
+  complete: () => void;
+  cancelled: boolean;
+};
+const settlementJobs: SettlementJob[] = [];
+const settlementEvents: string[] = [];
+const keyedSettlement = createKeyedInitialTopologySettlement<
+  SettlementFrame,
+  string
+>({
+  schedule: (steps, visit, complete) => {
+    const job: SettlementJob = {
+      steps,
+      visit,
+      complete,
+      cancelled: false,
+    };
+    settlementJobs.push(job);
+    return () => {
+      job.cancelled = true;
+    };
+  },
+  onStart: (frame, key) => settlementEvents.push(`start:${key}:${frame.phase}`),
+  onStep: (step, frame, key) =>
+    settlementEvents.push(`step:${key}:${step}:${frame.phase}`),
+  onComplete: (frame, key) =>
+    settlementEvents.push(`complete:${key}:${frame.phase}`),
+  onCancel: (key) => settlementEvents.push(`cancel:${key}`),
+});
+
+assert.equal(
+  keyedSettlement.update('topology-a', { revision: 'a-0', phase: 0 }, ['bar', 'pins']),
+  'started',
+);
+for (let phase = 1; phase <= 40; phase += 1) {
+  assert.equal(
+    keyedSettlement.update(
+      'topology-a',
+      { revision: `a-${phase}`, phase },
+      ['bar', 'pins'],
+    ),
+    'updated',
+  );
+}
+assert.equal(
+  settlementJobs.length,
+  1,
+  'repeated same-topology React frames never replace the active scheduler generation',
+);
+settlementJobs[0].steps.forEach(settlementJobs[0].visit);
+settlementJobs[0].complete();
+assert.deepEqual(
+  settlementEvents.slice(-3),
+  [
+    'step:topology-a:bar:40',
+    'step:topology-a:pins:40',
+    'complete:topology-a:40',
+  ],
+  'same-topology settlement completes from the latest frame despite adversarial rerenders',
+);
+assert.equal(keyedSettlement.isActive(), false);
+assert.deepEqual(
+  keyedSettlement.snapshot(),
+  {
+    active: false,
+    activeKey: null,
+    generationsStarted: 1,
+    sameKeyUpdates: 40,
+    generationsRestarted: 0,
+    generationsCancelled: 0,
+    stepsDelivered: 2,
+    generationsCompleted: 1,
+  },
+  'the keyed controller exposes deterministic start/update/step/completion transitions',
+);
+
+keyedSettlement.update('topology-b', { revision: 'b', phase: 1 }, ['old']);
+const supersededJob = settlementJobs.at(-1)!;
+assert.equal(
+  keyedSettlement.update('topology-c', { revision: 'c', phase: 2 }, ['new']),
+  'restarted',
+  'a real topology revision replaces the active generation',
+);
+const winningJob = settlementJobs.at(-1)!;
+assert.equal(supersededJob.cancelled, true, 'supersession cancels old scheduled work');
+supersededJob.visit('stale');
+supersededJob.complete();
+winningJob.visit('new');
+winningJob.complete();
+assert(
+  !settlementEvents.some((event) => event.includes('topology-b:stale')) &&
+    !settlementEvents.some((event) => event.startsWith('complete:topology-b')),
+  'late callbacks from a cancelled topology generation cannot publish stale scene work',
+);
+assert.deepEqual(
+  settlementEvents.slice(-2),
+  ['step:topology-c:new:2', 'complete:topology-c:2'],
+  'the replacement topology is the only generation allowed to complete',
+);
+assert.deepEqual(
+  keyedSettlement.snapshot(),
+  {
+    active: false,
+    activeKey: null,
+    generationsStarted: 3,
+    sameKeyUpdates: 40,
+    generationsRestarted: 1,
+    generationsCancelled: 1,
+    stepsDelivered: 3,
+    generationsCompleted: 2,
+  },
+  'supersession telemetry distinguishes a cancelled generation from its winning completion',
+);
+
+keyedSettlement.update('topology-unmount', { revision: 'unmount', phase: 3 }, ['late']);
+const unmountedJob = settlementJobs.at(-1)!;
+assert.equal(keyedSettlement.cancel(), true);
+unmountedJob.visit('late');
+unmountedJob.complete();
+assert.equal(
+  settlementEvents.some((event) => event.startsWith('complete:topology-unmount')),
+  false,
+  'unmount cancellation prevents a pending generation from reporting readiness',
+);
+assert.equal(keyedSettlement.snapshot().generationsCancelled, 2);
+
+const uploadRoot = new THREE.Group();
+uploadRoot.visible = false;
+const uploadMaterial = new THREE.MeshBasicMaterial();
+uploadMaterial.visible = false;
+const uploadMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(1, 1, 1),
+  uploadMaterial,
+);
+uploadMesh.visible = false;
+uploadMesh.frustumCulled = true;
+uploadRoot.add(uploadMesh);
+let uploadScissor = new THREE.Vector4(4, 5, 6, 7);
+let uploadScissorTest = false;
+const uploadSubmissions: Array<{
+  rootVisible: boolean;
+  meshVisible: boolean;
+  materialVisible: boolean;
+  frustumCulled: boolean;
+  scissor: number[];
+  scissorTest: boolean;
+}> = [];
+const uploadRenderer = {
+  getScissor(target: THREE.Vector4) {
+    return target.copy(uploadScissor);
+  },
+  getScissorTest() {
+    return uploadScissorTest;
+  },
+  setScissor(...args: [THREE.Vector4] | [number, number, number, number]) {
+    uploadScissor = args.length === 1
+      ? args[0].clone()
+      : new THREE.Vector4(args[0], args[1], args[2], args[3]);
+  },
+  setScissorTest(enabled: boolean) {
+    uploadScissorTest = enabled;
+  },
+} as InitialSceneResourceUploadRenderer;
+
+realizeInitialSceneResources({
+  renderer: uploadRenderer,
+  roots: [uploadRoot],
+  submit: () => {
+    uploadSubmissions.push({
+      rootVisible: uploadRoot.visible,
+      meshVisible: uploadMesh.visible,
+      materialVisible: uploadMaterial.visible,
+      frustumCulled: uploadMesh.frustumCulled,
+      scissor: uploadScissor.toArray(),
+      scissorTest: uploadScissorTest,
+    });
+  },
+});
+assert.deepEqual(
+  uploadSubmissions,
+  [
+    {
+      rootVisible: true,
+      meshVisible: true,
+      materialVisible: true,
+      frustumCulled: false,
+      scissor: [0, 0, 1, 1],
+      scissorTest: true,
+    },
+    {
+      rootVisible: false,
+      meshVisible: false,
+      materialVisible: false,
+      frustumCulled: true,
+      scissor: [4, 5, 6, 7],
+      scissorTest: false,
+    },
+  ],
+  'initial resource upload warms every retained draw object in one pixel, then submits the exact restored scene',
+);
+assert.equal(uploadRoot.visible, false);
+assert.equal(uploadMesh.visible, false);
+assert.equal(uploadMesh.frustumCulled, true);
+assert.equal(uploadMaterial.visible, false);
+uploadMesh.geometry.dispose();
+uploadMaterial.dispose();
+
+const readinessCallbacks = new Map<number, () => void>();
+const cancelledReadinessFrames: number[] = [];
+let nextReadinessHandle = 1;
+const readinessChanges: boolean[] = [];
+const readinessGeneration = createInitialSceneReadinessGeneration({
+  onReadyChange: (ready) => readinessChanges.push(ready),
+  scheduler: {
+    request(callback) {
+      const handle = nextReadinessHandle;
+      nextReadinessHandle += 1;
+      readinessCallbacks.set(handle, callback);
+      return handle;
+    },
+    cancel(handle) {
+      // Keep the callback deliberately callable to model a stale frame that
+      // was already delivered to the browser's animation-frame queue.
+      cancelledReadinessFrames.push(handle);
+    },
+  },
+});
+assert.equal(readinessGeneration.schedule(() => true), true);
+assert.equal(
+  readinessGeneration.schedule(() => true),
+  false,
+  'one scene revision owns at most one pending readiness publication',
+);
+readinessGeneration.invalidate();
+assert.deepEqual(cancelledReadinessFrames, [1]);
+readinessCallbacks.get(1)!();
+assert.deepEqual(
+  readinessChanges,
+  [false],
+  'an invalidated scene revision stays not-ready even if its cancelled frame is delivered',
+);
+assert.equal(readinessGeneration.schedule(() => false), true);
+readinessCallbacks.get(2)!();
+assert.deepEqual(
+  readinessChanges,
+  [false],
+  'a failed latest-revision validation does not publish readiness',
+);
+assert.equal(
+  readinessGeneration.schedule(() => true),
+  true,
+  'a revision can recheck after its resource validation initially fails',
+);
+readinessCallbacks.get(3)!();
+assert.deepEqual(
+  readinessChanges,
+  [false, true],
+  'only the validated latest retained-scene revision publishes readiness',
+);
+readinessGeneration.invalidate();
+assert.deepEqual(
+  readinessChanges,
+  [false, true, false],
+  'replacing an already-ready retained scene resets readiness immediately',
+);
+assert.equal(readinessGeneration.schedule(() => true), true);
+readinessCallbacks.get(4)!();
+assert.deepEqual(
+  readinessChanges,
+  [false, true, false, true],
+  'the replacement scene can publish readiness after its own validation frame',
+);
+
 let bitmapLoad: ((bitmap: ImageBitmap) => void) | undefined;
 let bitmapLoaderAborts = 0;
 let artLoads = 0;
@@ -590,9 +1230,19 @@ const artMaterial = createPartArtMaterial(
     },
   },
 );
+assert.equal(
+  isInitialSceneMaterialResourcePending(artMaterial),
+  true,
+  'a decoded part-art resource remains pending until its texture install callback runs',
+);
 let bitmapCloses = 0;
 bitmapLoad?.({ close: () => { bitmapCloses += 1; } } as ImageBitmap);
 assert.equal(artLoads, 1, 'part artwork reports readiness after asynchronous bitmap decode');
+assert.equal(
+  isInitialSceneMaterialResourcePending(artMaterial),
+  false,
+  'the successful texture install closes the part-art readiness lease',
+);
 assert(artMaterial.map, 'part artwork installs the decoded bitmap as a Three texture');
 disposePartArtMaterial(artMaterial);
 assert.equal(bitmapLoaderAborts, 1, 'part artwork disposal aborts its loader');
@@ -612,6 +1262,11 @@ const disposedBeforeLoad = createPartArtMaterial(
   },
 );
 disposePartArtMaterial(disposedBeforeLoad);
+assert.equal(
+  isInitialSceneMaterialResourcePending(disposedBeforeLoad),
+  false,
+  'disposing a queued part-art material cannot leave initial scene settlement pending',
+);
 lateBitmapLoad?.({ close: () => { bitmapCloses += 1; } } as ImageBitmap);
 assert.equal(artLoads, 1, 'a disposed material ignores a late bitmap result');
 assert.equal(bitmapCloses, 2, 'a late bitmap is closed instead of being retained');

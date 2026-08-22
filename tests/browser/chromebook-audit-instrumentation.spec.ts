@@ -15,7 +15,7 @@ test("Chromebook WebGL probe tracks identities and real GL submissions", async (
 
   try {
     await page.goto("data:text/html,<canvas id='probe'></canvas>");
-    const result = await page.evaluate(() => {
+    const result = await page.evaluate(async () => {
       const canvas = document.querySelector("canvas");
       const gl = canvas?.getContext("webgl2") ?? canvas?.getContext("webgl");
       if (!gl) throw new Error("WebGL is required for the audit probe contract");
@@ -31,10 +31,29 @@ test("Chromebook WebGL probe tracks identities and real GL submissions", async (
       gl.clear(gl.COLOR_BUFFER_BIT);
       canvas?.dispatchEvent(new Event("webglcontextlost"));
       canvas?.dispatchEvent(new Event("webglcontextrestored"));
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
 
       const audit = (window as Window & {
         __MOTIONSMITH_CHROMEBOOK_AUDIT__?: {
           webglFrameSubmissions: number[];
+          webglResourceDeletions: Array<{
+            atMs: number;
+            kind: string;
+            contextIndex: number;
+            canvasClassName: string;
+            canvasConnected: boolean;
+            liveBefore: number;
+            liveAfter: number;
+          }>;
+          webglResourceDeletionBatches: Array<{
+            contextIndex: number;
+            canvasClassName: string;
+            canvasConnectedAtStart: boolean;
+            firstAtMs: number;
+            lastAtMs: number;
+            stackReturnedAtMs: number | null;
+            uniqueDeletionCount: number;
+          }>;
           webgl: {
             contextsLost: number;
             contextsRestored: number;
@@ -47,6 +66,8 @@ test("Chromebook WebGL probe tracks identities and real GL submissions", async (
       }).__MOTIONSMITH_CHROMEBOOK_AUDIT__;
       return {
         texture: audit?.webgl.resources.texture,
+        resourceDeletions: audit?.webglResourceDeletions,
+        deletionBatches: audit?.webglResourceDeletionBatches,
         submissions: audit?.webglFrameSubmissions.length ?? 0,
         contextsLost: audit?.webgl.contextsLost ?? 0,
         contextsRestored: audit?.webgl.contextsRestored ?? 0,
@@ -61,6 +82,27 @@ test("Chromebook WebGL probe tracks identities and real GL submissions", async (
       peakLive: 2,
     });
     expect(result.secondTextureStillLive).toBe(true);
+    expect(result.resourceDeletions).toEqual([{
+      atMs: expect.any(Number),
+      kind: "texture",
+      contextIndex: 0,
+      canvasClassName: "",
+      canvasConnected: true,
+      liveBefore: 2,
+      liveAfter: 1,
+    }]);
+    expect(result.deletionBatches).toEqual([{
+      contextIndex: 0,
+      canvasClassName: "",
+      canvasConnectedAtStart: true,
+      firstAtMs: expect.any(Number),
+      lastAtMs: expect.any(Number),
+      stackReturnedAtMs: expect.any(Number),
+      uniqueDeletionCount: 1,
+    }]);
+    expect(
+      result.deletionBatches?.[0]?.stackReturnedAtMs,
+    ).toBeGreaterThanOrEqual(result.deletionBatches?.[0]?.lastAtMs ?? Infinity);
     expect(result.submissions).toBe(2);
     expect(result.contextsLost).toBe(1);
     expect(result.contextsRestored).toBe(1);

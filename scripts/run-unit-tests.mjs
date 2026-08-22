@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 
 const TEST_DIRECTORY = resolve(process.cwd(), 'tests');
 const UNIT_TEST_FILES = [
+  'adaptive-high-resolution-controller.test.ts',
   'assembly-guide-model.test.ts',
   'automata-scene-runtime.test.ts',
   'autosave-recovery-worker.test.ts',
@@ -19,6 +20,7 @@ const UNIT_TEST_FILES = [
   'cadenced-playback-sampler.test.ts',
   'chromebook-audit-contract.test.ts',
   'foundry-handle-gesture.test.ts',
+  'foundry-workflow-progressive-mount.test.ts',
   'four-bar-fit-retention.test.ts',
   'interactive-sampling.test.ts',
   'mechanism-fit-worker.test.ts',
@@ -29,9 +31,11 @@ const UNIT_TEST_FILES = [
   'project-contract.test.ts',
   'project-import-worker.test.ts',
   'render-performance-policy.test.ts',
+  'renderer-interaction-seams.test.ts',
   'scene-object-image-worker.test.ts',
   'three-resource-retention.test.ts',
   'tracking-media-policy.test.ts',
+  'transient-value-controller.test.ts',
 ];
 
 const discoveredUnitTests = readdirSync(TEST_DIRECTORY)

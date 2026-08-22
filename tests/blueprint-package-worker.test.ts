@@ -13,6 +13,7 @@ import type {
   BlueprintPackageWorkerRequest,
   BlueprintPackageWorkerResponse,
 } from "../runtime/blueprint/blueprintPackageJob";
+import { blueprintPackageWithoutSceneArtwork } from "../runtime/blueprint/blueprintPackageTransfer";
 import { createFabricationReadyFourBarProject } from "./fixtures/fabricationProject";
 import {
   CUSTOM_PARTS_STL_LIMITS,
@@ -29,11 +30,12 @@ const rasterObject = {
   textureUrl:
     `data:image/png;base64,export-raster-marker-${"a".repeat(4 * 1024 * 1024)}`,
 };
-const rasterPackage = runBlueprintPackageJob({
+const rasterProject = {
   ...project,
   sceneObjects: { [rasterObject.id]: rasterObject },
   sceneObjectOrder: [rasterObject.id],
-});
+};
+const rasterPackage = runBlueprintPackageJob(rasterProject);
 const rasterMetadata = JSON.parse(rasterPackage.metadataJson) as {
   sceneSnapshot: { sceneObjects: Record<string, { textureUrl?: string }> };
 };
@@ -56,6 +58,16 @@ assert.equal(
 assert(
   Buffer.byteLength(rasterPackage.metadataJson) < 512 * 1024,
   "reduced metadata stays independent of a 4 MB scene raster",
+);
+const rasterTransferPackage = blueprintPackageWithoutSceneArtwork(rasterPackage);
+assert.equal(
+  JSON.stringify(rasterTransferPackage).includes("export-raster-marker-"),
+  false,
+  "the worker response does not clone canonical scene artwork back to main",
+);
+assert(
+  Buffer.byteLength(JSON.stringify(rasterTransferPackage)) < 1024 * 1024,
+  "worker response size stays independent of a 4 MB scene raster",
 );
 assert(
   Buffer.byteLength(rasterPackageJson) < 5 * 1024 * 1024,
@@ -132,13 +144,17 @@ const flushFrame = () => {
 
 const workers: FakeWorker[] = [];
 const completions: string[] = [];
+const completedPackages: typeof rasterPackage[] = [];
 const stlCompletions: number[] = [];
 const stlFailures: string[] = [];
 const failures: string[] = [];
 const callbacks = {
   complete: (
     result: Extract<BlueprintPackageWorkerResponse, { type: "result" }>,
-  ) => completions.push(result.fabricationPackage.id),
+  ) => {
+    completions.push(result.fabricationPackage.id);
+    completedPackages.push(result.fabricationPackage);
+  },
   failed: (error: Error) => failures.push(error.message),
 };
 const client = createBlueprintPackageWorkerClient(() => {
@@ -158,11 +174,16 @@ assert.equal(workers.length, 1);
 assert.equal(workers[0].posted[0].project.lastExport, undefined);
 const staleHandler = workers[0].onmessage;
 
-const secondGeneration = client.request(project, callbacks);
+const secondGeneration = client.request(rasterProject, callbacks);
 assert.equal(workers[0].terminated, true, "new package request cancels the old worker");
 flushFrame();
 flushFrame();
 assert.equal(workers.length, 2);
+assert.equal(
+  workers[1].posted[0].project.sceneObjects[rasterObject.id].textureUrl,
+  undefined,
+  "canonical scene artwork stays on main instead of entering the package worker clone",
+);
 staleHandler?.({
   data: {
     type: "result",
@@ -176,10 +197,20 @@ workers[1].onmessage?.({
   data: {
     type: "result",
     generationId: secondGeneration,
-    fabricationPackage: pkg,
+    fabricationPackage: rasterTransferPackage,
   },
 } as MessageEvent<BlueprintPackageWorkerResponse>);
-assert.deepEqual(completions, [pkg.id]);
+assert.deepEqual(completions, [rasterPackage.id]);
+assert.equal(
+  completedPackages[0].sceneSnapshot.sceneObjects[rasterObject.id].textureUrl,
+  rasterObject.textureUrl,
+  "the client restores the full package snapshot from canonical references",
+);
+assert.equal(
+  JSON.stringify(completedPackages[0]).split("export-raster-marker-").length - 1,
+  1,
+  "restored package round trip retains exactly one canonical scene raster",
+);
 assert.deepEqual(failures, []);
 assert.equal(workers[1].terminated, true, "completed package work releases its worker");
 

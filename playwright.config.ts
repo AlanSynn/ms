@@ -21,7 +21,7 @@ if (!Number.isInteger(serverPort) || serverPort < 1 || serverPort > 65535) {
 }
 const cleanColorEnv = 'env -u NO_COLOR ';
 const webServerCommand = serverMode === 'preview'
-  ? `${cleanColorEnv}bun run preview -- --host 127.0.0.1 --port ${serverPort} --strictPort`
+  ? `${cleanColorEnv}${auditEnabled ? 'MOTIONSMITH_AUDIT_ISOLATION=1 ' : ''}bun run preview -- --host 127.0.0.1 --port ${serverPort} --strictPort`
   : `${cleanColorEnv}bun run dev -- --host 127.0.0.1 --port ${serverPort}`;
 
 export default defineConfig({

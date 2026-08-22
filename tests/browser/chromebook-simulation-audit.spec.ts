@@ -12,10 +12,12 @@ import {
 import {
   applyChromebookEmulation,
   collectPlaybackAudit,
+  collectChromebookRuntimeEnvironment,
   installChromebookAuditInstrumentation,
-  measureClickToNextPaint,
+  installChromebookAuditIsolation,
 } from "./chromebookAuditHarness";
 import { collectChromebookAuditProvenance } from "./chromebookAuditProvenance";
+import { CHROMEBOOK_AUDIT_PROFILE } from "./chromebookAuditProfiles";
 
 const ENABLED = process.env.CHROMEBOOK_AUDIT === "1";
 const ENFORCE = process.env.CHROMEBOOK_AUDIT_ENFORCE !== "0";
@@ -87,6 +89,7 @@ for (const stage of ["path", "design", "assembly"] as const) {
       });
       await installChromebookAuditInstrumentation(context);
       const page = await context.newPage();
+      const client = await installChromebookAuditIsolation(page);
       const pageErrors: string[] = [];
       const requests: string[] = [];
       page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -100,30 +103,32 @@ for (const stage of ["path", "design", "assembly"] as const) {
         expect(await page.locator('script[src*="/@vite/client"]').count()).toBe(0);
         await openWavingArm(page);
         await prepareStage(page, stage);
-        const client = await applyChromebookEmulation(page);
+        await applyChromebookEmulation(page, client);
 
         try {
           const requestOffset = requests.length;
           const dock = page.getByTestId("workspace-player-dock");
           const play = dock.getByRole("button", { name: "Play", exact: true });
           const actions: ActionLatency[] = [];
-          const playTiming = await measureClickToNextPaint(play);
-          actions.push({
-            label: `${stage}-play`,
-            kind: "click",
-            durationMs: playTiming.nextPaintMs,
+          await expect(play).toBeVisible();
+          const playback = await collectPlaybackAudit(page, PLAYBACK_MS, {
+            controlsTestId: "workspace-player-dock",
           });
-          await expect(
-            dock.getByRole("button", { name: "Pause", exact: true }),
-          ).toBeVisible();
-          const playback = await collectPlaybackAudit(page, PLAYBACK_MS);
-          const pause = dock.getByRole("button", { name: "Pause", exact: true });
-          const pauseTiming = await measureClickToNextPaint(pause);
-          actions.push({
-            label: `${stage}-pause`,
-            kind: "click",
-            durationMs: pauseTiming.nextPaintMs,
-          });
+          if (!playback.controlActions) {
+            throw new Error(`${stage} playback did not record control latency`);
+          }
+          actions.push(
+            {
+              label: `${stage}-play`,
+              kind: "click",
+              durationMs: playback.controlActions.playNextPaintMs,
+            },
+            {
+              label: `${stage}-pause`,
+              kind: "click",
+              durationMs: playback.controlActions.pauseNextPaintMs,
+            },
+          );
           await expect(play).toBeVisible();
 
           const interactionLatencyMs = percentiles(
@@ -145,22 +150,19 @@ for (const stage of ["path", "design", "assembly"] as const) {
             networkRequests: string[];
             forbiddenRuntimeRequests: string[];
           } = {
-            schemaVersion: 2,
+            schemaVersion: 3,
             generatedAt: new Date().toISOString(),
-            resultLabel: "6x CPU emulation",
+            profile: CHROMEBOOK_AUDIT_PROFILE.name,
+            resultLabel: CHROMEBOOK_AUDIT_PROFILE.resultLabel,
             productionBuild: true,
             actualChromebookTested: false,
             provenance: await collectChromebookAuditProvenance(baseURL),
             workload: `${stage}-playback`,
-            environment: {
-              ...CHROMEBOOK_AUDIT_ENVIRONMENT,
-              browserVersion: browser.version(),
-              userAgent: await page.evaluate(() => navigator.userAgent),
-              measuredDeviceScaleFactor: await page.evaluate(
-                () => window.devicePixelRatio,
-              ),
-              throttlingScope: "feature-action",
-            },
+            environment: await collectChromebookRuntimeEnvironment(
+              page,
+              browser.version(),
+              "feature-action",
+            ),
             actions,
             interactionLatencyMs,
             playback,

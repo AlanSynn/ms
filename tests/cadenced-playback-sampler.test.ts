@@ -1,7 +1,10 @@
 import { strict as assert } from 'node:assert';
 
 import type { PlaybackClockFrame } from '../runtime/playback/externalPlaybackClock';
-import { subscribeCadencedPlaybackSampler } from '../runtime/playback/cadencedPlaybackSampler';
+import {
+  HIGH_RESOLUTION_CADENCE_EARLY_TOLERANCE_MS,
+  subscribeCadencedPlaybackSampler,
+} from '../runtime/playback/cadencedPlaybackSampler';
 
 let phase = 0;
 let listener: ((frame: PlaybackClockFrame) => void) | undefined;
@@ -117,5 +120,52 @@ assert.deepEqual(
 );
 unsubscribeDeferred();
 assert.equal(listener, undefined, 'deferred sampler releases its clock listener');
+
+const toleranceSamples: number[] = [];
+const unsubscribeTolerance = subscribeCadencedPlaybackSampler({
+  clock,
+  minFrameIntervalMs: 25,
+  earlyToleranceMs: HIGH_RESOLUTION_CADENCE_EARLY_TOLERANCE_MS,
+  sampleInitial: false,
+  sample: (nextPhase) => nextPhase,
+  apply: (nextPhase) => toleranceSamples.push(nextPhase),
+});
+const toleranceListener = listener as ((frame: PlaybackClockFrame) => void) | undefined;
+assert(toleranceListener, 'tolerant sampler installs one clock listener');
+toleranceListener({
+  elapsedMs: 24,
+  phase: 3,
+  time: 24,
+  phaseChanged: true,
+});
+assert.deepEqual(
+  toleranceSamples,
+  [3],
+  'High probation accepts a clock tick no more than 1ms before its 25ms cadence boundary',
+);
+toleranceListener({
+  elapsedMs: 23,
+  phase: 3.1,
+  time: 47,
+  phaseChanged: true,
+});
+assert.deepEqual(
+  toleranceSamples,
+  [3],
+  'the tolerance cannot submit more than 1ms before the accumulated boundary',
+);
+toleranceListener({
+  elapsedMs: 1,
+  phase: 3.2,
+  time: 48,
+  phaseChanged: true,
+});
+assert.deepEqual(
+  toleranceSamples,
+  [3, 3.2],
+  'the accumulated cadence remains anchored instead of drifting earlier each frame',
+);
+unsubscribeTolerance();
+assert.equal(listener, undefined, 'tolerant sampler releases its clock listener');
 
 console.log('cadenced playback sampler contract ok');

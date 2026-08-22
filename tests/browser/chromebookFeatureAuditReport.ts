@@ -2,14 +2,21 @@ import {
   CHROMEBOOK_ACCEPTANCE_THRESHOLDS,
   percentiles,
   type AcceptanceCheck,
+  type ChromebookRuntimeEnvironment,
   type Percentiles,
 } from "./chromebookAuditReport";
 import type { ChromebookAuditProvenance } from "./chromebookAuditProvenance";
+import type {
+  ChromebookAuditProfileName,
+} from "./chromebookAuditProfiles";
+import { CHROMEBOOK_AUDIT_PROFILE } from "./chromebookAuditProfiles";
 
 export const CHROMEBOOK_FEATURE_NAMES = [
   "recommend",
   "designFit",
   "traceGif",
+  "traceVideo",
+  "rapierDiagnostics",
   "pathGestures",
   "foundryGestures",
   "designControls",
@@ -26,6 +33,7 @@ export type ChromebookFeatureName = (typeof CHROMEBOOK_FEATURE_NAMES)[number];
 export const CHROMEBOOK_FEATURE_ACCEPTANCE_THRESHOLDS = {
   nextPaintP95Ms: CHROMEBOOK_ACCEPTANCE_THRESHOLDS.interactionP95Ms,
   mainThreadLongTaskP95Ms: 50,
+  mainThreadLongTaskMaxMs: 50,
   heapGrowthRatio: CHROMEBOOK_ACCEPTANCE_THRESHOLDS.heapGrowthRatio,
   heapGrowthFloorBytes: CHROMEBOOK_ACCEPTANCE_THRESHOLDS.heapGrowthFloorBytes,
 } as const;
@@ -52,6 +60,16 @@ export type FeatureRuntimeProbe = {
   atMs: number;
   heapBytes?: number;
   heapSamplesBytes?: number[];
+  memory?: {
+    source:
+      | "measure-user-agent-specific-memory"
+      | "performance-memory-diagnostic"
+      | "unsupported";
+    authoritative: boolean;
+    crossOriginIsolated: boolean;
+    bytes?: number;
+    userAgentSpecificMemoryError?: string;
+  };
   longTaskCount: number;
   puppetTopologyCount: number;
   lifecycle: RuntimeLifecycleSnapshot;
@@ -61,10 +79,30 @@ export type FeatureActionAudit = {
   label: string;
   cycle: number;
   outcome: "completed" | "cancelled";
+  interactionClass?: "general" | "direct";
   eventTaskEndMs?: number;
   firstRafMs?: number;
   nextPaintMs: number;
   renderSubmissionOffsetsMs?: number[];
+  causality?: {
+    actionStartedAtMs: number;
+    globalGlStartIndex: number;
+    globalGlEndIndex: number;
+    causalGlobalGlIndex: number;
+    causalGlAtMs: number;
+    foundryCanvasGlStartCount: number;
+    foundryCanvasGlEndCount: number;
+    rigSubmissionStartCount: number;
+    rigSubmissionEndCount: number;
+    gestureEmissionStartCount?: number;
+    gestureEmissionCount?: number;
+    gestureEmissionAtMs?: number;
+    pointerEventTimestampsMs: number[];
+    pointerEventOffsetsMs: number[];
+    eventToGestureEmissionMs?: number;
+    gestureEmissionToFirstGlMs?: number;
+    eventToFirstGlMs: number;
+  };
   settleMs: number;
   jobCompletionMs?: number;
   longTasks: {
@@ -102,6 +140,14 @@ export type FeatureAudit = {
   };
   heap: {
     supported: boolean;
+    diagnosticAvailable: boolean;
+    metricSource:
+      | "measure-user-agent-specific-memory"
+      | "performance-memory-diagnostic"
+      | "unsupported";
+    authoritative: boolean;
+    crossOriginIsolated: boolean;
+    userAgentSpecificMemoryError?: string;
     baselineBytes: number;
     finalBytes: number;
     growthBytes: number;
@@ -110,35 +156,27 @@ export type FeatureAudit = {
     tailRangeBytes: number;
     stable: boolean;
   };
+  network?: {
+    requests: string[];
+    expectedRequests: string[];
+    forbiddenRequests: string[];
+  };
   acceptance: Record<string, AcceptanceCheck> & {
     passed: AcceptanceCheck;
   };
 };
 
 export type ChromebookFeatureAuditReport = {
-  schemaVersion: 2;
+  schemaVersion: 3;
   generatedAt: string;
-  resultLabel: "6x CPU emulation";
+  profile: ChromebookAuditProfileName;
+  resultLabel: typeof CHROMEBOOK_AUDIT_PROFILE.resultLabel;
   productionBuild: true;
   actualChromebookTested: false;
   provenance: ChromebookAuditProvenance;
   runtimeProbe: "browser-api-ownership-v1";
   workload: "production-feature" | "production-interaction";
-  environment: {
-    browser: "chrome";
-    browserVersion: string;
-    userAgent: string;
-    viewport: { width: number; height: number };
-    deviceScaleFactor: number;
-    cpuThrottlingRate: number;
-    throttlingScope: "feature-action";
-    network: {
-      name: string;
-      latencyMs: number;
-      downloadBytesPerSecond: number;
-      uploadBytesPerSecond: number;
-    };
-  };
+  environment: ChromebookRuntimeEnvironment;
   feature: FeatureAudit;
   acceptance: {
     passed: AcceptanceCheck;
@@ -191,8 +229,33 @@ export const buildChromebookFeatureAudit = (
     final.lifecycle,
     "objectUrls",
   );
+  const sameMemorySource =
+    baseline.memory?.source !== undefined &&
+    baseline.memory.source !== "unsupported" &&
+    baseline.memory.source === final.memory?.source;
+  const diagnosticAvailable =
+    baseline.heapBytes !== undefined &&
+    final.heapBytes !== undefined &&
+    sameMemorySource;
   const heapSupported =
-    baseline.heapBytes !== undefined && final.heapBytes !== undefined;
+    diagnosticAvailable &&
+    (
+      !CHROMEBOOK_AUDIT_PROFILE.officialAcceptance ||
+      Boolean(
+        baseline.memory?.authoritative &&
+        final.memory?.authoritative &&
+        baseline.memory.crossOriginIsolated &&
+        final.memory.crossOriginIsolated,
+      )
+    );
+  const memoryAuthoritative = Boolean(
+    sameMemorySource &&
+    baseline.memory?.source === "measure-user-agent-specific-memory" &&
+    baseline.memory.authoritative &&
+    final.memory?.authoritative &&
+    baseline.memory.crossOriginIsolated &&
+    final.memory.crossOriginIsolated,
+  );
   const baselineBytes = baseline.heapBytes ?? 0;
   const finalBytes = final.heapBytes ?? baselineBytes;
   const growthBytes = finalBytes - baselineBytes;
@@ -219,6 +282,12 @@ export const buildChromebookFeatureAudit = (
       observed: mainThreadLongTaskLatencyMs.p95,
       limit: thresholds.mainThreadLongTaskP95Ms,
     },
+    mainThreadLongTaskMax: {
+      passed:
+        Math.max(0, ...longTasks) <= thresholds.mainThreadLongTaskMaxMs,
+      observed: Math.max(0, ...longTasks),
+      limit: thresholds.mainThreadLongTaskMaxMs,
+    },
     workerProbeSupported: {
       passed: baseline.lifecycle.probeSupport.workers,
       observed: baseline.lifecycle.probeSupport.workers,
@@ -238,6 +307,14 @@ export const buildChromebookFeatureAudit = (
       passed: heapSupported,
       observed: heapSupported,
       limit: true,
+    },
+    memoryAuthoritative: {
+      passed:
+        !CHROMEBOOK_AUDIT_PROFILE.officialAcceptance || memoryAuthoritative,
+      observed: memoryAuthoritative,
+      limit: CHROMEBOOK_AUDIT_PROFILE.officialAcceptance
+        ? true
+        : "diagnostic fallback allowed for regression",
     },
     workersReturnedToBaseline: {
       passed: returnedToBaseline(
@@ -323,6 +400,19 @@ export const buildChromebookFeatureAudit = (
     },
     heap: {
       supported: heapSupported,
+      diagnosticAvailable,
+      metricSource: sameMemorySource
+        ? final.memory?.source ?? "unsupported"
+        : "unsupported",
+      authoritative: memoryAuthoritative,
+      crossOriginIsolated: Boolean(
+        baseline.memory?.crossOriginIsolated && final.memory?.crossOriginIsolated,
+      ),
+      userAgentSpecificMemoryError:
+        (!sameMemorySource
+          ? "Memory metric source changed between baseline and final"
+          : final.memory?.userAgentSpecificMemoryError ??
+            baseline.memory?.userAgentSpecificMemoryError),
       baselineBytes,
       finalBytes,
       growthBytes,

@@ -121,8 +121,10 @@ assert(
   pathCanvasPane.includes("playback={{") &&
     !pathCanvasPane.includes("playback={isPlaying ?") &&
     pathCanvasPane.includes("sample: (phase) => isPlaying ? playbackSample(phase) : undefined") &&
-    pathCanvasPane.includes("mechanisms={[]}"),
-  "Path owns one persistent shared-clock subscription, skips idle projection, and excludes mechanism geometry",
+    pathCanvasPane.includes("mechanisms={[]}") &&
+    pathCanvasPane.includes("const pathsToRender = React.useMemo(") &&
+    pathCanvasPane.includes("paths={pathsToRender}"),
+  "Path retains one shared-clock subscription and the canonical path prop across pause while skipping idle projection and mechanism geometry",
 );
 
 console.log("b695 playback contract ok");

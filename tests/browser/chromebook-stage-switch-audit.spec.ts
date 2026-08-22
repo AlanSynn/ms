@@ -9,12 +9,15 @@ import {
 } from "./chromebookAuditReport";
 import {
   applyChromebookEmulation,
+  collectChromebookRuntimeEnvironment,
   collectStableFeatureProbe,
   installChromebookAuditInstrumentation,
+  installChromebookAuditIsolation,
   measureClickToNextPaint,
   readFeatureRuntimeProbe,
 } from "./chromebookAuditHarness";
 import { collectChromebookAuditProvenance } from "./chromebookAuditProvenance";
+import { CHROMEBOOK_AUDIT_PROFILE } from "./chromebookAuditProfiles";
 
 const ENABLED = process.env.CHROMEBOOK_AUDIT === "1";
 const ENFORCE = process.env.CHROMEBOOK_AUDIT_ENFORCE !== "0";
@@ -166,6 +169,16 @@ const waitForStageContent = async (page: Page, stage: StageName) => {
     }).toBeGreaterThan(0);
     return;
   }
+  if (stage === "Options") {
+    const workspace = page.getByTestId("options-settings-workspace");
+    await expect(workspace).toBeVisible();
+    await expect(workspace.getByTestId("options-appearance")).toBeVisible();
+    await expect(workspace.getByTestId("options-units")).toBeAttached();
+    await expect(page.getByTestId("stage-right-inspector")).toBeHidden();
+    await expect(
+      page.getByRole("img", { name: "Options preview canvas" }),
+    ).toHaveCount(0);
+  }
   await expect(
     page.locator("canvas.three-puppet-canvas, canvas.foundry-three-canvas"),
   ).toHaveCount(0);
@@ -185,6 +198,7 @@ test.describe("Chromebook stage-switch audit", () => {
     });
     await installChromebookAuditInstrumentation(context);
     const page = await context.newPage();
+    const isolationClient = await installChromebookAuditIsolation(page);
     const pageErrors: string[] = [];
     page.on("pageerror", (error) => pageErrors.push(error.message));
     let client: CDPSession | undefined;
@@ -196,7 +210,7 @@ test.describe("Chromebook stage-switch audit", () => {
       });
       expect(await page.locator('script[src*="/@vite/client"]').count()).toBe(0);
       await openWavingArm(page);
-      client = await applyChromebookEmulation(page);
+      client = await applyChromebookEmulation(page, isolationClient);
       await expect.poll(
         async () => (await readFeatureRuntimeProbe(page)).lifecycle.workers.active,
         { message: "fixture autosave worker settles before the stage baseline" },
@@ -295,6 +309,10 @@ test.describe("Chromebook stage-switch audit", () => {
         samples.map((sample) => sample.ownershipSettledMs),
       );
       const longTasks = percentiles(samples.flatMap((sample) => sample.longTasksMs));
+      const longTaskMax = Math.max(
+        0,
+        ...samples.flatMap((sample) => sample.longTasksMs),
+      );
       const warmCycleEndLiveResources = samples
         .filter((sample) => sample.to === "Options")
         .map((sample) => sample.liveResources);
@@ -341,11 +359,31 @@ test.describe("Chromebook stage-switch audit", () => {
       const baselineHeap = initialRuntime.heapBytes ?? 0;
       const finalHeap = finalRuntime.heapBytes ?? baselineHeap;
       const finalHeapSamples = finalRuntime.heapSamplesBytes ?? [];
-      const heapSupported =
+      const memorySources = new Set([
+        initialRuntime.memory?.source,
+        warmRuntime.memory?.source,
+        finalRuntime.memory?.source,
+      ]);
+      const memoryDiagnosticAvailable =
         initialRuntime.heapBytes !== undefined &&
         warmRuntime.heapBytes !== undefined &&
         finalRuntime.heapBytes !== undefined &&
-        finalHeapSamples.length >= 3;
+        finalHeapSamples.length >= 3 &&
+        memorySources.size === 1 &&
+        !memorySources.has(undefined);
+      const memoryAuthoritative = Boolean(
+        memoryDiagnosticAvailable &&
+        initialRuntime.memory?.source === "measure-user-agent-specific-memory" &&
+        initialRuntime.memory?.authoritative &&
+        warmRuntime.memory?.authoritative &&
+        finalRuntime.memory?.authoritative &&
+        initialRuntime.memory.crossOriginIsolated &&
+        warmRuntime.memory.crossOriginIsolated &&
+        finalRuntime.memory.crossOriginIsolated,
+      );
+      const heapSupported =
+        memoryDiagnosticAvailable &&
+        (!CHROMEBOOK_AUDIT_PROFILE.officialAcceptance || memoryAuthoritative);
       const heapAllowance = Math.max(
         CHROMEBOOK_ACCEPTANCE_THRESHOLDS.heapGrowthFloorBytes,
         baselineHeap * CHROMEBOOK_ACCEPTANCE_THRESHOLDS.heapGrowthRatio,
@@ -358,11 +396,20 @@ test.describe("Chromebook stage-switch audit", () => {
           coldNextPaint.p95 <= CHROMEBOOK_ACCEPTANCE_THRESHOLDS.interactionP95Ms,
         coldReadyP95:
           coldReady.p95 <= CHROMEBOOK_ACCEPTANCE_THRESHOLDS.tabSwitchP95Ms,
-        coldLongTaskMax: coldLongTaskMax <= 100,
+        coldLongTaskMax:
+          coldLongTaskMax <=
+          CHROMEBOOK_ACCEPTANCE_THRESHOLDS.mainThreadLongTaskMaxMs,
         nextPaintP95: nextPaint.p95 <= CHROMEBOOK_ACCEPTANCE_THRESHOLDS.interactionP95Ms,
         readyP95: ready.p95 <= CHROMEBOOK_ACCEPTANCE_THRESHOLDS.tabSwitchP95Ms,
-        longTaskP95: longTasks.p95 <= 50,
+        longTaskP95:
+          longTasks.p95 <=
+          CHROMEBOOK_ACCEPTANCE_THRESHOLDS.mainThreadLongTaskMaxMs,
+        longTaskMax:
+          longTaskMax <=
+          CHROMEBOOK_ACCEPTANCE_THRESHOLDS.mainThreadLongTaskMaxMs,
         heapSupported,
+        memoryAuthoritative:
+          !CHROMEBOOK_AUDIT_PROFILE.officialAcceptance || memoryAuthoritative,
         heapGrowth: heapSupported && finalHeap - baselineHeap <= heapAllowance,
         heapStable: heapSupported && heapTailRange <= heapAllowance,
         workersReturned:
@@ -385,13 +432,18 @@ test.describe("Chromebook stage-switch audit", () => {
         throw new Error("Chromebook stage audit requires a preview base URL");
       }
       const report = {
-        schemaVersion: 2,
+        schemaVersion: 3,
         generatedAt: new Date().toISOString(),
-        resultLabel: "6x CPU emulation",
+        profile: CHROMEBOOK_AUDIT_PROFILE.name,
+        resultLabel: CHROMEBOOK_AUDIT_PROFILE.resultLabel,
         productionBuild: true,
         actualChromebookTested: false,
         provenance: await collectChromebookAuditProvenance(baseURL),
-        environment: CHROMEBOOK_AUDIT_ENVIRONMENT,
+        environment: await collectChromebookRuntimeEnvironment(
+          page,
+          browser.version(),
+          "feature-action",
+        ),
         coldCycles: 1,
         measuredCycles: 3,
         coldSamples,
@@ -403,9 +455,27 @@ test.describe("Chromebook stage-switch audit", () => {
           longTasks: coldLongTasks,
           longTaskMax: coldLongTaskMax,
         },
-        latencyMs: { nextPaint, ready, ownershipSettled, longTasks },
+        latencyMs: {
+          nextPaint,
+          ready,
+          ownershipSettled,
+          longTasks,
+          longTaskMax,
+        },
         heap: {
           supported: heapSupported,
+          diagnosticAvailable: memoryDiagnosticAvailable,
+          metricSource:
+            memoryDiagnosticAvailable
+              ? finalRuntime.memory?.source ?? "unsupported"
+              : "unsupported",
+          authoritative: memoryAuthoritative,
+          crossOriginIsolated:
+            finalRuntime.memory?.crossOriginIsolated ?? false,
+          userAgentSpecificMemoryError:
+            memorySources.size > 1
+              ? "Memory metric source changed across stage samples"
+              : finalRuntime.memory?.userAgentSpecificMemoryError,
           baselineBytes: baselineHeap,
           finalBytes: finalHeap,
           growthBytes: finalHeap - baselineHeap,

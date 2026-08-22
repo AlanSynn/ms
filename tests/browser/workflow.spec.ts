@@ -15,6 +15,12 @@ import {
   readFeatureRuntimeProbe,
   waitForLifecycleBaseline,
 } from './chromebookAuditHarness';
+import {
+  clearBrowserAutosave,
+  moveBrowserAutosaveToLegacyStorage,
+  readBrowserAutosaveProbe,
+  readBrowserAutosaveProject,
+} from './autosaveIndexedDbProbe';
 
 const ENABLED_CLASSROOM_LESSONS = CLASSROOM_LESSONS.filter(lesson => isMechanismTypeEnabled(lesson.mechanismType));
 
@@ -643,6 +649,17 @@ test('classroom assessment slug and mechanism example video work end-to-end', as
   page.on('console', msg => {
     if (msg.type() === 'error') consoleErrors.push(msg.text());
   });
+  const designModuleRequests: string[] = [];
+  const classroomExampleModuleRequests: string[] = [];
+  page.on('request', request => {
+    const url = request.url();
+    if (/\/assets\/MechanismDesign-[^/]+\.js(?:\?|$)/.test(url)) {
+      designModuleRequests.push(url);
+    }
+    if (/\/assets\/ClassroomExampleVideo-[^/]+\.js(?:\?|$)/.test(url)) {
+      classroomExampleModuleRequests.push(url);
+    }
+  });
   const youtubeRequests: string[] = [];
   await page.route('https://www.youtube-nocookie.com/**', async route => {
     youtubeRequests.push(route.request().url());
@@ -660,8 +677,22 @@ test('classroom assessment slug and mechanism example video work end-to-end', as
   const assessmentPrompt = page.getByTestId('classroom-assessment-prompt').first();
   await expect(assessmentPrompt).toHaveAttribute('data-assessment-key', 'motion-journal');
   await expect(assessmentPrompt).toContainText('What changed');
+  await expect(page.getByTestId('classroom-example-video')).toHaveCount(0);
+  await expect.poll(
+    () => designModuleRequests.length,
+    { message: 'Foundry idle-preloads the next Design adapter' },
+  ).toBeGreaterThan(0);
+  expect(
+    classroomExampleModuleRequests,
+    'preloading Design cannot fetch the click-owned classroom example chunk',
+  ).toEqual([]);
+  await page.getByTestId('foundry-visible-sensemaking').click();
   const example = page.getByTestId('classroom-example-video').first();
   await expect(example).toContainText('Where: waving hand');
+  await expect.poll(
+    () => classroomExampleModuleRequests.length,
+    { message: 'Hint owns the classroom example chunk request' },
+  ).toBeGreaterThan(0);
   await expect(example).toContainText('Watch for: two board pivots stay still');
   await expect(example).toContainText('Think: Which two pivots are the anchors?');
   const generatedLoop = example.getByTestId('classroom-generated-loop');
@@ -877,7 +908,15 @@ const stageButtonName = (name: string | RegExp) => {
   return aliases[name] ?? new RegExp(`^${escapeRegExp(name)}$`, 'i');
 };
 const stageRailButton = (page: Page, name: string | RegExp) => page.getByTestId('workspace-steps').getByRole('button', { name: stageButtonName(name) });
-const clickStage = async (page: Page, name: string | RegExp) => stageRailButton(page, name).click();
+const clickStage = async (page: Page, name: string | RegExp) => {
+  const button = stageRailButton(page, name);
+  const testId = await button.getAttribute('data-testid');
+  await button.click();
+  const target = testId?.replace(/^workflow-stage-/, '');
+  if (target && target !== testId) {
+    await expect(page.locator(`[data-stage="${target}"]`)).toBeVisible();
+  }
+};
 const expectProjectCounts = async (page: Page, parts: number, paths: number, mechanisms: number) => {
   await expect(page.getByTestId('stage-project-card')).toHaveAttribute('aria-label', new RegExp(`${parts} parts, ${paths} paths, ${mechanisms} mechanisms`));
   await expect(page.getByTestId('stage-project-card')).not.toBeVisible();
@@ -1819,7 +1858,7 @@ test('Options and validation gates update browser blueprint output', async ({ pa
   expectCleanPage(pageErrors, consoleErrors);
 });
 
-test('Options parity updates workspace UI, canvas context, and blueprint defaults', async ({ page }) => {
+test('Options parity updates the full-width settings workspace and blueprint defaults', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
@@ -1827,18 +1866,93 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
     if (msg.type() === 'error') consoleErrors.push(msg.text());
   });
 
+  await page.setViewportSize({ width: 1366, height: 768 });
   await page.goto('/');
   await openFabricationReadyFourBar(page);
   await applyFourBarFromFoundry(page);
   await page.getByRole('button', { name: /Options/i }).click();
   await expect(page.getByRole('heading', { name: 'Options' })).toBeVisible();
-  const optionsPreview = page.getByRole('img', { name: 'Options preview canvas' });
-  await expect(optionsPreview).toBeVisible();
-  await expect(optionsPreview).toContainText(/Letter sheet .* grid/);
-  await expect(optionsPreview).toContainText(/theme .* speed .* export/);
+  await expect(page.getByRole('img', { name: 'Options preview canvas' })).toHaveCount(0);
+  const optionsWorkspace = page.getByTestId('options-settings-workspace');
+  const optionsFrame = page.locator('[data-stage="options"]');
+  const optionsLeft = optionsFrame.getByTestId('stage-left-pane');
+  const optionsCenter = page.getByTestId('stage-canvas-pane');
+  const optionsInspector = page.getByTestId('stage-right-inspector');
+  await expect(optionsWorkspace).toBeVisible();
+  await expect(optionsInspector).toBeHidden();
+  const optionsLayout = await optionsWorkspace.evaluate(element => {
+    const grid = element.querySelector('.options-settings-grid');
+    const center = element.parentElement;
+    const frame = center?.parentElement;
+    const left = frame?.querySelector<HTMLElement>('[data-testid="stage-left-pane"]');
+    const inspector = frame?.querySelector<HTMLElement>('[data-testid="stage-right-inspector"]');
+    const frameBox = frame?.getBoundingClientRect();
+    const centerBox = center?.getBoundingClientRect();
+    const leftBox = left?.getBoundingClientRect();
+    const inspectorBox = inspector?.getBoundingClientRect();
+    const sections = [...element.querySelectorAll<HTMLElement>('.settings-section')];
+    return {
+      columnCount: grid ? getComputedStyle(grid).columnCount : '',
+      workspaceWidth: element.getBoundingClientRect().width,
+      centerWidth: centerBox?.width ?? 0,
+      leftWidth: leftBox?.width ?? 0,
+      centerRightGap: frameBox && centerBox
+        ? Math.abs(frameBox.right - centerBox.right)
+        : Number.POSITIVE_INFINITY,
+      inspectorDisplay: inspector ? getComputedStyle(inspector).display : '',
+      inspectorWidth: inspectorBox?.width ?? 0,
+      workspaceOverflowX: getComputedStyle(element).overflowX,
+      workspaceOverflowY: getComputedStyle(element).overflowY,
+      workspaceClientWidth: element.clientWidth,
+      workspaceScrollWidth: element.scrollWidth,
+      workspaceClientHeight: element.clientHeight,
+      workspaceScrollHeight: element.scrollHeight,
+      sectionsFitHorizontally: sections.every(
+        section => section.scrollWidth <= section.clientWidth + 1,
+      ),
+      documentClientWidth: document.documentElement.clientWidth,
+      documentScrollWidth: document.documentElement.scrollWidth,
+    };
+  });
+  expect(optionsLayout.columnCount, '1366px Options settings use three horizontal columns').toBe('3');
+  expect(Math.abs(optionsLayout.workspaceWidth - optionsLayout.centerWidth), 'settings surface fills the center workspace').toBeLessThan(2);
+  expect(optionsLayout.centerWidth, 'Options center consumes the former center and inspector width').toBeGreaterThan(optionsLayout.leftWidth * 2);
+  expect(optionsLayout.centerRightGap, 'Options center reaches the stage frame right edge').toBeLessThan(2);
+  expect(optionsLayout.inspectorDisplay, 'Options removes the empty inspector from layout').toBe('none');
+  expect(optionsLayout.inspectorWidth, 'hidden Options inspector reserves no phantom width').toBe(0);
+  expect(optionsLayout.workspaceOverflowX, 'Options owns no horizontal scrollbar').toBe('hidden');
+  expect(optionsLayout.workspaceOverflowY, 'desktop Options workspace owns vertical scrolling').toBe('auto');
+  expect(optionsLayout.workspaceScrollWidth, 'Options cards fit their full-width surface').toBeLessThanOrEqual(optionsLayout.workspaceClientWidth + 1);
+  expect(optionsLayout.sectionsFitHorizontally, 'each Options section fits its column').toBe(true);
+  expect(optionsLayout.documentScrollWidth, 'Options creates no page-level horizontal overflow').toBeLessThanOrEqual(optionsLayout.documentClientWidth + 1);
+  expect(optionsLayout.workspaceScrollHeight, 'lower Options sections require the owned scroll surface').toBeGreaterThan(optionsLayout.workspaceClientHeight);
+  await expect(optionsCenter.getByTestId('options-settings-workspace')).toBeVisible();
   for (const section of ['appearance', 'simulation', 'performance', 'debugging', 'workflow', 'fabrication', 'units']) {
-    await expect(page.getByTestId(`options-${section}`)).toBeVisible();
+    await expect(optionsWorkspace.getByTestId(`options-${section}`)).toHaveCount(1);
   }
+
+  await optionsWorkspace.evaluate(element => { element.scrollTop = 0; });
+  const optionsScrollBaseline = await page.evaluate(() => ({
+    documentY: window.scrollY,
+    workflowY: document.querySelector<HTMLElement>('[data-testid="stage-left-pane"]')?.scrollTop ?? 0,
+  }));
+  await optionsLeft.getByRole('link', { name: 'Units' }).click();
+  await expect.poll(() => optionsWorkspace.evaluate(element => element.scrollTop), {
+    message: 'Units anchor scrolls the Options-owned settings surface',
+  }).toBeGreaterThan(0);
+  await expect.poll(() => optionsWorkspace.evaluate(element => {
+    const target = element.querySelector<HTMLElement>('[data-testid="options-units"]');
+    if (!target) return false;
+    const ownerBox = element.getBoundingClientRect();
+    const targetBox = target.getBoundingClientRect();
+    return targetBox.top >= ownerBox.top - 1 && targetBox.bottom <= ownerBox.bottom + 1;
+  }), { message: 'the lower Units section is fully reachable inside Options' }).toBe(true);
+  expect(await page.evaluate(() => window.scrollY), 'desktop anchor does not scroll the page').toBe(optionsScrollBaseline.documentY);
+  expect(await optionsLeft.evaluate(element => element.scrollTop), 'desktop anchor does not scroll the workflow pane').toBe(optionsScrollBaseline.workflowY);
+  await optionsLeft.getByRole('link', { name: 'Appearance' }).click();
+  await expect.poll(() => optionsWorkspace.evaluate(element => element.scrollTop), {
+    message: 'Appearance anchor returns the Options surface to its top',
+  }).toBeLessThan(2);
 
   await page.getByLabel('Theme').selectOption('dark');
   await expect(page.locator('main[data-theme="dark"]')).toBeVisible();
@@ -1888,24 +2002,24 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await page.getByLabel('Format').selectOption('json');
   await expect(page.getByTestId('grid-cell-readout')).toContainText('0.98 in');
 
-  await expect.poll(async () => page.evaluate(() => {
-    const saved = JSON.parse(localStorage.getItem('motionsmith.autosave') ?? '{}');
+  await expect.poll(async () => {
+    const saved = await readBrowserAutosaveProject(page);
     return {
-      autosave: saved.settings?.autosave,
-      interval: saved.settings?.autosaveIntervalSeconds,
-      duration: saved.settings?.animationDurationMs,
-      timing: saved.settings?.timingProfile,
-      friction: saved.settings?.simulationFriction,
-      mass: saved.settings?.simulationMassKg,
-      performance: saved.settings?.performancePreset,
-      snap: saved.settings?.physicsSnapMode,
-      detailed: saved.settings?.detailedProcessingSteps,
-      unit: saved.settings?.gridUnit,
-      profile: saved.settings?.physicalKit?.profileKey,
-      pitch: saved.settings?.physicalKit?.gridPitchMm,
-      cutSheet: saved.settings?.physicalKit?.cutSheetFileType
+      autosave: saved?.settings?.autosave,
+      interval: saved?.settings?.autosaveIntervalSeconds,
+      duration: saved?.settings?.animationDurationMs,
+      timing: saved?.settings?.timingProfile,
+      friction: saved?.settings?.simulationFriction,
+      mass: saved?.settings?.simulationMassKg,
+      performance: saved?.settings?.performancePreset,
+      snap: saved?.settings?.physicsSnapMode,
+      detailed: saved?.settings?.detailedProcessingSteps,
+      unit: saved?.settings?.gridUnit,
+      profile: saved?.settings?.physicalKit?.profileKey,
+      pitch: saved?.settings?.physicalKit?.gridPitchMm,
+      cutSheet: saved?.settings?.physicalKit?.cutSheetFileType
     };
-  }), { timeout: 15000 }).toEqual({
+  }, { timeout: 15000 }).toEqual({
     autosave: true,
     interval: 1,
     duration: 6000,
@@ -1935,10 +2049,12 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await page.getByRole('button', { name: /Path Editor/i }).click();
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
   await expect(page.getByTestId('path-three-puppet-state')).toHaveAttribute('data-layer-grid', 'shown');
+  await expect(page.getByTestId('path-three-puppet-state')).toHaveAttribute('data-three-requested-dpr-cap', '1.00');
+  await expect(page.getByTestId('path-three-puppet-state')).toHaveAttribute('data-three-effective-dpr', '1.000');
   await expect.poll(
     () => canvasBackingPixelRatio(page.getByTestId('path-three-puppet-canvas')),
-    { message: 'High resolution applies native DPR 2 to the shared puppet renderer' },
-  ).toBeCloseTo(2, 1);
+    { message: 'adaptive High starts the shared puppet renderer at safe DPR 1' },
+  ).toBeCloseTo(1, 1);
   await expect(page.getByTestId('stage-project-card')).toHaveAttribute('aria-label', /25 millimeter grid/);
   await page.getByRole('button', { name: 'Drawing free path', exact: true }).click();
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
@@ -1950,15 +2066,17 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await expect(highPerformanceRig).toHaveAttribute('data-render-overlay-quality', 'balanced');
   await expect(highPerformanceRig).toHaveAttribute('data-three-animation-commit-ms', '25.0');
   await expect(highPerformanceRig).toHaveAttribute('data-three-pixel-ratio-cap', '2.00');
+  await expect(highPerformanceRig).toHaveAttribute('data-three-requested-dpr-cap', '1.00');
+  await expect(highPerformanceRig).toHaveAttribute('data-three-effective-dpr', '1.000');
   await expect.poll(
     () => canvasBackingPixelRatio(page.getByTestId('design-shared-foundry-preview').getByTestId('foundry-three-canvas')),
-    { message: 'High resolution applies native DPR 2 to the shared Foundry renderer' },
-  ).toBeCloseTo(2, 1);
+    { message: 'adaptive High starts the shared Foundry renderer at safe DPR 1' },
+  ).toBeCloseTo(1, 1);
   await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').fill('0');
   await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').press('Enter');
   await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').fill('100');
   await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').press('Enter');
-  await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('motionsmith.autosave') ?? '{}')?.mechanisms?.[0]?.anchorX), { timeout: 15000 }).toBe(0);
+  await expect.poll(async () => (await readBrowserAutosaveProject(page))?.mechanisms?.[0]?.anchorX, { timeout: 15000 }).toBe(0);
   await page.getByRole('button', { name: /Foundry/i }).click();
   await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
   await page.getByTestId('foundry-fit-path').click();
@@ -1999,16 +2117,29 @@ test('Autosave keeps cold boot idle and bounds 1/3/5MB writes at 6x CPU', async 
       __MOTIONSMITH_AUTOSAVE_WRITES__?: AutosaveWrite[];
     };
     target.__MOTIONSMITH_AUTOSAVE_WRITES__ = [];
-    const nativeSetItem = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (key: string, value: string) {
+    const nativePut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (
+      this: IDBObjectStore,
+      value: unknown,
+      key?: IDBValidKey,
+    ) {
       const startedAt = performance.now();
       let failed = true;
       try {
-        const result = Reflect.apply(nativeSetItem, this, [key, value]);
+        const result = Reflect.apply(
+          nativePut,
+          this,
+          key === undefined ? [value] : [value, key],
+        );
         failed = false;
         return result;
       } finally {
-        if (key.startsWith('motionsmith.autosave')) {
+        if (
+          this.name === 'autosave-journal' &&
+          typeof key === 'string' &&
+          key.startsWith('snapshot:') &&
+          typeof value === 'string'
+        ) {
           target.__MOTIONSMITH_AUTOSAVE_WRITES__?.push({
             key,
             characters: value.length,
@@ -2017,7 +2148,7 @@ test('Autosave keeps cold boot idle and bounds 1/3/5MB writes at 6x CPU', async 
           });
         }
       }
-    };
+    } as typeof IDBObjectStore.prototype.put;
   });
   const workerRequests: string[] = [];
   page.on('request', request => {
@@ -2041,55 +2172,47 @@ test('Autosave keeps cold boot idle and bounds 1/3/5MB writes at 6x CPU', async 
   }> = [];
   let autosaveAttempts = 0;
   const waitForAutosaveOutcome = async (generation: number) => {
-    await expect.poll(() => page.evaluate((expectedGeneration) => {
-      const raw = localStorage.getItem('motionsmith.autosave.metadata');
-      const committedGeneration = raw ? JSON.parse(raw).currentGeneration : 0;
-      if (committedGeneration === expectedGeneration) return 'saved';
-      return document.querySelector('[data-testid="status-bar"]')?.textContent
+    await expect.poll(async () => {
+      const committedGeneration =
+        (await readBrowserAutosaveProbe(page)).metadata?.currentGeneration ?? 0;
+      if (committedGeneration === generation) return 'saved';
+      return (await page.getByTestId('status-bar').textContent())
         ?.includes('Autosave failed: Storage full')
         ? 'quota'
         : 'pending';
-    }, generation), { timeout: 30_000 }).toMatch(/saved|quota/);
-    return page.evaluate((expectedGeneration) => {
-      const raw = localStorage.getItem('motionsmith.autosave.metadata');
-      return raw && JSON.parse(raw).currentGeneration === expectedGeneration
-        ? 'saved' as const
-        : 'quota' as const;
-    }, generation);
+    }, { timeout: 30_000 }).toMatch(/saved|quota/);
+    return (await readBrowserAutosaveProbe(page)).metadata?.currentGeneration === generation
+      ? 'saved' as const
+      : 'quota' as const;
   };
-  const readAutosaveMeasurement = () => page.evaluate(() => {
+  const readAutosaveMeasurement = async () => {
+    const writes = await page.evaluate(() => {
     type AutosaveWrite = {
       key: string;
       characters: number;
       durationMs: number;
       failed: boolean;
     };
-    const writes = (window as Window & {
+    return (window as Window & {
       __MOTIONSMITH_AUTOSAVE_WRITES__?: AutosaveWrite[];
     }).__MOTIONSMITH_AUTOSAVE_WRITES__ ?? [];
-    const currentWrites = writes.filter(item => item.key === 'motionsmith.autosave');
-    const metadataRaw = localStorage.getItem('motionsmith.autosave.metadata');
-    const metadata = metadataRaw
-      ? JSON.parse(metadataRaw) as { previousGeneration?: number | null }
-      : undefined;
-    let totalStoredCharacters = 0;
-    for (let index = 0; index < localStorage.length; index += 1) {
-      const key = localStorage.key(index);
-      if (key?.startsWith('motionsmith.autosave')) {
-        totalStoredCharacters += localStorage.getItem(key)?.length ?? 0;
-      }
-    }
+    });
+    const probe = await readBrowserAutosaveProbe(page);
     return {
-      maxAutosaveWriteMs: Math.max(0, ...currentWrites.map(item => item.durationMs)),
-      successfulCurrentWrites: currentWrites.filter(item => !item.failed).length,
-      failedCurrentWrites: currentWrites.filter(item => item.failed).length,
-      totalStoredCharacters,
+      maxAutosaveWriteMs: Math.max(0, ...writes.map(item => item.durationMs)),
+      attemptedCurrentWrites: writes.length,
+      failedCurrentWrites: writes.filter(item => item.failed).length,
+      totalStoredCharacters:
+        (probe.currentRaw?.length ?? 0) +
+        (probe.previousRaw?.length ?? 0) +
+        JSON.stringify(probe.metadata ?? {}).length,
       retainedGenerations: (
-        !metadata ? 0 : metadata.previousGeneration == null ? 1 : 2
+        !probe.metadata ? 0 : probe.metadata.previousGeneration == null ? 1 : 2
       ) as 0 | 1 | 2,
     };
-  });
+  };
   for (const megabytes of [1, 3, 5]) {
+    await clearBrowserAutosave(page);
     await page.evaluate(() => {
       localStorage.clear();
       const target = window as Window & {
@@ -2113,7 +2236,7 @@ test('Autosave keeps cold boot idle and bounds 1/3/5MB writes at 6x CPU', async 
 
     if (firstOutcome === 'quota') {
       const measured = await readAutosaveMeasurement();
-      expect(measured.failedCurrentWrites, `${megabytes}MB reports its browser quota limit`).toBeGreaterThan(0);
+      expect(measured.attemptedCurrentWrites, `${megabytes}MB reports its browser quota limit`).toBeGreaterThan(0);
       expect(measured.maxAutosaveWriteMs, `${megabytes}MB rejected write at 6x CPU`).toBeLessThan(100);
       results.push({ megabytes, outcome: 'quota', ...measured });
       continue;
@@ -2135,8 +2258,8 @@ test('Autosave keeps cold boot idle and bounds 1/3/5MB writes at 6x CPU', async 
     await waitForLifecycleBaseline(page, baseline.lifecycle);
     expect(secondOutcome, `${megabytes}MB newest generation survives optional-history quota pressure`).toBe('saved');
     const measured = await readAutosaveMeasurement();
-    expect(measured.successfulCurrentWrites, `${megabytes}MB current generation commits`).toBeGreaterThan(0);
-    expect(measured.maxAutosaveWriteMs, `${megabytes}MB localStorage write at 6x CPU`).toBeLessThan(100);
+    expect(measured.attemptedCurrentWrites, `${megabytes}MB current generation commits`).toBeGreaterThan(0);
+    expect(measured.maxAutosaveWriteMs, `${megabytes}MB IndexedDB put at 6x CPU`).toBeLessThan(100);
     results.push({ megabytes, outcome: 'saved', ...measured });
   }
 
@@ -2171,13 +2294,25 @@ test('Autosave keeps cold boot idle and bounds 1/3/5MB writes at 6x CPU', async 
 
 test('Autosave quota failure is visible in the status dock', async ({ page, context }) => {
   await context.addInitScript(() => {
-    const nativeSetItem = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (key: string, value: string) {
-      if (key === 'motionsmith.autosave') {
+    const nativePut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (
+      this: IDBObjectStore,
+      value: unknown,
+      key?: IDBValidKey,
+    ) {
+      if (
+        this.name === 'autosave-journal' &&
+        typeof key === 'string' &&
+        key.startsWith('snapshot:')
+      ) {
         throw new DOMException('storage full', 'QuotaExceededError');
       }
-      return Reflect.apply(nativeSetItem, this, [key, value]);
-    };
+      return Reflect.apply(
+        nativePut,
+        this,
+        key === undefined ? [value] : [value, key],
+      );
+    } as typeof IDBObjectStore.prototype.put;
   });
   await page.goto('/');
   await openCharacterScreen(page);
@@ -2206,16 +2341,13 @@ test('Legacy storage namespace migrates to MotionSmith keys without losing autos
   await page.getByRole('button', { name: /Options/i }).click();
   const autosaveToggle = page.getByLabel('Enable autosave');
   if (!(await autosaveToggle.isChecked())) await autosaveToggle.check();
-  await expect.poll(async () => page.evaluate(() => {
-    const saved = JSON.parse(localStorage.getItem('motionsmith.autosave') ?? '{}');
-    return saved.partOrder?.length ?? 0;
-  })).toBe(currentPartCount);
+  await expect.poll(async () =>
+    (await readBrowserAutosaveProject(page))?.partOrder?.length ?? 0
+  ).toBe(currentPartCount);
+  await moveBrowserAutosaveToLegacyStorage(page);
   await page.evaluate(() => {
-    const current = localStorage.getItem('motionsmith.autosave') ?? '';
-    const legacyPrefix = ['mech', 'anim'].join('');
-    localStorage.removeItem('motionsmith.autosave');
     localStorage.removeItem('motionsmith.workspace');
-    localStorage.setItem(`${legacyPrefix}.autosave`, current);
+    const legacyPrefix = ['mech', 'anim'].join('');
     localStorage.setItem(`${legacyPrefix}.workspace`, JSON.stringify({
       stage: 'character',
       viewport: { offset: { x: 24, y: -12 }, zoom: 1.25 },
@@ -2227,7 +2359,7 @@ test('Legacy storage namespace migrates to MotionSmith keys without losing autos
   await page.getByTestId('top-command-bar').getByText('File', { exact: true }).click();
   await page.getByRole('button', { name: 'Recover Autosave…' }).click();
   await expect(page.getByTestId('status-bar')).toContainText('Recovered browser autosave snapshot');
-  await expect.poll(async () => page.evaluate(() => Boolean(localStorage.getItem('motionsmith.autosave'))), { timeout: 5000 }).toBe(true);
+  await expect.poll(async () => Boolean((await readBrowserAutosaveProbe(page)).metadata), { timeout: 5000 }).toBe(true);
 
   await page.getByTestId('top-command-bar').getByText('View', { exact: true }).click();
   await page.getByRole('button', { name: 'Restore Layout' }).click();
@@ -2358,8 +2490,8 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
 test('Mechanism target ownership stays on the arm when a foot path is added', async ({ page }) => {
   await page.goto('/');
 
-  const readOwnership = () => page.evaluate(() => {
-    const snapshot = JSON.parse(localStorage.getItem('motionsmith.autosave') ?? '{}') as {
+  const readOwnership = async () => {
+    const snapshot = (await readBrowserAutosaveProject(page) ?? {}) as {
       mechanisms?: Array<{
         id: string;
         targetPartId?: string;
@@ -2394,7 +2526,7 @@ test('Mechanism target ownership stays on the arm when a foot path is added', as
         targetAnchorJointId: path.targetAnchorJointId,
       })),
     };
-  });
+  };
 
   // The fixture is a sample humanoid with an arm-owned path whose four-bar
   // fit is deterministic, so this exercises the same Fit → Use handoff.
@@ -3087,12 +3219,12 @@ test('Design Fit runs in a disposable worker without blocking its next paint', a
   }).toBeGreaterThan(0);
   await expect(fit).toHaveAttribute('aria-busy', 'false', { timeout: 120_000 });
   expect(optimizerWorkerRequests.length, 'Fit owns its worker only after the click').toBeGreaterThan(0);
-  await expect.poll(() => page.evaluate(() => {
-    const project = JSON.parse(localStorage.getItem('motionsmith.autosave') ?? '{}');
-    return project.mechanisms?.find(
-      (mechanism: { id?: string }) => mechanism.id === project.selectedMechanismId,
+  await expect.poll(async () => {
+    const project = await readBrowserAutosaveProject(page);
+    return project?.mechanisms?.find(
+      (mechanism: { id?: string }) => mechanism.id === project?.selectedMechanismId,
     )?.source;
-  }), { message: 'worker result commits one optimized mechanism' }).toBe('optimized');
+  }, { message: 'worker result commits one optimized mechanism' }).toBe('optimized');
 });
 
 test('Trace lazily streams bounded GIF frames and releases them on close', async ({ page }) => {
@@ -3100,8 +3232,8 @@ test('Trace lazily streams bounded GIF frames and releases them on close', async
   const gifWorkerRequests: string[] = [];
   const gifBytes: number[] = [
     ...Array.from('GIF89a', character => character.charCodeAt(0)),
-    0xd0, 0x07, // 2000px logical width
-    0xe8, 0x03, // 1000px logical height
+    0x00, 0x05, // 1280px logical width
+    0x80, 0x02, // 640px logical height
     0x80, 0x00, 0x00,
     0x00, 0x00, 0x00,
     0xff, 0xff, 0xff,
@@ -3992,21 +4124,79 @@ test('Shared player dock overlays the canvas, does not take layout space, and ca
   expect(Math.abs((after!.x - before!.x)) + Math.abs((after!.y - before!.y)), 'player dock moves by dragging the title handle').toBeGreaterThan(20);
 });
 
-test('Right inspector scroll does not move the center canvas', async ({ page }) => {
+test('Options settings scroll inside the center workspace without moving its panes', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto('/');
   await openWavingArmTemplate(page);
   await page.getByRole('button', { name: /Options/i }).click();
 
   const center = page.getByTestId('stage-canvas-pane');
-  const inspector = page.getByTestId('stage-right-inspector');
-  const before = await waitForStableBox(page, center, 'Options center canvas before inspector wheel');
-  await inspector.hover();
+  const workflow = page.getByTestId('stage-left-pane');
+  const settings = page.getByTestId('options-settings-workspace');
+  await expect(page.getByTestId('stage-right-inspector')).toBeHidden();
+  const beforeCenter = await waitForStableBox(page, center, 'Options center settings before wheel');
+  const beforeWorkflow = await waitForStableBox(page, workflow, 'Options workflow before wheel');
+  await settings.hover();
   await page.mouse.wheel(0, 900);
 
-  await expect.poll(() => inspector.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
-  const after = await waitForStableBox(page, center, 'Options center canvas after inspector wheel');
-  expect(Math.abs(after!.y - before!.y), 'center canvas stays pinned while right inspector scrolls').toBeLessThan(1);
+  await expect.poll(() => settings.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  const afterCenter = await waitForStableBox(page, center, 'Options center settings after wheel');
+  const afterWorkflow = await waitForStableBox(page, workflow, 'Options workflow after wheel');
+  expect(Math.abs(afterCenter.y - beforeCenter.y), 'center settings pane stays pinned while its content scrolls').toBeLessThan(1);
+  expect(Math.abs(afterWorkflow.y - beforeWorkflow.y), 'workflow pane stays pinned while settings scroll').toBeLessThan(1);
+});
+
+test('Options uses one reachable column at the 900px fallback without phantom panes', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 768 });
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByTestId('stage-left-pane')
+    .locator('.stage-nav-compact')
+    .getByRole('button', { name: 'Options' })
+    .click();
+  await expect(page.getByRole('heading', { name: 'Options' })).toBeVisible();
+
+  const frame = page.locator('[data-stage="options"]');
+  const center = frame.getByTestId('stage-canvas-pane');
+  const inspector = frame.getByTestId('stage-right-inspector');
+  const workspace = frame.getByTestId('options-settings-workspace');
+  const layout = await workspace.evaluate(element => {
+    const grid = element.querySelector<HTMLElement>('.options-settings-grid');
+    const centerElement = element.parentElement;
+    const inspectorElement = centerElement?.parentElement
+      ?.querySelector<HTMLElement>('[data-testid="stage-right-inspector"]');
+    const centerBox = centerElement?.getBoundingClientRect();
+    const workspaceBox = element.getBoundingClientRect();
+    return {
+      columnCount: grid ? getComputedStyle(grid).columnCount : '',
+      workspaceOverflowY: getComputedStyle(element).overflowY,
+      centerMinHeight: centerElement ? getComputedStyle(centerElement).minHeight : '',
+      centerHeight: centerBox?.height ?? 0,
+      workspaceHeight: workspaceBox.height,
+      inspectorDisplay: inspectorElement ? getComputedStyle(inspectorElement).display : '',
+      inspectorWidth: inspectorElement?.getBoundingClientRect().width ?? 0,
+      documentClientWidth: document.documentElement.clientWidth,
+      documentScrollWidth: document.documentElement.scrollWidth,
+    };
+  });
+  expect(layout.columnCount, 'Options collapses to one column at the inclusive 900px breakpoint').toBe('1');
+  expect(layout.workspaceOverflowY, 'mobile Options follows document scrolling').toBe('visible');
+  expect(layout.centerMinHeight, 'Options overrides the generic 360px mobile canvas minimum').toBe('0px');
+  expect(Math.abs(layout.centerHeight - layout.workspaceHeight), 'Options has no empty canvas row around its settings').toBeLessThan(2);
+  expect(layout.inspectorDisplay, 'mobile Options keeps the empty inspector out of layout').toBe('none');
+  expect(layout.inspectorWidth, 'mobile Options inspector reserves no phantom width').toBe(0);
+  expect(layout.documentScrollWidth, 'mobile Options has no horizontal page overflow').toBeLessThanOrEqual(layout.documentClientWidth + 1);
+  await expect(inspector).toBeHidden();
+  await expect(center.getByRole('img', { name: 'Options preview canvas' })).toHaveCount(0);
+
+  const documentScrollBefore = await page.evaluate(() => window.scrollY);
+  await frame.getByTestId('stage-left-pane').getByRole('link', { name: 'Units' }).click();
+  await expect.poll(() => page.evaluate(() => window.scrollY), {
+    message: 'mobile Units anchor scrolls the document-owned fallback',
+  }).toBeGreaterThan(documentScrollBefore);
+  expect(await workspace.evaluate(element => element.scrollTop), 'mobile workspace does not create nested scrolling').toBe(0);
+  await expectInsideViewport(page, frame.getByTestId('options-units'), 'mobile Options Units section');
+  await expectInsideViewport(page, page.getByLabel('Grid units'), 'mobile Options Grid units control');
 });
 
 test('Narrow character right inspector remains independently scrollable', async ({ page }) => {
@@ -4040,12 +4230,12 @@ test('Narrow character right inspector remains independently scrollable', async 
   expect(Math.abs(after!.y - before!.y), 'narrow layout scroll stays owned by right inspector').toBeLessThan(1);
 });
 
-test('Every workflow right inspector uses the shared scroll container', async ({ page }) => {
+test('Selected-item stages share the right scroll container while Options uses center', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto('/');
   await openWavingArmTemplate(page);
 
-  for (const stageName of ['Character', 'Path', 'Foundry', 'Design', 'Blueprint', 'Assembly', 'Options']) {
+  for (const stageName of ['Character', 'Path', 'Foundry', 'Design', 'Blueprint', 'Assembly']) {
     await clickStage(page, stageName);
     const inspector = page.getByTestId('stage-right-inspector');
     const center = page.getByTestId('stage-canvas-pane');
@@ -4070,9 +4260,13 @@ test('Every workflow right inspector uses the shared scroll container', async ({
     const after = await waitForStableBox(page, center, `${stageName} center canvas after inspector wheel`);
     expect(Math.abs(after.y - before.y), `${stageName} inspector wheel does not move the canvas`).toBeLessThan(1);
   }
+
+  await clickStage(page, 'Options');
+  await expect(page.getByTestId('stage-right-inspector'), 'Options has no empty selected-item inspector').toBeHidden();
+  await expect(page.getByTestId('stage-canvas-pane').getByTestId('options-settings-workspace')).toBeVisible();
 });
 
-test('Workflow tabs keep left workflow, center canvas, and right inspector roles', async ({ page }) => {
+test('Workflow tabs keep their stage-owned pane roles', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto('/');
   await openWavingArmTemplate(page);
@@ -4142,11 +4336,16 @@ test('Workflow tabs keep left workflow, center canvas, and right inspector roles
   await assertPaneContract('Build', 'Build animation', 'Assembly', '.assembly-readonly-step-strip', '.assembly-readonly-step-strip');
 
   await page.getByRole('button', { name: /Options/i }).click();
-  await assertPaneContract('Settings', 'Letter sheet', 'Appearance');
-  const rightInspector = page.getByTestId('stage-right-inspector');
-  await rightInspector.evaluate(element => { element.scrollTop = 0; });
+  const optionsLeft = page.getByTestId('stage-left-pane');
+  const optionsCenter = page.getByTestId('stage-canvas-pane');
+  const optionsInspector = page.getByTestId('stage-right-inspector');
+  const optionsWorkspace = page.getByTestId('options-settings-workspace');
+  await expect(optionsLeft).toContainText('Settings');
+  await expect(optionsCenter).toContainText('Appearance');
+  await expect(optionsInspector).toBeHidden();
+  await optionsWorkspace.evaluate(element => { element.scrollTop = 0; });
   await page.getByTestId('stage-left-pane').getByRole('link', { name: 'Units' }).click();
-  await expect.poll(() => rightInspector.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  await expect.poll(() => optionsWorkspace.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
   await expect(page.getByTestId('options-units')).toBeVisible();
 });
 
@@ -4227,6 +4426,7 @@ test('Workflow rail remains reachable on short desktop and mobile fallback expos
   await openWavingArmTemplate(page);
   const rail = page.getByTestId('workspace-steps');
   await expect(rail).toBeVisible();
+  await expect(page.locator('.stage-nav-compact')).toHaveCount(0);
   await rail.getByRole('button', { name: 'Options' }).scrollIntoViewIfNeeded();
   const optionsBox = await rail.getByRole('button', { name: 'Options' }).boundingBox();
   expect(optionsBox, 'Options button is reachable in the fixed workflow rail').toBeTruthy();
@@ -4237,6 +4437,7 @@ test('Workflow rail remains reachable on short desktop and mobile fallback expos
 
   await page.setViewportSize({ width: 390, height: 820 });
   const mobileNav = page.getByTestId('stage-left-pane').locator('.stage-nav-compact');
+  await expect(mobileNav).toHaveCount(1);
   await mobileNav.getByRole('button', { name: 'Path' }).click();
   await expect(page.getByTestId('workspace-steps')).toBeHidden();
   for (const name of ['Character', 'Path', 'Foundry', 'Design', 'Blueprint', 'Assembly', 'Options']) {
@@ -4584,13 +4785,13 @@ test('Unfitted classroom path stays blocked until a fabrication-valid fit exists
   await expect(page.getByTestId('foundry-fit-path-row')).toContainText('Fit path');
   await expect(page.getByText('No valid fabrication fit. Try a shorter path or another mechanism.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /Use mechanism/i })).toBeDisabled();
-  await expect.poll(async () => page.evaluate(() => {
-    const mechanism = JSON.parse(localStorage.getItem('motionsmith.autosave') ?? '{}')?.mechanisms?.[0];
+  await expect.poll(async () => {
+    const mechanism = (await readBrowserAutosaveProject(page))?.mechanisms?.[0];
     return {
       status: mechanism?.fabricationMetadata?.pathFit?.status,
       generatedPath: mechanism?.generatedPath,
     };
-  })).toEqual({ status: 'rejected', generatedPath: undefined });
+  }).toEqual({ status: 'rejected', generatedPath: undefined });
 
   await clickStage(page, 'Design');
   const designPreview = page.getByTestId('design-shared-foundry-preview');
@@ -4742,7 +4943,7 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
   await expect(designRig).toHaveAttribute('data-three-renderer', 'webgl');
   await expect(designRig).toHaveAttribute('data-three-engine-stack', 'three-webgl2-imperative');
   await expect(designRig).toHaveAttribute('data-physics-kernel', 'rapier3d-compat');
-  await expect(designRig).toHaveAttribute('data-physics-kernel-runtime', 'ready', { timeout: 60_000 });
+  await expect(designRig).toHaveAttribute('data-physics-kernel-runtime', 'idle');
   await expect(designRig).toHaveAttribute('data-physics-kernel-error', 'none');
   await expect(designRig).toHaveAttribute('data-physics-update-policy', 'kinematic-authority-rapier-contact-validation');
   await expect(designRig).toHaveAttribute('data-high-throughput-scene-policy', 'viser-style-transform-tree-batched-updates-instancing');
