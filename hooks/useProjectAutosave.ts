@@ -2,10 +2,7 @@ import { useEffect, useRef } from "react";
 import type { ProjectState } from "../types";
 import type { AutosaveFailureReason } from "../utils/projectAutosaveFormat";
 import {
-  commitAutosaveSnapshot,
   completeAutosaveSnapshot,
-  markAutosaveDirty,
-  prepareAutosaveBase,
   type PreparedAutosaveSnapshot,
 } from "../utils/projectAutosaveTransactions";
 import {
@@ -15,6 +12,12 @@ import {
   type AutosaveSerializedSnapshot,
   type AutosaveTransaction,
 } from "../runtime/persistence/autosaveTransaction";
+import {
+  browserAutosaveAtomicBackend,
+  commitIndexedDbAutosaveSnapshot,
+  markIndexedDbAutosaveDirty,
+  prepareIndexedDbAutosaveBase,
+} from "../runtime/persistence/autosaveIndexedDb";
 
 type ProjectAutosaveTransaction = AutosaveTransaction<
   ProjectState,
@@ -82,41 +85,56 @@ export const useProjectAutosave = (
   const lifecycleDisposalRef = useRef<AutosaveLifecycleDisposal | null>(null);
   if (transactionRef.current === null) {
     const preparation = createBrowserAutosavePreparationDriver();
+    const backend = browserAutosaveAtomicBackend();
+    let baseRequestGeneration = 0;
     transactionRef.current = createAutosaveTransaction<ProjectState, PreparedAutosaveSnapshot>({
       boundary: browserAutosaveIdleBoundary(),
       preparation: {
         start: (nextProject, _generation, callbacks) => {
-          const base = prepareAutosaveBase(nextProject);
-          if (base.status !== "base-prepared") {
-            reportFailure(base.reason);
-            callbacks.failed(base.error);
-            return;
-          }
-          preparation.start(nextProject, _generation, {
-            ready: (prepared: AutosaveSerializedSnapshot) =>
-              callbacks.ready(
-                completeAutosaveSnapshot(
-                  base.base,
-                  prepared.serialized,
-                  prepared,
+          const baseRequest = ++baseRequestGeneration;
+          void prepareIndexedDbAutosaveBase(nextProject, backend).then((base) => {
+            if (baseRequest !== baseRequestGeneration) return;
+            if (base.status !== "base-prepared") {
+              reportFailure(base.reason);
+              callbacks.failed(base.error);
+              return;
+            }
+            preparation.start(nextProject, _generation, {
+              ready: (prepared: AutosaveSerializedSnapshot) =>
+                callbacks.ready(
+                  completeAutosaveSnapshot(
+                    base.base,
+                    prepared.serialized,
+                    prepared,
+                  ),
                 ),
-              ),
-            failed: (error) => {
-              reportFailure("serialization");
-              callbacks.failed(error);
-            },
+              failed: (error) => {
+                reportFailure("serialization");
+                callbacks.failed(error);
+              },
+            });
+          }, (error) => {
+            if (baseRequest !== baseRequestGeneration) return;
+            reportFailure("unavailable");
+            callbacks.failed(error);
           });
         },
-        cancel: preparation.cancel,
-        dispose: preparation.dispose,
+        cancel: () => {
+          baseRequestGeneration += 1;
+          preparation.cancel();
+        },
+        dispose: () => {
+          baseRequestGeneration += 1;
+          preparation.dispose();
+        },
       },
-      commit: (nextProject, plan) => {
-        const result = commitAutosaveSnapshot(plan);
+      commit: async (_nextProject, plan) => {
+        const result = await commitIndexedDbAutosaveSnapshot(plan, backend);
         if (result.status === "failed") reportFailure(result.reason);
         return result.status === "saved";
       },
       markDirty: (nextProject) => {
-        const result = markAutosaveDirty(nextProject);
+        const result = markIndexedDbAutosaveDirty(nextProject);
         if (result.status === "failed") reportFailure(result.reason);
       },
     });

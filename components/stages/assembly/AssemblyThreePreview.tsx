@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import { DeferredThreeFoundryPreview } from "../foundry/DeferredThreeFoundryPreview";
 import type { FoundryPlaybackFrame } from "../foundry/ThreeFoundryPreview";
@@ -25,6 +25,8 @@ import type {
 } from "../../../utils/assemblyPlayback";
 import type { AssemblySceneFrame } from "../../../utils/assemblySceneFrame";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
+import { highResolutionSessionController } from "../../../runtime/render/adaptiveHighResolutionController";
+import { createTransientValueController } from "../../../runtime/render/transientValueController";
 
 const assemblyMechanismForProject = (project: ProjectState) =>
   project.mechanisms.find((item) => item.id === project.selectedMechanismId) ??
@@ -65,6 +67,20 @@ const useAssemblyFoundryCamera = () => {
     pan: Point;
     mode: "orbit" | "zoom" | "pan";
   } | null>(null);
+  const cameraGestureOwnerRef = useRef<object>({});
+  const transientCamera = useMemo(
+    () => createTransientValueController<FoundryCamera>({
+      onActiveChange: (active) => {
+        if (active) highResolutionSessionController.resetSubmissionWindow();
+        highResolutionSessionController.setGestureActive(
+          cameraGestureOwnerRef.current,
+          active,
+        );
+      },
+    }),
+    [],
+  );
+  useEffect(() => () => transientCamera.dispose(), [transientCamera]);
 
   const updateProjectionSize = (size: FoundryOverlaySize) =>
     setProjectionSize((prev) =>
@@ -94,6 +110,7 @@ const useAssemblyFoundryCamera = () => {
       pan: camera.pan ?? noPoint,
       mode,
     };
+    transientCamera.begin(camera);
     setIsOrbiting(mode === "orbit");
     setIsZooming(mode === "zoom");
     setIsPanning(mode === "pan");
@@ -109,30 +126,35 @@ const useAssemblyFoundryCamera = () => {
     event.preventDefault();
     const dx = event.clientX - start.x;
     const dy = event.clientY - start.y;
-    setCamera((prev) => {
-      if (start.mode === "zoom") {
-        return {
-          ...prev,
-          zoom: clampFoundryZoom(start.zoom * (1 - dy * 0.006)),
-          preset: "custom",
-        };
-      }
-      if (start.mode === "pan") {
-        return {
-          ...prev,
-          pan: {
-            x: start.pan.x - dx * 0.018,
-            y: start.pan.y + dy * 0.018,
-          },
-          preset: "custom",
-        };
-      }
-      return {
-        ...prev,
-        yaw: start.yaw + dx * 0.38,
-        pitch: clampFoundryPitch(start.pitch + dy * 0.28),
+    if (start.mode === "zoom") {
+      transientCamera.update({
+        yaw: start.yaw,
+        pitch: start.pitch,
+        zoom: clampFoundryZoom(start.zoom * (1 - dy * 0.006)),
         preset: "custom",
-      };
+        pan: start.pan,
+      });
+      return;
+    }
+    if (start.mode === "pan") {
+      transientCamera.update({
+        yaw: start.yaw,
+        pitch: start.pitch,
+        zoom: start.zoom,
+        pan: {
+          x: start.pan.x - dx * 0.018,
+          y: start.pan.y + dy * 0.018,
+        },
+        preset: "custom",
+      });
+      return;
+    }
+    transientCamera.update({
+      yaw: start.yaw + dx * 0.38,
+      pitch: clampFoundryPitch(start.pitch + dy * 0.28),
+      zoom: start.zoom,
+      pan: start.pan,
+      preset: "custom",
     });
   };
 
@@ -140,10 +162,12 @@ const useAssemblyFoundryCamera = () => {
     event,
   ) => {
     if (orbitStartRef.current?.pointerId !== event.pointerId) return;
+    const finalCamera = transientCamera.finish();
     orbitStartRef.current = null;
     setIsOrbiting(false);
     setIsZooming(false);
     setIsPanning(false);
+    if (finalCamera) setCamera(finalCamera);
     if (event.currentTarget.hasPointerCapture(event.pointerId))
       event.currentTarget.releasePointerCapture(event.pointerId);
   };
@@ -160,6 +184,7 @@ const useAssemblyFoundryCamera = () => {
 
   return {
     camera,
+    transientCamera,
     projectionSize,
     isOrbiting,
     isZooming,
@@ -200,6 +225,7 @@ export const AssemblyCharacterThreePreview = ({
   const previewModel = sceneModel.foundryPreview;
   const {
     camera,
+    transientCamera,
     projectionSize,
     isOrbiting,
     isZooming,
@@ -301,6 +327,7 @@ export const AssemblyCharacterThreePreview = ({
         simulation={physicalSimulation}
         kit={project.settings.physicalKit}
         camera={camera}
+        transientCamera={transientCamera}
         rigOpacity={0.92}
         color={designMechanism.color}
         pathPoints={previewPoints}
@@ -332,10 +359,10 @@ export const AssemblyCharacterThreePreview = ({
         assemblySceneFrame={sceneFrame}
         viewerTab="assembly"
         automataContext={automataContext}
-        playback={{
+        playback={playing ? {
           clock: playbackClock,
           sample: playbackSample,
-        }}
+        } : undefined}
       >
         <div className="assembly-three-hud">3D build</div>
         <svg
@@ -370,6 +397,7 @@ export const AssemblyMechanismThreePreview = ({
   const explode = stepLift(step.motion, progress, playing);
   const {
     camera,
+    transientCamera,
     projectionSize,
     isOrbiting,
     isZooming,
@@ -492,6 +520,7 @@ export const AssemblyMechanismThreePreview = ({
         simulation={physicalSimulation}
         kit={project.settings.physicalKit}
         camera={camera}
+        transientCamera={transientCamera}
         rigOpacity={0.92}
         color={designMechanism.color}
         pathPoints={previewPoints}
@@ -523,10 +552,10 @@ export const AssemblyMechanismThreePreview = ({
         assemblySceneFrame={sceneFrame}
         viewerTab="assembly"
         automataContext={automataContext}
-        playback={{
+        playback={playing ? {
           clock: playbackClock,
           sample: playbackSample,
-        }}
+        } : undefined}
       >
         <div className="assembly-three-hud">Build animation</div>
         <svg

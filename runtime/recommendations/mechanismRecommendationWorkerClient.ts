@@ -4,6 +4,7 @@ import type {
   MechanismRecommendationWorkerRequest,
   MechanismRecommendationWorkerResponse,
 } from "./mechanismRecommendationJob";
+import { recommendationProjectSnapshotChunked } from "./mechanismRecommendationJob";
 
 export interface MechanismRecommendationWorkerPort {
   onmessage:
@@ -22,6 +23,21 @@ export type MechanismRecommendationWorkerCallbacks = {
   failed: (error: Error) => void;
 };
 
+export type MechanismRecommendationProjector = (
+  input: MechanismRecommendationJobInput,
+  shouldContinue: () => boolean,
+) => Promise<MechanismRecommendationJobInput>;
+
+const defaultProjector: MechanismRecommendationProjector = async (
+  input,
+  shouldContinue,
+) => ({
+  ...input,
+  project: await recommendationProjectSnapshotChunked(input.project, {
+    shouldContinue,
+  }),
+});
+
 const browserWorkerFactory: MechanismRecommendationWorkerFactory = () =>
   new Worker(
     new URL("../../workers/mechanismRecommendationWorker.ts", import.meta.url),
@@ -34,22 +50,23 @@ const releaseWorker = (worker: MechanismRecommendationWorkerPort) => {
   worker.terminate();
 };
 
-/** One active worker means superseding a synchronous fit can cancel immediately. */
+/** One active projection/worker means superseding work can cancel immediately. */
 export const createMechanismRecommendationWorkerClient = (
   workerFactory: MechanismRecommendationWorkerFactory = browserWorkerFactory,
+  projector: MechanismRecommendationProjector = defaultProjector,
 ) => {
   let generationSequence = 0;
   let active:
     | {
         generationId: number;
-        inputFingerprint: string;
-        worker: MechanismRecommendationWorkerPort;
+        requestFingerprint: string;
+        worker?: MechanismRecommendationWorkerPort;
       }
     | undefined;
 
   const cancel = () => {
     generationSequence += 1;
-    if (active) releaseWorker(active.worker);
+    if (active?.worker) releaseWorker(active.worker);
     active = undefined;
   };
 
@@ -57,47 +74,61 @@ export const createMechanismRecommendationWorkerClient = (
     input: MechanismRecommendationJobInput,
     callbacks: MechanismRecommendationWorkerCallbacks,
   ) => {
-    if (active) releaseWorker(active.worker);
+    if (active?.worker) releaseWorker(active.worker);
     const generationId = ++generationSequence;
-    let worker: MechanismRecommendationWorkerPort;
-    try {
-      worker = workerFactory();
-    } catch (error) {
-      callbacks.failed(error instanceof Error ? error : new Error(String(error)));
-      return generationId;
-    }
     active = {
       generationId,
-      inputFingerprint: input.inputFingerprint,
-      worker,
+      requestFingerprint: input.requestFingerprint,
     };
-    worker.onmessage = ({ data }) => {
-      if (
-        !active ||
-        active.worker !== worker ||
-        data.generationId !== active.generationId ||
-        data.inputFingerprint !== active.inputFingerprint
-      ) return;
+    const requestState = active;
+    const isCurrent = () =>
+      active === requestState &&
+      active.generationId === generationId &&
+      active.requestFingerprint === input.requestFingerprint;
+    void projector(input, isCurrent).then((workerInput) => {
+      if (!isCurrent()) return;
+      let worker: MechanismRecommendationWorkerPort;
+      try {
+        worker = workerFactory();
+      } catch (error) {
+        if (!isCurrent()) return;
+        active = undefined;
+        callbacks.failed(error instanceof Error ? error : new Error(String(error)));
+        return;
+      }
+      requestState.worker = worker;
+      worker.onmessage = ({ data }) => {
+        if (
+          !isCurrent() ||
+          requestState.worker !== worker ||
+          data.generationId !== requestState.generationId ||
+          data.requestFingerprint !== requestState.requestFingerprint
+        ) return;
+        active = undefined;
+        releaseWorker(worker);
+        if (data.type === "result") callbacks.complete(data.recommendations);
+        else callbacks.failed(new Error(data.message));
+      };
+      worker.onerror = (event) => {
+        if (!isCurrent() || requestState.worker !== worker) return;
+        active = undefined;
+        releaseWorker(worker);
+        callbacks.failed(
+          new Error(event.message || "Recommendation worker failed."),
+        );
+      };
+      try {
+        worker.postMessage({ type: "build", generationId, input: workerInput });
+      } catch (error) {
+        if (isCurrent()) active = undefined;
+        releaseWorker(worker);
+        callbacks.failed(error instanceof Error ? error : new Error(String(error)));
+      }
+    }).catch((error) => {
+      if (!isCurrent()) return;
       active = undefined;
-      releaseWorker(worker);
-      if (data.type === "result") callbacks.complete(data.recommendations);
-      else callbacks.failed(new Error(data.message));
-    };
-    worker.onerror = (event) => {
-      if (!active || active.worker !== worker) return;
-      active = undefined;
-      releaseWorker(worker);
-      callbacks.failed(
-        new Error(event.message || "Recommendation worker failed."),
-      );
-    };
-    try {
-      worker.postMessage({ type: "build", generationId, input });
-    } catch (error) {
-      if (active?.worker === worker) active = undefined;
-      releaseWorker(worker);
       callbacks.failed(error instanceof Error ? error : new Error(String(error)));
-    }
+    });
     return generationId;
   };
 
@@ -106,7 +137,7 @@ export const createMechanismRecommendationWorkerClient = (
     cancel,
     dispose: () => {
       generationSequence += 1;
-      if (active) releaseWorker(active.worker);
+      if (active?.worker) releaseWorker(active.worker);
       active = undefined;
     },
   };

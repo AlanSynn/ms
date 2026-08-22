@@ -11,6 +11,7 @@ import {
 } from "../../../utils/fabrication";
 import { degToRad } from "../../../utils/foundryCamera";
 import type { MechanismPreviewSimulation } from "../../../utils/mechanismPreview";
+import type { FoundryInitialTopologySettlementStep } from "../../../runtime/render/initialSceneSettlement";
 import {
   foundrySpacerTouchesPin,
   type FoundryPinStack,
@@ -50,6 +51,7 @@ type FoundryDynamicLayerRenderOptions = {
   gearUsesMeshPhases: boolean;
   gearOutputRatioForDisplay: number;
   assemblySceneFrame?: FoundryAssemblySceneFrame;
+  initialTopologySettlement?: FoundryInitialTopologySettlementStep;
 };
 
 const linkageHoleCountFromLabel = (label: string, fallback: number) => {
@@ -77,6 +79,7 @@ export const renderFoundryDynamicLayers = ({
   gearUsesMeshPhases,
   gearOutputRatioForDisplay,
   assemblySceneFrame,
+  initialTopologySettlement,
 }: FoundryDynamicLayerRenderOptions) => {
   const {
     material,
@@ -251,7 +254,9 @@ export const renderFoundryDynamicLayers = ({
     } else addGear(s.p1, mechanism.crankLength, z, angle, mat);
   };
   let gearTrainLayerIndex = 0;
-  renderPlan.layers.forEach((layerItem, index) => {
+  const visibleLayerCount = initialTopologySettlement?.visibleLayerCount ??
+    renderPlan.layers.length;
+  renderPlan.layers.slice(0, visibleLayerCount).forEach((layerItem, index) => {
     const z = renderedLayerZ[index] ?? layerItem.z;
     const assemblyLayerState = foundryAssemblyLayerState(
       assemblySceneFrame,
@@ -310,7 +315,9 @@ export const renderFoundryDynamicLayers = ({
         mechanism.type === "cam" ? camFollowerRotation : 0,
       );
   });
-  pinStacks.forEach((pinStack) => {
+  const visiblePinStackCount =
+    initialTopologySettlement?.visiblePinStackCount ?? pinStacks.length;
+  pinStacks.slice(0, visiblePinStackCount).forEach((pinStack) => {
     const boardPivotFastener =
       mechanism.type === "4bar" &&
       (pinStack.id === "A" || pinStack.id === "D");

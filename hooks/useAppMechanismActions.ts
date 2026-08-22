@@ -66,10 +66,45 @@ const GENERATED_PATH_GEOMETRY_KEYS = new Set<keyof MechanismConfig>([
   "showOutputGear",
 ]);
 
+const BOARD_FIT_GEOMETRY_KEYS = new Set<keyof MechanismConfig>([
+  "anchorX",
+  "anchorY",
+  "groundAngle",
+  "crankLength",
+  "groundLength",
+  "couplerLength",
+  "rockerLength",
+  "sliderOffset",
+  "couplerPointDist",
+  "couplerPointAngle",
+  "assemblyMode",
+  "gearRatio",
+  "gearTrainRadii",
+  "camProfileSamples",
+  "targetPartId",
+  "targetSceneObjectId",
+  "targetPathId",
+  "targetAnchorJointId",
+  "rodLength",
+  "transform",
+  "sceneAnchor",
+  "outputGearRadius",
+  "showOutputGear",
+]);
+
 const changesGeneratedPathGeometry = (updates: Partial<MechanismConfig>) =>
   Object.keys(updates).some((key) =>
     GENERATED_PATH_GEOMETRY_KEYS.has(key as keyof MechanismConfig),
   );
+
+const changesBoardFitGeometry = (updates: Partial<MechanismConfig>) =>
+  Object.keys(updates).some((key) =>
+    BOARD_FIT_GEOMETRY_KEYS.has(key as keyof MechanismConfig),
+  );
+
+export type MechanismUpdateCallbacks = {
+  failed?: (error: Error) => void;
+};
 
 const hasStoredGeneratedPath = (mechanism: MechanismConfig) =>
   Boolean(mechanism.foundryExport || mechanism.generatedPath?.length);
@@ -110,6 +145,13 @@ export const useAppMechanismActions = ({
     () => providedMechanismFitClient ?? createMechanismFitWorkerClient(),
     [providedMechanismFitClient],
   );
+  const mechanismFitGenerationRef = useRef(0);
+  const activeMechanismFitRef = useRef<{
+    generation: number;
+    failed?: (error: Error) => void;
+  } | undefined>(undefined);
+  const currentProjectRef = useRef(project);
+  currentProjectRef.current = project;
   const optimizerScheduleRef = useRef<{
     generation: number;
     firstFrame?: number;
@@ -129,6 +171,10 @@ export const useAppMechanismActions = ({
   }, []);
 
   useEffect(() => {
+    mechanismFitGenerationRef.current += 1;
+    const pendingFit = activeMechanismFitRef.current;
+    activeMechanismFitRef.current = undefined;
+    pendingFit?.failed?.(new Error("Fit cancelled because the project changed."));
     cancelScheduledOptimizer();
     optimizerClient.cancel();
     mechanismFitClient.cancel();
@@ -171,9 +217,17 @@ export const useAppMechanismActions = ({
   );
 
   const updateMechanism = useCallback(
-    (id: string, updates: Partial<MechanismConfig>) => {
+    (
+      id: string,
+      updates: Partial<MechanismConfig>,
+      callbacks: MechanismUpdateCallbacks = {},
+    ) => {
+      const requestGeneration = ++mechanismFitGenerationRef.current;
       const mechanism = project.mechanisms.find((m) => m.id === id);
-      if (!mechanism) return;
+      if (!mechanism) {
+        callbacks.failed?.(new Error("Mechanism is no longer available."));
+        return;
+      }
       const nextUpdates = { ...updates };
       if (updates.targetPathId) {
         const path = project.paths[updates.targetPathId];
@@ -225,32 +279,59 @@ export const useAppMechanismActions = ({
       const normalized = normalizeGearMeshMechanism(next);
       const preserveGeneratedPath =
         hasStoredGeneratedPath(mechanism) && !changesGeneratedPathGeometry(updates);
-      const requiresPathFit =
-        nextUpdates.targetPathId &&
-        (updates.targetPathId !== undefined ||
-          updates.targetPartId !== undefined ||
-          updates.targetSceneObjectId !== undefined ||
-          updates.targetAnchorJointId !== undefined);
-      if (requiresPathFit) {
+      const requiresBoardFit = changesBoardFitGeometry(updates);
+      if (requiresBoardFit) {
+        const fittedInput = changesGeneratedPathGeometry(updates)
+          ? invalidateMechanismPathFit(normalized)
+          : normalized;
+        const targetPathId = fittedInput.targetPathId &&
+            project.paths[fittedInput.targetPathId]
+          ? fittedInput.targetPathId
+          : undefined;
+        activeMechanismFitRef.current = {
+          generation: requestGeneration,
+          failed: callbacks.failed,
+        };
         mechanismFitClient.request(
           createMechanismFitJobInput(
             project,
-            normalized,
-            "path",
-            nextUpdates.targetPathId,
+            fittedInput,
+            targetPathId ? "path" : "sheet",
+            targetPathId,
           ),
           {
             complete: ({ mechanism: fitted }) => {
+              if (
+                requestGeneration !== mechanismFitGenerationRef.current ||
+                currentProjectRef.current !== project
+              ) return;
+              if (activeMechanismFitRef.current?.generation === requestGeneration) {
+                activeMechanismFitRef.current = undefined;
+              }
               startTransition(() => {
                 dispatch({ type: "upsert_mechanism", mechanism: fitted });
                 setCommandStatus("Fit ready");
               });
             },
-            failed: (error) => setCommandStatus(`Fit failed: ${error.message}`),
+            failed: (error) => {
+              if (
+                requestGeneration !== mechanismFitGenerationRef.current ||
+                currentProjectRef.current !== project
+              ) return;
+              if (activeMechanismFitRef.current?.generation === requestGeneration) {
+                activeMechanismFitRef.current = undefined;
+              }
+              callbacks.failed?.(error);
+              setCommandStatus(`Fit failed: ${error.message}`);
+            },
           },
         );
         return;
       }
+      const pendingFit = activeMechanismFitRef.current;
+      activeMechanismFitRef.current = undefined;
+      mechanismFitClient.cancel();
+      pendingFit?.failed?.(new Error("Fit cancelled by a newer edit."));
       const refreshed = mechanismWithGeneratedPath({
         ...(
           changesGeneratedPathGeometry(updates)

@@ -18,6 +18,9 @@ export const PROJECT_IMPORT_LIMITS = Object.freeze({
   totalPathPoints: 4_096,
   contourPoints: 512,
   totalContourPoints: 4_096,
+  auxiliaryListEntries: 1_200,
+  objectGraphArrayEntries: 4_096,
+  objectGraphRecordEntries: 4_096,
   objectGraphDepth: 32,
   objectGraphContainers: 50_000,
   metadataDepth: 8,
@@ -35,15 +38,48 @@ export const validateProjectImportFile = (file: Pick<File, "name" | "size">) => 
   }
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
 const asRecord = (value: unknown): Record<string, unknown> =>
-  value !== null && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
+  isRecord(value) ? value : {};
+
+const assertRecordContainer = (
+  value: unknown,
+  label: string,
+  options: { nullable?: boolean } = {},
+) => {
+  if (value === undefined || (options.nullable && value === null)) return;
+  if (!isRecord(value)) {
+    throw new Error(`${label} must be an object.`);
+  }
+};
+
+const assertArrayContainer = (value: unknown, label: string) => {
+  if (value === undefined) return;
+  if (!Array.isArray(value)) {
+    throw new Error(`${label} must be a list.`);
+  }
+};
 
 const assertMaximum = (count: number, maximum: number, label: string) => {
   if (count > maximum) {
     throw new Error(`${label} exceeds the classroom limit of ${maximum}.`);
   }
+};
+
+const assertRecordMaximum = (
+  value: Record<string, unknown>,
+  maximum: number,
+  label: string,
+) => {
+  let count = 0;
+  for (const key in value) {
+    if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
+    count += 1;
+    assertMaximum(count, maximum, label);
+  }
+  return count;
 };
 
 const validateOrder = (value: unknown, maximum: number, label: string) => {
@@ -65,6 +101,18 @@ const validateObjectGraph = (
     { value, depth: 0 },
   ];
   let containers = 0;
+  const enqueue = (child: unknown, depth: number) => {
+    if (child !== null && typeof child === "object") {
+      if (containers + pending.length >= maximumContainers) {
+        assertMaximum(
+          maximumContainers + 1,
+          maximumContainers,
+          `${label} containers`,
+        );
+      }
+      pending.push({ value: child, depth });
+    }
+  };
   while (pending.length) {
     const current = pending.pop()!;
     if (current.value === null || typeof current.value !== "object") continue;
@@ -73,37 +121,84 @@ const validateObjectGraph = (
     if (current.depth >= maximumDepth) {
       throw new Error(`${label} exceeds the classroom depth limit of ${maximumDepth}.`);
     }
-    const children = Array.isArray(current.value)
-      ? current.value
-      : Object.values(current.value as Record<string, unknown>);
-    for (const child of children) {
-      if (child !== null && typeof child === "object") {
-        pending.push({ value: child, depth: current.depth + 1 });
+    if (Array.isArray(current.value)) {
+      assertMaximum(
+        current.value.length,
+        PROJECT_IMPORT_LIMITS.objectGraphArrayEntries,
+        `${label} array entries`,
+      );
+      for (let index = 0; index < current.value.length; index += 1) {
+        enqueue(current.value[index], current.depth + 1);
+      }
+      continue;
+    }
+    let recordEntries = 0;
+    for (const key in current.value as Record<string, unknown>) {
+      if (Object.prototype.hasOwnProperty.call(current.value, key)) {
+        recordEntries += 1;
+        assertMaximum(
+          recordEntries,
+          PROJECT_IMPORT_LIMITS.objectGraphRecordEntries,
+          `${label} record entries`,
+        );
+        enqueue(
+          (current.value as Record<string, unknown>)[key],
+          current.depth + 1,
+        );
       }
     }
   }
 };
 
 export const validateProjectImportShape = (value: unknown) => {
+  if (!isRecord(value)) {
+    throw new Error("Project data must be an object.");
+  }
   const project = asRecord(value);
+  assertRecordContainer(project.parts, "Parts");
+  assertRecordContainer(project.sceneObjects, "Scene objects");
+  assertRecordContainer(project.paths, "Paths");
+  assertRecordContainer(project.metadata, "Project metadata");
+  assertRecordContainer(project.settings, "Project settings");
+  assertRecordContainer(project.processing, "Project processing state");
+  assertRecordContainer(project.characterPackage, "Character package", {
+    nullable: true,
+  });
+  assertRecordContainer(project.skeleton, "Skeleton", { nullable: true });
+  assertArrayContainer(project.partOrder, "Part order");
+  assertArrayContainer(project.sceneObjectOrder, "Scene object order");
+  assertArrayContainer(project.mechanisms, "Mechanisms");
+
   const parts = asRecord(project.parts);
   const sceneObjects = asRecord(project.sceneObjects);
   const paths = asRecord(project.paths);
   const skeleton = asRecord(project.skeleton);
-  const skeletonJoints = Array.isArray(skeleton.skeleton)
+  assertRecordContainer(skeleton.joints, "Skeleton joints");
+  assertArrayContainer(skeleton.skeleton, "Legacy skeleton joints");
+  assertArrayContainer(skeleton.bones, "Skeleton bones");
+  const skeletonJointRecord = asRecord(skeleton.joints);
+  const legacySkeletonJoints = Array.isArray(skeleton.skeleton)
     ? skeleton.skeleton
-    : Object.values(asRecord(skeleton.joints));
+    : undefined;
   const bones = Array.isArray(skeleton.bones) ? skeleton.bones : [];
   const mechanisms = Array.isArray(project.mechanisms)
     ? project.mechanisms
     : [];
 
-  assertMaximum(Object.keys(parts).length, PROJECT_IMPORT_LIMITS.parts, "Parts");
-  assertMaximum(
-    Object.keys(sceneObjects).length,
+  assertRecordMaximum(parts, PROJECT_IMPORT_LIMITS.parts, "Parts");
+  assertRecordMaximum(
+    sceneObjects,
     PROJECT_IMPORT_LIMITS.sceneObjects,
     "Scene objects",
   );
+  if (!legacySkeletonJoints) {
+    assertRecordMaximum(
+      skeletonJointRecord,
+      PROJECT_IMPORT_LIMITS.joints,
+      "Joints",
+    );
+  }
+  const skeletonJoints = legacySkeletonJoints ?? Object.values(skeletonJointRecord);
   assertMaximum(skeletonJoints.length, PROJECT_IMPORT_LIMITS.joints, "Joints");
   assertMaximum(bones.length, PROJECT_IMPORT_LIMITS.bones, "Bones");
   assertMaximum(
@@ -111,7 +206,7 @@ export const validateProjectImportShape = (value: unknown) => {
     PROJECT_IMPORT_LIMITS.mechanisms,
     "Mechanisms",
   );
-  assertMaximum(Object.keys(paths).length, PROJECT_IMPORT_LIMITS.paths, "Paths");
+  assertRecordMaximum(paths, PROJECT_IMPORT_LIMITS.paths, "Paths");
   validateOrder(project.partOrder, PROJECT_IMPORT_LIMITS.parts, "Part order");
   validateOrder(
     project.sceneObjectOrder,
@@ -132,16 +227,34 @@ export const validateProjectImportShape = (value: unknown) => {
       PROJECT_IMPORT_LIMITS.pathPoints,
       "Timed path points",
     );
+    assertMaximum(
+      Array.isArray(record.warnings) ? record.warnings.length : 0,
+      PROJECT_IMPORT_LIMITS.auxiliaryListEntries,
+      "Path warnings",
+    );
     totalPathPoints += Math.max(points, timedPoints);
   }
   for (const mechanism of mechanisms) {
-    const generatedPath = asRecord(mechanism).generatedPath;
+    const record = asRecord(mechanism);
+    const generatedPath = record.generatedPath;
     const count = Array.isArray(generatedPath) ? generatedPath.length : 0;
     assertMaximum(
       count,
       PROJECT_IMPORT_LIMITS.pathPoints,
       "Generated path points",
     );
+    for (const [value, label] of [
+      [record.warnings, "Mechanism warnings"],
+      [record.activeVisualPartIds, "Mechanism visual part ids"],
+      [record.gearTrainRadii, "Mechanism gear radii"],
+      [record.camProfileSamples, "Mechanism cam samples"],
+    ] as const) {
+      assertMaximum(
+        Array.isArray(value) ? value.length : 0,
+        PROJECT_IMPORT_LIMITS.auxiliaryListEntries,
+        label,
+      );
+    }
     totalPathPoints += count;
   }
   assertMaximum(

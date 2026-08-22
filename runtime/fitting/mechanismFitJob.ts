@@ -3,6 +3,7 @@ import {
   fitMechanismToTargetPath,
   fitRecommendedMechanismToSheet,
 } from '../../utils/mechanismRecommendations';
+import { mechanismBoardPlacementErrors } from '../../utils/fabrication';
 import { recommendationProjectSnapshot } from '../recommendations/mechanismRecommendationJob';
 
 const MECHANISM_FIT_JOB_VERSION = 1;
@@ -72,11 +73,21 @@ export const fitMechanismInWorkerJob = (
 
 export const runMechanismFitJob = (
   input: MechanismFitJobInput,
-): MechanismFitJobResult => ({
-  mechanism: fitMechanismInWorkerJob(
+): MechanismFitJobResult => {
+  const mechanism = fitMechanismInWorkerJob(
     input.project,
     input.mechanism,
     input.mode,
     input.pathId,
-  ),
-});
+  );
+  const placementErrors = mechanismBoardPlacementErrors(
+    input.project,
+    mechanism,
+  );
+  if (placementErrors.length) {
+    throw new Error(
+      `No valid board placement. ${placementErrors[0]}`,
+    );
+  }
+  return { mechanism };
+};

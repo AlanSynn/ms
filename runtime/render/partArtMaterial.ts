@@ -67,14 +67,38 @@ const defaultBitmapLoader = (): PartArtBitmapLoader => {
 const materialIsDisposed = (material: THREE.MeshBasicMaterial) =>
   material.userData.partArtDisposed === true;
 
+export const isInitialSceneMaterialResourcePending = (material: THREE.Material) =>
+  material.userData.initialSceneResourcePending === true;
+
+const settlePartArtMaterial = (
+  material: THREE.MeshBasicMaterial,
+  onSettled: () => void,
+) => {
+  if (
+    materialIsDisposed(material) ||
+    !isInitialSceneMaterialResourcePending(material)
+  ) return;
+  material.userData.initialSceneResourcePending = false;
+  onSettled();
+};
+
 const loadFallbackTexture = (
   material: THREE.MeshBasicMaterial,
   url: string,
-  onLoaded: () => void,
+  onSettled: () => void,
 ) => {
-  const texture = new THREE.TextureLoader().load(url, () => {
-    if (!materialIsDisposed(material)) onLoaded();
-  });
+  const texture = new THREE.TextureLoader().load(
+    url,
+    () => settlePartArtMaterial(material, onSettled),
+    undefined,
+    () => {
+      if (materialIsDisposed(material)) return;
+      if (material.map === texture) material.map = null;
+      texture.dispose();
+      material.needsUpdate = true;
+      settlePartArtMaterial(material, onSettled);
+    },
+  );
   configureTexture(texture);
   material.map = texture;
   material.needsUpdate = true;
@@ -96,6 +120,7 @@ export const createPartArtMaterial = (
     polygonOffsetFactor: -1,
   });
   material.userData.ownedByPartArt = true;
+  material.userData.initialSceneResourcePending = Boolean(part.textureUrl);
   if (!part.textureUrl) return material;
 
   const bitmapSupported = options.bitmapSupported ?? (
@@ -129,7 +154,7 @@ export const createPartArtMaterial = (
         configureTexture(texture);
         material.map = texture;
         material.needsUpdate = true;
-        onLoaded();
+        settlePartArtMaterial(material, onLoaded);
       });
       material.userData.cancelPartArtTextureInstall = () => {
         cancelInstall();
@@ -149,6 +174,7 @@ export const createPartArtMaterial = (
 export const disposePartArtMaterial = (material: THREE.Material) => {
   if (material.userData.ownedByPartArt !== true) return;
   material.userData.partArtDisposed = true;
+  material.userData.initialSceneResourcePending = false;
   (material.userData.partArtBitmapLoader as PartArtBitmapLoader | undefined)?.abort();
   (material.userData.cancelPartArtTextureInstall as (() => void) | undefined)?.();
   material.userData.cancelPartArtTextureInstall = undefined;

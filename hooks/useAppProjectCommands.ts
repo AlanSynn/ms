@@ -2,6 +2,7 @@ import {
   startTransition,
   useEffect,
   useMemo,
+  useRef,
   type Dispatch,
   type SetStateAction,
 } from "react";
@@ -27,13 +28,13 @@ import {
 import { isMechanismTypeEnabled } from "../utils/mechanismTemplates";
 import {
   projectSnapshotFileName,
-  readAutosaveProject,
   readWorkspaceLayoutSnapshot,
   writeWorkspaceLayoutSnapshot,
 } from "../utils/projectPersistence";
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT } from "../utils/viewport";
 import { createPortableProjectBlob } from "../runtime/persistence/projectDownloadJob";
 import { createProjectDownloadWorkerClient } from "../runtime/persistence/projectDownloadWorkerClient";
+import { createAutosaveRecoveryWorkerClient } from "../runtime/persistence/autosaveRecoveryWorkerClient";
 
 const APP_STAGE_IDS: AppStage[] = [
   "character",
@@ -116,9 +117,18 @@ export const useAppProjectCommands = ({
     () => createProjectDownloadWorkerClient(),
     [],
   );
+  const autosaveRecoveryClient = useMemo(
+    () => createAutosaveRecoveryWorkerClient(),
+    [],
+  );
+  const latestProjectRef = useRef(project);
+  latestProjectRef.current = project;
   useEffect(
-    () => () => projectDownloadClient.dispose(),
-    [projectDownloadClient],
+    () => () => {
+      projectDownloadClient.dispose();
+      autosaveRecoveryClient.dispose();
+    },
+    [autosaveRecoveryClient, projectDownloadClient],
   );
   const downloadProjectSnapshot = (suffix: string, status: string) => {
     const filename = projectSnapshotFileName(project.metadata.name, suffix);
@@ -232,31 +242,42 @@ export const useAppProjectCommands = ({
   };
 
   const recoverAutosave = () => {
-    try {
-      const recovered = readAutosaveProject(project);
-      if (recovered.status === "rejected") {
-        setCommandStatus(recovered.blocker);
-        return;
-      }
-      if (recovered.status === "missing") {
-        setCommandStatus("No autosave found");
-        return;
-      }
-      const recoveredProject = recovered.project;
-      if (
-        (!projectHasUserWork(recoveredProject) && projectHasUserWork(project))
-      ) {
-        setCommandStatus("No autosave found");
-        return;
-      }
-      setProject(recoveredProject, { resetHistory: true });
-      setCommandStatus("Recovered browser autosave snapshot");
-      setStage("path");
-    } catch (error) {
-      setCommandStatus(
-        `Autosave recovery failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
+    const requestedProject = project;
+    const shouldApply = () =>
+      latestProjectRef.current === requestedProject &&
+      latestProjectRef.current.metadata.id === requestedProject.metadata.id;
+    setCommandStatus("Recovering autosave");
+    autosaveRecoveryClient.request(requestedProject, {
+      complete: (recovered) => {
+        if (recovered.status === "rejected") {
+          setCommandStatus(recovered.blocker);
+          return;
+        }
+        if (recovered.status === "missing") {
+          setCommandStatus(
+            recovered.recovery.outcome === "storage-unavailable"
+              ? "Autosave unavailable"
+              : "No autosave found",
+          );
+          return;
+        }
+        const recoveredProject = recovered.project;
+        if (
+          !projectHasUserWork(recoveredProject) &&
+          projectHasUserWork(requestedProject)
+        ) {
+          setCommandStatus("No autosave found");
+          return;
+        }
+        setProject(recoveredProject, { resetHistory: true });
+        setCommandStatus("Recovered browser autosave snapshot");
+        setStage("path");
+      },
+      failed: (error) => setCommandStatus(
+        `Autosave recovery failed: ${error.message}`,
+      ),
+      superseded: () => setCommandStatus("Autosave changed. Try again."),
+    }, shouldApply);
   };
 
   const saveWorkspaceLayout = () => {

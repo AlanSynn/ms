@@ -16,17 +16,19 @@ worker.onmessage = async ({ data }) => {
     const { runMechanismRecommendationJob } = await import(
       "../runtime/recommendations/mechanismRecommendationJob"
     );
+    const result = runMechanismRecommendationJob(data.input);
     worker.postMessage({
       type: "result",
       generationId: data.generationId,
-      inputFingerprint: data.input.inputFingerprint,
-      recommendations: runMechanismRecommendationJob(data.input),
+      requestFingerprint: data.input.requestFingerprint,
+      inputFingerprint: result.inputFingerprint,
+      recommendations: result.recommendations,
     });
   } catch (error) {
     worker.postMessage({
       type: "error",
       generationId: data.generationId,
-      inputFingerprint: data.input.inputFingerprint,
+      requestFingerprint: data.input.requestFingerprint,
       message: error instanceof Error ? error.message : String(error),
     });
   }

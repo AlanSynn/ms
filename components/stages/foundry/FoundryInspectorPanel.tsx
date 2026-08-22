@@ -1,6 +1,6 @@
-import React from "react";
+import React, { startTransition, useEffect, useState } from "react";
 import type { MechanismConfig, MechanismType } from "../../../types";
-import { ClassroomExampleVideo } from "../../ui/ClassroomExampleVideo";
+import { DeferredClassroomExampleVideo } from "../../ui/DeferredClassroomExampleVideo";
 import {
   classroomAssessmentFor,
   classroomUseExampleFor,
@@ -23,6 +23,48 @@ import {
 
 type FoundrySensemaking =
   (typeof MECHANISM_LIBRARY)[MechanismType]["classroomSensemaking"];
+
+export const FOUNDRY_INSPECTOR_IDLE_TIMEOUT_MS = 160;
+export const FOUNDRY_INSPECTOR_SUPPORT_TIMEOUT_MS = 80;
+
+type FoundryInspectorScheduleHost = {
+  requestIdleCallback?: (
+    callback: IdleRequestCallback,
+    options?: IdleRequestOptions,
+  ) => number;
+  cancelIdleCallback?: (handle: number) => void;
+  setTimeout: (callback: () => void, delay?: number) => number;
+  clearTimeout: (handle: number) => void;
+};
+
+export const scheduleFoundryInspectorControls = (
+  callback: () => void,
+  host: FoundryInspectorScheduleHost = window,
+  timeoutMs = FOUNDRY_INSPECTOR_IDLE_TIMEOUT_MS,
+) => {
+  let active = true;
+  const run = () => {
+    if (!active) return;
+    active = false;
+    callback();
+  };
+  if (host.requestIdleCallback) {
+    const handle = host.requestIdleCallback(run, {
+      timeout: timeoutMs,
+    });
+    return () => {
+      if (!active) return;
+      active = false;
+      host.cancelIdleCallback?.(handle);
+    };
+  }
+  const handle = host.setTimeout(run, 0);
+  return () => {
+    if (!active) return;
+    active = false;
+    host.clearTimeout(handle);
+  };
+};
 
 export const FoundryInspectorPanel = ({
   foundry,
@@ -57,6 +99,23 @@ export const FoundryInspectorPanel = ({
   onSetPreset: (presetId: string) => void;
   onToggleSensemaking: () => void;
 }) => {
+  const [supportControlsReady, setSupportControlsReady] = useState(false);
+  const [parametricControlsReady, setParametricControlsReady] = useState(false);
+  const [advancedControlsMounted, setAdvancedControlsMounted] = useState(false);
+  useEffect(
+    () => scheduleFoundryInspectorControls(
+      () => startTransition(() => setSupportControlsReady(true)),
+      window,
+      FOUNDRY_INSPECTOR_SUPPORT_TIMEOUT_MS,
+    ),
+    [],
+  );
+  useEffect(() => {
+    if (!supportControlsReady) return;
+    return scheduleFoundryInspectorControls(
+      () => startTransition(() => setParametricControlsReady(true)),
+    );
+  }, [supportControlsReady]);
   const assessment = classroomAssessmentFor(
     foundry.type,
     classroomAssessmentKey,
@@ -131,9 +190,11 @@ export const FoundryInspectorPanel = ({
           </p>
         </div>
       )}
-      <div className="foundry-use-example">
-        <ClassroomExampleVideo example={useExample} />
-      </div>
+      {showSensemaking && (
+        <div className="foundry-use-example">
+          <DeferredClassroomExampleVideo example={useExample} />
+        </div>
+      )}
     </div>
     <div
       className="compact-fabrication-stack"
@@ -147,7 +208,7 @@ export const FoundryInspectorPanel = ({
         {stackSummary.readable}
       </span>
     </div>
-    <div className="foundry-view-controls" data-testid="foundry-view-controls">
+    {supportControlsReady && <div className="foundry-view-controls" data-testid="foundry-view-controls">
       <div className="section-title">View</div>
       <div className="foundry-view-controls-grid">
         <div
@@ -185,61 +246,71 @@ export const FoundryInspectorPanel = ({
           />
         </div>
       </div>
-    </div>
-    <MechanismParametricEditor
-      mechanism={foundry}
-      onChange={onUpdateParams}
-      testId="foundry-parametric-editor"
-    />
-    <MechanismFeasibilityStatus
+    </div>}
+    {parametricControlsReady && (
+      <MechanismParametricEditor
+        mechanism={foundry}
+        onChange={onUpdateParams}
+        testId="foundry-parametric-editor"
+      />
+    )}
+    {supportControlsReady && <MechanismFeasibilityStatus
       status={feasibilityStatus}
       testId="foundry-feasibility-status"
-    />
-    <details className="advanced-panel">
+    />}
+    {supportControlsReady && <details
+      className="advanced-panel"
+      onToggle={(event) => {
+        if (!event.currentTarget.open || advancedControlsMounted) return;
+        startTransition(() => setAdvancedControlsMounted(true));
+      }}
+    >
       <summary>Mechanism options</summary>
-      <div className="mt-3 space-y-3">
-        <select
-          aria-label="Foundry mechanism type"
-          className="field"
-          value={foundry.type}
-          onChange={(event) =>
-            onSetMechanismType(event.target.value as MechanismType)
-          }
-        >
-          {ENABLED_FOUNDRY_MECHANISM_TYPES.map((type) => (
-            <option key={type} value={type}>
-              {mechanismTemplateLabel(type)}
-            </option>
+      {advancedControlsMounted && (
+        <div className="mt-3 space-y-3">
+          <select
+            aria-label="Foundry mechanism type"
+            className="field"
+            value={foundry.type}
+            onChange={(event) =>
+              onSetMechanismType(event.target.value as MechanismType)
+            }
+          >
+            {ENABLED_FOUNDRY_MECHANISM_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {mechanismTemplateLabel(type)}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Foundry preset"
+            className="field"
+            value={foundry.presetId ?? "balanced"}
+            onChange={(event) => onSetPreset(event.target.value)}
+          >
+            {Object.entries(FOUNDRY_PRESETS).map(([id, preset]) => (
+              <option key={id} value={id}>
+                {preset.label}
+              </option>
+            ))}
+          </select>
+          {MECHANISM_PARAM_META.filter((param) =>
+            shouldShowMechanismParam(foundry.type, param.key),
+          ).map((param) => (
+            <React.Fragment key={String(param.key)}>
+              <MiniNumber
+                label={param.label}
+                value={Number(foundry[param.key] ?? 0)}
+                min={param.min}
+                max={param.max}
+                step={param.step}
+                onChange={(value) => onChangeParam(param.key, value)}
+              />
+            </React.Fragment>
           ))}
-        </select>
-        <select
-          aria-label="Foundry preset"
-          className="field"
-          value={foundry.presetId ?? "balanced"}
-          onChange={(event) => onSetPreset(event.target.value)}
-        >
-          {Object.entries(FOUNDRY_PRESETS).map(([id, preset]) => (
-            <option key={id} value={id}>
-              {preset.label}
-            </option>
-          ))}
-        </select>
-        {MECHANISM_PARAM_META.filter((param) =>
-          shouldShowMechanismParam(foundry.type, param.key),
-        ).map((param) => (
-          <React.Fragment key={String(param.key)}>
-            <MiniNumber
-              label={param.label}
-              value={Number(foundry[param.key] ?? 0)}
-              min={param.min}
-              max={param.max}
-              step={param.step}
-              onChange={(value) => onChangeParam(param.key, value)}
-            />
-          </React.Fragment>
-        ))}
-      </div>
-    </details>
+        </div>
+      )}
+    </details>}
   </div>
   );
 };

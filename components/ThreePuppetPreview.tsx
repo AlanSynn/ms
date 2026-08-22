@@ -16,9 +16,33 @@ import {
   createThreePathGestureDraftVisual,
   type ThreePathGestureDraftVisual,
 } from './stages/path/threePathGestureDraftVisual';
-import { subscribeCadencedPlaybackSampler } from '../runtime/playback/cadencedPlaybackSampler';
+import {
+  HIGH_RESOLUTION_CADENCE_EARLY_TOLERANCE_MS,
+  subscribeCadencedPlaybackSampler,
+} from '../runtime/playback/cadencedPlaybackSampler';
 import { scheduleIncrementalTopologyBuild } from '../runtime/render/incrementalTopologyBuild';
-import { createPartArtMaterial, disposePartArtMaterial } from '../runtime/render/partArtMaterial';
+import {
+  puppetInitialTopologyBatchPolicy,
+  puppetInitialTopologySettlementSteps,
+  type PuppetInitialTopologyPhase,
+} from '../runtime/render/initialSceneSettlement';
+import {
+  createInitialSceneReadinessGeneration,
+  realizeInitialSceneResources,
+} from '../runtime/render/initialSceneResourceUpload';
+import {
+  acquireAdaptiveTopologyBuildLease,
+  highResolutionSessionController,
+} from '../runtime/render/adaptiveHighResolutionController';
+import {
+  createTransientValueController,
+} from '../runtime/render/transientValueController';
+import {
+  createPartArtMaterial,
+  disposePartArtMaterial,
+  isInitialSceneMaterialResourcePending,
+} from '../runtime/render/partArtMaterial';
+import { disposePuppetObjectGraph } from '../runtime/render/puppetSceneDisposal';
 import { warmPartTopologyPipeline } from '../runtime/render/warmPartTopology';
 import {
   acquireSharedWebGLRenderer,
@@ -28,6 +52,7 @@ import {
   disposeMarkedThreeMaterials,
   disposeThreeObjectGraph,
   pruneUnusedThreeResourceCache,
+  rendererEffectivePixelRatio,
   resizeRendererToPerformancePolicy,
 } from '../utils/threeResourceKit';
 import { resolveRenderPerformancePolicy } from '../utils/renderPerformancePolicy';
@@ -139,6 +164,16 @@ type PuppetPlayback = {
   sample: (phase: number) => MotionPreview | undefined;
 };
 
+type PuppetTransientCamera = {
+  orbit: { yaw: number; pitch: number };
+  offset: Point;
+};
+
+type AppliedPuppetCamera = PuppetTransientCamera & {
+  preset: Viewer3DCameraPreset;
+  zoom: number;
+};
+
 const to3 = (point: Point, z = 0) => new THREE.Vector3(point.x / VIEW_SCALE, point.y / VIEW_SCALE, z);
 
 const cameraOrbitFromPreset = (preset: Viewer3DCameraPreset) => {
@@ -216,7 +251,11 @@ const disposeOwnedMaterials = (object: THREE.Object3D) =>
     material => Boolean(material.userData?.ownedByPartArt || material.userData?.ownedBySceneObject),
     material => {
       if (material.userData?.ownedByPartArt) disposePartArtMaterial(material);
-      else (material as THREE.MeshBasicMaterial).map?.dispose();
+      else {
+        material.userData.sceneObjectDisposed = true;
+        material.userData.initialSceneResourcePending = false;
+        (material as THREE.MeshBasicMaterial).map?.dispose();
+      }
     }
   );
 
@@ -380,8 +419,22 @@ const createSceneObjectArtMaterial = (object: SceneObject, onLoaded: () => void)
     polygonOffsetFactor: -1
   });
   material.userData.ownedBySceneObject = true;
+  material.userData.initialSceneResourcePending = Boolean(object.textureUrl);
   if (object.textureUrl) {
-    const texture = new THREE.TextureLoader().load(object.textureUrl, () => onLoaded());
+    const settle = () => {
+      if (
+        material.userData.sceneObjectDisposed === true ||
+        material.userData.initialSceneResourcePending !== true
+      ) return;
+      material.userData.initialSceneResourcePending = false;
+      onLoaded();
+    };
+    const texture = new THREE.TextureLoader().load(
+      object.textureUrl,
+      settle,
+      undefined,
+      settle,
+    );
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.anisotropy = 4;
     material.map = texture;
@@ -777,8 +830,10 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
   onSelectOnlyWheel?: React.WheelEventHandler<HTMLDivElement>;
 }) => {
   const renderPolicy = resolveRenderPerformancePolicy(project?.settings.performancePreset ?? 'balanced');
+  const previewRef = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef<HTMLDivElement | null>(null);
+  const initialSceneReadyRef = useRef(false);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -796,18 +851,54 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
   const pathGestureDraftVisualRef = useRef<ThreePathGestureDraftVisual | null>(null);
   const prunedGeometryRevisionRef = useRef(-1);
   const renderFrameRef = useRef<number | undefined>(undefined);
+  const renderContinuousRef = useRef(false);
   const renderSubmissionCountRef = useRef(0);
+  const effectiveDprRef = useRef(renderPolicy.pixelRatioCap);
+  const requestedDprCapRef = useRef(renderPolicy.pixelRatioCap);
+  const rendererResizeRef = useRef<(() => void) | null>(null);
+  const appliedCameraRef = useRef<AppliedPuppetCamera | null>(null);
+  const adaptiveTopologyOwnerRef = useRef<object>({});
+  const initialSceneSettlementCheckRef = useRef<{
+    invalidate: () => void;
+    check: () => void;
+  } | null>(null);
+  const adaptiveGestureOwnerRef = useRef<object>({});
   const playbackSampleRef = useRef(playback?.sample);
   playbackSampleRef.current = playback?.sample;
   const [rendererStatus, setRendererStatus] = useState<RendererStatus>('pending');
+  const publishInitialSceneReady = (ready: boolean) => {
+    initialSceneReadyRef.current = ready;
+    if (previewRef.current) {
+      previewRef.current.dataset.threeInitialSceneReady = ready ? 'true' : 'false';
+    }
+  };
   const physicsKernelRuntime = 'deferred-to-foundry';
   const physicsKernelVersion = 'pending';
   const physicsKernelError = 'none';
   const [cameraPreset, setCameraPreset] = useState<Viewer3DCameraPreset>(() => initialCameraPreset ?? 'iso');
   const [cameraOrbit, setCameraOrbit] = useState(() => cameraOrbitFromPreset(initialCameraPreset ?? 'iso'));
+  const cameraPresetRef = useRef(cameraPreset);
+  const cameraOrbitRef = useRef(cameraOrbit);
+  const viewportRef = useRef(viewport);
   const [isViewerDragging, setIsViewerDragging] = useState(false);
   const viewerDragRef = useRef<{ pointerId: number; button: number; x: number; y: number; maxDistance: number; yaw: number; pitch: number; offset: Point; mode: 'orbit' | 'pan' | 'select' | 'draw' | 'path-point' } | null>(null);
+  const transientCamera = useMemo(
+    () => createTransientValueController<PuppetTransientCamera>({
+      onActiveChange: (active) => {
+        if (active) highResolutionSessionController.resetSubmissionWindow();
+        highResolutionSessionController.setGestureActive(
+          adaptiveGestureOwnerRef.current,
+          active,
+        );
+      },
+    }),
+    [],
+  );
+  useEffect(() => () => transientCamera.dispose(), [transientCamera]);
   const [visibleLayers, setVisibleLayers] = useState(() => ({ ...DEFAULT_PUPPET_VIEWER_LAYERS, ...(initialLayers ?? {}) }));
+  cameraPresetRef.current = cameraPreset;
+  cameraOrbitRef.current = cameraOrbit;
+  viewportRef.current = viewport;
   useEffect(() => {
     if (!initialCameraPreset) return;
     setCameraPreset(initialCameraPreset);
@@ -1097,41 +1188,51 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     visible: target.visible
   }));
 
-  const render = () => {
+  const submitScene = (trackSubmissionInterval = false) => {
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+    const renderer = rendererRef.current;
+    if (!scene || !camera || !renderer) return;
+    if (prunedGeometryRevisionRef.current !== sharedGeometryCacheRevision) {
+      pruneSharedGeometryCache();
+      prunedGeometryRevisionRef.current = sharedGeometryCacheRevision;
+    }
+    renderer.render(scene, camera);
+    if (trackSubmissionInterval && renderPolicy.preset === 'high') {
+      highResolutionSessionController.recordSubmission(performance.now());
+    }
+    if (E2E_DIAGNOSTICS && stateRef.current) {
+      renderSubmissionCountRef.current += 1;
+      const screenTargets = roundedScreenTargets(collectViewerScreenTargets(true));
+      stateRef.current.dataset.threeSceneVisibleObjectCount = String(estimatedObjectCount);
+      stateRef.current.dataset.threeSceneObjectCount = String(estimatedObjectCount);
+      stateRef.current.dataset.threeRenderSubmissions = String(renderSubmissionCountRef.current);
+      stateRef.current.dataset.threeRenderCalls = String(renderer.info.render.calls);
+      stateRef.current.dataset.threeRenderTriangles = String(renderer.info.render.triangles);
+      stateRef.current.dataset.threeRendererGeometryCount = String(renderer.info.memory.geometries);
+      stateRef.current.dataset.threeRendererTextureCount = String(renderer.info.memory.textures);
+      stateRef.current.dataset.threeSceneObjectScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'object'));
+      stateRef.current.dataset.threePartScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'part'));
+      stateRef.current.dataset.threeMechanismScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'mechanism'));
+      stateRef.current.dataset.threePathPointScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'path-point'));
+    }
+  };
+
+  const render = (continuous = false) => {
+    renderContinuousRef.current ||= continuous;
     if (renderFrameRef.current !== undefined) return;
     renderFrameRef.current = window.requestAnimationFrame(() => {
       renderFrameRef.current = undefined;
-      const scene = sceneRef.current;
-      const camera = cameraRef.current;
-      const renderer = rendererRef.current;
-      if (scene && camera && renderer) {
-        if (prunedGeometryRevisionRef.current !== sharedGeometryCacheRevision) {
-          pruneSharedGeometryCache();
-          prunedGeometryRevisionRef.current = sharedGeometryCacheRevision;
-        }
-        renderer.render(scene, camera);
-        if (E2E_DIAGNOSTICS && stateRef.current) {
-          renderSubmissionCountRef.current += 1;
-          const screenTargets = roundedScreenTargets(collectViewerScreenTargets(true));
-          stateRef.current.dataset.threeSceneVisibleObjectCount = String(estimatedObjectCount);
-          stateRef.current.dataset.threeSceneObjectCount = String(estimatedObjectCount);
-          stateRef.current.dataset.threeRenderSubmissions = String(renderSubmissionCountRef.current);
-          stateRef.current.dataset.threeRenderCalls = String(renderer.info.render.calls);
-          stateRef.current.dataset.threeRenderTriangles = String(renderer.info.render.triangles);
-          stateRef.current.dataset.threeRendererGeometryCount = String(renderer.info.memory.geometries);
-          stateRef.current.dataset.threeRendererTextureCount = String(renderer.info.memory.textures);
-          stateRef.current.dataset.threeSceneObjectScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'object'));
-          stateRef.current.dataset.threePartScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'part'));
-          stateRef.current.dataset.threeMechanismScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'mechanism'));
-          stateRef.current.dataset.threePathPointScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'path-point'));
-        }
-      }
+      const trackSubmissionInterval = renderContinuousRef.current;
+      renderContinuousRef.current = false;
+      submitScene(trackSubmissionInterval);
     });
   };
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
+    publishInitialSceneReady(false);
 
     let rendererLease;
     try {
@@ -1151,11 +1252,16 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     renderer.domElement.className = 'three-puppet-canvas';
     const handleContextLost = (event: Event) => {
       event.preventDefault();
+      publishInitialSceneReady(false);
       setRendererStatus('restoring');
+      if (renderPolicy.preset === 'high') {
+        highResolutionSessionController.recordContextLoss();
+      }
     };
     const handleContextRestored = () => {
       setRendererStatus('webgl');
-      render();
+      if (rendererResizeRef.current) rendererResizeRef.current();
+      else render();
     };
     renderer.domElement.addEventListener('webglcontextlost', handleContextLost);
     renderer.domElement.addEventListener('webglcontextrestored', handleContextRestored);
@@ -1193,25 +1299,59 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     const resize = () => {
       const width = Math.max(1, host.clientWidth);
       const height = Math.max(1, host.clientHeight);
-      resizeRendererToPerformancePolicy(renderer, renderPolicy, { width, height });
+      const viewportSize = { width, height };
+      if (renderPolicy.preset === 'high') {
+        highResolutionSessionController.setAvailableCap(
+          rendererEffectivePixelRatio(renderer, renderPolicy, viewportSize),
+        );
+      }
+      const requestedCap = renderPolicy.preset === 'high'
+        ? highResolutionSessionController.snapshot().requestedCap
+        : renderPolicy.pixelRatioCap;
+      const effectiveDpr = resizeRendererToPerformancePolicy(
+        renderer,
+        renderPolicy,
+        viewportSize,
+        requestedCap,
+      );
+      effectiveDprRef.current = effectiveDpr;
+      requestedDprCapRef.current = requestedCap;
+      renderer.domElement.dataset.threeEffectiveDpr = effectiveDpr.toFixed(3);
+      renderer.domElement.dataset.threeRequestedDprCap = requestedCap.toFixed(2);
+      if (stateRef.current) {
+        stateRef.current.dataset.threeEffectiveDpr = effectiveDpr.toFixed(3);
+        stateRef.current.dataset.threeRequestedDprCap = requestedCap.toFixed(2);
+      }
+      if (host.parentElement) {
+        host.parentElement.dataset.threeEffectiveDpr = effectiveDpr.toFixed(3);
+        host.parentElement.dataset.threeRequestedDprCap = requestedCap.toFixed(2);
+      }
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       render();
     };
     const ro = new ResizeObserver(resize);
+    rendererResizeRef.current = resize;
     ro.observe(host);
     window.addEventListener('resize', resize);
     resize();
+    const unsubscribeAdaptive = renderPolicy.preset === 'high'
+      ? highResolutionSessionController.subscribe(() => {
+          if (!renderer.getContext().isContextLost()) resize();
+        })
+      : undefined;
 
     return () => {
+      publishInitialSceneReady(false);
       ro.disconnect();
+      unsubscribeAdaptive?.();
+      rendererResizeRef.current = null;
       window.removeEventListener('resize', resize);
       if (renderFrameRef.current !== undefined) {
         window.cancelAnimationFrame(renderFrameRef.current);
         renderFrameRef.current = undefined;
       }
-      disposeOwnedMaterials(scene);
-      disposeObject(scene, false);
+      disposePuppetObjectGraph(scene);
       activePuppetScenes.delete(scene);
       pruneSharedGeometryCache(
         renderPolicy.repeatedGeometry.maxGeometryCacheEntries,
@@ -1226,6 +1366,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
       sceneRef.current = null;
       cameraRef.current = null;
       rootsRef.current = null;
+      appliedCameraRef.current = null;
       partMeshesRef.current.clear();
       partTopologyIdentitiesRef.current.clear();
       sceneObjectRefs.current.clear();
@@ -1264,13 +1405,13 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     const roots = rootsRef.current;
     const materials = materialsRef.current;
     if (!roots || !materials || rendererStatus !== 'webgl') return;
+    publishInitialSceneReady(false);
     const topologyDiff = diffPuppetPartTopologies(
       partTopologyIdentitiesRef.current,
       preparedPartTopologies,
     );
     if (E2E_DIAGNOSTICS && stateRef.current) {
-      stateRef.current.dataset.threeTopologyReady =
-        topologyDiff.build.length === 0 ? 'true' : 'false';
+      stateRef.current.dataset.threeTopologyReady = 'false';
     }
     const staleParts = topologyDiff.removeIds.flatMap((partId) => {
       const part = partMeshesRef.current.get(partId);
@@ -1285,7 +1426,128 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
       disposeObject(part, false);
     });
     let topologyComplete = false;
-    return scheduleIncrementalTopologyBuild(topologyDiff.build, topology => {
+    let cancelled = false;
+    const pendingInitialSceneResources = () => {
+      let pending = 0;
+      [roots.partsLayer, roots.objectsLayer].forEach((layer) => {
+        layer.traverse((object) => {
+          const material = (object as THREE.Mesh).material;
+          const materials = Array.isArray(material) ? material : material ? [material] : [];
+          materials.forEach((candidate) => {
+            if (isInitialSceneMaterialResourcePending(candidate)) pending += 1;
+          });
+        });
+      });
+      return pending;
+    };
+    const publishPendingInitialSceneResources = () => {
+      if (E2E_DIAGNOSTICS && stateRef.current) {
+        stateRef.current.dataset.threePendingInitialSceneResources = String(
+          pendingInitialSceneResources(),
+        );
+      }
+    };
+    const releaseAdaptiveTopology =
+      (topologyDiff.build.length > 0 || pendingInitialSceneResources() > 0) &&
+        renderPolicy.preset === 'high'
+        ? acquireAdaptiveTopologyBuildLease(
+          highResolutionSessionController,
+          adaptiveTopologyOwnerRef.current,
+        )
+        : () => {};
+    const readinessGeneration = createInitialSceneReadinessGeneration({
+      onReadyChange: (ready) => {
+        publishInitialSceneReady(ready);
+        if (!ready && E2E_DIAGNOSTICS && stateRef.current) {
+          stateRef.current.dataset.threeInitialSceneResourceUpload = 'pending';
+          stateRef.current.dataset.threeTopologyReady = 'false';
+        }
+      },
+    });
+    const completeInitialSceneSettlement = () => {
+      publishPendingInitialSceneResources();
+      if (cancelled || !topologyComplete || pendingInitialSceneResources() > 0) return;
+      if (readinessGeneration.hasScheduledPublication()) return;
+      const renderer = rendererRef.current;
+      if (!renderer) return;
+      // Force-upload every retained Puppet draw object, including initially
+      // culled/hidden plates and art, then restore and submit the exact
+      // canonical frame before publishing readiness. Mechanisms remain
+      // excluded so Path's 2D/front-view scene contract is unchanged.
+      realizeInitialSceneResources({
+        renderer,
+        roots: [
+          roots.staticLayer,
+          roots.partsLayer,
+          roots.objectsLayer,
+          roots.skeletonLayer,
+          roots.pathsLayer,
+        ],
+        submit: () => submitScene(false),
+      });
+      if (E2E_DIAGNOSTICS && stateRef.current) {
+        stateRef.current.dataset.threeInitialSceneResourceUpload = 'complete';
+      }
+      readinessGeneration.schedule(() => {
+        if (
+          cancelled ||
+          rendererRef.current !== renderer ||
+          renderer.getContext().isContextLost() ||
+          pendingInitialSceneResources() > 0
+        ) return false;
+        releaseAdaptiveTopology();
+        if (E2E_DIAGNOSTICS && stateRef.current) {
+          stateRef.current.dataset.threePendingInitialSceneResources = '0';
+          stateRef.current.dataset.threeTopologyReady = 'true';
+        }
+        return true;
+      });
+    };
+    const settlementControl = {
+      invalidate: readinessGeneration.invalidate,
+      check: completeInitialSceneSettlement,
+    };
+    initialSceneSettlementCheckRef.current = settlementControl;
+    const initialTopologyPolicy = puppetInitialTopologyBatchPolicy(
+      renderPolicy.preset,
+    );
+    type PendingPartTopology = (typeof topologyDiff.build)[number];
+    type PartBuildRuntime = {
+      topology: PendingPartTopology;
+      shape: THREE.Shape;
+      geometry: THREE.BufferGeometry;
+      mesh: THREE.Mesh;
+      cpuBuildMs: number;
+      outlineAttached: boolean;
+      artAttached: boolean;
+      hardwareAttached: boolean;
+      finalized: boolean;
+      topOutline?: THREE.Line;
+    };
+    const buildRuntimes = new Map<string, PartBuildRuntime>();
+    const applyInitialPartTransform = (runtime: PartBuildRuntime) => {
+      const base = runtime.topology.part;
+      const renderedParts = renderedPartsRef.current;
+      const renderedIndex = renderedParts.findIndex(candidate => candidate.id === base.id);
+      const renderedPart = renderedIndex >= 0 ? renderedParts[renderedIndex] : base;
+      const assemblyOffset = assemblyOffsetForPart(
+        Math.max(0, renderedIndex),
+        Math.max(1, renderedParts.length),
+        assemblyExplodeAmountRef.current,
+      );
+      runtime.mesh.visible = renderedPart.visible;
+      runtime.mesh.position.set(
+        (renderedPart.transform.x + assemblyOffset.x) / VIEW_SCALE,
+        (renderedPart.transform.y + assemblyOffset.y) / VIEW_SCALE,
+        renderedPart.zIndex * 0.035 + assemblyOffset.z,
+      );
+      runtime.mesh.rotation.z = (renderedPart.transform.rotation * Math.PI) / 180;
+      runtime.mesh.scale.set(renderedPart.transform.scale, renderedPart.transform.scale, 1);
+      runtime.mesh.material = selectedPartIdRef.current === base.id
+        ? materials.selected
+        : materials.part;
+    };
+    const createBaseRuntime = (topology: PendingPartTopology) => {
       const topologyStartedAt = performance.now();
       const base = topology.part;
       const { outline, localHoles } = topology;
@@ -1310,107 +1572,209 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
       mesh.userData.partId = base.id;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      if (renderPolicy.partTopology.edgeGeometryEnabled) {
-        attachCachedEdges(
-          mesh,
-          geometry,
-          materials.edge,
-          `puppet-part-plate:${partGeometryKey}`,
-        );
-      }
-      const artGeometry = cachedGeometry(
-        `puppet-part-art:${partGeometryKey}`,
-        () => {
-          const next = new THREE.ShapeGeometry(shape);
-          const artPositions = next.getAttribute('position');
-          const uvs: number[] = [];
-          const artWidth = Math.max(1, base.bounds.width);
-          const artHeight = Math.max(1, base.bounds.height);
-          for (let i = 0; i < artPositions.count; i += 1) {
-            const x = artPositions.getX(i) * VIEW_SCALE;
-            const y = artPositions.getY(i) * VIEW_SCALE;
-            uvs.push(
-              (x - base.bounds.x) / artWidth,
-              (y - base.bounds.y) / artHeight,
-            );
-          }
-          next.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-          return next;
-        },
-      );
-      const art = new THREE.Mesh(artGeometry, createPartArtMaterial(base, () => {
-        if (topologyComplete) render();
-      }));
-      art.name = `part-art-decal-${base.id}`;
-      art.position.set(0, 0, THICKNESS + 0.018);
-      mesh.add(art);
-      if (outline.length > 1) {
-        const topOutline = cachedGeometry(
-          `puppet-part-outline:${partGeometryKey}`,
-          () => new THREE.BufferGeometry().setFromPoints([
-            ...outline.map(point => new THREE.Vector3(
-              point.x / VIEW_SCALE,
-              point.y / VIEW_SCALE,
-              THICKNESS + 0.034,
-            )),
-            new THREE.Vector3(
-              outline[0].x / VIEW_SCALE,
-              outline[0].y / VIEW_SCALE,
-              THICKNESS + 0.034,
-            ),
-          ]),
-        );
-        mesh.add(new THREE.Line(topOutline, materials.edge));
-      }
-      mesh.traverse(child => {
-        child.userData.partId = base.id;
-      });
-      if (localHoles.length) {
-        mesh.add(createPuppetCutHoleRingInstances({
-          partId: base.id,
-          holes: localHoles,
-          viewScale: VIEW_SCALE,
-          z: THICKNESS + 0.04,
-          geometry: cachedGeometry(
-            'cut-hole-ring:0.11:0.014:8:28',
-            () => new THREE.TorusGeometry(0.11, 0.014, 8, 28),
-          ),
-          material: materials.cutRing,
-        }));
-      }
+      const runtime: PartBuildRuntime = {
+        topology,
+        shape,
+        geometry,
+        mesh,
+        cpuBuildMs: 0,
+        outlineAttached: false,
+        artAttached: false,
+        hardwareAttached: false,
+        finalized: false,
+      };
       roots.partsLayer.add(mesh);
       partMeshesRef.current.set(base.id, mesh);
-      partTopologyIdentitiesRef.current.set(base.id, topology.identity);
-      const renderedParts = renderedPartsRef.current;
-      const renderedIndex = renderedParts.findIndex(candidate => candidate.id === base.id);
-      const renderedPart = renderedIndex >= 0 ? renderedParts[renderedIndex] : base;
-      const assemblyOffset = assemblyOffsetForPart(
-        Math.max(0, renderedIndex),
-        Math.max(1, renderedParts.length),
-        assemblyExplodeAmountRef.current,
-      );
-      mesh.visible = renderedPart.visible;
-      mesh.position.set(
-        (renderedPart.transform.x + assemblyOffset.x) / VIEW_SCALE,
-        (renderedPart.transform.y + assemblyOffset.y) / VIEW_SCALE,
-        renderedPart.zIndex * 0.035 + assemblyOffset.z,
-      );
-      mesh.rotation.z = (renderedPart.transform.rotation * Math.PI) / 180;
-      mesh.scale.set(renderedPart.transform.scale, renderedPart.transform.scale, 1);
-      mesh.material = selectedPartIdRef.current === base.id ? materials.selected : materials.part;
-      recordPuppetTopologyBuild(performance.now() - topologyStartedAt);
+      applyInitialPartTransform(runtime);
+      buildRuntimes.set(base.id, runtime);
+      runtime.cpuBuildMs = performance.now() - topologyStartedAt;
+      return runtime;
+    };
+    const measurePartPhase = (
+      runtime: PartBuildRuntime,
+      build: () => void,
+    ) => {
+      const startedAt = performance.now();
+      build();
+      runtime.cpuBuildMs += performance.now() - startedAt;
+    };
+    const attachPartOutline = (runtime: PartBuildRuntime) => {
+      if (runtime.outlineAttached) return;
+      measurePartPhase(runtime, () => {
+        const { topology, mesh, geometry } = runtime;
+        const { outline } = topology;
+        const partGeometryKey = topology.identity.geometry;
+        if (renderPolicy.partTopology.edgeGeometryEnabled) {
+          attachCachedEdges(
+            mesh,
+            geometry,
+            materials.edge,
+            `puppet-part-plate:${partGeometryKey}`,
+          );
+        }
+        if (outline.length > 1) {
+          const topOutline = cachedGeometry(
+            `puppet-part-outline:${partGeometryKey}`,
+            () => new THREE.BufferGeometry().setFromPoints([
+              ...outline.map(point => new THREE.Vector3(
+                point.x / VIEW_SCALE,
+                point.y / VIEW_SCALE,
+                THICKNESS + 0.034,
+              )),
+              new THREE.Vector3(
+                outline[0].x / VIEW_SCALE,
+                outline[0].y / VIEW_SCALE,
+                THICKNESS + 0.034,
+              ),
+            ]),
+          );
+          const topOutlineLine = new THREE.Line(topOutline, materials.edge);
+          runtime.topOutline = topOutlineLine;
+          mesh.add(topOutlineLine);
+        }
+      });
+      runtime.outlineAttached = true;
+    };
+    const attachPartArt = (runtime: PartBuildRuntime) => {
+      if (runtime.artAttached) return;
+      measurePartPhase(runtime, () => {
+        const { topology, mesh, shape } = runtime;
+        const base = topology.part;
+        const partGeometryKey = topology.identity.geometry;
+        const artGeometry = cachedGeometry(
+          `puppet-part-art:${partGeometryKey}`,
+          () => {
+            const next = new THREE.ShapeGeometry(shape);
+            const artPositions = next.getAttribute('position');
+            const uvs: number[] = [];
+            const artWidth = Math.max(1, base.bounds.width);
+            const artHeight = Math.max(1, base.bounds.height);
+            for (let i = 0; i < artPositions.count; i += 1) {
+              const x = artPositions.getX(i) * VIEW_SCALE;
+              const y = artPositions.getY(i) * VIEW_SCALE;
+              uvs.push(
+                (x - base.bounds.x) / artWidth,
+                (y - base.bounds.y) / artHeight,
+              );
+            }
+            next.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+            return next;
+          },
+        );
+        const art = new THREE.Mesh(artGeometry, createPartArtMaterial(base, () => {
+          initialSceneSettlementCheckRef.current?.check();
+        }));
+        art.name = `part-art-decal-${base.id}`;
+        art.position.set(0, 0, THICKNESS + 0.018);
+        art.userData.partId = base.id;
+        // Preserve the canonical final child order from the unsplit path:
+        // cached edge, art decal, top outline, then cut hardware.
+        if (runtime.topOutline) {
+          mesh.remove(runtime.topOutline);
+          mesh.add(art, runtime.topOutline);
+        } else {
+          mesh.add(art);
+        }
+      });
+      runtime.artAttached = true;
+    };
+    const attachPartHardware = (runtime: PartBuildRuntime) => {
+      if (runtime.hardwareAttached) return;
+      measurePartPhase(runtime, () => {
+        const { topology, mesh } = runtime;
+        const base = topology.part;
+        if (topology.localHoles.length) {
+          mesh.add(createPuppetCutHoleRingInstances({
+            partId: base.id,
+            holes: topology.localHoles,
+            viewScale: VIEW_SCALE,
+            z: THICKNESS + 0.04,
+            geometry: cachedGeometry(
+              'cut-hole-ring:0.11:0.014:8:28',
+              () => new THREE.TorusGeometry(0.11, 0.014, 8, 28),
+            ),
+            material: materials.cutRing,
+          }));
+        }
+      });
+      runtime.hardwareAttached = true;
+    };
+    const finalizePartRuntime = (runtime: PartBuildRuntime) => {
+      if (runtime.finalized) return;
+      const startedAt = performance.now();
+      const base = runtime.topology.part;
+      runtime.mesh.traverse(child => {
+        child.userData.partId = base.id;
+      });
+      partTopologyIdentitiesRef.current.set(base.id, runtime.topology.identity);
+      runtime.finalized = true;
+      runtime.cpuBuildMs += performance.now() - startedAt;
+      recordPuppetTopologyBuild(runtime.cpuBuildMs);
+    };
+    const runPartBuildPhase = (
+      topology: PendingPartTopology,
+      phase: PuppetInitialTopologyPhase,
+      finalForPart: boolean,
+    ) => {
+      const runtime = buildRuntimes.get(topology.part.id) ??
+        createBaseRuntime(topology);
+      if (phase === 'outline' || phase === 'complete') attachPartOutline(runtime);
+      if (phase === 'art' || phase === 'complete') attachPartArt(runtime);
+      if (phase === 'hardware' || phase === 'complete') attachPartHardware(runtime);
+      if (finalForPart) finalizePartRuntime(runtime);
+    };
+    const firstTopology = topologyDiff.build[0];
+    const topologyBuildSteps = puppetInitialTopologySettlementSteps(
+      topologyDiff.build,
+      {
+        hasOutline: Boolean(
+          firstTopology && (
+            firstTopology.outline.length > 1 ||
+            renderPolicy.partTopology.edgeGeometryEnabled
+          )
+        ),
+        hasArt: Boolean(firstTopology),
+        hasHardware: Boolean(firstTopology?.localHoles.length),
+      },
+      partTopologyIdentitiesRef.current.size === 0,
+    );
+    const cancelTopologyBuild = scheduleIncrementalTopologyBuild(topologyBuildSteps, step => {
+      runPartBuildPhase(step.item, step.phase, step.finalForPart);
     }, {
       initialDelayFrames: 1,
-      maxItemsPerFrame: renderPolicy.preset === 'high' ? 2 : 6,
-      frameBudgetMs: renderPolicy.preset === 'high' ? 8 : 12,
+      maxItemsPerFrame: initialTopologyPolicy.maxItemsPerFrame,
+      frameBudgetMs: initialTopologyPolicy.frameBudgetMs,
+      interBatchDelayFrames: initialTopologyPolicy.interBatchDelayFrames,
+      // The first cold part's base, outline, art, and hardware each reach the
+      // GPU before the next material/program variant is constructed.
+      onBatchComplete: () => render(),
       onComplete: () => {
         topologyComplete = true;
-        if (E2E_DIAGNOSTICS && stateRef.current) {
-          stateRef.current.dataset.threeTopologyReady = 'true';
-        }
-        render();
+        completeInitialSceneSettlement();
       },
     });
+    return () => {
+      cancelled = true;
+      publishInitialSceneReady(false);
+      if (
+        initialSceneSettlementCheckRef.current ===
+          settlementControl
+      ) {
+        initialSceneSettlementCheckRef.current = null;
+      }
+      cancelTopologyBuild();
+      buildRuntimes.forEach((runtime, partId) => {
+        if (runtime.finalized) return;
+        roots.partsLayer.remove(runtime.mesh);
+        if (partMeshesRef.current.get(partId) === runtime.mesh) {
+          partMeshesRef.current.delete(partId);
+        }
+        disposeOwnedMaterials(runtime.mesh);
+        disposeObject(runtime.mesh, false);
+      });
+      readinessGeneration.cancel();
+      releaseAdaptiveTopology();
+    };
   }, [preparedPartTopologies, rendererStatus, renderPolicy.partTopology]);
 
   useEffect(() => {
@@ -1450,14 +1814,24 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     const roots = rootsRef.current;
     const materials = materialsRef.current;
     if (!roots || !materials || rendererStatus !== 'webgl') return;
+    initialSceneSettlementCheckRef.current?.invalidate();
     clearGroup(roots.objectsLayer);
     sceneObjectRefs.current.clear();
     sceneObjects.forEach(object => {
-      const group = createSceneObjectVisual(object, materials, object.id === project?.selectedSceneObjectId, render);
+      const group = createSceneObjectVisual(
+        object,
+        materials,
+        object.id === project?.selectedSceneObjectId,
+        () => {
+          render();
+          initialSceneSettlementCheckRef.current?.check();
+        },
+      );
       roots.objectsLayer.add(group);
       sceneObjectRefs.current.set(object.id, group);
     });
     render();
+    initialSceneSettlementCheckRef.current?.check();
   }, [project?.selectedSceneObjectId, rendererStatus, sceneObjectSignature]);
 
   useEffect(() => {
@@ -2041,16 +2415,28 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
           });
         }
       }
-      render();
+      render(true);
     };
 
-    return subscribeCadencedPlaybackSampler({
+    if (renderPolicy.preset === 'high') {
+      highResolutionSessionController.resetSubmissionWindow();
+    }
+    const unsubscribe = subscribeCadencedPlaybackSampler({
       clock: playbackClock,
       sample: (phase) => playbackSampleRef.current?.(phase),
       minFrameIntervalMs: renderPolicy.minRenderIntervalMs,
+      earlyToleranceMs: renderPolicy.preset === 'high'
+        ? HIGH_RESOLUTION_CADENCE_EARLY_TOLERANCE_MS
+        : 0,
       sampleInitial: false,
       apply: applyPreview,
     });
+    return () => {
+      unsubscribe();
+      if (renderPolicy.preset === 'high') {
+        highResolutionSessionController.resetSubmissionWindow();
+      }
+    };
   }, [
     activeSkeleton,
     assemblyExplodeAmount,
@@ -2072,20 +2458,60 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     render();
   }, [pathsToRender.length, rendererStatus, visibleLayers.grid, visibleLayers.character, visibleLayers.skeleton, visibleLayers.mechanisms]);
 
-  useEffect(() => {
+  const applyPuppetCamera = (
+    view: PuppetTransientCamera,
+    continuous = false,
+  ) => {
     const roots = rootsRef.current;
     const camera = cameraRef.current;
     if (!roots || !camera || rendererStatus !== 'webgl') return;
-    const zoom = viewport?.zoom ?? 1;
-    const preset = VIEWER3D_CAMERA_PRESETS[cameraPreset];
-    const [px, py, pz] = cameraPreset === 'iso' ? orbitPosition(cameraOrbit.yaw, cameraOrbit.pitch) : preset.position;
+    const activePreset = cameraPresetRef.current;
+    const zoom = viewportRef.current?.zoom ?? 1;
+    const preset = VIEWER3D_CAMERA_PRESETS[activePreset];
+    const [px, py, pz] = activePreset === 'iso'
+      ? orbitPosition(view.orbit.yaw, view.orbit.pitch)
+      : preset.position;
     const [ux, uy, uz] = preset.up;
     const distance = preset.distance / zoom;
     camera.up.set(ux, uy, uz);
     camera.position.set(px * distance, py * distance, pz * distance);
     camera.lookAt(new THREE.Vector3(0, 0, 0.1));
-    roots.root.position.set((viewport?.offset.x ?? 0) / VIEW_SCALE, (viewport?.offset.y ?? 0) / VIEW_SCALE, 0);
-    render();
+    roots.root.position.set(view.offset.x / VIEW_SCALE, view.offset.y / VIEW_SCALE, 0);
+    appliedCameraRef.current = {
+      ...view,
+      preset: activePreset,
+      zoom,
+    };
+    render(continuous);
+  };
+  const applyPuppetCameraRef = useRef(applyPuppetCamera);
+  applyPuppetCameraRef.current = applyPuppetCamera;
+
+  useEffect(
+    () => transientCamera.subscribe((view) => {
+      cameraOrbitRef.current = view.orbit;
+      // Pointer events are sparse when a hand pauses. They render directly but
+      // must not masquerade as a continuously expected playback interval.
+      applyPuppetCameraRef.current(view);
+    }),
+    [transientCamera],
+  );
+
+  useEffect(() => {
+    const nextView = {
+      orbit: cameraOrbit,
+      offset: viewport?.offset ?? { x: 0, y: 0 },
+    };
+    const applied = appliedCameraRef.current;
+    if (
+      applied?.preset === cameraPreset &&
+      applied.zoom === (viewport?.zoom ?? 1) &&
+      applied.orbit.yaw === nextView.orbit.yaw &&
+      applied.orbit.pitch === nextView.orbit.pitch &&
+      applied.offset.x === nextView.offset.x &&
+      applied.offset.y === nextView.offset.y
+    ) return;
+    applyPuppetCamera(nextView);
   }, [cameraOrbit.pitch, cameraOrbit.yaw, cameraPreset, rendererStatus, viewport?.offset.x, viewport?.offset.y, viewport?.zoom]);
 
   useEffect(() => {
@@ -2245,6 +2671,10 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
       offset: viewport?.offset ?? { x: 0, y: 0 },
       mode
     };
+    transientCamera.begin({
+      orbit: { yaw: cameraOrbit.yaw, pitch: cameraOrbit.pitch },
+      offset: viewport?.offset ?? { x: 0, y: 0 },
+    });
     setIsViewerDragging(true);
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -2275,10 +2705,19 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     const dx = event.clientX - start.x;
     const dy = event.clientY - start.y;
     if (start.mode === 'orbit') {
-      setCameraOrbit({ yaw: start.yaw + dx * 0.35, pitch: clampOrbitPitch(start.pitch - dy * 0.3) });
+      transientCamera.update({
+        orbit: {
+          yaw: start.yaw + dx * 0.35,
+          pitch: clampOrbitPitch(start.pitch - dy * 0.3),
+        },
+        offset: start.offset,
+      });
       return;
     }
-    setViewport?.(prev => ({ ...prev, offset: { x: start.offset.x + dx, y: start.offset.y + dy } }));
+    transientCamera.update({
+      orbit: { yaw: start.yaw, pitch: start.pitch },
+      offset: { x: start.offset.x + dx, y: start.offset.y + dy },
+    });
   };
 
   const pickViewerTarget = (event: Pick<React.PointerEvent<HTMLDivElement>, 'clientX' | 'clientY'>) => {
@@ -2387,6 +2826,17 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     const start = viewerDragRef.current;
     if (start?.pointerId !== event.pointerId) return;
     const moved = recordViewerDragDistance(start, event.clientX, event.clientY);
+    if (start.mode === 'orbit' || start.mode === 'pan') {
+      const finalCamera = transientCamera.finish();
+      if (finalCamera) {
+        if (start.mode === 'orbit') {
+          cameraOrbitRef.current = finalCamera.orbit;
+          setCameraOrbit(finalCamera.orbit);
+        } else {
+          setViewport?.((prev) => ({ ...prev, offset: finalCamera.offset }));
+        }
+      }
+    }
     viewerDragRef.current = null;
     setIsViewerDragging(false);
     if (start.mode === 'draw') {
@@ -2422,6 +2872,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     velocity: 'absent'
   }, activeCamera.mode), [activeCamera.mode, cameraPreset, pathsToRender.length, testId, visibleLayers.character, visibleLayers.grid, visibleLayers.mechanisms, visibleLayers.skeleton]);
   return <div
+    ref={previewRef}
     className="three-puppet-overlay"
     data-testid={testId}
     aria-label="3D character view"
@@ -2447,6 +2898,9 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     data-scene-object-count={sceneObjects.length}
     data-selected-scene-object-id={project?.selectedSceneObjectId ?? ''}
     data-three-renderer-status={rendererStatus}
+    data-three-initial-scene-ready={initialSceneReadyRef.current ? 'true' : 'false'}
+    data-three-effective-dpr={effectiveDprRef.current.toFixed(3)}
+    data-three-requested-dpr-cap={requestedDprCapRef.current.toFixed(2)}
     data-assembly-mode={assemblyPhase ? 'character' : ''}
     data-assembly-phase={assemblyPhase ?? ''}
     data-assembly-progress={Math.round(assemblyProgress * 100)}
@@ -2558,6 +3012,8 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
       data-render-performance-preset={renderPolicy.preset}
       data-render-antialias={renderPolicy.antialias ? 'on' : 'off'}
       data-three-pixel-ratio-cap={renderPolicy.pixelRatioCap.toFixed(2)}
+      data-three-effective-dpr={effectiveDprRef.current.toFixed(3)}
+      data-three-requested-dpr-cap={requestedDprCapRef.current.toFixed(2)}
       data-puppet-mode="thick-flat-assembly"
       data-part-outline-mode="model-or-user-contour-with-fabrication-fallback"
       data-joint-placement="skeleton-anchors"

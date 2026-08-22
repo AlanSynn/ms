@@ -71,7 +71,7 @@
       @media (min-width:1280px){.xl\:grid-cols-\[1\.1fr_\.9fr\]{grid-template-columns:1.1fr .9fr}.xl\:grid-cols-\[\.8fr_1\.2fr\]{grid-template-columns:.8fr 1.2fr}.xl\:grid-cols-\[1fr_340px\]{grid-template-columns:1fr 340px}.xl\:grid-cols-\[1fr_360px\]{grid-template-columns:1fr 360px}}
       .fill-slate-400{fill:#94a3b8}.fill-amber-700{fill:#a16207}.ring-2{box-shadow:0 0 0 2px var(--ms-accent) inset}.ring-inset{box-shadow:0 0 0 2px var(--ms-accent) inset}
       .animate-spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
-      .workspace { border: 1px solid var(--ms-line); border-radius: 2rem; background: rgba(255,255,255,.92); box-shadow: var(--ms-shadow); backdrop-filter: blur(18px); }
+      .workspace { border: 1px solid var(--ms-line); border-radius: 2rem; background: #fff; box-shadow: var(--ms-shadow); }
       .btn-primary, .btn-secondary, .chip { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; border-radius: 999px; padding: .65rem .95rem; font-size: .82rem; font-weight: 650; letter-spacing: -.01em; transition: transform .18s ease, background .18s ease, box-shadow .18s ease; }
       .btn-primary { background: var(--ms-accent); color: white; box-shadow: 0 14px 34px rgba(90,108,255,.22); }
       .btn-primary.inverse { background: var(--ms-accent); color: white; }
@@ -121,6 +121,8 @@
       .editor-workbench { background-color: var(--ms-bg-soft); background-size: 40px 40px; background-image: linear-gradient(to right, rgba(139,92,246,.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(139,92,246,.06) 1px, transparent 1px); }
       .app-shell .stage-body { display: flex; flex-direction: column; gap: .65rem; flex: none; height: var(--ms-stage-body-height); margin-left: var(--ms-rail-width); margin-top: var(--ms-header-height); min-height: 0; overflow: hidden; padding: var(--ms-stage-top-gap) var(--ms-stage-gap) .7rem !important; }
       .editor-stage-frame { flex: 1 1 auto; min-height: 0; height: 100%; overflow: hidden; display: grid; grid-template-columns: minmax(245px, var(--ms-left-pane-width)) minmax(0, 1fr) minmax(280px, var(--ms-right-pane-width)); grid-template-areas: "left canvas right"; gap: var(--ms-stage-gap); }
+      .editor-stage-frame[data-stage="foundry"] { contain: layout paint; }
+      .editor-stage-frame[data-stage="foundry"] .stage-left-pane, .editor-stage-frame[data-stage="foundry"] .stage-right-inspector { box-shadow: none; }
       .stage-left-pane { grid-area: left; }
       .stage-canvas-pane { grid-area: canvas; }
       .stage-right-inspector { grid-area: right; }
@@ -136,10 +138,15 @@
       .stage-player-row { position: absolute; left: calc(var(--ms-left-pane-width) + var(--ms-stage-gap)); right: calc(var(--ms-right-pane-width) + var(--ms-stage-gap)); bottom: .85rem; z-index: 45; display: flex; justify-content: center; pointer-events: none; }
       .stage-nav-compact { display: none; border-top: 1px solid var(--ms-line); border-bottom: 1px solid var(--ms-line); padding: .9rem 0; }
       .stage-option-list { display: grid; gap: .4rem; margin-top: 1rem; }
+      .options-stage-frame { grid-template-columns: minmax(245px, var(--ms-left-pane-width)) minmax(0, 1fr); grid-template-areas: "left canvas"; }
+      .options-stage-frame .stage-right-inspector { display: none; }
+      .options-workspace { height: 100%; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; border-radius: 1.35rem; padding: clamp(1rem, 1.8vw, 1.5rem); }
+      .options-settings-header { display: grid; gap: .3rem; border-bottom: 1px solid var(--ms-line); padding: .15rem 0 1rem; scroll-margin-top: clamp(1rem, 1.8vw, 1.5rem); }
+      .options-settings-header h3 { margin: 0; font-size: 1.35rem; }
+      .options-settings-grid { columns: 16rem 3; column-gap: 1.5rem; }
+      .options-settings-grid .settings-section { display: inline-block; width: 100%; break-inside: avoid; margin: 0 0 .35rem; border-top: 1px solid var(--ms-line); padding: 1.1rem 0 1.25rem; }
       .foundry-canvas-shell { display: grid; place-items: stretch; }
       .foundry-canvas-shell .foundry-preview { height: 100%; min-height: 0; }
-      .options-preview-shell { display: grid; place-items: stretch; }
-      .options-preview-canvas { height: 100%; min-height: 0; }
       .settings-section { scroll-margin-top: 1rem; }
       .app-shell .path-canvas-shell { height: 100%; min-height: 0; }
       .template-gallery { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .75rem; align-content: stretch; }
@@ -540,8 +547,12 @@
         .stage-body { margin-left: 0; padding-top: 1rem !important; }
         .app-shell .stage-body { height: auto; margin-top: 0; overflow: auto; }
         .editor-stage-frame { height: auto; overflow: visible; grid-template-columns: 1fr; grid-template-areas: "left" "canvas" "right"; }
+        .options-stage-frame { grid-template-areas: "left" "canvas"; }
         .stage-left-pane, .stage-canvas-pane { min-height: auto; height: auto; max-height: none; overflow: visible; }
         .stage-canvas-pane { min-height: 360px; }
+        .options-stage-frame .stage-canvas-pane { min-height: 0; }
+        .options-workspace { height: auto; overflow: visible; }
+        .options-settings-grid { columns: 1; }
         .stage-right-inspector { min-height: 0; height: auto; max-height: min(72vh, 42rem); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-gutter: stable; }
         .stage-nav-compact { display: grid; }
         .workflow-status-strip, .status-bar { margin-left: 0; }
@@ -568,6 +579,7 @@
       input[type=range] {
         -webkit-appearance: none; 
         background: transparent; 
+        margin-inline: 0;
         width: 100%;
       }
 

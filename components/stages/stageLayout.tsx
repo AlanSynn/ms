@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { startTransition, useEffect, useState, useSyncExternalStore } from 'react';
 import { Boxes, Download, FileJson, PenLine, Settings, UserRound, Wrench } from 'lucide-react';
 import type { AppStage, ProjectState } from '../../types';
 
@@ -55,15 +55,64 @@ const keepPaneWheelOnPane = (event: React.WheelEvent<HTMLElement>) => {
     pane.scrollTop = nextScrollTop;
 };
 
-export const EditorStageFrame = ({ stage, layout, className = '' }: { stage: AppStage; layout: StageLayoutSpec; className?: string }) => (
-    <div className={`editor-stage-frame ${className}`.trim()} data-stage={stage}>
-        <aside className="stage-left-pane workspace p-5" data-pane-kind={layout.workflow.kind} data-testid={EDITOR_PANE_CONTRACT.left.testId} aria-label={EDITOR_PANE_CONTRACT.left.ariaLabel} onWheelCapture={keepPaneWheelOnPane}>
-            <div className="stage-left-pane-content" data-testid="editor-sidebar">{layout.workflow.content}</div>
+const COMPACT_STAGE_NAV_QUERY = '(max-width: 900px)';
+
+const subscribeCompactStageNavigation = (onChange: () => void) => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return () => undefined;
+    const query = window.matchMedia(COMPACT_STAGE_NAV_QUERY);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+};
+
+const compactStageNavigationMatches = () =>
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia(COMPACT_STAGE_NAV_QUERY).matches;
+
+const useCompactStageNavigation = () => useSyncExternalStore(
+    subscribeCompactStageNavigation,
+    compactStageNavigationMatches,
+    () => false,
+);
+
+export const EditorStageFrame = ({
+    stage,
+    layout,
+    className = '',
+    progressivePanes = false,
+}: {
+    stage: AppStage;
+    layout: StageLayoutSpec;
+    className?: string;
+    progressivePanes?: boolean;
+}) => {
+    const initiallyReady = !progressivePanes || typeof window === 'undefined';
+    const [inspectorReady, setInspectorReady] = useState(initiallyReady);
+    const [workflowReady, setWorkflowReady] = useState(initiallyReady);
+
+    useEffect(() => {
+        if (!progressivePanes) return;
+        let workflowFrame: number | undefined;
+        const inspectorFrame = window.requestAnimationFrame(() => {
+            startTransition(() => setInspectorReady(true));
+            workflowFrame = window.requestAnimationFrame(() => {
+                startTransition(() => setWorkflowReady(true));
+            });
+        });
+        return () => {
+            window.cancelAnimationFrame(inspectorFrame);
+            if (workflowFrame !== undefined) window.cancelAnimationFrame(workflowFrame);
+        };
+    }, [progressivePanes, stage]);
+
+    return <div className={`editor-stage-frame ${className}`.trim()} data-stage={stage}>
+        <aside className="stage-left-pane workspace p-5" data-pane-kind={layout.workflow.kind} data-testid={EDITOR_PANE_CONTRACT.left.testId} data-pane-content-ready={workflowReady ? 'true' : 'false'} aria-busy={!workflowReady} aria-label={EDITOR_PANE_CONTRACT.left.ariaLabel} onWheelCapture={keepPaneWheelOnPane}>
+            <div className="stage-left-pane-content" data-testid="editor-sidebar">{workflowReady ? layout.workflow.content : null}</div>
         </aside>
         <section className="stage-canvas-pane" data-pane-kind={layout.canvas.kind} data-testid={EDITOR_PANE_CONTRACT.center.testId} aria-label={EDITOR_PANE_CONTRACT.center.ariaLabel}>{layout.canvas.content}</section>
-        <aside className="stage-right-inspector workspace p-5" data-pane-kind={layout.inspector.kind} data-testid={EDITOR_PANE_CONTRACT.right.testId} aria-label={EDITOR_PANE_CONTRACT.right.ariaLabel} onWheelCapture={keepPaneWheelOnPane}>{layout.inspector.content}</aside>
-    </div>
-);
+        <aside className="stage-right-inspector workspace p-5" data-pane-kind={layout.inspector.kind} data-testid={EDITOR_PANE_CONTRACT.right.testId} data-pane-content-ready={inspectorReady ? 'true' : 'false'} aria-busy={!inspectorReady} aria-label={EDITOR_PANE_CONTRACT.right.ariaLabel} onWheelCapture={keepPaneWheelOnPane}>{inspectorReady ? layout.inspector.content : null}</aside>
+    </div>;
+};
 
 export const StageLeftSummary = ({ project, title, stage, goStage, children }: {
     project: ProjectState;
@@ -72,12 +121,13 @@ export const StageLeftSummary = ({ project, title, stage, goStage, children }: {
     goStage?: (stage: AppStage) => void;
     children: React.ReactNode;
 }) => {
+    const showCompactNavigation = useCompactStageNavigation();
     const linkClass = (targets: AppStage[]) => `workspace-side-link ${targets.includes(stage) ? 'active' : ''}`;
     return <>
         <div hidden className="stage-project-card" data-testid="stage-project-card" aria-label={`${project.metadata.name}: ${project.partOrder.length} parts, ${Object.keys(project.paths).length} paths, ${project.mechanisms.length} mechanisms, ${project.settings.physicalKit.gridPitchMm} millimeter grid`}>
             <span data-testid="project-compact-stats">{project.partOrder.length} parts · {Object.keys(project.paths).length} paths · {project.mechanisms.length} mechanisms · {project.settings.physicalKit.gridPitchMm}mm</span>
         </div>
-        {goStage && <nav className="stage-nav-compact">
+        {goStage && showCompactNavigation && <nav className="stage-nav-compact">
             <div className="section-title">Flow</div>
             {STAGE_PANE_NAV_ITEMS.map(item => <button key={item.ariaLabel} aria-label={item.ariaLabel} aria-current={item.activeStages.includes(stage) ? 'step' : undefined} className={linkClass(item.activeStages)} onClick={() => goStage(item.target)}><StagePaneNavIcon icon={item.icon}/> {item.label}</button>)}
         </nav>}

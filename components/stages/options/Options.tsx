@@ -16,7 +16,6 @@ import {
   resolveClassroomAssessmentBundle,
 } from "../../../utils/classroomContent";
 import { formatGridReadout } from "../../../utils/units";
-import { OptionsPreviewCanvas } from "./OptionsPreviewCanvas";
 import {
   OPTIONS_SECTION_MANIFEST,
   SelectField,
@@ -73,7 +72,11 @@ export const Options = ({
                   <a
                     key={section.id}
                     className="workspace-side-link"
-                    href={`#${section.id}`}
+                    href={
+                      section.id === "appearance"
+                        ? "#options-settings-start"
+                        : `#${section.id}`
+                    }
                   >
                     {section.label}
                   </a>
@@ -82,14 +85,19 @@ export const Options = ({
             </StageLeftSummary>
           </div>,
         ),
-        canvas: canvasPane(<OptionsPreviewCanvas settings={project.settings} />),
-        inspector: inspectorPane(
-          <div className="options-workspace stage-pane-stack">
-            <section className="workspace space-y-5 p-6">
-              <div>
-                <div className="section-title">Options</div>
-                <h3>Settings</h3>
-              </div>
+        canvas: canvasPane(
+          <div
+            className="options-workspace workspace"
+            data-testid="options-settings-workspace"
+          >
+            <header
+              id="options-settings-start"
+              className="options-settings-header"
+            >
+              <div className="section-title">Options</div>
+              <h3>Settings</h3>
+            </header>
+            <div className="options-settings-grid">
               <SettingsSection section={optionSection("appearance")}>
                 <SelectField
                   label="Theme"
@@ -181,8 +189,6 @@ export const Options = ({
                   }
                 />
               </SettingsSection>
-            </section>
-            <section className="space-y-5">
               <SettingsSection section={optionSection("performance")}>
                 <SelectField
                   label="Performance preset"
@@ -388,9 +394,10 @@ export const Options = ({
                   <option value="px">Scene pixels</option>
                 </SelectField>
               </SettingsSection>
-            </section>
+            </div>
           </div>,
         ),
+        inspector: inspectorPane(null),
       }}
     />
   );

@@ -400,6 +400,9 @@ export const FoundryOverlayLayer = ({
               onPointerMove={handle.draggable ? onParamPointerMove : undefined}
               onPointerUp={handle.draggable ? onParamPointerUp : undefined}
               onPointerCancel={handle.draggable ? onParamPointerUp : undefined}
+              onLostPointerCapture={
+                handle.draggable ? onParamPointerUp : undefined
+              }
             />
             <text className="foundry-param-label" x="10" y="-8">
               {handle.id}

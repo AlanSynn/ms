@@ -27,7 +27,7 @@ export const SettingsSection = ({
 }) => (
   <section
     id={section.id}
-    className="workspace settings-section space-y-3 p-5"
+    className="settings-section space-y-3"
     data-testid={`options-${section.id}`}
     aria-label={section.label}
   >

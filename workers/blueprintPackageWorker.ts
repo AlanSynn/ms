@@ -2,6 +2,7 @@ import type {
   BlueprintPackageWorkerRequest,
   BlueprintPackageWorkerResponse,
 } from "../runtime/blueprint/blueprintPackageJob";
+import { blueprintPackageWithoutSceneArtwork } from "../runtime/blueprint/blueprintPackageTransfer";
 
 const worker = globalThis as unknown as {
   onmessage: ((event: MessageEvent<BlueprintPackageWorkerRequest>) => void) | null;
@@ -30,7 +31,9 @@ worker.onmessage = async ({ data }) => {
       worker.postMessage({
         type: "result",
         generationId: data.generationId,
-        fabricationPackage: runBlueprintPackageJob(data.project),
+        fabricationPackage: blueprintPackageWithoutSceneArtwork(
+          runBlueprintPackageJob(data.project),
+        ),
       });
     }
   } catch (error) {

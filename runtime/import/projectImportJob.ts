@@ -16,6 +16,8 @@ import {
   validateCharacterPackageRasterFiles,
   validateProjectRasterSources,
 } from "./projectRasterImportPolicy";
+import { fitMechanismInWorkerJob } from "../fitting/mechanismFitJob";
+import { mechanismBoardPlacementErrors } from "../../utils/fabrication";
 
 export type ProjectImportInput =
   | { kind: "project"; file: File }
@@ -36,17 +38,74 @@ export type ProjectImportWorkerResponse =
     }
   | { type: "error"; generationId: number; message: string };
 
-export const validateCharacterPackageProjectPersistence = (
+export const validateImportedProjectPersistence = (
   project: ProjectState,
+  sourceLabel = "Project",
 ) => {
   validateProjectImportShape(project);
   const bytes = autosaveByteLength(serializeProjectCompact(project));
   if (bytes > AUTOSAVE_SNAPSHOT_MAX_BYTES) {
     throw new Error(
-      "Character package expands beyond the 6 MB browser autosave limit.",
+      `${sourceLabel} expands beyond the 6 MB browser autosave limit.`,
     );
   }
   return bytes;
+};
+
+export const validateCharacterPackageProjectPersistence = (
+  project: ProjectState,
+) => validateImportedProjectPersistence(project, "Character package");
+
+export const fitImportedMechanismsToBoard = (project: ProjectState) => {
+  let fittedProject = project;
+  for (
+    let mechanismIndex = 0;
+    mechanismIndex < fittedProject.mechanisms.length;
+    mechanismIndex += 1
+  ) {
+    const importedMechanism = fittedProject.mechanisms[mechanismIndex];
+    if (!mechanismBoardPlacementErrors(fittedProject, importedMechanism).length) {
+      continue;
+    }
+    const targetPathId = importedMechanism.targetPathId &&
+        fittedProject.paths[importedMechanism.targetPathId]
+      ? importedMechanism.targetPathId
+      : undefined;
+    const attempts = targetPathId
+      ? (["path", "sheet"] as const)
+      : (["sheet"] as const);
+    let fittedMechanism = importedMechanism;
+    let placementErrors = mechanismBoardPlacementErrors(
+      fittedProject,
+      fittedMechanism,
+    );
+    for (const mode of attempts) {
+      fittedMechanism = fitMechanismInWorkerJob(
+        fittedProject,
+        importedMechanism,
+        mode,
+        mode === "path" ? targetPathId : undefined,
+      );
+      placementErrors = mechanismBoardPlacementErrors(
+        fittedProject,
+        fittedMechanism,
+      );
+      if (!placementErrors.length) break;
+    }
+    if (placementErrors.length) {
+      const cells = fittedProject.settings.physicalKit.boardCells;
+      throw new Error(
+        `Cannot import ${importedMechanism.id}: no valid ${cells}x${cells} board placement. ${placementErrors[0]}`,
+      );
+    }
+    fittedProject = {
+      ...fittedProject,
+      mechanisms: fittedProject.mechanisms.map((mechanism, index) =>
+        index === mechanismIndex ? fittedMechanism : mechanism
+      ),
+    };
+  }
+  return fittedProject;
 };
 
 export const runProjectImportJob = async (input: ProjectImportInput) => {
@@ -65,7 +124,9 @@ export const runProjectImportJob = async (input: ProjectImportInput) => {
     await validateCharacterPackageRasterFiles(
       characterPackageReferencedAssetFiles(partsInfo, assets),
     );
-    const project = await loadCharacterPackage(input.files);
+    const project = fitImportedMechanismsToBoard(
+      await loadCharacterPackage(input.files),
+    );
     validateProjectRasterSources(project);
     validateCharacterPackageProjectPersistence(project);
     return {
@@ -76,9 +137,11 @@ export const runProjectImportJob = async (input: ProjectImportInput) => {
   validateProjectImportFile(input.file);
   const raw = JSON.parse(await input.file.text());
   validateProjectImportShape(raw);
-  validateProjectRasterSources(raw);
+  const project = fitImportedMechanismsToBoard(loadProjectSnapshot(raw));
+  validateProjectRasterSources(project);
+  validateImportedProjectPersistence(project);
   return {
-    project: loadProjectSnapshot(raw),
+    project,
     sourceName: input.file.name,
   };
 };

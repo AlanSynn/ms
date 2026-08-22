@@ -128,7 +128,7 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
         const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
         if (isGif) {
             if (file.size > TRACKING_GIF_MAX_COMPRESSED_BYTES) {
-                setError('Failed to load media: GIF files must be 32MB or smaller.');
+                setError('Failed to load media: GIF files must be 16MB or smaller.');
                 if (fileInputRef.current) fileInputRef.current.value = '';
                 return;
             }

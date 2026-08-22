@@ -19,7 +19,6 @@ export const workflowStatusFor = (
   selectedPart?: BodyPartLayer,
   selectedPath?: ProjectMotionPath,
 ): WorkflowStatus => {
-  const validation = validateForFabrication(project);
   const enabledMechanisms = project.mechanisms.filter(
     (mechanism) => mechanism.visible && mechanism.enabled !== false,
   );
@@ -49,9 +48,11 @@ export const workflowStatusFor = (
     blocker = enabledMechanisms.length ? "OK" : "No mechanism";
     nextAction = enabledMechanisms.length ? "Check target" : "Pick mechanism";
   } else if (stage === "blueprint") {
+    const validation = validateForFabrication(project);
     blocker = validation.errors[0] ?? validation.warnings[0] ?? "OK";
     nextAction = validation.errors.length ? "Fix" : "Make sheets";
   } else if (stage === "assembly") {
+    const validation = validateForFabrication(project);
     blocker = validation.errors[0] ?? validation.warnings[0] ?? "OK";
     nextAction = validation.errors.length ? "Fix blueprint" : "Build";
   } else if (stage === "options") {

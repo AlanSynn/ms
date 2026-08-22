@@ -310,12 +310,12 @@ const load = async (request: Extract<GifWorkerRequest, { type: 'load' }>) => {
   generationId = request.generationId;
   activeLimits = request.limits ?? DEFAULT_TRACKING_MEDIA_LIMITS;
   if (request.file.size > TRACKING_GIF_MAX_COMPRESSED_BYTES) {
-    throw new Error('GIF files must be 32MB or smaller.');
+    throw new Error('GIF files must be 16MB or smaller.');
   }
   const buffer = await request.file.arrayBuffer();
   if (request.generationId !== generationId) return;
   if (buffer.byteLength > TRACKING_GIF_MAX_COMPRESSED_BYTES) {
-    throw new Error('GIF files must be 32MB or smaller.');
+    throw new Error('GIF files must be 16MB or smaller.');
   }
   const metadata = scanTrackingGifMetadata(new Uint8Array(buffer));
   assertTrackingGifDecodeInput(metadata);

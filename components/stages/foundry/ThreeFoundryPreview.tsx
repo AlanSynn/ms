@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import * as THREE from "three";
 import type {
   BodyPartLayer,
@@ -52,18 +58,42 @@ import {
 } from "../../../utils/foundryCamera";
 import type { MechanismPreviewSimulation } from "../../../utils/mechanismPreview";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
-import { subscribeCadencedPlaybackSampler } from "../../../runtime/playback/cadencedPlaybackSampler";
+import {
+  HIGH_RESOLUTION_CADENCE_EARLY_TOLERANCE_MS,
+  subscribeCadencedPlaybackSampler,
+} from "../../../runtime/playback/cadencedPlaybackSampler";
+import { scheduleIncrementalTopologyBuild } from "../../../runtime/render/incrementalTopologyBuild";
+import {
+  createKeyedInitialTopologySettlement,
+  foundryInitialShaderSettlementSteps,
+  foundryInitialTopologySettlementSteps,
+  type FoundryInitialShaderSettlementStep,
+  type FoundryInitialTopologySettlementStep,
+  type KeyedInitialTopologySettlement,
+} from "../../../runtime/render/initialSceneSettlement";
+import {
+  highResolutionSessionController,
+  shouldRecordAdaptiveSubmission,
+} from "../../../runtime/render/adaptiveHighResolutionController";
+import type {
+  TransientValueController,
+} from "../../../runtime/render/transientValueController";
 import {
   acquireSharedWebGLRenderer,
   cachedThreeResource,
   collectThreeObjectResourceUsage,
   pruneUnusedThreeResourceCache,
+  rendererEffectivePixelRatio,
   resizeRendererToPerformancePolicy,
 } from "../../../utils/threeResourceKit";
-import { recordFoundryTopologyBuild } from "../../../utils/performanceAudit";
+import {
+  recordFoundryGestureVisualEmission,
+  recordFoundryTopologyBuild,
+} from "../../../utils/performanceAudit";
 import { resolveRenderPerformancePolicy } from "../../../utils/renderPerformancePolicy";
 import type { PartTopologyPolicy } from "../../../utils/renderPerformancePolicy";
 import { sampleIndexedValues } from "../../../utils/interactiveSampling";
+import { retainFoundryGestureAnalysis } from "./foundryHandleGesture";
 import { fittedGearTrainCenters } from "./foundryPreviewGeometry";
 import { FoundryPreviewStateProbe } from "./FoundryPreviewStateProbe";
 import {
@@ -98,6 +128,17 @@ type FoundryRendererStatus = "pending" | "webgl" | "restoring" | "unavailable";
 
 const sharedFoundryGeometryCache = new Map<string, THREE.BufferGeometry>();
 const sharedFoundryMaterialCache = new Map<string, THREE.Material>();
+const foundryProjectTopologyRevisions = new WeakMap<ProjectState, number>();
+let nextFoundryProjectTopologyRevision = 1;
+
+const foundryProjectTopologyRevision = (project: ProjectState) => {
+  const existing = foundryProjectTopologyRevisions.get(project);
+  if (existing !== undefined) return existing;
+  const revision = nextFoundryProjectTopologyRevision;
+  nextFoundryProjectTopologyRevision += 1;
+  foundryProjectTopologyRevisions.set(project, revision);
+  return revision;
+};
 
 const foundryTopologyPointKey = (points: readonly Point[]) =>
   points.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(";");
@@ -113,6 +154,8 @@ export type ThreeFoundryPreviewProps = {
   };
   kit: PhysicalKitSettings;
   camera: FoundryCamera;
+  transientCamera?: TransientValueController<FoundryCamera>;
+  transientFrame?: TransientValueController<FoundryPlaybackFrame>;
   rigOpacity: number;
   color: string;
   pathPoints: Point[];
@@ -168,11 +211,112 @@ type FoundryAutomataContext = {
 };
 
 export type FoundryPlaybackFrame = {
+  mechanism?: MechanismConfig;
   simulation: MechanismPreviewSimulation;
   automataContext?: FoundryAutomataContext;
   assemblySceneFrame?: FoundryAssemblySceneFrame;
   explode?: number;
+  deferMechanismTopology?: boolean;
+  measureSubmissionInterval?: boolean;
 };
+
+type FoundryRenderFrame = FoundryPlaybackFrame & {
+  initialTopologySettlement?: FoundryInitialTopologySettlementStep;
+};
+
+const foundryInitialTopologyKey = ({
+  mechanism,
+  renderPlan,
+  kit,
+  partTopology,
+  automataContext,
+  assemblySceneFrame,
+  pinStackCount,
+  physicalValidationSummary,
+}: {
+  mechanism: MechanismConfig;
+  renderPlan: ReturnType<typeof fabricationRenderPlanForMechanism>;
+  kit: PhysicalKitSettings;
+  partTopology: PartTopologyPolicy;
+  automataContext?: FoundryAutomataContext;
+  assemblySceneFrame?: FoundryAssemblySceneFrame;
+  pinStackCount: number;
+  physicalValidationSummary: string;
+}) =>
+  JSON.stringify({
+    mechanism: [
+      mechanism.id,
+      mechanism.type,
+      mechanism.crankLength,
+      mechanism.groundLength,
+      mechanism.couplerLength,
+      mechanism.rockerLength,
+      mechanism.rodLength ?? null,
+      mechanism.sliderOffset,
+      mechanism.couplerPointDist,
+      mechanism.couplerPointAngle,
+      mechanism.assemblyMode ?? null,
+      mechanism.gearRatio ?? null,
+      mechanism.gearTrainRadii ?? null,
+      mechanism.camProfileSamples ?? null,
+      mechanism.showOutputGear ?? null,
+      mechanism.outputGearRadius ?? null,
+    ],
+    renderPlan: [
+      renderPlan.occurrenceSummary,
+      renderPlan.zSummary,
+      renderPlan.validationErrors,
+      physicalValidationSummary,
+    ],
+    kit: [
+      kit.profileKey,
+      kit.gridPitchMm,
+      kit.sheetWidthMm,
+      kit.sheetHeightMm,
+      kit.boardCells,
+      kit.holeDiameterMm,
+    ],
+    partTopology: [
+      partTopology.bevelEnabled,
+      partTopology.edgeGeometryEnabled,
+      partTopology.curveSegments,
+    ],
+    projectRevision: automataContext
+      ? [
+          foundryProjectTopologyRevision(automataContext.project),
+          automataContext.project.metadata.id,
+          automataContext.project.metadata.updatedAt,
+          automataContext.showCharacter ?? false,
+          automataContext.showSkeleton ?? false,
+        ]
+      : null,
+    assemblyTopology: assemblySceneFrame
+      ? [
+          assemblySceneFrame.version,
+          assemblySceneFrame.kind,
+          assemblySceneFrame.boardMode,
+          assemblySceneFrame.kitProfileKey ?? null,
+          assemblySceneFrame.visibleParts.map((part) => [
+            part.id,
+            part.role,
+            part.zMm ?? null,
+          ]),
+          assemblySceneFrame.activeBoardCoords,
+          assemblySceneFrame.floatingReferenceCoords,
+          assemblySceneFrame.mechanismContract
+            ? [
+                assemblySceneFrame.mechanismContract.version,
+                assemblySceneFrame.mechanismContract.mechanismId,
+                assemblySceneFrame.mechanismContract.zSummary,
+                assemblySceneFrame.mechanismContract.layers.map(
+                  (layer) => layer.id,
+                ),
+              ]
+            : null,
+        ]
+      : null,
+    pinStackCount,
+  });
 
 const FOUNDRY_PREVIEW_WIDTH = 360;
 const FOUNDRY_PREVIEW_HEIGHT = 240;
@@ -704,6 +848,8 @@ export const ThreeFoundryPreview = ({
   playback,
   kit,
   camera,
+  transientCamera,
+  transientFrame,
   rigOpacity,
   color,
   pathPoints,
@@ -751,9 +897,124 @@ export const ThreeFoundryPreview = ({
   const primitivePoolRef = useRef<FoundryThreeObjectPool | null>(null);
   const automataContextRef = useRef<FoundryAutomataContext | undefined>(automataContext);
   const assemblySceneFrameRef = useRef<FoundryAssemblySceneFrame | undefined>(assemblySceneFrame);
-  const renderDynamicRef = useRef<((frame: FoundryPlaybackFrame) => void) | null>(null);
+  const renderDynamicRef = useRef<((frame: FoundryRenderFrame) => void) | null>(null);
   const playbackSampleRef = useRef(playback?.sample);
   const renderSubmissionCountRef = useRef(0);
+  const effectiveDprRef = useRef(renderPolicy.pixelRatioCap);
+  const requestedDprCapRef = useRef(renderPolicy.pixelRatioCap);
+  const rendererResizeRef = useRef<(() => void) | null>(null);
+  const reportedProjectionSizeRef = useRef<FoundryOverlaySize | null>(null);
+  const adaptiveTopologyOwnerRef = useRef<object>({});
+  const adaptiveInitialSettlementOwnerRef = useRef<object>({});
+  const renderPolicyPresetRef = useRef(renderPolicy.preset);
+  const initialShaderSettlementActiveRef = useRef(false);
+  const initialTopologyCompleteRef = useRef(false);
+  const completedInitialTopologyKeyRef = useRef<string | null>(null);
+  const initialTopologySettlementRef = useRef<
+    KeyedInitialTopologySettlement<
+      FoundryPlaybackFrame,
+      FoundryInitialTopologySettlementStep
+    > | null
+  >(null);
+  const retainedRenderPlanRef = useRef<
+    ReturnType<typeof fabricationRenderPlanForMechanism> | null
+  >(null);
+  const retainedValidationRef = useRef<
+    ReturnType<typeof validateMechanismPreviewReadiness> | null
+  >(null);
+  const publishInitialTopologyReady = (ready: boolean) => {
+    initialTopologyCompleteRef.current = ready;
+    const value = ready ? "true" : "false";
+    if (stateRef.current) stateRef.current.dataset.threeTopologyReady = value;
+    const preview = hostRef.current?.parentElement;
+    if (preview) preview.dataset.threeTopologyReady = value;
+  };
+  const publishInitialTopologyTransitionDiagnostics = () => {
+    if (!E2E_DIAGNOSTICS) return;
+    const snapshot = initialTopologySettlementRef.current?.snapshot();
+    if (!snapshot) return;
+    const publish = (element: HTMLElement | null | undefined) => {
+      if (!element) return;
+      element.dataset.threeInitialTopologyActive = String(snapshot.active);
+      element.dataset.threeInitialTopologyStarts = String(
+        snapshot.generationsStarted,
+      );
+      element.dataset.threeInitialTopologyUpdates = String(
+        snapshot.sameKeyUpdates,
+      );
+      element.dataset.threeInitialTopologyRestarts = String(
+        snapshot.generationsRestarted,
+      );
+      element.dataset.threeInitialTopologyCancels = String(
+        snapshot.generationsCancelled,
+      );
+      element.dataset.threeInitialTopologySteps = String(
+        snapshot.stepsDelivered,
+      );
+      element.dataset.threeInitialTopologyCompletes = String(
+        snapshot.generationsCompleted,
+      );
+    };
+    publish(stateRef.current);
+    publish(hostRef.current?.parentElement);
+  };
+  const cancelInitialTopologySettlement = () => {
+    initialTopologySettlementRef.current?.cancel();
+    completedInitialTopologyKeyRef.current = null;
+    highResolutionSessionController.setTopologyBuildActive(
+      adaptiveInitialSettlementOwnerRef.current,
+      false,
+    );
+  };
+  renderPolicyPresetRef.current = renderPolicy.preset;
+  const initialTopologySettlementController =
+    initialTopologySettlementRef.current ??
+    createKeyedInitialTopologySettlement<
+      FoundryPlaybackFrame,
+      FoundryInitialTopologySettlementStep
+    >({
+      schedule: (steps, visit, complete) =>
+        scheduleIncrementalTopologyBuild(steps, visit, {
+          maxItemsPerFrame: 1,
+          frameBudgetMs: 4,
+          onComplete: complete,
+        }),
+      onStart: () => {
+        publishInitialTopologyReady(false);
+        if (renderPolicyPresetRef.current === "high") {
+          highResolutionSessionController.setTopologyBuildActive(
+            adaptiveInitialSettlementOwnerRef.current,
+            true,
+          );
+        }
+        publishInitialTopologyTransitionDiagnostics();
+      },
+      onStep: (settlement, latestFrame) => {
+        renderDynamicRef.current?.({
+          ...latestFrame,
+          measureSubmissionInterval: false,
+          initialTopologySettlement: settlement,
+        });
+        publishInitialTopologyTransitionDiagnostics();
+      },
+      onComplete: (_latestFrame, key) => {
+        completedInitialTopologyKeyRef.current = key;
+        highResolutionSessionController.setTopologyBuildActive(
+          adaptiveInitialSettlementOwnerRef.current,
+          false,
+        );
+        publishInitialTopologyReady(true);
+        publishInitialTopologyTransitionDiagnostics();
+      },
+      onCancel: () => {
+        highResolutionSessionController.setTopologyBuildActive(
+          adaptiveInitialSettlementOwnerRef.current,
+          false,
+        );
+        publishInitialTopologyTransitionDiagnostics();
+      },
+    });
+  initialTopologySettlementRef.current = initialTopologySettlementController;
   automataContextRef.current = automataContext;
   assemblySceneFrameRef.current = assemblySceneFrame;
   playbackSampleRef.current = playback?.sample;
@@ -808,12 +1069,22 @@ export const ThreeFoundryPreview = ({
       : baseInv;
   const pinionRotation = simulation.driveAngleDeg;
   const renderPlan = useMemo(
-    () => fabricationRenderPlanForMechanism(mechanism),
-    [mechanism],
+    () =>
+      retainFoundryGestureAnalysis(
+        deferMechanismTopology,
+        retainedRenderPlanRef,
+        () => fabricationRenderPlanForMechanism(mechanism),
+      ),
+    [deferMechanismTopology, mechanism],
   );
   const physicalValidationErrors = useMemo(
-    () => validateMechanismPreviewReadiness(mechanism),
-    [mechanism],
+    () =>
+      retainFoundryGestureAnalysis(
+        deferMechanismTopology,
+        retainedValidationRef,
+        () => validateMechanismPreviewReadiness(mechanism),
+      ),
+    [deferMechanismTopology, mechanism],
   );
   const physicalValidationSummary = physicalValidationErrors.join(" | ");
   const stackLayerZ = useMemo(
@@ -1264,7 +1535,15 @@ export const ThreeFoundryPreview = ({
     };
   }, [showForces]);
 
-  const renderCamera = (view: FoundryCamera) => {
+  const renderCamera = (
+    view: FoundryCamera,
+    continuous = false,
+    allowInitialShaderSettlement = false,
+  ) => {
+    if (
+      initialShaderSettlementActiveRef.current &&
+      !allowInitialShaderSettlement
+    ) return;
     const scene = sceneRef.current;
     const renderer = rendererRef.current;
     const cam = cameraRef.current;
@@ -1272,6 +1551,9 @@ export const ThreeFoundryPreview = ({
     cam.position.copy(foundryCameraPosition(view));
     cam.lookAt(foundryCameraTarget(view));
     renderer.render(scene, cam);
+    if (continuous && renderPolicy.preset === "high") {
+      highResolutionSessionController.recordSubmission(performance.now());
+    }
     if (!E2E_DIAGNOSTICS || !stateRef.current) return;
     renderSubmissionCountRef.current += 1;
     stateRef.current.dataset.threeRenderSubmissions = String(
@@ -1519,6 +1801,12 @@ export const ThreeFoundryPreview = ({
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
+    cancelInitialTopologySettlement();
+    publishInitialTopologyReady(false);
+    initialShaderSettlementActiveRef.current = true;
+    setRendererStatus("pending");
+    let cancelInitialShaderSettlement: () => void = () => undefined;
+    let restartInitialShaderSettlement: () => void = () => undefined;
     let rendererLease;
     try {
       rendererLease = acquireSharedWebGLRenderer({
@@ -1526,6 +1814,7 @@ export const ThreeFoundryPreview = ({
         alpha: true,
       });
     } catch (error) {
+      initialShaderSettlementActiveRef.current = false;
       console.warn("ThreeFoundryPreview WebGL unavailable", error);
       setRendererStatus("unavailable");
       return;
@@ -1536,11 +1825,16 @@ export const ThreeFoundryPreview = ({
     if (E2E_DIAGNOSTICS) renderer.domElement.dataset.testid = "foundry-three-canvas";
     const handleContextLost = (event: Event) => {
       event.preventDefault();
+      cancelInitialShaderSettlement();
+      initialShaderSettlementActiveRef.current = true;
       setRendererStatus("restoring");
+      if (renderPolicy.preset === "high") {
+        highResolutionSessionController.recordContextLoss();
+      }
     };
     const handleContextRestored = () => {
-      setRendererStatus("webgl");
-      renderCamera(cameraStateRef.current);
+      rendererResizeRef.current?.();
+      restartInitialShaderSettlement();
     };
     renderer.domElement.addEventListener("webglcontextlost", handleContextLost);
     renderer.domElement.addEventListener("webglcontextrestored", handleContextRestored);
@@ -1555,9 +1849,11 @@ export const ThreeFoundryPreview = ({
     scene.add(key);
     const staticRoot = new THREE.Group();
     staticRoot.name = "foundry-static";
+    staticRoot.visible = showGrid;
     const grid = new THREE.GridHelper(24, 24, "#c7d2fe", "#e2e8f0");
     grid.rotation.x = Math.PI / 2;
     grid.position.z = -0.9;
+    grid.visible = false;
     staticRoot.add(grid);
     const plane = new THREE.Mesh(
       new THREE.PlaneGeometry(26, 16),
@@ -1570,27 +1866,110 @@ export const ThreeFoundryPreview = ({
     );
     plane.receiveShadow = true;
     plane.position.z = -0.94;
+    plane.visible = false;
     staticRoot.add(plane);
     scene.add(staticRoot);
     sceneRef.current = scene;
     rendererRef.current = renderer;
     cameraRef.current = cam;
-    setRendererStatus("webgl");
     const resize = () => {
       const width = Math.max(1, host.clientWidth);
       const height = Math.max(1, host.clientHeight);
-      onProjectionSizeChange({ width, height });
-      resizeRendererToPerformancePolicy(renderer, renderPolicy, { width, height });
+      const reportedProjectionSize = reportedProjectionSizeRef.current;
+      if (
+        !reportedProjectionSize ||
+        Math.abs(reportedProjectionSize.width - width) >= 1 ||
+        Math.abs(reportedProjectionSize.height - height) >= 1
+      ) {
+        reportedProjectionSizeRef.current = { width, height };
+        onProjectionSizeChange({ width, height });
+      }
+      const viewportSize = { width, height };
+      if (renderPolicy.preset === "high") {
+        highResolutionSessionController.setAvailableCap(
+          rendererEffectivePixelRatio(renderer, renderPolicy, viewportSize),
+        );
+      }
+      const requestedCap = renderPolicy.preset === "high"
+        ? highResolutionSessionController.snapshot().requestedCap
+        : renderPolicy.pixelRatioCap;
+      const effectiveDpr = resizeRendererToPerformancePolicy(
+        renderer,
+        renderPolicy,
+        viewportSize,
+        requestedCap,
+      );
+      effectiveDprRef.current = effectiveDpr;
+      requestedDprCapRef.current = requestedCap;
+      renderer.domElement.dataset.threeEffectiveDpr = effectiveDpr.toFixed(3);
+      renderer.domElement.dataset.threeRequestedDprCap = requestedCap.toFixed(2);
+      if (stateRef.current) {
+        stateRef.current.dataset.threeEffectiveDpr = effectiveDpr.toFixed(3);
+        stateRef.current.dataset.threeRequestedDprCap = requestedCap.toFixed(2);
+      }
+      if (host.parentElement) {
+        host.parentElement.dataset.threeEffectiveDpr = effectiveDpr.toFixed(3);
+        host.parentElement.dataset.threeRequestedDprCap = requestedCap.toFixed(2);
+      }
       cam.aspect = width / height;
       cam.updateProjectionMatrix();
       renderCamera(cameraStateRef.current);
     };
+    rendererResizeRef.current = resize;
     resize();
+    const unsubscribeAdaptive = renderPolicy.preset === "high"
+      ? highResolutionSessionController.subscribe(() => {
+          if (!renderer.getContext().isContextLost()) resize();
+        })
+      : undefined;
     const ro = new ResizeObserver(resize);
     ro.observe(host);
     window.addEventListener("resize", resize);
+    const shaderSettlementSteps = foundryInitialShaderSettlementSteps();
+    const renderShaderSettlementStep = (
+      step: FoundryInitialShaderSettlementStep,
+    ) => {
+      grid.visible = step.gridLines;
+      plane.visible = step.workSurface;
+      renderCamera(cameraStateRef.current, false, true);
+    };
+    restartInitialShaderSettlement = () => {
+      cancelInitialShaderSettlement();
+      initialShaderSettlementActiveRef.current = true;
+      grid.visible = false;
+      plane.visible = false;
+      const [firstShaderFamily, ...remainingShaderFamilies] =
+        shaderSettlementSteps;
+      if (!firstShaderFamily) return;
+      renderShaderSettlementStep(firstShaderFamily);
+      if (renderer.getContext().isContextLost()) return;
+      cancelInitialShaderSettlement = scheduleIncrementalTopologyBuild(
+        remainingShaderFamilies,
+        renderShaderSettlementStep,
+        {
+          maxItemsPerFrame: 1,
+          frameBudgetMs: 4,
+          onComplete: () => {
+            if (renderer.getContext().isContextLost()) return;
+            initialShaderSettlementActiveRef.current = false;
+            setRendererStatus("webgl");
+          },
+        },
+      );
+    };
+    restartInitialShaderSettlement();
     return () => {
+      cancelInitialShaderSettlement();
+      initialShaderSettlementActiveRef.current = false;
       ro.disconnect();
+      unsubscribeAdaptive?.();
+      cancelInitialTopologySettlement();
+      publishInitialTopologyReady(false);
+      rendererResizeRef.current = null;
+      highResolutionSessionController.setTopologyBuildActive(
+        adaptiveTopologyOwnerRef.current,
+        false,
+      );
       window.removeEventListener("resize", resize);
       sceneRef.current = null;
       rendererRef.current = null;
@@ -1619,6 +1998,35 @@ export const ThreeFoundryPreview = ({
     };
   }, [renderPolicy]);
 
+  const renderCameraRef = useRef(renderCamera);
+  renderCameraRef.current = renderCamera;
+
+  useEffect(
+    () => transientCamera?.subscribe((view) => {
+      cameraStateRef.current = view;
+      // Sparse pointer events are not a continuous playback cadence window.
+      renderCameraRef.current(view);
+    }),
+    [transientCamera],
+  );
+
+  const cameraGestureActive = isOrbiting || isZooming || isPanning;
+  useEffect(() => {
+    const root = hostRef.current?.parentElement;
+    if (!root) return;
+    const overlays = root.querySelectorAll<HTMLElement>(
+      ".foundry-preview-overlay",
+    );
+    overlays.forEach((overlay) => {
+      overlay.style.visibility = cameraGestureActive ? "hidden" : "";
+    });
+    return () => {
+      overlays.forEach((overlay) => {
+        overlay.style.visibility = "";
+      });
+    };
+  }, [cameraGestureActive, children]);
+
   useEffect(() => {
     const previousCamera = cameraStateRef.current;
     cameraStateRef.current = camera;
@@ -1630,6 +2038,7 @@ export const ThreeFoundryPreview = ({
     const scene = sceneRef.current;
     const staticRoot = scene?.getObjectByName("foundry-static");
     if (!staticRoot) return;
+    if (staticRoot.visible === showGrid) return;
     staticRoot.visible = showGrid;
     renderCamera(cameraStateRef.current);
   }, [showGrid]);
@@ -1655,8 +2064,16 @@ export const ThreeFoundryPreview = ({
     );
   };
 
-  const renderDynamicScene = (frame: FoundryPlaybackFrame) => {
+  const renderDynamicScene = (frame: FoundryRenderFrame) => {
+    if (initialShaderSettlementActiveRef.current) return;
     const { simulation } = frame;
+    const initialTopologySettlement = frame.initialTopologySettlement;
+    const measureSubmissionInterval = shouldRecordAdaptiveSubmission(
+      frame.measureSubmissionInterval,
+    );
+    const activeMechanism = frame.mechanism ?? mechanism;
+    const activeDeferMechanismTopology =
+      frame.deferMechanismTopology ?? deferMechanismTopology;
     const activeAutomataContext =
       frame.automataContext ?? automataContextRef.current;
     const activeAssemblySceneFrame =
@@ -1677,14 +2094,14 @@ export const ThreeFoundryPreview = ({
         ? frameStackLayerZ[gearLayerIndexes[0]]
         : undefined;
     const frameRenderedLayerZ = foundryRenderedLayerZForMechanism(
-      mechanism.type,
+      activeMechanism.type,
       renderPlan.layers,
       frameStackLayerZ,
       frameGearMeshPlaneZ,
     );
     const frameLocalSpacerZsForPin = (pin: FoundryPinStackPoint) =>
       foundryLocalSpacerZsForPin(
-        mechanism.type,
+        activeMechanism.type,
         pin,
         frameRenderedLayerZ,
         renderPlan.layers,
@@ -1694,7 +2111,7 @@ export const ThreeFoundryPreview = ({
       spacerLayerIndex?: number,
     ) =>
       foundryLocalSpacerZForPin(
-        mechanism.type,
+        activeMechanism.type,
         pin,
         frameRenderedLayerZ,
         renderPlan.layers,
@@ -1708,7 +2125,7 @@ export const ThreeFoundryPreview = ({
         )
       : [];
     const frameAssemblyPinPoints = isGearTrain
-      ? mechanism.type === "gear_linkage"
+      ? activeMechanism.type === "gear_linkage"
         ? [
             ...frameGearCenters,
             simulation.state.j1,
@@ -1716,9 +2133,9 @@ export const ThreeFoundryPreview = ({
             simulation.state.effector,
           ].filter((point): point is Point => Boolean(point))
         : frameGearCenters
-      : foundryAssemblyPinPoints(mechanism.type, simulation.state);
+      : foundryAssemblyPinPoints(activeMechanism.type, simulation.state);
     const framePinStackPoints = foundryPinStackPoints(
-      mechanism.type,
+      activeMechanism.type,
       frameAssemblyPinPoints,
       movingLayerIndexes,
       spacerLayerIndexes,
@@ -1769,6 +2186,38 @@ export const ThreeFoundryPreview = ({
       );
     }
     const objectPool = primitivePoolRef.current;
+    const initialTopologyKey = foundryInitialTopologyKey({
+      mechanism: activeMechanism,
+      renderPlan,
+      kit,
+      partTopology: renderPolicy.partTopology,
+      automataContext: activeAutomataContext,
+      assemblySceneFrame: activeAssemblySceneFrame,
+      pinStackCount: framePinStacks.length,
+      physicalValidationSummary,
+    });
+    const initialTopologyValid =
+      renderPlan.validationErrors.length === 0 &&
+      physicalValidationErrors.length === 0;
+    if (!initialTopologySettlement && !initialTopologyValid) {
+      initialTopologySettlementController.cancel();
+    } else if (
+      !initialTopologySettlement &&
+      (initialTopologySettlementController.isActive() ||
+        !initialTopologyCompleteRef.current ||
+        completedInitialTopologyKeyRef.current !== initialTopologyKey)
+    ) {
+      initialTopologySettlementController.update(
+        initialTopologyKey,
+        frame,
+        foundryInitialTopologySettlementSteps(
+          renderPlan.layers.length,
+          framePinStacks.length,
+        ),
+      );
+      publishInitialTopologyTransitionDiagnostics();
+      return;
+    }
     objectPool.beginFrame();
     const topologyRevisionBefore = objectPool.topologyRevision;
     if (renderPlan.validationErrors.length || physicalValidationErrors.length) {
@@ -1780,6 +2229,7 @@ export const ThreeFoundryPreview = ({
       const automataLayer = root.getObjectByName("foundry-automata-context");
       if (automataLayer) automataLayer.visible = false;
       pruneFoundryResourceCaches(root);
+      renderCamera(cameraStateRef.current, measureSubmissionInterval);
       if (E2E_DIAGNOSTICS && stateRef.current) {
         stateRef.current.dataset.threeDynamicBuildCount = String(
           dynamicBuildCountRef.current,
@@ -1791,13 +2241,13 @@ export const ThreeFoundryPreview = ({
           materialCacheRef.current.size,
         );
       }
-      renderCamera(cameraStateRef.current);
+      if (!initialTopologySettlement) publishInitialTopologyReady(true);
       return;
     }
     const primitives = createFoundryThreePrimitiveFactory({
       geometryCache: geometryCacheRef.current,
       materialCache: materialCacheRef.current,
-      mechanism,
+      mechanism: activeMechanism,
       kit,
       color,
       rigOpacity,
@@ -1807,10 +2257,12 @@ export const ThreeFoundryPreview = ({
       edgeGeometryEnabled: renderPolicy.partTopology.edgeGeometryEnabled,
       bevelEnabled: renderPolicy.partTopology.bevelEnabled,
       curveSegments: renderPolicy.partTopology.curveSegments,
-      deferBarTopologyChanges: deferMechanismTopology,
+      deferBarTopologyChanges: activeDeferMechanismTopology,
     });
+    const includeCanonicalSceneContexts =
+      !initialTopologySettlement || initialTopologySettlement.complete;
     renderFoundryDynamicLayers({
-      mechanism,
+      mechanism: activeMechanism,
       simulation,
       primitives,
       renderPlan,
@@ -1827,13 +2279,18 @@ export const ThreeFoundryPreview = ({
       gearCenters: frameGearCenters,
       gearUsesMeshPhases,
       gearOutputRatioForDisplay,
-      assemblySceneFrame: activeAssemblySceneFrame,
+      assemblySceneFrame: includeCanonicalSceneContexts
+        ? activeAssemblySceneFrame
+        : undefined,
+      initialTopologySettlement,
     });
     objectPool.endFrame();
     const assemblyTopologyChanged = renderFoundryAssemblySceneOverlay({
       root,
-      frame: activeAssemblySceneFrame,
-      mechanism,
+      frame: includeCanonicalSceneContexts
+        ? activeAssemblySceneFrame
+        : undefined,
+      mechanism: activeMechanism,
       simulation,
       kit,
       pinBottomZ: framePinBottomZ,
@@ -1844,8 +2301,12 @@ export const ThreeFoundryPreview = ({
     });
     const automataTopologyChanged = renderFoundryAutomataContext({
       root,
-      context: activeAutomataContext,
-      assemblySceneFrame: activeAssemblySceneFrame,
+      context: includeCanonicalSceneContexts
+        ? activeAutomataContext
+        : undefined,
+      assemblySceneFrame: includeCanonicalSceneContexts
+        ? activeAssemblySceneFrame
+        : undefined,
       geometryCache: geometryCacheRef.current,
       materialCache: materialCacheRef.current,
       onLoaded: () => renderCamera(cameraStateRef.current),
@@ -1855,18 +2316,19 @@ export const ThreeFoundryPreview = ({
     });
     pruneFoundryResourceCaches(root);
 
-    if (
+    const topologyChanged =
       objectPool.topologyRevision !== topologyRevisionBefore ||
       assemblyTopologyChanged ||
-      automataTopologyChanged
-    ) {
+      automataTopologyChanged;
+    if (topologyChanged) {
       dynamicBuildCountRef.current += 1;
       recordFoundryTopologyBuild(
         geometryCacheRef.current.size,
         materialCacheRef.current.size,
       );
     }
-    if (E2E_DIAGNOSTICS && stateRef.current) {
+    const publishFoundryE2EDiagnosticsAfterRender = () => {
+      if (!E2E_DIAGNOSTICS || !stateRef.current) return;
       const visiblePartIds =
         activeAutomataContext?.showCharacter
           ? activeAutomataContext.project.partOrder.filter(
@@ -2007,18 +2469,55 @@ export const ThreeFoundryPreview = ({
       stateRef.current.dataset.threeAssemblyBoardZ = assemblyBoard
         ? Number(assemblyBoard.userData.assemblyBoardZ ?? 0).toFixed(2)
         : "";
+    };
+    if (topologyChanged && renderPolicy.preset === "high") {
+      highResolutionSessionController.setTopologyBuildActive(
+        adaptiveTopologyOwnerRef.current,
+        true,
+      );
     }
-    renderCamera(cameraStateRef.current);
+    try {
+      renderCamera(cameraStateRef.current, measureSubmissionInterval);
+    } finally {
+      if (topologyChanged && renderPolicy.preset === "high") {
+        highResolutionSessionController.setTopologyBuildActive(
+          adaptiveTopologyOwnerRef.current,
+          false,
+        );
+      }
+    }
+    publishFoundryE2EDiagnosticsAfterRender();
   };
   renderDynamicRef.current = renderDynamicScene;
 
-  useEffect(() => {
+  useEffect(
+    () =>
+      transientFrame?.subscribe((frame) => {
+        recordFoundryGestureVisualEmission();
+        renderDynamicRef.current?.(frame);
+      }),
+    [transientFrame],
+  );
+
+  useLayoutEffect(() => {
+    if (rendererStatus !== "webgl") return;
+    if (transientFrame?.isActive()) return;
+    const nextFrame = {
+      simulation,
+      automataContext,
+      assemblySceneFrame,
+    };
+    if (initialTopologySettlementController.isActive()) {
+      renderDynamicRef.current?.(nextFrame);
+      return;
+    }
+    if (deferMechanismTopology) {
+      if (transientFrame) return;
+      renderDynamicRef.current?.(nextFrame);
+      return;
+    }
     const frame = requestAnimationFrame(() => {
-      renderDynamicRef.current?.({
-        simulation,
-        automataContext,
-        assemblySceneFrame,
-      });
+      renderDynamicRef.current?.(nextFrame);
     });
     return () => cancelAnimationFrame(frame);
   }, [
@@ -2043,22 +2542,45 @@ export const ThreeFoundryPreview = ({
     localSpacerZForPin,
     automataContext,
     renderPolicy,
+    rendererStatus,
     deferMechanismTopology,
+    transientFrame,
   ]);
 
   const playbackClock = playback?.clock;
   const playbackMinFrameIntervalMs =
     playback?.minFrameIntervalMs ?? renderPolicy.minRenderIntervalMs;
   useEffect(() => {
-    if (!playbackClock) return;
-    return subscribeCadencedPlaybackSampler({
+    if (!playbackClock) {
+      if (renderPolicy.preset === "high") {
+        highResolutionSessionController.resetSubmissionWindow();
+      }
+      return;
+    }
+    if (renderPolicy.preset === "high") {
+      highResolutionSessionController.resetSubmissionWindow();
+    }
+    const unsubscribe = subscribeCadencedPlaybackSampler({
       clock: playbackClock,
       sample: (phase) => playbackSampleRef.current?.(phase),
       minFrameIntervalMs: playbackMinFrameIntervalMs,
+      earlyToleranceMs: renderPolicy.preset === "high"
+        ? HIGH_RESOLUTION_CADENCE_EARLY_TOLERANCE_MS
+        : 0,
       sampleInitial: false,
-      apply: (frame) => renderDynamicRef.current?.(frame),
+      apply: (frame) =>
+        renderDynamicRef.current?.({
+          ...frame,
+          measureSubmissionInterval: true,
+        }),
     });
-  }, [playbackClock, playbackMinFrameIntervalMs]);
+    return () => {
+      unsubscribe();
+      if (renderPolicy.preset === "high") {
+        highResolutionSessionController.resetSubmissionWindow();
+      }
+    };
+  }, [playbackClock, playbackMinFrameIntervalMs, renderPolicy.preset]);
 
   return (
     <div
@@ -2084,6 +2606,11 @@ export const ThreeFoundryPreview = ({
       data-layer-velocity={viewer3DLayerDataValue(showVelocity)}
       data-layer-trail={viewer3DLayerDataValue(showTrail)}
       data-three-renderer-status={rendererStatus}
+      data-three-topology-ready={
+        initialTopologyCompleteRef.current ? "true" : "false"
+      }
+      data-three-effective-dpr={effectiveDprRef.current.toFixed(3)}
+      data-three-requested-dpr-cap={requestedDprCapRef.current.toFixed(2)}
     >
       <div ref={hostRef} className="foundry-three-host" />
       {rendererStatus !== "pending" && rendererStatus !== "webgl" && (
@@ -2155,6 +2682,8 @@ export const ThreeFoundryPreview = ({
         geometryCacheSize={geometryCacheRef.current.size}
         materialCacheSize={materialCacheRef.current.size}
         renderPolicy={renderPolicy}
+        effectiveDpr={effectiveDprRef.current}
+        requestedDprCap={requestedDprCapRef.current}
         explode={explode}
         pinBottomZ={pinBottomZ}
         pinTopZ={pinTopZ}

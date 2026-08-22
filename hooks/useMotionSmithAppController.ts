@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { startTransition, useRef, useState, useEffect } from "react";
 
 import type { AppStageRouterProps } from "../components/AppStageRouter";
 import type { AppWorkspaceShellProps } from "../components/AppWorkspaceShell";
@@ -140,7 +140,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   const goStage = createStageNavigator({
     project,
     dispatch,
-    setStage,
+    setStage: (nextStage) => startTransition(() => setStage(nextStage)),
     setCommandStatus,
     stageLabel: (item) =>
       STAGES.find((stageItem) => stageItem.id === item)?.label ?? item,
