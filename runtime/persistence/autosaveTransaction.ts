@@ -204,7 +204,7 @@ export const createBrowserAutosavePreparationDriver = (
 export type AutosaveTransactionOptions<T, P> = {
   boundary: AutosaveIdleBoundary;
   preparation: AutosavePreparationDriver<T, P>;
-  commit: (value: T, prepared: P) => boolean;
+  commit: (value: T, prepared: P) => boolean | Promise<boolean>;
   markDirty: (value: T) => void;
 };
 
@@ -228,6 +228,9 @@ export const createAutosaveTransaction = <T, P>(
   let prepared:
     | { generation: number; value: T; payload: P }
     | undefined;
+  let committing:
+    | { generation: number; value: T }
+    | undefined;
   let suspended = false;
   let disposed = false;
 
@@ -240,7 +243,7 @@ export const createAutosaveTransaction = <T, P>(
   };
 
   const schedule = () => {
-    if (disposed || suspended) return;
+    if (disposed || suspended || committing) return;
     if (scheduled) options.boundary.cancel(scheduled);
     scheduled = options.boundary.request(run);
   };
@@ -262,14 +265,36 @@ export const createAutosaveTransaction = <T, P>(
       if (hasLatest && preparingGeneration === undefined) schedule();
       return false;
     }
-    let didCommit = false;
+    let commitResult: boolean | Promise<boolean>;
     try {
-      didCommit = options.commit(candidate.value, candidate.payload);
+      commitResult = options.commit(candidate.value, candidate.payload);
     } catch {
-      didCommit = false;
+      commitResult = false;
     }
     clearLatest();
-    if (didCommit) {
+    if (commitResult && typeof (commitResult as Promise<boolean>).then === "function") {
+      const currentCommit = {
+        generation: candidate.generation,
+        value: candidate.value,
+      };
+      committing = currentCommit;
+      void Promise.resolve(commitResult).then((didCommit) => {
+        if (committing !== currentCommit) return;
+        committing = undefined;
+        if (didCommit) {
+          committed = candidate.value;
+          hasCommitted = true;
+        } else {
+          safeMarkDirty(candidate.value);
+        }
+        if (!disposed && !suspended && hasLatest) schedule();
+      }, () => {
+        if (committing !== currentCommit) return;
+        committing = undefined;
+        safeMarkDirty(candidate.value);
+        if (!disposed && !suspended && hasLatest) schedule();
+      });
+    } else if (commitResult) {
       committed = candidate.value;
       hasCommitted = true;
     } else {
@@ -280,7 +305,7 @@ export const createAutosaveTransaction = <T, P>(
 
   const run = () => {
     scheduled = undefined;
-    if (disposed || suspended) return;
+    if (disposed || suspended || committing) return;
     if (prepared) {
       commitReady();
       return;
@@ -322,6 +347,7 @@ export const createAutosaveTransaction = <T, P>(
   const accept = (value: T) => {
     if (disposed) return;
     if (hasLatest && value === latest) return;
+    if (committing && !hasLatest && value === committing.value) return;
     if (
       hasCommitted &&
       !hasLatest &&
@@ -356,6 +382,10 @@ export const createAutosaveTransaction = <T, P>(
     if (disposed) return;
     if (scheduled) options.boundary.cancel(scheduled);
     scheduled = undefined;
+    if (committing) {
+      if (hasLatest) safeMarkDirty(latest as T);
+      return;
+    }
     if (prepared) {
       const committedReady = commitReady();
       if (committedReady) {
@@ -400,6 +430,10 @@ export const createAutosaveTransaction = <T, P>(
     cancel,
     dispose,
     setSuspended,
-    hasPending: () => hasLatest || preparingGeneration !== undefined || prepared !== undefined,
+    hasPending: () =>
+      hasLatest ||
+      preparingGeneration !== undefined ||
+      prepared !== undefined ||
+      committing !== undefined,
   };
 };

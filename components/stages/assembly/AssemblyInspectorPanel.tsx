@@ -1,5 +1,5 @@
 import type { AppStage, FabricationRecipe } from "../../../types";
-import { ClassroomExampleVideo } from "../../ui/ClassroomExampleVideo";
+import { DeferredClassroomExampleVideo } from "../../ui/DeferredClassroomExampleVideo";
 import type {
   AssemblyPlaybackStep,
   CharacterAssemblyPlan,
@@ -176,7 +176,9 @@ export const AssemblyInspectorPanel = ({
               )}
             </div>
           )}
-          {selectedUseExample && <ClassroomExampleVideo example={selectedUseExample} />}
+          {selectedUseExample && (
+            <DeferredClassroomExampleVideo example={selectedUseExample} />
+          )}
           <details className="blueprint-more-exports mt-3">
             <summary>Parts</summary>
             <div className="mt-2 flex flex-wrap gap-2">

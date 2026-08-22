@@ -61,8 +61,13 @@ export const PathCanvasPane = ({
   switchPathView,
   pathPreview,
   pathGestureDraft,
-}: PathCanvasPaneProps) => (
-  <div className="path-canvas-shell canvas-workspace overflow-hidden p-0">
+}: PathCanvasPaneProps) => {
+  const pathsToRender = React.useMemo(
+    () => selectedPath ? [selectedPath] : [],
+    [selectedPath],
+  );
+
+  return <div className="path-canvas-shell canvas-workspace overflow-hidden p-0">
     <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
     <div
       className="path-view-switch"
@@ -96,7 +101,7 @@ export const PathCanvasPane = ({
       animatedSceneObjects={pathPreview?.sceneObjects ?? {}}
       skeleton={pathPreview?.skeleton ?? project.skeleton}
       mechanisms={[]}
-      paths={selectedPath ? [selectedPath] : []}
+      paths={pathsToRender}
       selectedPathId={selectedPath?.id}
       selectedPathPointIndex={selectedPoint}
       angle={angle}
@@ -124,5 +129,5 @@ export const PathCanvasPane = ({
       }
       onSelectJoint={onJointPick}
     />
-  </div>
-);
+  </div>;
+};

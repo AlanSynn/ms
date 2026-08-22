@@ -319,6 +319,7 @@ export const PathEditor = ({
     <EditorStageFrame
       stage="path"
       className="path-stage-frame"
+      progressivePanes
       layout={{
         workflow: workflowPane(
           <PathWorkflowPanel

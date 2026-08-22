@@ -14,7 +14,14 @@ export const scheduleIncrementalTopologyBuild = <Item>(
   options: {
     scheduler?: TopologyFrameScheduler;
     onComplete?: () => void;
+    onBatchComplete?: (progress: {
+      builtThisFrame: number;
+      builtTotal: number;
+      remaining: number;
+      complete: boolean;
+    }) => void;
     initialDelayFrames?: number;
+    interBatchDelayFrames?: number;
     maxItemsPerFrame?: number;
     frameBudgetMs?: number;
     now?: () => number;
@@ -31,6 +38,11 @@ export const scheduleIncrementalTopologyBuild = <Item>(
   let frameHandle: number | undefined;
   let nextIndex = 0;
   let initialDelayFrames = Math.max(0, Math.floor(options.initialDelayFrames ?? 0));
+  let interBatchDelayFrames = 0;
+  const requestedInterBatchDelayFrames = Math.max(
+    0,
+    Math.floor(options.interBatchDelayFrames ?? 0),
+  );
 
   const scheduleStep = () => {
     frameHandle = scheduler.request(step);
@@ -41,6 +53,11 @@ export const scheduleIncrementalTopologyBuild = <Item>(
     if (cancelled) return;
     if (initialDelayFrames > 0) {
       initialDelayFrames -= 1;
+      scheduleStep();
+      return;
+    }
+    if (interBatchDelayFrames > 0) {
+      interBatchDelayFrames -= 1;
       scheduleStep();
       return;
     }
@@ -60,7 +77,15 @@ export const scheduleIncrementalTopologyBuild = <Item>(
       if (now() - startedAt >= frameBudgetMs) break;
     }
 
+    const complete = nextIndex >= items.length;
+    options.onBatchComplete?.({
+      builtThisFrame,
+      builtTotal: nextIndex,
+      remaining: items.length - nextIndex,
+      complete,
+    });
     if (nextIndex < items.length) {
+      interBatchDelayFrames = requestedInterBatchDelayFrames;
       scheduleStep();
     } else {
       options.onComplete?.();

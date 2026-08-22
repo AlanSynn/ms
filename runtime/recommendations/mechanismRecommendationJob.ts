@@ -15,8 +15,7 @@ export type MechanismRecommendationJobInput = {
   project: ProjectState;
   selectedPartId?: string;
   selectedPathId?: string;
-  inputFingerprint: string;
-  seed: number;
+  requestFingerprint: string;
 };
 
 export type MechanismRecommendationWorkerRequest = {
@@ -29,18 +28,25 @@ export type MechanismRecommendationWorkerResponse =
   | {
       type: "result";
       generationId: number;
+      requestFingerprint: string;
       inputFingerprint: string;
       recommendations: MechanismRecommendation[];
     }
   | {
       type: "error";
       generationId: number;
-      inputFingerprint: string;
+      requestFingerprint: string;
       message: string;
     };
 
 const withoutPartMedia = (part: BodyPartLayer): BodyPartLayer => {
-  const { textureUrl: _textureUrl, maskUrl: _maskUrl, ...domainPart } = part;
+  const {
+    textureUrl: _textureUrl,
+    maskUrl: _maskUrl,
+    originalSvgPath: _originalSvgPath,
+    enhancedSvgPath: _enhancedSvgPath,
+    ...domainPart
+  } = part;
   return domainPart;
 };
 
@@ -80,6 +86,67 @@ export const recommendationProjectSnapshot = (
   };
 };
 
+export const RECOMMENDATION_PROJECTION_SLICE_MS = 8;
+
+export type RecommendationProjectionOptions = {
+  maxSliceMs?: number;
+  now?: () => number;
+  yieldToMain?: () => Promise<void>;
+  shouldContinue?: () => boolean;
+};
+
+const defaultProjectionClock = () =>
+  typeof performance === "undefined" ? Date.now() : performance.now();
+
+const defaultProjectionYield = () =>
+  new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+/**
+ * Strip retained media before structured cloning while yielding between small
+ * record batches. Imported project cardinality is bounded separately; the time
+ * check keeps a valid near-limit project from monopolizing a classroom frame.
+ */
+export const recommendationProjectSnapshotChunked = async (
+  project: ProjectState,
+  options: RecommendationProjectionOptions = {},
+): Promise<ProjectState> => {
+  const {
+    lastExport: _lastExport,
+    lastFoundryExport: _lastFoundryExport,
+    characterPackage: _characterPackage,
+    ...domainProject
+  } = project;
+  const parts: ProjectState["parts"] = {};
+  const sceneObjects: ProjectState["sceneObjects"] = {};
+  const maxSliceMs = Math.max(
+    1,
+    Math.min(RECOMMENDATION_PROJECTION_SLICE_MS, options.maxSliceMs ?? RECOMMENDATION_PROJECTION_SLICE_MS),
+  );
+  const now = options.now ?? defaultProjectionClock;
+  const yieldToMain = options.yieldToMain ?? defaultProjectionYield;
+  const shouldContinue = options.shouldContinue ?? (() => true);
+  let sliceStartedAt = now();
+
+  const checkpoint = async () => {
+    if (!shouldContinue()) throw new DOMException("Recommendation superseded", "AbortError");
+    if (now() - sliceStartedAt < maxSliceMs) return;
+    await yieldToMain();
+    if (!shouldContinue()) throw new DOMException("Recommendation superseded", "AbortError");
+    sliceStartedAt = now();
+  };
+
+  for (const id of Object.keys(project.parts)) {
+    parts[id] = withoutPartMedia(project.parts[id]);
+    await checkpoint();
+  }
+  for (const id of Object.keys(project.sceneObjects)) {
+    sceneObjects[id] = withoutSceneObjectMedia(project.sceneObjects[id]);
+    await checkpoint();
+  }
+  if (!shouldContinue()) throw new DOMException("Recommendation superseded", "AbortError");
+  return { ...domainProject, parts, sceneObjects };
+};
+
 const stableValue = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(stableValue);
   if (value && typeof value === "object") {
@@ -102,6 +169,47 @@ const fnv1a = (value: string) => {
   return hash >>> 0;
 };
 
+const recommendationFingerprint = (
+  input: Pick<
+    MechanismRecommendationJobInput,
+    "project" | "selectedPartId" | "selectedPathId"
+  >,
+) => {
+  const fingerprintSource = JSON.stringify(
+    stableValue({
+      version: RECOMMENDATION_JOB_VERSION,
+      project: {
+        parts: input.project.parts,
+        partOrder: input.project.partOrder,
+        sceneObjects: input.project.sceneObjects,
+        sceneObjectOrder: input.project.sceneObjectOrder,
+        skeleton: input.project.skeleton,
+        paths: input.project.paths,
+        mechanisms: input.project.mechanisms,
+        settings: input.project.settings,
+      },
+      selectedPartId: input.selectedPartId,
+      selectedPathId: input.selectedPathId,
+    }),
+  );
+  const seed = fnv1a(fingerprintSource) || FALLBACK_SEED;
+  return {
+    inputFingerprint: `recommendation-v${RECOMMENDATION_JOB_VERSION}-${seed.toString(16).padStart(8, "0")}`,
+    seed,
+  };
+};
+
+let recommendationRequestSequence = 0;
+const recommendationProjectRequestIds = new WeakMap<ProjectState, number>();
+
+const projectRequestId = (project: ProjectState) => {
+  const existing = recommendationProjectRequestIds.get(project);
+  if (existing !== undefined) return existing;
+  const next = ++recommendationRequestSequence;
+  recommendationProjectRequestIds.set(project, next);
+  return next;
+};
+
 export const createRecommendationRandom = (seed: number) => {
   let state = seed >>> 0 || FALLBACK_SEED;
   return () => {
@@ -118,44 +226,36 @@ export const createMechanismRecommendationJobInput = (
   selectedPart?: BodyPartLayer,
   selectedPathId?: string,
 ): MechanismRecommendationJobInput => {
-  const snapshot = recommendationProjectSnapshot(project);
-  const fingerprintSource = JSON.stringify(
-    stableValue({
-      version: RECOMMENDATION_JOB_VERSION,
-      project: {
-        parts: snapshot.parts,
-        partOrder: snapshot.partOrder,
-        sceneObjects: snapshot.sceneObjects,
-        sceneObjectOrder: snapshot.sceneObjectOrder,
-        skeleton: snapshot.skeleton,
-        paths: snapshot.paths,
-        mechanisms: snapshot.mechanisms,
-        settings: snapshot.settings,
-      },
-      selectedPartId: selectedPart?.id,
-      selectedPathId,
-    }),
-  );
-  const seed = fnv1a(fingerprintSource) || FALLBACK_SEED;
   return {
-    project: snapshot,
+    project,
     selectedPartId: selectedPart?.id,
     selectedPathId,
-    inputFingerprint: `recommendation-v${RECOMMENDATION_JOB_VERSION}-${seed.toString(16).padStart(8, "0")}`,
-    seed,
+    requestFingerprint: [
+      "recommendation-request",
+      projectRequestId(project),
+      selectedPart?.id ?? "",
+      selectedPathId ?? "",
+    ].join(":"),
   };
 };
 
 export const runMechanismRecommendationJob = (
   input: MechanismRecommendationJobInput,
-): MechanismRecommendation[] => {
+): { inputFingerprint: string; recommendations: MechanismRecommendation[] } => {
+  const { inputFingerprint, seed } = recommendationFingerprint(input);
   const selectedPart = input.selectedPartId
     ? input.project.parts[input.selectedPartId]
     : undefined;
   const selectedPath = input.selectedPathId
     ? input.project.paths[input.selectedPathId]
     : undefined;
-  return buildMechanismRecommendations(input.project, selectedPart, selectedPath, {
-    random: createRecommendationRandom(input.seed),
-  });
+  return {
+    inputFingerprint,
+    recommendations: buildMechanismRecommendations(
+      input.project,
+      selectedPart,
+      selectedPath,
+      { random: createRecommendationRandom(seed) },
+    ),
+  };
 };

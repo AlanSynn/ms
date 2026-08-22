@@ -109,6 +109,8 @@ type FoundryPreviewStateProbeProps = {
   geometryCacheSize: number;
   materialCacheSize: number;
   renderPolicy: RenderPerformancePolicy;
+  effectiveDpr: number;
+  requestedDprCap: number;
   explode: number;
   pinBottomZ: number;
   pinTopZ: number;
@@ -182,6 +184,8 @@ export const FoundryPreviewStateProbe = ({
   geometryCacheSize,
   materialCacheSize,
   renderPolicy,
+  effectiveDpr,
+  requestedDprCap,
   explode,
   pinBottomZ,
   pinTopZ,
@@ -254,6 +258,8 @@ export const FoundryPreviewStateProbe = ({
       data-physics-kernel-version={physicsKernelVersion}
       data-physics-kernel-error={physicsKernelError}
       data-physics-authority="motionsmith-kinematics"
+      data-three-effective-dpr={effectiveDpr.toFixed(3)}
+      data-three-requested-dpr-cap={requestedDprCap.toFixed(2)}
       data-mechanism-type={mechanism.type}
       data-three-part-count={inv.parts}
       data-three-hole-count={inv.holes}

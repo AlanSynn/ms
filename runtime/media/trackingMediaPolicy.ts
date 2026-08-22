@@ -1,8 +1,9 @@
 export const TRACKING_MEDIA_MAX_EDGE_PX = 1280;
 export const TRACKING_MEDIA_MAX_FPS = 30;
 export const TRACKING_MEDIA_MAX_SAMPLED_FRAMES = 600;
+export const TRACKING_GIF_MAX_SOURCE_PIXELS = 1_638_400;
 export const TRACKING_GIF_MAX_IN_FLIGHT_FRAMES = 1;
-export const TRACKING_GIF_MAX_COMPRESSED_BYTES = 32 * 1024 * 1024;
+export const TRACKING_GIF_MAX_COMPRESSED_BYTES = 16 * 1024 * 1024;
 export const TRACKING_VIDEO_MAX_COMPRESSED_BYTES = 48 * 1024 * 1024;
 export const TRACKING_VIDEO_MAX_SOURCE_PIXELS = 1920 * 1080;
 export const TRACKING_VIDEO_MAX_DURATION_SECONDS = 60;
@@ -83,6 +84,21 @@ export const assertTrackingVideoMetadata = ({
 export const assertTrackingGifDecodeInput = (
   metadata: TrackingGifMetadata,
 ) => {
+  if (
+    !Number.isFinite(metadata.width) ||
+    !Number.isFinite(metadata.height) ||
+    metadata.width < 1 ||
+    metadata.height < 1
+  ) {
+    throw new Error("GIF dimensions are invalid.");
+  }
+  if (
+    metadata.width > TRACKING_MEDIA_MAX_EDGE_PX ||
+    metadata.height > TRACKING_MEDIA_MAX_EDGE_PX ||
+    metadata.width * metadata.height > TRACKING_GIF_MAX_SOURCE_PIXELS
+  ) {
+    throw new Error("GIFs must be 1280 px or smaller on each edge.");
+  }
   if (metadata.rawFrames > TRACKING_MEDIA_MAX_SAMPLED_FRAMES) {
     throw new Error(
       `GIFs must contain ${TRACKING_MEDIA_MAX_SAMPLED_FRAMES} frames or fewer.`,

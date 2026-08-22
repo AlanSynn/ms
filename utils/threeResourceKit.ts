@@ -8,6 +8,7 @@ import {
 type SharedRendererSlot = {
   renderer: THREE.WebGLRenderer;
   leased: boolean;
+  cancelIdleShrink?: () => void;
 };
 
 export type SharedWebGLRendererLease = {
@@ -16,6 +17,60 @@ export type SharedWebGLRendererLease = {
 };
 
 const sharedRendererSlots = new Map<string, SharedRendererSlot[]>();
+// A stage transition may retain one drawing buffer long enough for the next
+// preview to reuse it. All other idle slots shrink immediately, so retained
+// canvas storage is globally bounded by the shared render pixel budget.
+let retainedIdleRendererSlot: SharedRendererSlot | undefined;
+
+export const SHARED_RENDERER_IDLE_SHRINK_DELAY_MS = 1_000;
+export const SHARED_RENDERER_IDLE_PIXEL_BUDGET = RENDER_VIEWPORT_PIXEL_BUDGET;
+
+type RendererIdleShrinkScheduler = {
+  schedule: (callback: () => void, delayMs: number) => unknown;
+  cancel: (handle: unknown) => void;
+};
+
+const defaultRendererIdleShrinkScheduler: RendererIdleShrinkScheduler = {
+  schedule: (callback, delayMs) => setTimeout(callback, delayMs),
+  cancel: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+};
+
+export const scheduleBoundedRendererIdleShrink = ({
+  retainedPixels,
+  shrink,
+  scheduler = defaultRendererIdleShrinkScheduler,
+}: {
+  retainedPixels: number;
+  shrink: () => void;
+  scheduler?: RendererIdleShrinkScheduler;
+}) => {
+  if (
+    !Number.isFinite(retainedPixels) ||
+    retainedPixels > SHARED_RENDERER_IDLE_PIXEL_BUDGET
+  ) {
+    shrink();
+    return () => undefined;
+  }
+
+  let active = true;
+  const handle = scheduler.schedule(() => {
+    if (!active) return;
+    active = false;
+    shrink();
+  }, SHARED_RENDERER_IDLE_SHRINK_DELAY_MS);
+  return () => {
+    if (!active) return;
+    active = false;
+    scheduler.cancel(handle);
+  };
+};
+
+export const configureThreeShaderDiagnostics = (
+  renderer: { debug: { checkShaderErrors: boolean } },
+  enabled = import.meta.env.DEV,
+) => {
+  renderer.debug.checkShaderErrors = enabled;
+};
 
 /**
  * Keep the browser's WebGL context alive while stage-owned scenes come and go.
@@ -29,18 +84,31 @@ export const acquireSharedWebGLRenderer = ({
   const key = `${antialias ? "aa" : "no-aa"}:${alpha ? "alpha" : "opaque"}`;
   const slots = sharedRendererSlots.get(key) ?? [];
   sharedRendererSlots.set(key, slots);
-  let slot = slots.find((candidate) =>
-    !candidate.leased && !candidate.renderer.getContext().isContextLost()
-  );
+  const reusable = (candidate: SharedRendererSlot) =>
+    !candidate.leased && !candidate.renderer.getContext().isContextLost();
+  let slot = retainedIdleRendererSlot &&
+      slots.includes(retainedIdleRendererSlot) &&
+      reusable(retainedIdleRendererSlot)
+    ? retainedIdleRendererSlot
+    : slots.find(reusable);
   if (!slot) {
+    const renderer = new THREE.WebGLRenderer({ antialias, alpha });
+    // Three enables synchronous shader info-log reads by default. Keep the
+    // diagnostics in development, but do not force the production GPU/driver
+    // synchronization on the first Path or Foundry submission.
+    configureThreeShaderDiagnostics(renderer);
     slot = {
-      renderer: new THREE.WebGLRenderer({ antialias, alpha }),
+      renderer,
       leased: false,
     };
     slots.push(slot);
   }
-  slot.leased = true;
-  const renderer = slot.renderer;
+  const rendererSlot = slot;
+  rendererSlot.cancelIdleShrink?.();
+  rendererSlot.cancelIdleShrink = undefined;
+  if (retainedIdleRendererSlot === rendererSlot) retainedIdleRendererSlot = undefined;
+  rendererSlot.leased = true;
+  const renderer = rendererSlot.renderer;
   let released = false;
   return {
     renderer,
@@ -52,19 +120,35 @@ export const acquireSharedWebGLRenderer = ({
       renderer.renderLists.dispose();
       renderer.info.reset();
       renderer.resetState();
-      renderer.setSize(1, 1, false);
-      slot.leased = false;
+      rendererSlot.leased = false;
+      const retainedPixels =
+        Number(renderer.domElement.width) * Number(renderer.domElement.height);
+      const canRetainIdleBuffer =
+        Number.isFinite(retainedPixels) &&
+        retainedPixels <= SHARED_RENDERER_IDLE_PIXEL_BUDGET &&
+        (!retainedIdleRendererSlot || retainedIdleRendererSlot === rendererSlot);
+      if (!canRetainIdleBuffer) {
+        if (!renderer.getContext().isContextLost()) renderer.setSize(1, 1, false);
+        return;
+      }
+      retainedIdleRendererSlot = rendererSlot;
+      rendererSlot.cancelIdleShrink = scheduleBoundedRendererIdleShrink({
+        retainedPixels,
+        shrink: () => {
+          rendererSlot.cancelIdleShrink = undefined;
+          if (retainedIdleRendererSlot === rendererSlot) retainedIdleRendererSlot = undefined;
+          if (!rendererSlot.leased && !renderer.getContext().isContextLost()) {
+            renderer.setSize(1, 1, false);
+          }
+        },
+      });
     },
   };
 };
 
 const rendererLogicalSize = new THREE.Vector2();
 
-export const resizeRendererToPerformancePolicy = (
-  renderer: THREE.WebGLRenderer,
-  policy: Pick<RenderPerformancePolicy, "pixelRatioCap">,
-  viewport: { width: number; height: number },
-) => {
+const rendererRenderbufferLimit = (renderer: THREE.WebGLRenderer) => {
   let reportedRenderbufferLimit = Number.NaN;
   try {
     const context = renderer.getContext();
@@ -79,17 +163,39 @@ export const resizeRendererToPerformancePolicy = (
     Number.isFinite(textureLimit) && textureLimit > 0
       ? Math.min(textureLimit, 4096)
       : 4096;
-  const ratio = effectiveRenderPixelRatio({
+  return Number.isFinite(reportedRenderbufferLimit) && reportedRenderbufferLimit > 0
+    ? reportedRenderbufferLimit
+    : fallbackRenderbufferLimit;
+};
+
+export const rendererEffectivePixelRatio = (
+  renderer: THREE.WebGLRenderer,
+  policy: Pick<RenderPerformancePolicy, "pixelRatioCap">,
+  viewport: { width: number; height: number },
+  requestedPixelRatioCap = policy.pixelRatioCap,
+) => effectiveRenderPixelRatio({
+  policy: {
+    pixelRatioCap: Math.min(policy.pixelRatioCap, requestedPixelRatioCap),
+  },
+  devicePixelRatio:
+    typeof window === "undefined" ? 1 : window.devicePixelRatio || 1,
+  viewportWidth: viewport.width,
+  viewportHeight: viewport.height,
+  maxRenderbufferDimension: rendererRenderbufferLimit(renderer),
+});
+
+export const resizeRendererToPerformancePolicy = (
+  renderer: THREE.WebGLRenderer,
+  policy: Pick<RenderPerformancePolicy, "pixelRatioCap">,
+  viewport: { width: number; height: number },
+  requestedPixelRatioCap = policy.pixelRatioCap,
+) => {
+  const ratio = rendererEffectivePixelRatio(
+    renderer,
     policy,
-    devicePixelRatio:
-      typeof window === "undefined" ? 1 : window.devicePixelRatio || 1,
-    viewportWidth: viewport.width,
-    viewportHeight: viewport.height,
-    maxRenderbufferDimension:
-      Number.isFinite(reportedRenderbufferLimit) && reportedRenderbufferLimit > 0
-        ? reportedRenderbufferLimit
-        : fallbackRenderbufferLimit,
-  });
+    viewport,
+    requestedPixelRatioCap,
+  );
   const currentSize = renderer.getSize(rendererLogicalSize);
   if (
     currentSize.x !== viewport.width ||

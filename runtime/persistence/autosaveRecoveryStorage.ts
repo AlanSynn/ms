@@ -59,6 +59,22 @@ export type AutosaveRecoveryMutationResult =
   | { status: "applied" }
   | { status: "failed"; error: string };
 
+export const clearMigratedAutosaveStorage = (
+  snapshot: AutosaveRecoveryStorageSnapshot,
+  storage: AutosaveStorage = browserStorage(),
+) => {
+  if (
+    typeof storage.removeItem !== "function" ||
+    !autosaveRecoveryStorageIsCurrent(snapshot, storage)
+  ) return false;
+  storage.removeItem(AUTOSAVE_STORAGE_KEYS.autosave);
+  storage.removeItem(AUTOSAVE_STORAGE_KEYS.autosavePrevious);
+  storage.removeItem(AUTOSAVE_STORAGE_KEYS.autosaveMetadata);
+  storage.removeItem(AUTOSAVE_STORAGE_KEYS.autosaveDirty);
+  storage.removeItem(LEGACY_STORAGE_KEYS.autosave);
+  return true;
+};
+
 /** Apply the same ordered, recoverable migration writes as the legacy reader. */
 export const applyAutosaveRecoveryMutation = (
   plan: AutosaveRecoveryMutationPlan,

@@ -3,6 +3,10 @@ import type {
   BlueprintPackageWorkerRequest,
   BlueprintPackageWorkerResponse,
 } from "./blueprintPackageJob";
+import {
+  projectWithoutBlueprintArtwork,
+  restoreBlueprintPackageSceneArtwork,
+} from "./blueprintPackageTransfer";
 
 export interface BlueprintPackageWorkerPort {
   onmessage: ((event: MessageEvent<BlueprintPackageWorkerResponse>) => void) | null;
@@ -46,25 +50,7 @@ const projectForWorker = (
     lastFoundryExport: undefined,
     characterPackage: undefined,
   };
-  if (requestType === "create-package") return base;
-  return {
-    ...base,
-    parts: Object.fromEntries(Object.entries(project.parts).map(([id, part]) => {
-      const geometryPart = { ...part };
-      delete geometryPart.textureUrl;
-      delete geometryPart.maskUrl;
-      delete geometryPart.originalSvgPath;
-      delete geometryPart.enhancedSvgPath;
-      return [id, geometryPart];
-    })),
-    sceneObjects: Object.fromEntries(
-      Object.entries(project.sceneObjects).map(([id, sceneObject]) => {
-        const geometryObject = { ...sceneObject };
-        delete geometryObject.textureUrl;
-        return [id, geometryObject];
-      }),
-    ),
-  };
+  return projectWithoutBlueprintArtwork(base);
 };
 
 export const createBlueprintPackageWorkerClient = (
@@ -75,6 +61,7 @@ export const createBlueprintPackageWorkerClient = (
   let active:
     | {
         generationId: number;
+        sourceProject: ProjectState;
         project: ProjectState;
         firstFrame?: number;
         secondFrame?: number;
@@ -113,6 +100,7 @@ export const createBlueprintPackageWorkerClient = (
     const generationId = ++generationSequence;
     active = {
       generationId,
+      sourceProject: project,
       project: projectForWorker(project, requestType),
     };
 
@@ -139,9 +127,17 @@ export const createBlueprintPackageWorkerClient = (
           active.worker !== worker ||
           data.generationId !== generationId
         ) return;
+        const sourceProject = active.sourceProject;
         active = undefined;
         releaseWorker(worker);
         if (data.type === "error") callbacks.failed(new Error(data.message));
+        else if (data.type === "result") callbacks.complete({
+          ...data,
+          fabricationPackage: restoreBlueprintPackageSceneArtwork(
+            data.fabricationPackage,
+            sourceProject,
+          ),
+        });
         else callbacks.complete(data);
       };
       worker.onmessageerror = () => fail("Blueprint worker returned unreadable data.");

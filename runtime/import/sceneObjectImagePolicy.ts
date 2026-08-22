@@ -3,8 +3,8 @@ const MEBIBYTE = 1024 * 1024;
 export const SCENE_OBJECT_IMAGE_LIMITS = Object.freeze({
   compressedBytes: 12 * MEBIBYTE,
   svgBytes: 512 * 1024,
-  maxSourcePixels: 16_000_000,
-  maxSourceEdge: 8_192,
+  maxSourcePixels: 4_000_000,
+  maxSourceEdge: 2_048,
   textureEdge: 512,
   contourEdge: 160,
 });
@@ -55,7 +55,7 @@ export const validateSceneObjectImageDimensions = (
     height > SCENE_OBJECT_IMAGE_LIMITS.maxSourceEdge ||
     width * height > SCENE_OBJECT_IMAGE_LIMITS.maxSourcePixels
   ) {
-    throw new Error("Object image exceeds the 16 megapixel classroom limit.");
+    throw new Error("Object image exceeds the 2048 px or 4 megapixel classroom limit.");
   }
   return { width: Math.floor(width), height: Math.floor(height) };
 };
@@ -71,11 +71,33 @@ export const fitSceneObjectImageDimensions = (
   };
 };
 
+const isLocalSvgFragment = (value: string) =>
+  /^#[a-z0-9_.:-]+$/i.test(value.trim());
+
+const hasNonLocalSvgReference = (svgText: string) => {
+  const referencePatterns = [
+    /(?:^|[\s<])(?:xlink:)?href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi,
+    /\burl\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*))\s*\)/gi,
+  ];
+  for (const pattern of referencePatterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(svgText)) !== null) {
+      const reference = match[1] ?? match[2] ?? match[3] ?? "";
+      if (!isLocalSvgFragment(reference)) return true;
+    }
+  }
+  return false;
+};
+
 export const assertLocalSceneObjectSvg = (svgText: string) => {
   const normalized = svgText.toLowerCase();
   const unsafePattern =
-    /<script|<foreignobject|javascript:|data:text\/html|href\s*=\s*["']?\s*(https?:|\/\/)|xlink:href\s*=\s*["']?\s*(https?:|\/\/)|url\(\s*["']?\s*(https?:|\/\/)|@import/i;
-  if (!/<svg(?:\s|>)/i.test(svgText) || unsafePattern.test(normalized)) {
+    /<script\b|<foreignobject\b|<(?:image|feimage)\b|javascript:|data:(?:text\/html|image\/)|href\s*=\s*["']?\s*(https?:|\/\/)|xlink:href\s*=\s*["']?\s*(https?:|\/\/)|url\(\s*["']?\s*(https?:|\/\/)|@import/i;
+  if (
+    !/<svg(?:\s|>)/i.test(svgText) ||
+    unsafePattern.test(normalized) ||
+    hasNonLocalSvgReference(svgText)
+  ) {
     throw new Error("Object SVG must be local artwork only.");
   }
 };

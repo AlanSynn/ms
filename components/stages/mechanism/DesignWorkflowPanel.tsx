@@ -1,6 +1,6 @@
-import { startTransition, useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
-import { ClassroomExampleVideo } from "../../ui/ClassroomExampleVideo";
+import { DeferredClassroomExampleVideo } from "../../ui/DeferredClassroomExampleVideo";
 import { StageLeftSummary } from "../stageLayout";
 import type {
   AppStage,
@@ -35,6 +35,7 @@ import {
 } from "../../../runtime/recommendations/mechanismRecommendationWorkerClient";
 import { createMechanismFitJobInput } from "../../../runtime/fitting/mechanismFitJob";
 import { createMechanismFitWorkerClient } from "../../../runtime/fitting/mechanismFitWorkerClient";
+import { designFamilyFitAuthorityChanged } from "../../../runtime/fitting/designFamilyFitAuthority";
 
 const DesignRecommendationControl = ({
   project,
@@ -111,11 +112,15 @@ export const DesignWorkflowPanel = ({
   const [activeFamilyFit, setActiveFamilyFit] = useState<MechanismType>();
   const [familyFitError, setFamilyFitError] = useState(false);
   const familyFitClient = useMemo(() => createMechanismFitWorkerClient(), []);
+  const familyFitAuthorityProjectRef = useRef(project);
   useEffect(() => () => familyFitClient.dispose(), [familyFitClient]);
   useEffect(() => {
+    const previousProject = familyFitAuthorityProjectRef.current;
+    familyFitAuthorityProjectRef.current = project;
+    if (!designFamilyFitAuthorityChanged(previousProject, project)) return;
     familyFitClient.cancel();
     setActiveFamilyFit(undefined);
-  }, [familyFitClient, project.metadata.updatedAt]);
+  }, [familyFitClient, project]);
   const selectedLibrary = selectedMechanism
     ? MECHANISM_LIBRARY[selectedMechanism.type]
     : undefined;
@@ -272,7 +277,9 @@ export const DesignWorkflowPanel = ({
             )}
           </div>
         )}
-        {selectedUseExample && <ClassroomExampleVideo example={selectedUseExample} />}
+        {selectedUseExample && (
+          <DeferredClassroomExampleVideo example={selectedUseExample} />
+        )}
         {Object.entries(bindingWarnings).map(([id, warnings]) =>
           warnings.length ? (
             <div className="warning" key={id}>

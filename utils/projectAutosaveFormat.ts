@@ -1,4 +1,5 @@
 import type { ProjectState } from "../types";
+import { validateProjectImportShape } from "../runtime/import/projectImportPolicy";
 import { loadProjectSnapshot } from "./project";
 import {
   autosaveByteLength,
@@ -333,6 +334,7 @@ export const loadedSnapshot = (
     if (!raw || typeof raw !== "object" || !("metadata" in raw) || !("settings" in raw)) {
       throw new Error("autosave snapshot is missing project state");
     }
+    validateProjectImportShape(raw);
     return {
       status: "loaded",
       project: loadProjectSnapshot(raw),

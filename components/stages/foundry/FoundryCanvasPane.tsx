@@ -28,6 +28,7 @@ import {
 import { DeferredThreeFoundryPreview } from "./DeferredThreeFoundryPreview";
 import type { FoundryPlaybackFrame } from "./ThreeFoundryPreview";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
+import type { TransientValueController } from "../../../runtime/render/transientValueController";
 
 type FoundryCanvasPaneProps = {
   foundry: MechanismConfig;
@@ -38,6 +39,8 @@ type FoundryCanvasPaneProps = {
   playbackClock: PlaybackClock;
   playbackSample: (phase: number) => FoundryPlaybackFrame | undefined;
   foundryCamera: FoundryCamera;
+  transientCamera: TransientValueController<FoundryCamera>;
+  transientFrame: TransientValueController<FoundryPlaybackFrame>;
   foundryCameraLabel: string;
   foundryRigOpacity: number;
   foundryExplode: number;
@@ -128,6 +131,8 @@ export const FoundryCanvasPane = ({
   playbackClock,
   playbackSample,
   foundryCamera,
+  transientCamera,
+  transientFrame,
   foundryCameraLabel,
   foundryRigOpacity,
   foundryExplode,
@@ -310,12 +315,14 @@ export const FoundryCanvasPane = ({
       mechanism={landedFoundry}
       performancePreset={performancePreset}
       simulation={selectedPhysicalSimulation}
-      playback={{
+      playback={foundryPlaying ? {
         clock: playbackClock,
         sample: playbackSample,
-      }}
+      } : undefined}
       kit={kit}
       camera={foundryCamera}
+      transientCamera={transientCamera}
+      transientFrame={transientFrame}
       rigOpacity={foundryRigOpacity / 100}
       color={foundry.color}
       pathPoints={previewPoints}

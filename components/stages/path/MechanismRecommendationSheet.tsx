@@ -170,7 +170,7 @@ const RecommendationFitPreview = ({
 };
 
 type RecommendationLoadState = {
-  inputFingerprint: string;
+  requestFingerprint: string;
   status: "loading" | "ready" | "error";
   recommendations: MechanismRecommendation[];
   error?: string;
@@ -196,7 +196,7 @@ const OpenMechanismRecommendationSheet = ({
     [project, selectedPart, selectedPath?.id],
   );
   const [loadState, setLoadState] = useState<RecommendationLoadState>(() => ({
-    inputFingerprint: input.inputFingerprint,
+    requestFingerprint: input.requestFingerprint,
     status: "loading",
     recommendations: [],
   }));
@@ -210,7 +210,7 @@ const OpenMechanismRecommendationSheet = ({
       return;
     }
     setLoadState({
-      inputFingerprint: input.inputFingerprint,
+      requestFingerprint: input.requestFingerprint,
       status: "loading",
       recommendations: [],
     });
@@ -231,7 +231,7 @@ const OpenMechanismRecommendationSheet = ({
             }
             startTransition(() => {
               setLoadState({
-                inputFingerprint: input.inputFingerprint,
+                requestFingerprint: input.requestFingerprint,
                 status: "ready",
                 recommendations,
               });
@@ -242,7 +242,7 @@ const OpenMechanismRecommendationSheet = ({
               sheetRef.current.dataset.recommendationWorkerRequest = "settled";
             }
             setLoadState({
-              inputFingerprint: input.inputFingerprint,
+              requestFingerprint: input.requestFingerprint,
               status: "error",
               recommendations: [],
               error: error.message,
@@ -263,10 +263,10 @@ const OpenMechanismRecommendationSheet = ({
   }, [input, isOpen, workerClient]);
 
   const currentState =
-    loadState.inputFingerprint === input.inputFingerprint
+    loadState.requestFingerprint === input.requestFingerprint
       ? loadState
       : {
-          inputFingerprint: input.inputFingerprint,
+          requestFingerprint: input.requestFingerprint,
           status: "loading" as const,
           recommendations: [],
         };

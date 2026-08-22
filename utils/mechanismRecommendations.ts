@@ -9,7 +9,7 @@ import type {
 import { generateCurvePoints, gearTrainOutputRatio, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from "./kinematics";
 import { generateSmartConfig } from "./optimizer";
 import { createDefaultMechanism, mechanismWithGeneratedPath } from "./project";
-import { sampleFeasibleRange, validateMechanismPreviewReadiness, validateForFabrication } from "./fabrication";
+import { mechanismBoardPlacementErrors, sampleFeasibleRange, validateMechanismPreviewReadiness, validateForFabrication } from "./fabrication";
 import { boardToScene, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, SCENE_PX_PER_MM } from "./coordinates";
 import { motionAnchorJointIds, preferredMotionJointId } from "./motion";
 import {
@@ -219,100 +219,89 @@ export const fitRecommendedMechanismToSheet = (
       Math.max(0, bounds.maxY - (sheet.y + sheet.height - margin))
     );
   };
-  const searchBoardFit = (seed: MechanismConfig) => {
-    let best: MechanismConfig | undefined = boardHoleFit(seed) ? seed : undefined;
-    let bestOverflow = best ? sheetOverflow(best) : Number.POSITIVE_INFINITY;
-    if (best && bestOverflow <= 0.01) return best;
-    const cells = project.settings.physicalKit.boardCells;
-    for (let col = 0; col < cells; col += 1) {
-      for (let row = 0; row < cells; row += 1) {
-        const anchor = boardToScene(col, row, project.settings.physicalKit);
-        const candidate = snapMechanismAnchor(
-          {
-            ...seed,
-            anchorX: anchor.x,
-            anchorY: anchor.y,
-            sceneAnchor: anchor,
-          },
-          project,
-        );
-        if (!boardHoleFit(candidate)) continue;
-        const overflow = sheetOverflow(candidate);
-        if (overflow < bestOverflow) {
-          best = candidate;
-          bestOverflow = overflow;
-          if (bestOverflow <= 0.01) return best;
-        }
-      }
-    }
-    return best ?? seed;
+  const requestedAnchor = {
+    x: Number.isFinite(mechanism.anchorX) ? mechanism.anchorX! : 0,
+    y: Number.isFinite(mechanism.anchorY) ? mechanism.anchorY! : 0,
   };
-  let fitted = snapMechanismAnchor(mechanism, project);
-  let moved = false;
-  for (let i = 0; i < 4; i++) {
-    const bounds = boundsForSheet(fitted);
-    if (!bounds) return fitted;
-    let dx = 0;
-    let dy = 0;
-    if (bounds.minX < sheet.x + margin) dx = sheet.x + margin - bounds.minX;
-    if (bounds.maxX > sheet.x + sheet.width - margin)
-      dx = sheet.x + sheet.width - margin - bounds.maxX;
-    if (bounds.minY < sheet.y + margin) dy = sheet.y + margin - bounds.minY;
-    if (bounds.maxY > sheet.y + sheet.height - margin)
-      dy = sheet.y + sheet.height - margin - bounds.maxY;
-    if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01 && boardHoleFit(fitted)) return fitted;
-    moved = true;
-    const previousAnchor = { x: fitted.anchorX ?? 0, y: fitted.anchorY ?? 0 };
-    const adjusted = snapMechanismAnchor(
-      {
-        ...fitted,
-        anchorX: previousAnchor.x + dx,
-        anchorY: previousAnchor.y + dy,
-      },
-      project,
-    );
-    const adjustedAnchor = {
-      x: adjusted.anchorX ?? previousAnchor.x,
-      y: adjusted.anchorY ?? previousAnchor.y,
-    };
-    if (
-      Math.hypot(
-        adjustedAnchor.x - previousAnchor.x,
-        adjustedAnchor.y - previousAnchor.y,
-      ) < 0.01
-    ) {
-      const pitch = project.settings.physicalKit.gridPitchMm * SCENE_PX_PER_MM;
-      fitted = snapMechanismAnchor(
+  const nearestGridCandidate = snapMechanismAnchor(mechanism, project);
+  if (
+    boardHoleFit(nearestGridCandidate) &&
+    mechanismBoardPlacementErrors(project, nearestGridCandidate).length === 0
+  ) {
+    const moved = Math.hypot(
+      (nearestGridCandidate.anchorX ?? 0) - requestedAnchor.x,
+      (nearestGridCandidate.anchorY ?? 0) - requestedAnchor.y,
+    ) > 0.01;
+    return moved
+      ? {
+          ...nearestGridCandidate,
+          warnings: [
+            ...(nearestGridCandidate.warnings ?? []),
+            "Moved onto sheet. Check anchor.",
+          ],
+        }
+      : nearestGridCandidate;
+  }
+  let nearestValid: MechanismConfig | undefined;
+  let nearestValidDistance = Number.POSITIVE_INFINITY;
+  let leastOverflow: MechanismConfig | undefined;
+  let leastOverflowAmount = Number.POSITIVE_INFINITY;
+  let leastOverflowDistance = Number.POSITIVE_INFINITY;
+  const cells = project.settings.physicalKit.boardCells;
+  for (let col = 0; col < cells; col += 1) {
+    for (let row = 0; row < cells; row += 1) {
+      const anchor = boardToScene(col, row, project.settings.physicalKit);
+      const candidate = snapMechanismAnchor(
         {
-          ...fitted,
-          anchorX:
-            previousAnchor.x + (dx < 0 ? -pitch : dx > 0 ? pitch : 0),
-          anchorY:
-            previousAnchor.y + (dy < 0 ? -pitch : dy > 0 ? pitch : 0),
+          ...mechanism,
+          anchorX: anchor.x,
+          anchorY: anchor.y,
+          sceneAnchor: anchor,
         },
         project,
       );
-    } else {
-      fitted = adjusted;
+      if (!boardHoleFit(candidate)) continue;
+      const distance = Math.hypot(
+        anchor.x - requestedAnchor.x,
+        anchor.y - requestedAnchor.y,
+      );
+      if (mechanismBoardPlacementErrors(project, candidate).length === 0) {
+        if (distance < nearestValidDistance) {
+          nearestValid = candidate;
+          nearestValidDistance = distance;
+        }
+      } else {
+        const overflow = sheetOverflow(candidate);
+        if (
+        overflow < leastOverflowAmount - 0.01 ||
+        (Math.abs(overflow - leastOverflowAmount) <= 0.01 &&
+          distance < leastOverflowDistance)
+        ) {
+          leastOverflow = candidate;
+          leastOverflowAmount = overflow;
+          leastOverflowDistance = distance;
+        }
+      }
     }
   }
-  const searched = searchBoardFit(fitted);
-  const searchedMoved =
-    Math.hypot(
-      (searched.anchorX ?? 0) - (fitted.anchorX ?? 0),
-      (searched.anchorY ?? 0) - (fitted.anchorY ?? 0),
-    ) > 0.01;
-  const needsBoardWarning = !boardHoleFit(searched);
-  return moved || searchedMoved || needsBoardWarning
+  const fitted = nearestValid ?? leastOverflow ?? snapMechanismAnchor(mechanism, project);
+  const moved = Math.hypot(
+    (fitted.anchorX ?? 0) - requestedAnchor.x,
+    (fitted.anchorY ?? 0) - requestedAnchor.y,
+  ) > 0.01;
+  const needsBoardWarning = !boardHoleFit(fitted);
+  const needsSheetWarning = !nearestValid;
+  return moved || needsBoardWarning || needsSheetWarning
     ? {
-        ...searched,
+        ...fitted,
         warnings: [
-          ...(searched.warnings ?? []),
-          ...(moved || searchedMoved ? ["Moved onto sheet. Check anchor."] : []),
+          ...(fitted.warnings ?? []),
+          ...(moved ? ["Moved onto sheet. Check anchor."] : []),
           ...(needsBoardWarning ? ["Assembly holes exceed the active board."] : []),
+          ...(needsSheetWarning ? ["No board-valid sheet placement."] : []),
         ],
       }
-    : searched;
+    : fitted;
 };
 
 const fabricationErrorsForCandidate = (

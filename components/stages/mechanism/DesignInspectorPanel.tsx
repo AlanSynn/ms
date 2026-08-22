@@ -24,11 +24,16 @@ import {
   shouldShowMechanismParam,
 } from "./mechanismParamPolicy";
 import { MechanismFeasibilityStatus } from "./MechanismFeasibilityStatus";
+import type { MechanismUpdateCallbacks } from "../../../hooks/useAppMechanismActions";
 
 type DesignInspectorPanelProps = {
   project: ProjectState;
   selectedMechanism?: MechanismConfig;
-  updateMechanism: (id: string, updates: Partial<MechanismConfig>) => void;
+  updateMechanism: (
+    id: string,
+    updates: Partial<MechanismConfig>,
+    callbacks?: MechanismUpdateCallbacks,
+  ) => void;
   dispatch: (action: ProjectAction) => void;
   optimizerBusy: boolean;
   onOptimize: () => void;
@@ -57,6 +62,11 @@ export const DesignInspectorPanel = ({
     targetPathId?: string;
     targetAnchorJointId?: string;
   }>();
+  const [editRevision, setEditRevision] = useState(0);
+  const revertPendingEdit = () => {
+    setPendingBinding(undefined);
+    setEditRevision((revision) => revision + 1);
+  };
   const selectedRange = selectedMechanism
     ? getInspectorFeasibleRange(selectedMechanism)
     : undefined;
@@ -130,6 +140,7 @@ export const DesignInspectorPanel = ({
             targetAnchorJointId: effectiveTargetAnchorJointId,
           }
         : updates,
+      { failed: revertPendingEdit },
     );
   };
   const pathBelongsToSelection = (path: ProjectMotionPath) =>
@@ -174,7 +185,7 @@ export const DesignInspectorPanel = ({
       targetSceneObjectId,
       targetPathId: targetPath?.id,
       targetAnchorJointId,
-    });
+    }, { failed: revertPendingEdit });
   };
 
   return (
@@ -250,7 +261,7 @@ export const DesignInspectorPanel = ({
               });
               updateMechanism(selectedMechanism.id, {
                 targetPathId,
-              });
+              }, { failed: revertPendingEdit });
             }}
           >
             <option value="">No path</option>
@@ -285,7 +296,7 @@ export const DesignInspectorPanel = ({
                   targetSceneObjectId: effectiveTargetSceneObjectId,
                   targetPathId: effectiveTargetPathId,
                   targetAnchorJointId,
-                });
+                }, { failed: revertPendingEdit });
               }}
             >
               <option value="">Default handle</option>
@@ -301,6 +312,7 @@ export const DesignInspectorPanel = ({
             </select>
           )}
           <MechanismParametricEditor
+            key={`${selectedMechanism.id}-parametric-${editRevision}`}
             mechanism={selectedMechanism}
             onChange={updateSelectedMechanism}
             testId="design-parametric-editor"
@@ -315,7 +327,7 @@ export const DesignInspectorPanel = ({
           {MECHANISM_PARAM_META.filter((p) =>
             shouldShowMechanismParam(selectedMechanism.type, p.key),
           ).map((p) => (
-            <React.Fragment key={String(p.key)}>
+            <React.Fragment key={`${String(p.key)}-${editRevision}`}>
               <MiniNumber
                 label={p.label}
                 value={Number(selectedMechanism[p.key] ?? 0)}

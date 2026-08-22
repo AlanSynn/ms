@@ -1,7 +1,9 @@
 import type { ProjectState } from "../../types";
 import {
+  AUTOSAVE_STORAGE_KEYS,
   autosaveWriterId,
   browserStorage,
+  failureReason,
   nextTransactionId,
   type AutosaveStorage,
 } from "../../utils/projectAutosaveFormat";
@@ -14,10 +16,15 @@ import {
   type AutosaveRecoveryStorageSnapshot,
 } from "./autosaveRecoveryJob";
 import {
-  applyAutosaveRecoveryMutation,
   autosaveRecoveryStorageIsCurrent,
   captureAutosaveRecoveryStorage,
+  clearMigratedAutosaveStorage,
 } from "./autosaveRecoveryStorage";
+import {
+  browserAutosaveAtomicBackend,
+  type AutosaveAtomicBackend,
+  type IndexedDbAutosaveToken,
+} from "./autosaveIndexedDb";
 
 export type AutosaveRecoveryWorkerRequest = {
   type: "recover-autosave";
@@ -78,6 +85,7 @@ export const createAutosaveRecoveryWorkerClient = (
   workerFactory: AutosaveRecoveryWorkerFactory = browserWorkerFactory,
   frameScheduler: AutosaveRecoveryFrameScheduler = browserFrameScheduler,
   storageFactory: () => AutosaveStorage = browserStorage,
+  backendFactory: () => AutosaveAtomicBackend = browserAutosaveAtomicBackend,
 ) => {
   let generationSequence = 0;
   let active:
@@ -93,6 +101,7 @@ export const createAutosaveRecoveryWorkerClient = (
         firstFrame?: number;
         secondFrame?: number;
         worker?: AutosaveRecoveryWorkerPort;
+        settling?: boolean;
       }
     | undefined;
 
@@ -126,22 +135,67 @@ export const createAutosaveRecoveryWorkerClient = (
     const generationId = ++generationSequence;
     active = { generationId, currentProject, callbacks, shouldApply };
 
-    const startWorker = () => {
+    const startWorker = async () => {
       if (!active || active.generationId !== generationId) return;
       const requestState = active;
-      let storage: AutosaveStorage;
+      let storage: AutosaveStorage | undefined;
       let snapshot: AutosaveRecoveryStorageSnapshot;
+      let backend: AutosaveAtomicBackend | undefined;
+      let indexedDbToken: IndexedDbAutosaveToken | undefined;
+      let indexedDbReadError: unknown;
       try {
-        storage = storageFactory();
-        snapshot = captureAutosaveRecoveryStorage(storage);
+        backend = backendFactory();
+        const indexedDbSnapshot = await backend.readRecoverySnapshot();
+        if (!active || active !== requestState) return;
+        if (indexedDbSnapshot) {
+          indexedDbToken = indexedDbSnapshot.token;
+          try {
+            storage = storageFactory();
+            snapshot = {
+              ...indexedDbSnapshot.storage,
+              dirtyRaw: storage.getItem(AUTOSAVE_STORAGE_KEYS.autosaveDirty),
+            };
+          } catch {
+            snapshot = indexedDbSnapshot.storage;
+          }
+        } else {
+          storage = storageFactory();
+          snapshot = captureAutosaveRecoveryStorage(storage);
+        }
       } catch (error) {
+        indexedDbReadError = error;
+        try {
+          backend ??= backendFactory();
+          storage = storageFactory();
+          snapshot = captureAutosaveRecoveryStorage(storage);
+        } catch (storageError) {
+          active = undefined;
+          callbacks.complete(
+            recoveryFromStorageReadError(
+              currentProject,
+              indexedDbReadError ?? storageError,
+            ),
+          );
+          return;
+        }
+      }
+      if (!backend) {
         active = undefined;
-        callbacks.complete(recoveryFromStorageReadError(currentProject, error));
+        callbacks.complete(
+          recoveryFromStorageReadError(
+            currentProject,
+            indexedDbReadError ?? new Error("Autosave database unavailable"),
+          ),
+        );
         return;
       }
       if (!storageHasRecoveryData(snapshot)) {
         active = undefined;
-        callbacks.complete({ status: "missing", recovery: { outcome: "missing" } });
+        callbacks.complete(
+          indexedDbReadError
+            ? recoveryFromStorageReadError(currentProject, indexedDbReadError)
+            : { status: "missing", recovery: { outcome: "missing" } },
+        );
         return;
       }
 
@@ -166,46 +220,124 @@ export const createAutosaveRecoveryWorkerClient = (
         if (
           !active ||
           active.worker !== worker ||
-          data.generationId !== generationId
+          data.generationId !== generationId ||
+          active.settling
         ) return;
+        active.settling = true;
         if (data.type === "error") {
           fail(data.message);
           return;
         }
-        if (!requestState.shouldApply()) {
-          active = undefined;
-          releaseWorker(worker);
-          callbacks.superseded?.();
-          return;
-        }
-        let storageIsCurrent: boolean;
-        try {
-          storageIsCurrent = autosaveRecoveryStorageIsCurrent(snapshot, storage);
-        } catch (error) {
-          fail(error instanceof Error ? error.message : String(error));
-          return;
-        }
-        if (!storageIsCurrent) {
-          active = undefined;
-          releaseWorker(worker);
-          callbacks.superseded?.();
-          return;
-        }
-
-        let result = data.output.result;
-        if (data.output.mutation) {
-          const mutation = applyAutosaveRecoveryMutation(
-            data.output.mutation,
-            snapshot,
-            storage,
-          );
-          if (mutation.status === "failed") {
-            result = recoveryAfterMutationFailure(data.output, mutation.error);
+        void (async () => {
+          const supersede = () => {
+            if (active !== requestState) return;
+            active = undefined;
+            releaseWorker(worker);
+            callbacks.superseded?.();
+          };
+          if (!requestState.shouldApply()) {
+            supersede();
+            return;
           }
-        }
-        active = undefined;
-        releaseWorker(worker);
-        callbacks.complete(result);
+          let storageIsCurrent = true;
+          try {
+            if (indexedDbToken) {
+              storageIsCurrent = await backend.isCurrent(indexedDbToken);
+              if (
+                storageIsCurrent &&
+                storage &&
+                storage.getItem(AUTOSAVE_STORAGE_KEYS.autosaveDirty) !==
+                  snapshot.dirtyRaw
+              ) storageIsCurrent = false;
+            } else if (storage) {
+              storageIsCurrent = autosaveRecoveryStorageIsCurrent(snapshot, storage);
+            }
+          } catch (error) {
+            fail(error instanceof Error ? error.message : String(error));
+            return;
+          }
+          if (
+            !active ||
+            active !== requestState ||
+            !storageIsCurrent ||
+            !requestState.shouldApply()
+          ) {
+            supersede();
+            return;
+          }
+
+          let result = data.output.result;
+          if (data.output.mutation) {
+            const serialized = data.output.mutation.serializedSource === "legacy"
+              ? snapshot.legacyRaw
+              : snapshot.currentRaw;
+            if (serialized === null || !storage) {
+              result = recoveryAfterMutationFailure(
+                data.output,
+                "autosave migration source is missing",
+              );
+            } else {
+              let migratedToken: IndexedDbAutosaveToken | undefined;
+              try {
+                migratedToken = await backend.migrate(
+                  serialized,
+                  data.output.mutation.metadataRaw,
+                );
+              } catch (error) {
+                if (failureReason(error) === "stale-write") {
+                  supersede();
+                  return;
+                }
+                result = recoveryAfterMutationFailure(data.output, error);
+              }
+              if (migratedToken) {
+                let migratedTokenIsCurrent = false;
+                try {
+                  migratedTokenIsCurrent = await backend.isCurrent(migratedToken);
+                } catch {
+                  supersede();
+                  return;
+                }
+                const legacyStillCurrent =
+                  active === requestState &&
+                  autosaveRecoveryStorageIsCurrent(snapshot, storage);
+                if (!legacyStillCurrent || !migratedTokenIsCurrent) {
+                  if (migratedTokenIsCurrent) {
+                    try {
+                      await backend.removeIfCurrent(migratedToken);
+                    } catch {
+                      // Ownership is already lost. Never publish the stale
+                      // recovery result even when best-effort cleanup fails.
+                    }
+                  }
+                  supersede();
+                  return;
+                }
+                try {
+                  if (!clearMigratedAutosaveStorage(snapshot, storage)) {
+                    result = recoveryAfterMutationFailure(
+                      data.output,
+                      "legacy autosave could not be cleared after migration",
+                    );
+                  }
+                } catch (error) {
+                  result = recoveryAfterMutationFailure(data.output, error);
+                }
+              }
+            }
+          }
+          if (
+            !active ||
+            active !== requestState ||
+            !requestState.shouldApply()
+          ) {
+            supersede();
+            return;
+          }
+          active = undefined;
+          releaseWorker(worker);
+          callbacks.complete(result);
+        })();
       };
       worker.onmessageerror = () =>
         fail("Autosave recovery worker returned unreadable data.");
@@ -236,7 +368,7 @@ export const createAutosaveRecoveryWorkerClient = (
       active.secondFrame = frameScheduler.requestFrame(() => {
         if (!active || active.generationId !== generationId) return;
         active.secondFrame = undefined;
-        startWorker();
+        void startWorker();
       });
     });
     return generationId;

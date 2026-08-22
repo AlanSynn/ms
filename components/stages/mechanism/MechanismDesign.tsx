@@ -11,6 +11,7 @@ import { DesignFoundryPreview } from "./DesignFoundryPreview";
 import { DesignInspectorPanel } from "./DesignInspectorPanel";
 import { DesignWorkflowPanel } from "./DesignWorkflowPanel";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
+import type { MechanismUpdateCallbacks } from "../../../hooks/useAppMechanismActions";
 
 export const MechanismDesign = ({
   project,
@@ -37,7 +38,11 @@ export const MechanismDesign = ({
   selectedPart?: BodyPartLayer;
   selectedPath?: ProjectMotionPath;
   selectedMechanism?: MechanismConfig;
-  updateMechanism: (id: string, updates: Partial<MechanismConfig>) => void;
+  updateMechanism: (
+    id: string,
+    updates: Partial<MechanismConfig>,
+    callbacks?: MechanismUpdateCallbacks,
+  ) => void;
   dispatch: (action: ProjectAction) => void;
   showTrace: boolean;
   setShowTrace: (v: boolean) => void;

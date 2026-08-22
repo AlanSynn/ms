@@ -1,4 +1,5 @@
 import {
+  startTransition,
   Suspense,
   useEffect,
   useState,
@@ -21,18 +22,17 @@ import type {
 import type { ClassroomLessonTemplate } from "../utils/project";
 import type { PlaybackClock } from "../runtime/playback/externalPlaybackClock";
 import type { CharacterImportProgressStore } from "../runtime/import/characterImportProgressStore";
+import type { MechanismUpdateCallbacks } from "../hooks/useAppMechanismActions";
 import {
-  loadCharacterStage,
-  preloadNextClassroomStage,
   resolveAssemblyStage,
   resolveBlueprintStage,
-  resolveCharacterStage,
   resolveDesignStage,
   resolveFoundryStage,
   resolveOptionsStage,
   resolvePathStage,
+  useAdjacentClassroomStagePreload,
 } from "./classroomStageModules";
-import { preloadThreeFoundryPreview } from "./stages/foundry/DeferredThreeFoundryPreview";
+import { CharacterSelection } from "./stages/character/CharacterSelection";
 
 export type AppStageRouterProps = {
   editorStage: AppStage;
@@ -78,7 +78,11 @@ export type AppStageRouterProps = {
   onFoundryExport: (pkg: FoundryExportPackage) => void;
 
   selectedMechanism?: MechanismConfig;
-  updateMechanism: (id: string, updates: Partial<MechanismConfig>) => void;
+  updateMechanism: (
+    id: string,
+    updates: Partial<MechanismConfig>,
+    callbacks?: MechanismUpdateCallbacks,
+  ) => void;
   showTrace: boolean;
   setShowTrace: (v: boolean) => void;
   onOptimize: () => void | Promise<void>;
@@ -114,7 +118,7 @@ const useDeferredStageMount = (
     let secondFrame = 0;
     const firstFrame = window.requestAnimationFrame(() => {
       secondFrame = window.requestAnimationFrame(() => {
-        setMountedStage(editorStage);
+        startTransition(() => setMountedStage(editorStage));
       });
     });
     return () => {
@@ -195,7 +199,6 @@ export const AppStageRouter = ({
 }: AppStageRouterProps) => {
   const AssemblyGuide = resolveAssemblyStage();
   const BlueprintExport = resolveBlueprintStage();
-  const CharacterSelection = resolveCharacterStage();
   const MechanismFoundry = resolveFoundryStage();
   const MechanismDesign = resolveDesignStage();
   const Options = resolveOptionsStage();
@@ -204,39 +207,7 @@ export const AppStageRouter = ({
     editorStage,
     suspendStageContent,
   );
-
-  useEffect(() => {
-    if (!suspendStageContent || editorStage !== "character") return;
-    // Warm only the small Character adapter. Loading every stage or the Three
-    // renderer here competes with the student's first click on slow CPUs.
-    void loadCharacterStage().catch(() => undefined);
-  }, [editorStage, suspendStageContent]);
-
-  useEffect(() => {
-    if (suspendStageContent || mountedStage === null) return;
-    // Warm only the likely next adapter once the current stage is idle. This
-    // avoids an all-stage parse burst competing with direct manipulation and
-    // keeps worker, media, physics, and export chunks strictly on demand.
-    const host = window as typeof window & {
-      requestIdleCallback?: (
-        callback: () => void,
-        options?: { timeout: number },
-      ) => number;
-      cancelIdleCallback?: (handle: number) => void;
-    };
-    const warmNextStage = () => {
-      void preloadNextClassroomStage(mountedStage).catch(() => undefined);
-      if (mountedStage === "character" || mountedStage === "path") {
-        void preloadThreeFoundryPreview().catch(() => undefined);
-      }
-    };
-    if (host.requestIdleCallback) {
-      const handle = host.requestIdleCallback(warmNextStage, { timeout: 1_000 });
-      return () => host.cancelIdleCallback?.(handle);
-    }
-    const handle = window.setTimeout(warmNextStage, 250);
-    return () => window.clearTimeout(handle);
-  }, [mountedStage, suspendStageContent]);
+  useAdjacentClassroomStagePreload(mountedStage, suspendStageContent);
 
   return <div
     className="stage-body editor-workbench relative min-h-0 flex-1 overflow-hidden p-7"

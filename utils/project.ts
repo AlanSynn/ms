@@ -1642,6 +1642,40 @@ const safeRasterTextureUrl = (value: unknown): string | undefined =>
         ? value
         : undefined;
 
+const safeCharacterArtworkUrl = (value: unknown): string | undefined =>
+    typeof value === 'string' && /^data:image\/(?:png|jpe?g|webp|svg\+xml)(?:;|,)/i.test(value)
+        ? value
+        : undefined;
+
+const normalizeCharacterPackageSnapshot = (value: unknown): CharacterPackageArtifact | undefined => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+    const raw = value as Record<string, unknown>;
+    const replacement = asRecord(raw.replacementContext);
+    const mode = replacement.mode === 'replace-character' ? 'replace-character' : 'plain-load';
+    const previousStage = typeof replacement.previousStage === 'string'
+        && (['character', 'path', 'foundry', 'design', 'blueprint', 'assembly', 'options'] as const).includes(replacement.previousStage as AppStage)
+        ? replacement.previousStage as AppStage
+        : undefined;
+    return {
+        id: typeof raw.id === 'string' && raw.id.trim() ? raw.id.slice(0, 120) : 'imported-character',
+        createdAt: typeof raw.createdAt === 'string' ? raw.createdAt.slice(0, 80) : '',
+        sourceImageName: typeof raw.sourceImageName === 'string' ? raw.sourceImageName.slice(0, 240) : 'Imported character',
+        outputDir: typeof raw.outputDir === 'string' ? raw.outputDir.slice(0, 320) : 'local-package://imported',
+        partsInfo: raw.partsInfo ?? {},
+        charCfg: raw.charCfg ?? {},
+        maskUrl: safeCharacterArtworkUrl(raw.maskUrl),
+        sourceTextureUrl: safeCharacterArtworkUrl(raw.sourceTextureUrl),
+        keypoints: raw.keypoints,
+        replacementContext: raw.replacementContext && typeof raw.replacementContext === 'object' && !Array.isArray(raw.replacementContext) ? {
+            mode,
+            previousStage,
+            rebindingSummary: typeof replacement.rebindingSummary === 'string'
+                ? replacement.rebindingSummary.slice(0, 500)
+                : ''
+        } : undefined
+    };
+};
+
 const normalizePartSnapshot = (id: string, value: unknown, skeleton: StandardSkeleton | null): BodyPartLayer => {
     const raw = asRecord(value);
     const fallbackAnchor = skeleton?.rootJointIds[0] ?? Object.keys(skeleton?.joints ?? {})[0] ?? 'root';
@@ -1818,22 +1852,44 @@ export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
         const next = validatePath({ ...asRecord(path), id } as ProjectMotionPath);
         return next.sceneObjectId ? (sceneObjects[next.sceneObjectId] ? [[id, next] as const] : []) : (parts[next.partId] ? [[id, next] as const] : []);
     }));
+    const mechanisms = (Array.isArray(data.mechanisms) ? data.mechanisms : fallback.mechanisms).map(m => reconcileMechanismTargets(normalizeMechanismSnapshot(m), parts, paths, sceneObjects, { preserveGeneratedPath: true, preserveRejectedPathFit: true }, skeleton));
+    const rawMetadata = asRecord(data.metadata);
+    const rawProcessing = asRecord(data.processing);
+    const metadata: ProjectState['metadata'] = {
+        id: typeof rawMetadata.id === 'string' && rawMetadata.id.trim() ? rawMetadata.id.slice(0, 120) : fallback.metadata.id,
+        name: typeof rawMetadata.name === 'string' && rawMetadata.name.trim() ? rawMetadata.name.slice(0, 160) : fallback.metadata.name,
+        sourceImageName: typeof rawMetadata.sourceImageName === 'string' ? rawMetadata.sourceImageName.slice(0, 240) : undefined,
+        classroomLessonId: typeof rawMetadata.classroomLessonId === 'string' ? rawMetadata.classroomLessonId.slice(0, 120) : undefined,
+        classroomLessonLabel: typeof rawMetadata.classroomLessonLabel === 'string' ? rawMetadata.classroomLessonLabel.slice(0, 160) : undefined,
+        createdAt: typeof rawMetadata.createdAt === 'string' ? rawMetadata.createdAt.slice(0, 80) : fallback.metadata.createdAt,
+        updatedAt: nowIso(),
+        normalizationScale: clampNumber(rawMetadata.normalizationScale, fallback.metadata.normalizationScale, 0.0001, 10000),
+        status: pickOne(rawMetadata.status, ['empty', 'sample', 'processed', 'imported'] as const, fallback.metadata.status)
+    };
+    const processing: ProcessingStatus = {
+        stage: pickOne(rawProcessing.stage, ['idle', 'selecting', 'downloading-model', 'loading-model', 'running-onnx', 'extracting-parts', 'normalizing', 'ready', 'error'] as const, fallback.processing.stage),
+        message: typeof rawProcessing.message === 'string' ? rawProcessing.message.slice(0, 240) : fallback.processing.message,
+        progress: clampNumber(rawProcessing.progress, fallback.processing.progress, 0, 100),
+        error: typeof rawProcessing.error === 'string' ? rawProcessing.error.slice(0, 500) : undefined
+    };
     return {
-        ...fallback,
-        ...data,
         version: APP_STATE_VERSION,
-        metadata: { ...fallback.metadata, ...(data.metadata ?? {}), updatedAt: nowIso() },
+        metadata,
         parts,
         partOrder,
         sceneObjects,
         sceneObjectOrder,
+        selectedPartId: data.selectedPartId && parts[data.selectedPartId] ? data.selectedPartId : undefined,
+        selectedPathId: data.selectedPathId && paths[data.selectedPathId] ? data.selectedPathId : undefined,
+        selectedMechanismId: data.selectedMechanismId && mechanisms.some(mechanism => mechanism.id === data.selectedMechanismId) ? data.selectedMechanismId : undefined,
         selectedSceneObjectId: data.selectedSceneObjectId && sceneObjects[data.selectedSceneObjectId] ? data.selectedSceneObjectId : undefined,
         skeleton,
         paths,
-        mechanisms: (Array.isArray(data.mechanisms) ? data.mechanisms : fallback.mechanisms).map(m => reconcileMechanismTargets(normalizeMechanismSnapshot(m), parts, paths, sceneObjects, { preserveGeneratedPath: true, preserveRejectedPathFit: true }, skeleton)),
+        mechanisms,
         settings: normalizeAppSettings(data.settings, fallback.settings),
-        processing: data.processing ?? idleProcessing(),
-        lastExport: undefined
+        processing,
+        characterPackage: normalizeCharacterPackageSnapshot(data.characterPackage),
+        lastFoundryExport: data.lastFoundryExport && typeof data.lastFoundryExport === 'object' ? data.lastFoundryExport as FoundryExportPackage : undefined
     };
 };
 
