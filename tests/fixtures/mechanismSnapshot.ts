@@ -1,8 +1,8 @@
-import type { JointState, MechanismConfig, MechanismType, PhysicalKitSettings, Point, ProjectMotionPath, ProjectState } from '../types';
-import type { FabricationRenderPlan } from './fabrication';
-import type { MechanismFeatureIssue, MechanismInteractionPolicy, MechanismPhysicsHint, MechanismProjectionHint, MechanismFeasibleRange } from './mechanismFeatureRegistry';
-import { normalizeMechanismToFabricationSet } from './mechanismReference';
-import { mechanismFeature } from './mechanismFeatureRegistry';
+import type { JointState, MechanismConfig, MechanismType, PhysicalKitSettings, Point, ProjectMotionPath, ProjectState } from '../../types';
+import type { FabricationRenderPlan } from '../../utils/fabrication';
+import type { MechanismFeatureIssue, MechanismInteractionPolicy, MechanismPhysicsHint, MechanismProjectionHint, MechanismFeasibleRange } from '../../utils/mechanismFeatureRegistry';
+import { normalizeMechanismToFabricationSet } from '../../utils/mechanismReference';
+import { mechanismFeature } from '../../utils/mechanismFeatureRegistry';
 
 export interface MechanismSnapshotSourceIds {
     projectId: string;
