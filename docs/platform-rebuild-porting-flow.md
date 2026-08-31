@@ -733,8 +733,6 @@ runtime or release source. Current implementation evidence lives in `App.tsx`,
 - [`docs/adr/`](adr/) — architecture decision records.
 - [`docs/prd/`](prd/) — product requirements and refactor plans.
 - [`docs/analysis/`](analysis/) — historical audits and migration analyses.
-- [`docs/observability/`](observability/) — scenario telemetry and diagnostics.
-- [`docs/sessions/`](sessions/) — previous implementation session summaries.
 
 
 ## 15. Current implementation inventory for porting
@@ -770,7 +768,6 @@ evidence that the web implementation should fabricate replacement behavior.
 | Mechanism transfer | `src/automataii/application/mechanism_transfer/contract.py`, `src/automataii/application/mechanism_transfer/spec.py` | Cross-screen mechanism package and supported type aliases. |
 | Blueprint/export | `src/automataii/presentation/qt/blueprint/`, `src/automataii/application/managers/blueprint_manager.py`, `src/automataii/application/fabrication/assembly_export.py`, `src/automataii/shared/fabrication_assembly.py` | Current-scene export, assembly recipe schema, board coordinate conversion. |
 | Physical kit | `src/automataii/shared/physical_kit.py` | 2 cm grid, Letter sheet, 15x15 board, gear/cam/linkage physical presets. |
-| Observability | `docs/observability/` | Scenario names and evidence to preserve in a new telemetry/QA harness. |
 
 ## 16. What each screen must show before handoff
 
