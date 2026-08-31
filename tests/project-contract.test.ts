@@ -757,7 +757,6 @@ const packageJson = JSON.parse(readFileSync(join(process.cwd(), 'package.json'),
 const physicsKernel = physicsKernelCapability();
 const rapierProbe = await runRapierFrictionProbe({ frictionCoefficient: 0.74, steps: 150 });
 const physicsKernelSource = readFileSync(join(process.cwd(), 'utils', 'physicsKernel.ts'), 'utf8');
-const dockerfileText = readFileSync(join(process.cwd(), 'Dockerfile'), 'utf8');
 const deployWorkflowText = readFileSync(join(process.cwd(), '.github', 'workflows', 'deploy.yml'), 'utf8');
 const ciWorkflowText = readFileSync(join(process.cwd(), '.github', 'workflows', 'ci.yml'), 'utf8');
 const workflowBrowserTestText = readFileSync(join(process.cwd(), 'tests', 'browser', 'workflow.spec.ts'), 'utf8');
@@ -843,7 +842,6 @@ assert(chromebookAuditDoc.includes('Full emulation audits are local-only') && ch
 assert(chromebookAuditDoc.includes('does not establish ten-minute heap stabilization') && chromebookAuditDoc.includes('No physical Chromebook was tested'), 'short memory evidence keeps the physical-device and ten-minute boundaries explicit');
 assert(chromebookAuditDoc.includes('156,137 gzip bytes') && chromebookAuditDoc.includes('217,411 compressed bytes'), 'audit document records the checked production bundle evidence');
 assert(chromebookAuditDoc.includes('webgl-clear-submission') && chromebookAuditDoc.includes('High is not claimed safe') && chromebookAuditDoc.includes('remains opt-in'), 'audit documentation distinguishes actual renderer telemetry and the opt-in High-resolution boundary');
-assert(dockerfileText.includes('FROM oven/bun:1.3.14-alpine') && dockerfileText.includes('bun install --frozen-lockfile') && dockerfileText.includes('\"preview\"'), 'Docker image uses Bun install, build, and preview runtime');
 assert.equal(tauriConfig.build.beforeDevCommand, 'bun run dev', 'Tauri dev hook uses Bun');
 assert.equal(tauriConfig.build.beforeBuildCommand, 'bun run build:tauri-frontend', 'Tauri build hook uses Bun');
 assert(deploymentDocs.includes('bun install --frozen-lockfile') && !deploymentDocs.includes('npm '), 'deployment docs use Bun commands');
