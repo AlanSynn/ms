@@ -50,3 +50,8 @@ playwright-report/
 .omc/
 .agents/
 skills-lock.json
+
+# Local secrets and tool runtime state (never commit)
+.env
+.wrangler/
+__pycache__/
