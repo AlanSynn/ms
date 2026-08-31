@@ -38,7 +38,6 @@ import { createFoundryPlaybackFrame, foundryPlaybackPhaseToInputAngle, generateF
 import { createMechanismFitContext, createSceneMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext } from '../utils/mechanismPreview';
 import { buildMechanismRecommendations, fitMechanismToTargetPath, fitRecommendedMechanismToSheet } from '../utils/mechanismRecommendations';
 import { buildAutomataSceneModel } from '../utils/automataSceneModel';
-import { buildDesignAutomataProjection } from '../utils/designAutomataProjection';
 import { canvasPanOffset, canvasViewBoxForViewport, zoomCanvasViewportAtPoint } from '../utils/viewport';
 import { resolveRenderPerformancePolicy } from '../utils/renderPerformancePolicy';
 import { cachedThreeResource, clearThreeGroup, disposeThreeObjectGraph, resizeRendererToPerformancePolicy } from '../utils/threeResourceKit';
@@ -3050,7 +3049,6 @@ const collectComponentSourceFiles = (dir: string): string[] =>
     return entry.name.endsWith('.tsx') ? [path] : [];
   });
 const designFoundryPreviewText = readFileSync(join(process.cwd(), 'components', 'stages', 'mechanism', 'DesignFoundryPreview.tsx'), 'utf8');
-const designAutomataProjectionText = readFileSync(join(process.cwd(), 'utils', 'designAutomataProjection.ts'), 'utf8');
 const automataSceneModelText = readFileSync(join(process.cwd(), 'utils', 'automataSceneModel.ts'), 'utf8');
 const designWorkflowPanelText = readFileSync(join(process.cwd(), 'components', 'stages', 'mechanism', 'DesignWorkflowPanel.tsx'), 'utf8');
 const workflowSpecText = readFileSync(join(process.cwd(), 'tests', 'browser', 'workflow.spec.ts'), 'utf8');
@@ -3765,14 +3763,10 @@ assert(foundry3dText.includes('validateMechanismPreviewReadiness') && automataSc
 assert(automataSceneModelText.includes('createFoundryMechanismPreviewRuntime') && designFoundryPreviewText.includes('reuseAutomataSceneRuntime') && designFoundryPreviewText.includes('sampleReusableAutomataSceneRuntime') && assemblyThreePreviewText.includes('reuseAutomataSceneRuntime') && assemblyThreePreviewText.includes('sampleReusableAutomataSceneRuntime') && foundryPreviewModelText.includes('createFoundryPlaybackFrame') && foundryPreviewModelText.includes('generateFoundryPlaybackPointTraces') && !designFoundryPreviewText.includes('generateMechanismPointTraces') && !assemblyThreePreviewText.includes('generateMechanismPointTraces') && !assemblyThreePreviewText.includes('fitMechanismSimulationWithContext'), 'Mechanism Design and Assembly retain bounded reusable Foundry state and sample motion without private legacy simulation paths');
 assert(assemblyThreePreviewText.includes('viewerTab="assembly"') && assemblyThreePreviewText.includes('automataContext={automataContext}') && assemblyThreePreviewText.includes('data-assembly-one-scene-automata'), 'Assembly labels the viewer as Assembly and can render character/object context inside the shared Foundry mechanism scene');
 assert(!automataSceneModelText.includes('firstVisiblePath'), 'Automata scene model does not silently pick a different first-visible path than Foundry when no explicit/selected path exists');
-assert(designAutomataProjectionText.includes('buildAutomataSceneModel') && !designAutomataProjectionText.includes('motionPreviewForProject') && !designAutomataProjectionText.includes('mechanismFeature('), 'Legacy Design projection file is a thin compatibility wrapper around the canonical automata scene model');
 {
   const fixture = createFabricationReadyFourBarProject();
   const mechanism = fixture.mechanisms[0]!;
   const canonical = buildAutomataSceneModel(fixture, mechanism, Math.PI * 0.42, 'design-live');
-  const compat = buildDesignAutomataProjection(fixture, mechanism, Math.PI * 0.42);
-  assert.equal(compat.foundryPreview?.mechanism.id, canonical.foundryPreview?.mechanism.id, 'Design compatibility wrapper returns the same Foundry mechanism instance as the canonical automata model');
-  assert.equal(compat.foundryPreview?.previewPoints.length, canonical.foundryPreview?.previewPoints.length, 'Design compatibility wrapper returns the same Foundry preview trace as the canonical automata model');
   assert.equal(canonical.userPath?.id, 'fabrication-fit-path', 'Canonical automata model uses the explicit/selected path for fitted previews');
   assert.equal(canonical.motionSource, 'linkage-trace', 'Canonical automata model drives the scene from the physical linkage trace when a fitted path exists');
   assert(canonical.generatedTarget && canonical.target, 'Canonical automata model exposes both generated mechanism output and selected IK target');
