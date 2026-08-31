@@ -36,8 +36,6 @@ This folder is the portable mechanism-unit rulebook for rebuilding Automataii's 
 | `six_bar` / `linkage_six_bar` | catalog/content/domain reference only | no | no | no | Catalog entry exists; no current physical recipe. |
 | `geneva_drive` | catalog-only legacy idea | no | no | no | Present in `mechanism_catalog.json`, not in physical kit/export contract. |
 
-PRD-level implementation contracts live in `docs/prd/mechanisms/`. Those files are the task-level spec for keeping Foundry, Design, Blueprint, Assembly, and tests aligned with this reference.
-
 ## Non-negotiable portability rules
 
 - Use millimetres as canonical physical units.
