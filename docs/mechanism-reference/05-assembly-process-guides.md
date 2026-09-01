@@ -16,7 +16,7 @@ assembly/assembly-guide.pdf
 assembly/kit-parts-to-cut.pdf
 ```
 
-The export guide should be generated from the same recipe contracts as `source/assembly-recipes.snapshot.json`.
+The export guide should be generated from the same recipe contracts as the live `fabrication/assembly/recipes.json`.
 
 ### Workflow B — Self-fabrication from template parts
 
