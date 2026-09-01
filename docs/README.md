@@ -10,7 +10,6 @@ For current tab, pane, button, and tooltip UX, use `workbench-flow-ux-contract.m
 ## Active source of truth
 
 - [`../AGENTS.md`](../AGENTS.md) — repo operating contract, architecture discipline, verification gates.
-- [`../DESIGN.md`](../DESIGN.md) — UI/UX design contract.
 - [`workbench-flow-ux-contract.md`](workbench-flow-ux-contract.md) — canonical tab/pane/button/tooltip flow contract and UX drift ledger.
 - [`app-command-shortcuts.md`](app-command-shortcuts.md) — app commands, menu items, keyboard shortcuts.
 - [`mechanism-reference/`](mechanism-reference/) — physical mechanism, spacer, z-stack, schema, and assembly rules.
@@ -45,7 +44,7 @@ For current tab, pane, button, and tooltip UX, use `workbench-flow-ux-contract.m
 
 ## Historical / evidence docs
 
-Keep these for provenance; do not treat them as current UI contract unless `DESIGN.md` or active plans cite them.
+Keep these for provenance; do not treat them as current UI contract unless active plans cite them.
 
 - [`ui-to-web/`](ui-to-web/) — Qt-to-web inventory, screenshots, porting evidence.
 - [`ui-pane-tab-redesign-plan.md`](ui-pane-tab-redesign-plan.md) — historical pane redesign notes; current contract is `workbench-flow-ux-contract.md` plus `subsystem-governance-and-mechanism-contracts.md`.

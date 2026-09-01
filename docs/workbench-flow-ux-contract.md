@@ -4,11 +4,11 @@ Status: active contract
 Last refreshed: 2026-08-20
 Scope: tabs, panes, buttons, tooltips, and classroom workflow surfaces.
 
-This is the compact UX contract for the current MotionSmith workbench. It does not replace `AGENTS.md`, `DESIGN.md`, `docs/subsystem-governance-and-mechanism-contracts.md`, or mechanism-specific PRDs. It names how those rules show up in the app shell.
+This is the compact UX contract for the current MotionSmith workbench. It does not replace `AGENTS.md`, `docs/subsystem-governance-and-mechanism-contracts.md`, or mechanism-specific PRDs. It names how those rules show up in the app shell.
 
 ## Source order
 
-1. `AGENTS.md` and `DESIGN.md` define product direction and runtime copy policy.
+1. `AGENTS.md` defines product direction and runtime copy policy.
 2. `docs/subsystem-governance-and-mechanism-contracts.md` defines ProjectState, pane ownership, and mechanism subsystem boundaries.
 3. `docs/prd/foundry-assembly-ssot-plan.md` defines the active Foundry/Design/Assembly mechanism visual contract.
 4. This file is the stage-level UX checklist and drift ledger.
@@ -251,7 +251,7 @@ None known from this audit. This pass is documentation-only; full browser QA was
 | ProjectState boundary | `ProjectState` currently stores durable authoring data plus selected ids, processing, and last-result/export-adjacent fields. | `types.ts`, `utils/projectPersistence.ts`, `hooks/useMotionSmithAppController.ts` | Classify canonical vs recovery/session fields before moving more state into snapshots. |
 | Design camera/context integration | Design now uses one Foundry scene, but this contract must stay locked so future work does not reintroduce a split renderer or private mechanism primitive path. | `DesignFoundryPreview.tsx`, `utils/automataSceneModel.ts`, `components/stages/foundry/ThreeFoundryPreview.tsx` | Keep Design/Assembly consuming `buildAutomataSceneModel` + Foundry primitive layers; do not add private mechanism primitives. |
 | Design mental model | Direct mechanism chips in Design can bypass Foundry-first selection/fit. | `DesignWorkflowPanel.tsx` creates mechanisms from chips. | Prefer Foundry for new mechanism choice; keep Design as instance tuning, or explicitly redesign/document the bypass. |
-| Shared viewport | The design contract asks for preserved viewport across Path/Design/Blueprint; Design currently owns local view state and Blueprint has static SVG preview. | `DESIGN.md`, `DesignFoundryPreview.tsx`, `BlueprintExport.tsx` | Either thread shared viewport through all workbench tabs or narrow the contract to the implemented surfaces. |
+| Shared viewport | Preserved viewport across Path/Design/Blueprint is wanted; Design currently owns local view state and Blueprint has static SVG preview. | `DesignFoundryPreview.tsx`, `BlueprintExport.tsx` | Either thread shared viewport through all workbench tabs or narrow the contract to the implemented surfaces. |
 | Mechanism parity testing | Foundry, Design, and Assembly do not yet have an exact browser parity assertion for same mechanism id/type/layers/z/labels/validation. | `tests/browser/workflow.spec.ts` has broad coverage but no exact cross-tab equality gate. | Add Foundry -> Design -> Assembly parity test before the next renderer refactor. |
 | Path purity testing | Path hides mechanisms in code, but browser coverage should prove no mechanism geometry/pins/overlays after a mechanism exists. | `PathCanvasPane.tsx` passes `mechanisms={[]}`; test gap from audit. | Add a regression after applying a mechanism and returning to Path. |
 | Assembly z-only explode | `AssemblySceneFrame` names `explode_z`, but direct x/y invariance over progress is not fully locked. | `utils/assemblySceneFrame.ts`, Foundry overlay frame motion. | Add pure and browser tests that x/y stay unchanged for z-only explode. |

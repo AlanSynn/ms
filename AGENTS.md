@@ -4,7 +4,7 @@ Status: active
 Last refreshed: 2026-08-20
 Scope: every implementation, design, test, and documentation change in this repository.
 
-This file is the project-level rulebook for future agents. If older docs or UI copy drift from this contract, update the product to match this file and `DESIGN.md`; do not add another explanatory layer.
+This file is the project-level rulebook for future agents. If older docs or UI copy drift from this contract, update the product to match this file; do not add another explanatory layer.
 
 ## 1. Product direction: tinkerable workbench first
 
