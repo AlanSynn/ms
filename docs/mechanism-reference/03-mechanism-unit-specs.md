@@ -608,3 +608,13 @@ Then optionally add:
 
 7. `three_bar`, `five_bar`, `six_bar` as simulation-only linkages, clearly labelled non-fabrication-ready.
 8. `geneva_drive` only after adding real implementation and fabrication data.
+
+## 3.11 Driving metadata contract
+
+Mechanisms connect back to one input driver through intermediate gear trains. The durable metadata contract (implemented in `types.ts` and `utils/kinematics.ts`):
+
+- `gearTrainRadii`: ordered external spur gear pitch radii. Two values preserve the drive/output pair; more values are idlers between them. `gearTrainPitchRadii` in `utils/kinematics.ts` derives the effective radii, preferring the explicit list over preset lengths.
+- `driverGroupId`: mechanisms sharing a group id are driven by the same virtual input shaft.
+- `driverPhaseOffset`: per-mechanism phase relative to the group driver, shifting the mechanism's local input phase before the kinematic constraints are sampled.
+
+Keep this as `driverGroupId` + `driverPhaseOffset` first; add a full constraint-graph solver only once multi-driver UI exists. Any number of external spur gears is allowed through `gearTrainRadii`.

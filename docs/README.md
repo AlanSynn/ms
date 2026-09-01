@@ -47,7 +47,6 @@ For current tab, pane, button, and tooltip UX, use `workbench-flow-ux-contract.m
 Keep these for provenance; do not treat them as current UI contract unless active plans cite them.
 
 - [`ui-to-web/CANVAS_LAYER_STRATEGY.md`](ui-to-web/CANVAS_LAYER_STRATEGY.md) — surviving porting-era contract: scene layers, canonical coordinates, viewport-only camera state. The rest of the Qt porting bundle was removed 2026-08-31.
-- [`mechanism-driving-plan.md`](mechanism-driving-plan.md) — planning provenance; durable rules belong in `mechanism-reference/03-mechanism-unit-specs.md` and registry tests.
 
 ## Local-only / ignored references
 
