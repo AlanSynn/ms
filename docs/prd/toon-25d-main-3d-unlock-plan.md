@@ -2,7 +2,7 @@
 
 Status: active direction addendum  
 Created: 2026-06-25  
-Supersedes part of: `docs/prd/realistic-25d-3d-physics-platform-plan.md`  
+Supersedes the removed realistic-2.5D/3D/physics platform plan (deleted 2026-08-31); its durable physics decisions live in `docs/subsystem-governance-and-mechanism-contracts.md`.
 Mission: make **2.5D the main product view**, with **3D as a fixed-view unlock**, styled as a **cartoon/toon paper automata workbench**, while keeping 2D fabrication state canonical.
 
 ## 0. Updated decision
