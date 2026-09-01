@@ -565,7 +565,7 @@ Required flows:
 
 ### Static/documentation gates
 
-- `AGENTS.md`, `DESIGN.md`, and this document must not disagree on source-of-truth and pane rules.
+- `AGENTS.md` and this document must not disagree on source-of-truth and pane rules.
 - Any new hard architectural rule must have an executable assertion.
 - Any new dependency/package split must have an ADR and measured reason.
 
@@ -655,7 +655,6 @@ This is not current implementation work. These names are distribution candidates
 ## 12. References inside this repo
 
 - `AGENTS.md` — tinkerable workbench, 3D physics, fabrication, canonical state, test rules.
-- `DESIGN.md` — shared editor workbench, pane ownership, novice UI contract.
 - `docs/ui-to-web/CANVAS_LAYER_STRATEGY.md` — scene layers, canonical coordinates, viewport-only camera state.
 - `docs/ui-pane-tab-redesign-plan.md` — left/center/right pane redesign.
 - `docs/prd/realistic-25d-3d-physics-platform-plan.md` — 2.5D/3D/physics platform direction.

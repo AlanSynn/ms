@@ -353,7 +353,7 @@ Acceptance:
 Deliverables:
 
 - add contract tests for project round-trip, z-order, mechanism binding, viewport persistence, and export invariants;
-- document the canonical/derived boundary in code comments and `DESIGN.md` if needed.
+- document the canonical/derived boundary in code comments if needed.
 
 Acceptance:
 

@@ -10,7 +10,7 @@ The current editor has the right intent — shared canvas, light MotionSmith sty
 
 Observed from code/docs:
 
-- `DESIGN.md` already says post-onboarding stages should share one workbench shell and not feel like separate apps.
+- Post-onboarding stages should share one workbench shell and not feel like separate apps.
 - `docs/ui-to-web/CANVAS_LAYER_STRATEGY.md` says tab switching should change panel composition and layer visibility, not reset or replace the canvas mental model.
 - `App.tsx` currently has a fixed `app-rail` with only broad links/stats, while each stage renders its own internal grid with canvas plus controls.
 - This means the left pane is underused, the center can become a mixed content panel instead of a pure work surface, and the right pane often carries workflow navigation, sensemaking, primary actions, and fine parameter controls at once.

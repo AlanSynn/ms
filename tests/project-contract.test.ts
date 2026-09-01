@@ -286,7 +286,6 @@ const linkageSceneLengthIsFabricationPreset = (length: number) =>
   FABRICATION_LINKAGE_SPECS.some(spec => Math.abs(spec.lengthMm * SCENE_PX_PER_MM - length) < 1e-9);
 assert(!existsSync(join(process.cwd(), 'resources/examples/raw/girl.png')), 'girl recognition starter image stays removed');
 assert(!existsSync(join(process.cwd(), 'resources/examples/raw/boy.png')), 'boy recognition starter image stays removed');
-const designContract = readFileSync(join(process.cwd(), 'DESIGN.md'), 'utf8');
 const agentsContract = readFileSync(join(process.cwd(), 'AGENTS.md'), 'utf8');
 const docsMap = readFileSync(join(process.cwd(), 'docs', 'README.md'), 'utf8');
 const noviceUiPlan = readFileSync(join(process.cwd(), 'docs', 'prd', 'novice-canva-style-ui-plan.md'), 'utf8');
@@ -304,7 +303,6 @@ const brandStaticFiles = [
   'bun.lock',
   'metadata.json',
   'README.md',
-  'DESIGN.md',
   'vite.config.ts',
   'run_browser.bat',
   'build_portable_exe.bat',
@@ -862,10 +860,6 @@ assert(agentsContract.includes('Classroom entry is theme-guided first') && agent
 assert(agentsContract.includes('`Reset Lesson` must restore a known-good lesson baseline') && agentsContract.includes('preserving app settings'), 'AGENTS.md locks stable lesson reset semantics');
 assert(agentsContract.includes('Blueprint owns build files') && agentsContract.includes('Assembly owns animated step-by-step build'), 'AGENTS.md preserves Blueprint versus Assembly role split');
 assert(agentsContract.includes('Use domain-driven vocabulary consistently') && agentsContract.includes('Keep harness engineering first-class'), 'AGENTS.md locks DDD vocabulary and harness-friendly seam rules');
-assert(designContract.includes('Shared editor workbench'), 'DESIGN.md documents the shared editor workbench');
-assert(designContract.includes('Project governance: `AGENTS.md`'), 'DESIGN.md points contributors at the project agent contract');
-assert(designContract.includes('#8b5cf6'), 'DESIGN.md uses the MotionSmith light primary color');
-assert(!designContract.includes('Cyber-Industrial Minimalism'), 'DESIGN.md no longer points contributors at the old dark CAD direction');
 assert(docsMap.includes('active novice flow and tutorial/help plan'), 'docs map treats the novice tutorial plan as an active implementation plan');
 assert(docsMap.includes('classroom field-study gap plan'), 'docs map treats the classroom field support plan as an active implementation plan');
 assert(agentsContract.includes('tinkerable workbench'), 'AGENTS.md codifies the tinkerable workbench direction');
@@ -4082,8 +4076,6 @@ assert(
   '3D Puppet unmount disposes owned decals and private geometry in one graph traversal before cache pruning, material-kit disposal, and renderer release',
 );
 assert(agentsContract.includes('Path Editor must render only character, skeleton, editable path') && agentsContract.includes('Mechanism Design is the first workflow tab that overlays character + path + mechanism together'), 'AGENTS.md locks tab-scoped rendering ownership for Path vs Mechanism Design');
-assert(designContract.includes('Getting Started is a compact modal dialog'), 'DESIGN.md separates Getting Started from full-screen onboarding');
-assert(designContract.includes('The Character tab is functional'), 'DESIGN.md defines Character as a functional editor tab');
 assert(indexText.includes('id="boot-loader"') && indexText.includes('aria-label="Loading MotionSmith"') && indexText.includes('boot-word') && indexText.includes('boot-version') && indexText.includes('Opening workspace'), 'startup uses one static logo/wordmark/version boot loader before the async workspace mounts');
 assert(indexText.includes('src-tauri/icons/icon.png'), 'startup boot loader uses the 256px MotionSmith delivery icon');
 assert(indexText.includes('#boot-loader .boot-word') && indexText.includes('max-width: calc(100vw - 2rem)') && indexText.includes('white-space: nowrap'), 'startup wordmark is viewport-constrained instead of clipped');
