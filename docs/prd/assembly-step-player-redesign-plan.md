@@ -62,7 +62,7 @@ Canonical sources stay unchanged:
 
 New seam:
 
-- `utils/assemblyScene.ts` builds a render-ready frame from the canonical recipe and playback state.
+- `utils/assemblySceneFrame.ts` builds a render-ready frame from the canonical recipe and playback state.
 
 Stage components render the frame; they do not invent stack order, board holes, or part visibility.
 
@@ -411,7 +411,7 @@ Work:
   Mitigation: fail closed with a blocker and add the missing stack to the mechanism reference before rendering.
 
 - Risk: App.tsx grows again.  
-  Mitigation: keep Assembly scene derivation in `utils/assemblyScene.ts` and phase renderers under `components/stages/assembly/`.
+  Mitigation: keep Assembly scene derivation in `utils/assemblySceneFrame.ts` and phase renderers under `components/stages/assembly/`.
 
 - Risk: Blueprint and Assembly drift.  
   Mitigation: generate exports and player frames from the same recipe ids and step descriptors.

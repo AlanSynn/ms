@@ -29,7 +29,7 @@ Keep MotionSmith easy to change without changing behavior: small files, one doma
 
 ## 2026-07-04 permission recovery audit
 
-- Source of truth is back to the original `/Users/alansynn/Documents/MechAnim` working tree; no temporary clone is authoritative.
+- Source of truth is back to the original `/Users/alansynn/Workspace/MechAnim` working tree; no temporary clone is authoritative.
 - `App.tsx` is now a tiny composition entry; `hooks/useMotionSmithAppController.ts` owns top-level state/action orchestration plus the already-extracted mechanism action, stage navigation, and stage-router prop grouping seams. The next App-adjacent seams are controller subdomain splits, not renderer or fabrication logic.
 - Retired the dead `components/Canvas.tsx` seam because runtime code no longer imported it; contracts now pin that it stays deleted.
 - Completed low-risk Assembly geometry seam: DOM-free coordinate, smoothing, and character projectors now live in `components/stages/assembly/assemblyGeometry.ts`.
@@ -38,7 +38,7 @@ Keep MotionSmith easy to change without changing behavior: small files, one doma
 - Completed low-risk App stage navigation seam: stage handoff gate, recovery dispatch, stage-open status, and `goStage` wiring now live in `utils/appStageNavigation.ts`.
 - Next safe production seams: continue splitting pure `utils/fabrication.ts` concerns behind golden-master output hashes; broad validation/export/package movement still needs stronger harnesses.
 - High-risk seams that need stronger harnesses before editing: `components/ThreePuppetPreview.tsx`, `utils/project.ts`, `utils/fabrication.ts`, and `components/TrackingModal.tsx`.
-- Local ignored junk can be removed when seen: `.DS_Store`, `resources/.DS_Store`, `resources/examples/.DS_Store`, `fabrication/__pycache__/`, `fabrication/board-final.svg`, and `test-results/`. Do not delete `.agents/`, `.omx/`, `docs/to-port-web-onnx/`, `dist/`, or `node_modules/` as cleanup.
+- Local ignored junk can be removed when seen: `.DS_Store`, `resources/.DS_Store`, `resources/examples/.DS_Store`, `fabrication/__pycache__/`, `fabrication/board-final.svg`, and `test-results/`. Do not delete `.agents/`, `.omx/`, `dist/`, or `node_modules/` as cleanup.
 
 
 ## 2026-07-04 team refactor audit synthesis

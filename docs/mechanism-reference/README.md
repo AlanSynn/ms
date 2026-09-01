@@ -1,6 +1,6 @@
-# Automataii Mechanism Reference
+# MotionSmith Mechanism Reference
 
-This folder is the portable mechanism-unit rulebook for rebuilding Automataii's mechanism and fabrication logic in another application. It extracts the current source-of-truth contracts from:
+This folder is the portable mechanism-unit rulebook for MotionSmith's mechanism and fabrication logic. It extracts contracts originally derived from the legacy Automataii (PyQt6) app, plus current sources:
 
 - `src/automataii/shared/physical_kit.py`
 - `src/automataii/shared/fabrication_assembly.py`
