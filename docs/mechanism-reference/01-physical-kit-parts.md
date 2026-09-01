@@ -84,7 +84,7 @@ Additional current generated geometry:
 
 | PartId | Root radius | Outer radius | Pattern |
 |---|---:|---:|---|
-| `gears:g8` | `10.0 mm` | `11.5 mm` | no attachment holes. |
+| `gears:g8` | `8.438 mm` | `11.5 mm` | no attachment holes. |
 | `gears:g24` | `28.438 mm` | `31.5 mm` | grid attachment holes. |
 | `gears:g40` | `48.438 mm` | `51.5 mm` | grid attachment holes. |
 | `gears:g56` | `68.438 mm` | `71.5 mm` | grid attachment holes. |

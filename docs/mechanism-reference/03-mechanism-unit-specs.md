@@ -177,25 +177,25 @@ gear_ratio = T_b / T_a
 |---:|---|---|
 | 1 | `H6(board)` | `B@H6 > F > tabs-behind-board` |
 | 2 | `H6(board)` | `B@H6 > S10 > G3_drive > fastener-head` |
-| 3 | `H12(board)` | `B@H12 > S10 > G3_driven > fastener-head` |
-| 4 | `H6(board)`, `H12(board)` | endpoint span check; add idlers before mesh-coupled motion |
+| 3 | `H9(board)` | `B@H9 > S10 > G3_driven > fastener-head` |
+| 4 | `H6(board)`, `H9(board)` | mesh check: drive and output counter-rotate with teeth engaged |
 
 Compatibility record:
 
 ```text
-H6 ↔ H12 = 6 board cells = 120.0 mm
-G3 + optional G3 idler + G3 pitch chain = 30.0 + 60.0 + 30.0 = 120.0 mm
-error = 0.0 mm when the idler is inserted
+H6 ↔ H9 = 3 board cells = 60.0 mm
+G3 + G3 pitch chain = 30.0 + 30.0 = 60.0 mm
+error = 0.0 mm
 tolerance = 3.6 mm for each adjacent meshing pair
 ```
 
 Rules:
 
-1. Endpoint gear centres are fixed board axles. With only drive/output gears, A and B are intentionally separated placeholders; an inserted idler chain fills the span and creates the meshing contacts.
+1. The two-gear crank places drive and output G3 gears on fixed board axles `H6` and `H9` in direct mesh; no idler is required.
 2. Drive, idler, and driven gears in an external gear train are coplanar on fixed board axles when the pitch chain is complete. Lower z is the board side: each gear axle renders `board > S10 board-side spacer > gear > fastener-head`. `S10` spacers are local washers on each axle; they must not push meshing gear plates onto different z planes.
 3. Each visible axle/fastener stack must pass through the gear centre and the adjacent board-side `S10` spacer; no gear may float beside or away from its centre shaft.
-4. Adjacent gears in an inserted chain should touch lightly; physical tolerance is loose educational tolerance, not precision gearbox backlash.
-5. If an app chooses other gear pairs or idlers, verify each adjacent board distance equals `r_i+r_{i+1}+g` within tolerance.
+4. Adjacent gears should touch lightly; physical tolerance is loose educational tolerance, not precision gearbox backlash.
+5. If an app chooses other gear pairs or inserts idlers via `gearTrainRadii`, verify each adjacent board distance equals `r_i+r_{i+1}+g` within tolerance.
 6. If using a handle, attach to a real gear attachment hole; `G1` has no attachment holes.
 
 ## 3.4 Gear linkage crank — `gear_linkage`
