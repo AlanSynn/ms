@@ -21,5 +21,4 @@ Use [`../README.md`](../README.md) as the repository-wide docs index. This file 
 
 ## Historical or superseded plans
 
-- [Canva / Video-Editor Workspace Plan](canva-video-editor-workspace-plan.md) — superseded workspace-shell provenance; current pane/workbench contract is `../workbench-flow-ux-contract.md`.
-- [Realistic 2.5D / 3D / Physics Platform Plan](realistic-25d-3d-physics-platform-plan.md) — superseded by toon 2.5D main + 3D unlock plans.
+Removed 2026-08-31 as superseded: Canva/video-editor workspace plan (contracts live in `../workbench-flow-ux-contract.md`) and the realistic-2.5D/3D/physics platform plan (superseded by the toon 2.5D plans).

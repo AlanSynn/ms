@@ -312,11 +312,8 @@ const brandStaticFiles = [
   'docs/mechanism-blueprint-manual.md',
   'docs/prd/novice-canva-style-ui-plan.md',
   'docs/prd/classroom-field-support-plan.md',
-  'docs/prd/realistic-25d-3d-physics-platform-plan.md',
-  'docs/prd/canva-video-editor-workspace-plan.md',
   'docs/prd/toon-25d-main-3d-unlock-plan.md',
   'docs/subsystem-governance-and-mechanism-contracts.md',
-  'docs/subsystem-governance-execution-log.md',
   'docs/app-command-shortcuts.md'
 ];
 const brandStaticText = brandStaticFiles.map(file => readFileSync(join(process.cwd(), file), 'utf8')).join('\n');
