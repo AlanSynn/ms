@@ -55,3 +55,6 @@ skills-lock.json
 .env
 .wrangler/
 __pycache__/
+
+# Local chromebook audit run outputs (committed evidence JSONs stay tracked)
+artifacts/chromebook-audit/runs/
