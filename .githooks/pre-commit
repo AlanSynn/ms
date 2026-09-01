@@ -1,0 +1,7 @@
+#!/bin/sh
+# Pre-commit gate: run the local-only b695 regression suites before every commit.
+# CI deliberately omits them; this hook is their enforcement point.
+bun run test:precommit || {
+  printf >&2 "\npre-commit: b695 regression suites failed — fix before committing.\n\n"
+  exit 1
+}

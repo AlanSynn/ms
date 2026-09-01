@@ -21,7 +21,9 @@
     "test:no-image-recognition": "bun scripts/check-no-image-recognition.mjs --all",
     "build:dmg": "bun scripts/with-rustup-cargo.mjs tauri build --bundles dmg",
     "test:browser": "bun run build:e2e && env -u NO_COLOR PLAYWRIGHT_SERVER=preview playwright test",
-    "build:tauri-frontend": "tsc && bun scripts/check-no-image-recognition.mjs --source && vite build --base ./ && bun scripts/check-no-image-recognition.mjs --dist"
+    "build:tauri-frontend": "tsc && bun scripts/check-no-image-recognition.mjs --source && vite build --base ./ && bun scripts/check-no-image-recognition.mjs --dist",
+    "test:precommit": "bun tests/b695-diagnostics.test.ts && bun tests/b695-frame.test.ts && bun tests/b695-inspector-cache.test.ts && bun tests/b695-persistence.test.ts && bun tests/b695-playback.test.ts && bun tests/b695-study.test.ts",
+    "prepare": "git config core.hooksPath .githooks"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.3",
