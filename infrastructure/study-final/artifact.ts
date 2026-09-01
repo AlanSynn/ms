@@ -7,12 +7,12 @@ import type {
 export const FINAL_STUDY_ARTIFACT_SCHEMA = 'motionsmith-final-study-v1';
 export const FINAL_STUDY_ARTIFACT_MAX_BYTES = 128 * 1024;
 
-export type StudyFabricationInput = {
+type StudyFabricationInput = {
   signature: string;
   readiness: 'ready' | 'blocked';
 };
 
-export type FinalStudyArtifact = {
+type FinalStudyArtifact = {
   schema: typeof FINAL_STUDY_ARTIFACT_SCHEMA;
   projectId: string;
   parts: Array<{
