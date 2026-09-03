@@ -13,7 +13,7 @@ export const TopCommandBar = ({ commandHandlers }: { commandHandlers: Record<App
   };
   return <nav className="command-bar" aria-label="Commands" data-testid="top-command-bar">
     {APP_MENU_GROUPS.map(group => <details key={group.id} open={openMenu === group.id}>
-      <summary onClick={toggleMenu(group.id)}>{group.label}</summary>
+      <summary data-testid={`command-menu-${group.id}`} onClick={toggleMenu(group.id)}>{group.label}</summary>
       <div className="command-menu">
         {group.commandIds.map(id => {
           const command = commandById(id);
