@@ -183,6 +183,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     project,
     dispatch,
     setProject,
+    setFoundry,
     setStage,
     setCommandStatus,
     setShowGettingStarted,
@@ -309,6 +310,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     goStage,
     playerDock,
     playbackClock,
+    commandHandlers,
     character: {
       characterImportProgress,
       onOpenGettingStarted: () => setShowGettingStarted(true),

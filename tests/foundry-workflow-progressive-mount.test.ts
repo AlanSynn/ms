@@ -43,7 +43,7 @@ const initialMarkup = renderToStaticMarkup(
 
 assert(initialMarkup.includes('data-testid="foundry-fit-path"'));
 assert(initialMarkup.includes('data-testid="foundry-pick-anchor"'));
-assert(initialMarkup.includes('aria-label="Use mechanism"'));
+assert(initialMarkup.includes('aria-label="Use this mechanism"'));
 assert(initialMarkup.includes('data-visible-previews="0"'));
 assert.equal(
   initialMarkup.match(/recommendation-card mechanism-choice/g)?.length,

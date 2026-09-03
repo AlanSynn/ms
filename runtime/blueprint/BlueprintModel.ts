@@ -4,6 +4,7 @@ import type {
   ProjectState,
 } from '../../types';
 import { pendingRecipeForMechanism } from '../../utils/assemblyPlayback';
+import { createBuildPlanV1, type BuildPlanV1 } from '../../utils/buildPlan';
 import {
   createFabricationPackage,
   validateForFabrication,
@@ -13,6 +14,7 @@ export type BlueprintModel = {
   validation: ReturnType<typeof validateForFabrication>;
   pkg?: FabricationPackage;
   recipes: FabricationRecipe[];
+  buildPlan: BuildPlanV1;
 };
 
 const modelCache = new WeakMap<ProjectState, BlueprintModel>();
@@ -31,10 +33,15 @@ export const buildBlueprintModel = (project: ProjectState): BlueprintModel => {
     pendingRecipeForMechanism(project, mechanism),
   );
   const recipes = liveRecipes.length ? liveRecipes : (pkg?.recipes ?? []);
+  const buildPlan = createBuildPlanV1(project, {
+    recipes,
+    includeDetachedRecipes: !liveRecipes.length && recipes.length > 0,
+  });
   const model = {
     validation,
     pkg,
     recipes,
+    buildPlan,
   };
   modelCache.set(project, model);
   return model;

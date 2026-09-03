@@ -28,6 +28,7 @@ export const PathInspectorPanel = ({
   selectedSceneObjectId,
   selectedPartName,
   selectedPath,
+  pointCount,
   selectedPoint,
   pathLocked,
   selectedChainRootId,
@@ -49,7 +50,13 @@ export const PathInspectorPanel = ({
     {selectedPath && (
       <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
         <div className="font-bold text-slate-800">Path</div>
-        <div>{selectedPath.closed ? "Loop ready" : "Curve ready"}</div>
+        <div>
+          {pointCount >= 3
+            ? selectedPath.closed
+              ? "Loop ready"
+              : "Curve ready"
+            : `${pointCount}/3 points`}
+        </div>
         <div>
           {selectedPoint !== null && selectedPath.points[selectedPoint]
             ? "Point selected."
@@ -128,10 +135,14 @@ export const PathInspectorPanel = ({
         <div
           className="rounded-2xl border border-violet-100 bg-violet-50/70 p-3 text-sm text-slate-600"
           data-testid="ik-chain-summary"
-          title={ikDescriptor ? "Motion target." : "Pick handle."}
+          title={pointCount < 3 ? "Draw 3 points." : ikDescriptor ? "Motion target." : "Pick handle."}
         >
           <div className="font-bold text-slate-800">
-            {ikDescriptor ? "Motion ready" : "Pick a handle"}
+            {pointCount < 3
+              ? "Draw 3 points"
+              : ikDescriptor
+                ? "Motion ready"
+                : "Pick a handle"}
           </div>
         </div>
       )}

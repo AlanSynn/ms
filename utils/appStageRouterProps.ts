@@ -8,6 +8,7 @@ type BaseRouterProps = Pick<
   | "goStage"
   | "playerDock"
   | "playbackClock"
+  | "commandHandlers"
 >;
 
 type CharacterRouterProps = Pick<
@@ -96,6 +97,7 @@ export const buildAppStageRouterProps = ({
   goStage,
   playerDock,
   playbackClock,
+  commandHandlers,
   character,
   selection,
   path,
@@ -110,6 +112,7 @@ export const buildAppStageRouterProps = ({
   goStage,
   playerDock,
   playbackClock,
+  commandHandlers,
   ...character,
   ...selection,
   ...path,

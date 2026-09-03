@@ -5,6 +5,7 @@ import {
     CharacterPackageArtifact,
     FoundryExportPackage,
     MechanismConfig,
+    MechanismOutputBinding,
     Point,
     ProcessingStatus,
     ProjectAction,
@@ -23,7 +24,12 @@ import { generateFoundryPlaybackPointTraces, primaryFoundryPlaybackPath } from '
 import { clampNumber, finiteNumber, sanitizeHexColor, sanitizeMechanismType, sanitizePoint } from './sanitize';
 import { isUsableContourPoints } from './partGeometry';
 import { DEFAULT_CLASSROOM_ASSESSMENT_KEY, normalizeClassroomAssessmentKey } from './classroomContent';
-import { APP_STATE_VERSION, serializeProject } from './projectSerialization';
+import { APP_STATE_VERSION, projectStateFromPortableDocument, serializeProject } from './projectSerialization';
+import {
+    mechanismOutputBindings,
+    mechanismWithOutputBindings,
+    mechanismWithoutOutputBindings,
+} from './mechanismBindings';
 
 export { APP_STATE_VERSION, serializeProject, serializeProjectCompact } from './projectSerialization';
 
@@ -403,10 +409,11 @@ export const mechanismWithGeneratedPath = (mechanism: MechanismConfig, options: 
 
 export const invalidateMechanismPathFit = (mechanism: MechanismConfig): MechanismConfig => {
     const pathFit = mechanism.fabricationMetadata?.pathFit;
+    const bindings = mechanismOutputBindings(mechanism);
     const isFitWarning = (warning: string) =>
         warning.startsWith('Closest kit fit:') || warning === 'No fabrication-valid path fit.';
-    if (!pathFit && (mechanism.type !== '4bar' || !mechanism.targetPathId || mechanism.targetSceneObjectId)) return mechanism;
-    return {
+    if (!pathFit && !bindings.some(binding => binding.fit) && (mechanism.type !== '4bar' || !mechanism.targetPathId || mechanism.targetSceneObjectId)) return mechanism;
+    const invalidated: MechanismConfig = {
         ...mechanism,
         warnings: (mechanism.warnings ?? []).filter((warning) => !isFitWarning(warning)),
         fabricationMetadata: {
@@ -425,6 +432,26 @@ export const invalidateMechanismPathFit = (mechanism: MechanismConfig): Mechanis
             },
         },
     };
+    return mechanismWithOutputBindings(invalidated, bindings.map((binding): MechanismOutputBinding => {
+        const fit = binding.fit ?? (binding.pathId === mechanism.targetPathId ? pathFit : undefined);
+        return mechanism.type === '4bar' && !binding.targetSceneObjectId
+            ? {
+                ...binding,
+                fit: {
+                    ...(fit ?? {}),
+                    status: 'unfitted',
+                    targetPathId: binding.pathId,
+                    outputTraceId: binding.outputTraceId,
+                    error: undefined,
+                    maxError: undefined,
+                    tangentError: undefined,
+                    maxTangentError: undefined,
+                    phaseOffset: undefined,
+                    direction: undefined,
+                },
+            }
+            : binding;
+    }));
 };
 
 const preserveGeneratedPathFor = (mechanism: MechanismConfig) =>
@@ -482,43 +509,53 @@ const reconcileMechanismTargets = (
     options: { preserveGeneratedPath?: boolean; preserveRejectedPathFit?: boolean } = {},
     skeleton?: StandardSkeleton | null
 ) => {
-    let targetSceneObjectId = mechanism.targetSceneObjectId && sceneObjects[mechanism.targetSceneObjectId] ? mechanism.targetSceneObjectId : undefined;
-    let targetPartId = !targetSceneObjectId && mechanism.targetPartId && parts[mechanism.targetPartId] ? mechanism.targetPartId : undefined;
-    let targetPathId = mechanism.targetPathId && paths[mechanism.targetPathId] ? mechanism.targetPathId : undefined;
-    if (targetPathId) {
-        const path = paths[targetPathId];
+    const sourceBindings = mechanismOutputBindings(mechanism);
+    const outputs: MechanismOutputBinding[] = sourceBindings.flatMap((binding): MechanismOutputBinding[] => {
+        const path = paths[binding.pathId];
+        if (!path) return [];
         if (path.sceneObjectId) {
             if (sceneObjects[path.sceneObjectId]) {
-                targetSceneObjectId = path.sceneObjectId;
-                targetPartId = undefined;
-            } else {
-                targetPathId = undefined;
+                return [{
+                    ...binding,
+                    targetPartId: undefined,
+                    targetSceneObjectId: path.sceneObjectId,
+                    targetAnchorJointId: undefined,
+                }];
             }
-        } else {
-            const pathPartId = path.partId;
-            const requestedPart = targetPartId ? parts[targetPartId] : undefined;
-            const pathTargetJointId = path.targetAnchorJointId ?? parts[pathPartId]?.anchorJointId;
-            if (requestedPart && partCanReachJoint(requestedPart, pathTargetJointId, skeleton)) {
-                targetPartId = requestedPart.id;
-                targetSceneObjectId = undefined;
-            } else if (parts[pathPartId]) {
-                targetPartId = pathPartId;
-                targetSceneObjectId = undefined;
-            } else {
-                targetPathId = undefined;
-            }
+            return [];
         }
-    }
-    const pathAnchorJointId = targetPathId ? paths[targetPathId]?.targetAnchorJointId : undefined;
-    const targetAnchorJointId = targetPartId ? (mechanism.targetAnchorJointId ?? pathAnchorJointId ?? parts[targetPartId]?.anchorJointId) : undefined;
-    const normalized = normalizeMechanismToFabricationSet({
-        ...mechanism,
-        targetPartId,
-        targetSceneObjectId,
-        targetPathId,
-        targetAnchorJointId,
-        activeVisualPartIds: targetPartId ? [targetPartId] : []
+        const requestedPart = binding.targetPartId ? parts[binding.targetPartId] : undefined;
+        const pathTargetJointId = path.targetAnchorJointId ?? parts[path.partId]?.anchorJointId;
+        const targetPartId = requestedPart && partCanReachJoint(requestedPart, pathTargetJointId, skeleton)
+            ? requestedPart.id
+            : parts[path.partId] ? path.partId : undefined;
+        if (!targetPartId) return [];
+        return [{
+            ...binding,
+            targetPartId,
+            targetSceneObjectId: undefined,
+            targetAnchorJointId: binding.targetAnchorJointId ?? path.targetAnchorJointId ?? parts[targetPartId]?.anchorJointId,
+        }];
     });
+    const standaloneSceneObjectId = mechanism.targetSceneObjectId && sceneObjects[mechanism.targetSceneObjectId]
+        ? mechanism.targetSceneObjectId
+        : undefined;
+    const standalonePartId = !standaloneSceneObjectId && mechanism.targetPartId && parts[mechanism.targetPartId]
+        ? mechanism.targetPartId
+        : undefined;
+    const reconciled = outputs.length
+        ? mechanismWithOutputBindings(mechanism, outputs)
+        : {
+            ...mechanism,
+            ...(mechanism.outputs === undefined ? {} : { outputs: [] }),
+            targetPartId: standalonePartId,
+            targetSceneObjectId: standaloneSceneObjectId,
+            targetPathId: undefined,
+            targetAnchorJointId: standalonePartId ? mechanism.targetAnchorJointId : undefined,
+            activeVisualPartIds: standalonePartId ? [standalonePartId] : [],
+        };
+    const normalized = normalizeMechanismToFabricationSet(reconciled);
+    const targetPathId = normalized.targetPathId;
     const pathFitStatus = normalized.fabricationMetadata?.pathFit?.status;
     const fitReady = Boolean(
         targetPathId &&
@@ -1148,14 +1185,18 @@ export const replaceCharacterProject = (next: ProjectState, previous: ProjectSta
     const fallbackFrom = previousBox?.center ?? { x: 0, y: 0 };
     const fallbackTo = nextBox?.center ?? { x: 0, y: 0 };
     const remappedPaths: Record<string, ProjectMotionPath> = Object.fromEntries(Object.entries(previous.paths).flatMap(([id, path]): Array<[string, ProjectMotionPath]> => {
-        if (path.sceneObjectId) return previous.sceneObjects[path.sceneObjectId] ? [[id, { ...path, warnings: [] }]] : [];
+        if (path.sceneObjectId) return previous.sceneObjects[path.sceneObjectId] ? [[id, { ...path, warnings: [] }]] : [[id, { ...path, enabled: false, warnings: [...new Set([...path.warnings, 'Choose a scene object after character replacement'])] }]];
         const referencingMechanismTarget = previous.mechanisms.find(mechanism => mechanism.targetPathId === id && mechanism.targetAnchorJointId && next.skeleton?.joints[mechanism.targetAnchorJointId])?.targetAnchorJointId;
         const previousPartRoot = previous.parts[path.partId]?.anchorJointId;
         const targetJointId = path.targetAnchorJointId && next.skeleton?.joints[path.targetAnchorJointId]
             ? path.targetAnchorJointId
             : (referencingMechanismTarget ?? (previousPartRoot && next.skeleton?.joints[previousPartRoot] ? previousPartRoot : undefined));
         const partId = replacementPartId(next, path.partId, targetJointId);
-        if (!partId) return [];
+        if (!partId) return [[id, {
+            ...path,
+            enabled: false,
+            warnings: [...new Set([...path.warnings, 'Choose a body part after character replacement'])]
+        }]];
         const from = jointScenePoint(previous, targetJointId) ?? jointScenePoint(previous, previous.parts[path.partId]?.anchorJointId) ?? fallbackFrom;
         const to = jointScenePoint(next, targetJointId) ?? jointScenePoint(next, next.parts[partId]?.anchorJointId) ?? fallbackTo;
         const candidateChainRootJointId = path.chainRootJointId ?? previousPartRoot;
@@ -1170,22 +1211,21 @@ export const replaceCharacterProject = (next: ProjectState, previous: ProjectSta
             warnings: []
         }]];
     }));
-    const firstPathByPart = (partId?: string) => partId ? Object.values(remappedPaths).find(path => path.partId === partId) : undefined;
     const remappedMechanisms = previous.mechanisms.map(mechanism => {
         const priorPath = mechanism.targetPathId ? remappedPaths[mechanism.targetPathId] : undefined;
-        if (mechanism.targetSceneObjectId) return mechanismWithGeneratedPath({
+        if (mechanism.targetSceneObjectId) return mechanismWithGeneratedPath(normalizeMechanismToFabricationSet({
             ...mechanism,
             targetPartId: undefined,
-            targetSceneObjectId: next.sceneObjects[mechanism.targetSceneObjectId] ? mechanism.targetSceneObjectId : undefined,
+            targetSceneObjectId: previous.sceneObjects[mechanism.targetSceneObjectId] ? mechanism.targetSceneObjectId : undefined,
             targetPathId: priorPath?.id,
             targetAnchorJointId: undefined,
             activeVisualPartIds: []
-        }, { preserveGeneratedPath: Boolean(mechanism.foundryExport || mechanism.generatedPath?.length) });
+        }), { preserveGeneratedPath: Boolean(mechanism.foundryExport || mechanism.generatedPath?.length) });
         const targetAnchorJointId = mechanism.targetAnchorJointId && next.skeleton?.joints[mechanism.targetAnchorJointId]
             ? mechanism.targetAnchorJointId
             : priorPath?.targetAnchorJointId;
         const targetPartId = replacementPartId(next, mechanism.targetPartId, targetAnchorJointId);
-        const targetPathId = priorPath?.id ?? firstPathByPart(targetPartId)?.id;
+        const targetPathId = priorPath?.id;
         const anchor = mappedPoint(
             { x: mechanism.anchorX ?? mechanism.sceneAnchor?.x ?? mechanism.transform?.x ?? fallbackFrom.x, y: mechanism.anchorY ?? mechanism.sceneAnchor?.y ?? mechanism.transform?.y ?? fallbackFrom.y },
             fallbackFrom,
@@ -1196,7 +1236,7 @@ export const replaceCharacterProject = (next: ProjectState, previous: ProjectSta
             const value = mechanism[key];
             return typeof value === 'number' ? { ...acc, [key]: value * scale } : acc;
         }, {} as Partial<MechanismConfig>);
-        return mechanismWithGeneratedPath({
+        return mechanismWithGeneratedPath(normalizeMechanismToFabricationSet({
             ...mechanism,
             ...scaled,
             gearTrainRadii: mechanism.gearTrainRadii?.map(radius => radius * scale),
@@ -1208,15 +1248,34 @@ export const replaceCharacterProject = (next: ProjectState, previous: ProjectSta
             anchorY: anchor.y,
             transform: mechanism.transform ? { ...mechanism.transform, x: anchor.x, y: anchor.y } : { x: anchor.x, y: anchor.y, rotation: mechanism.groundAngle ?? 0, scale: 1 },
             sceneAnchor: anchor
-        });
+        }));
     });
     return {
-        ...next,
+        ...previous,
+        version: APP_STATE_VERSION,
+        revision: (previous.revision ?? 0) + 1,
+        metadata: {
+            ...previous.metadata,
+            sourceImageName: next.metadata.sourceImageName,
+            normalizationScale: next.metadata.normalizationScale,
+            status: next.metadata.status,
+            updatedAt: nowIso()
+        },
+        parts: next.parts,
+        partOrder: next.partOrder,
+        skeleton: next.skeleton,
         paths: remappedPaths,
+        pathOrder: [
+            ...(previous.pathOrder ?? []).filter(id => Boolean(remappedPaths[id])),
+            ...Object.keys(remappedPaths).filter(id => !(previous.pathOrder ?? []).includes(id))
+        ],
         mechanisms: remappedMechanisms,
         selectedPartId: remappedMechanisms[0]?.targetPartId ?? Object.keys(next.parts)[0],
         selectedPathId: Object.keys(remappedPaths)[0],
         selectedMechanismId: remappedMechanisms[0]?.id,
+        processing: next.processing,
+        lastExport: undefined,
+        lastFoundryExport: undefined,
         characterPackage: next.characterPackage ? {
             ...next.characterPackage,
             replacementContext: {
@@ -1342,6 +1401,8 @@ export const createProjectFromCharacterPackage = (input: {
 
 const touch = (project: ProjectState, options: { preserveExport?: boolean } = {}): ProjectState => ({
     ...project,
+    version: APP_STATE_VERSION,
+    revision: (project.revision ?? 0) + 1,
     lastExport: options.preserveExport ? project.lastExport : undefined,
     metadata: { ...project.metadata, updatedAt: nowIso() }
 });
@@ -1349,7 +1410,7 @@ const touch = (project: ProjectState, options: { preserveExport?: boolean } = {}
 export const handoffGate = (project: ProjectState, targetStage: import('../types').AppStage) => {
     const fail = (message: string, recoveryStage: import('../types').AppStage = 'character') => ({ ok: false as const, message, recoveryStage });
     const mechanisms = project.mechanisms.filter(m => m.visible && m.enabled !== false);
-    if (targetStage === 'character' || targetStage === 'options') return { ok: true as const, message: 'Ready' };
+    if (targetStage === 'project' || targetStage === 'character' || targetStage === 'options') return { ok: true as const, message: 'Ready' };
     if (!project.partOrder.length) return fail('Load a character package before entering this workflow.');
     if (targetStage === 'path') return project.skeleton || project.metadata.status === 'sample' ? { ok: true as const, message: 'Parts ready' } : fail('Skeleton missing or unreadable.');
     if (targetStage === 'foundry') return { ok: true as const, message: 'Parts ready for mechanism search' };
@@ -1368,6 +1429,16 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
             const nextPath = Object.values(project.paths).find(path => !path.sceneObjectId && path.partId === action.partId);
             return { ...project, selectedPartId: action.partId, selectedSceneObjectId: undefined, selectedPathId: nextPath?.id };
         }
+        case 'select_path': {
+            const path = action.pathId ? project.paths[action.pathId] : undefined;
+            if (action.pathId && !path) return project;
+            return {
+                ...project,
+                selectedPathId: path?.id,
+                selectedPartId: path?.sceneObjectId ? undefined : path?.partId,
+                selectedSceneObjectId: path?.sceneObjectId
+            };
+        }
         case 'upsert_part': {
             const exists = Boolean(project.parts[action.part.id]);
             const parts = { ...project.parts, [action.part.id]: action.part };
@@ -1378,9 +1449,9 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
             if (project.parts[action.partId]?.locked) return project;
             const { [action.partId]: _part, ...parts } = project.parts;
             const paths = Object.fromEntries(Object.entries(project.paths).filter(([, path]) => path.sceneObjectId || path.partId !== action.partId));
-            const mechanisms = project.mechanisms.map(m => m.targetPartId === action.partId
+            const mechanisms = project.mechanisms.map(m => mechanismOutputBindings(m).some(binding => binding.targetPartId === action.partId)
                 ? mechanismWithGeneratedPath(
-                    { ...m, targetPartId: undefined, targetPathId: undefined, activeVisualPartIds: [] },
+                    mechanismWithoutOutputBindings(m, binding => binding.targetPartId === action.partId),
                     { preserveGeneratedPath: preserveGeneratedPathFor(m) }
                 )
                 : m);
@@ -1389,6 +1460,7 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
                 ...project,
                 parts,
                 paths,
+                pathOrder: (project.pathOrder ?? Object.keys(project.paths)).filter(id => Boolean(paths[id])),
                 mechanisms,
                 partOrder: project.partOrder.filter(id => id !== action.partId),
                 selectedPartId: project.selectedPartId === action.partId ? nextPartId : project.selectedPartId,
@@ -1428,9 +1500,9 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
             if (project.sceneObjects[action.objectId]?.locked) return project;
             const { [action.objectId]: _object, ...sceneObjects } = project.sceneObjects;
             const paths = Object.fromEntries(Object.entries(project.paths).filter(([, path]) => path.sceneObjectId !== action.objectId));
-            const mechanisms = project.mechanisms.map(m => m.targetSceneObjectId === action.objectId
+            const mechanisms = project.mechanisms.map(m => mechanismOutputBindings(m).some(binding => binding.targetSceneObjectId === action.objectId)
                 ? mechanismWithGeneratedPath(
-                    { ...m, targetSceneObjectId: undefined, targetPathId: undefined },
+                    mechanismWithoutOutputBindings(m, binding => binding.targetSceneObjectId === action.objectId),
                     { preserveGeneratedPath: preserveGeneratedPathFor(m) }
                 )
                 : m);
@@ -1438,6 +1510,7 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
                 ...project,
                 sceneObjects,
                 paths,
+                pathOrder: (project.pathOrder ?? Object.keys(project.paths)).filter(id => Boolean(paths[id])),
                 mechanisms,
                 sceneObjectOrder: project.sceneObjectOrder.filter(id => id !== action.objectId),
                 selectedSceneObjectId: project.selectedSceneObjectId === action.objectId ? undefined : project.selectedSceneObjectId,
@@ -1490,7 +1563,10 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
             if (path.sceneObjectId ? project.sceneObjects[path.sceneObjectId]?.locked : project.parts[path.partId]?.locked) return project;
             const previousPath = project.paths[path.id] ? validatePath(project.paths[path.id]) : undefined;
             const paths = { ...project.paths, [path.id]: path };
-            const mechanisms = project.mechanisms.map(m => m.targetPathId === path.id
+            const pathOrder = project.paths[path.id]
+                ? (project.pathOrder ?? Object.keys(project.paths))
+                : [...(project.pathOrder ?? Object.keys(project.paths)), path.id];
+            const mechanisms = project.mechanisms.map(m => mechanismOutputBindings(m).some(binding => binding.pathId === path.id)
                 ? reconcileMechanismTargets(
                     { ...m, targetPartId: path.sceneObjectId ? undefined : m.targetPartId, targetSceneObjectId: path.sceneObjectId },
                     project.parts,
@@ -1503,15 +1579,15 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
                     project.skeleton
                 )
                 : m);
-            return touch({ ...project, paths, mechanisms, selectedPathId: path.id });
+            return touch({ ...project, paths, pathOrder, mechanisms, selectedPathId: path.id });
         }
         case 'delete_path': {
             const current = project.paths[action.pathId];
             if (current && (current.sceneObjectId ? project.sceneObjects[current.sceneObjectId]?.locked : project.parts[current.partId]?.locked)) return project;
             const { [action.pathId]: _removed, ...paths } = project.paths;
-            const mechanisms = project.mechanisms.map(m => m.targetPathId === action.pathId
+            const mechanisms = project.mechanisms.map(m => mechanismOutputBindings(m).some(binding => binding.pathId === action.pathId)
                 ? reconcileMechanismTargets(
-                    { ...m, targetPathId: undefined },
+                    mechanismWithoutOutputBindings(m, binding => binding.pathId === action.pathId),
                     project.parts,
                     paths,
                     project.sceneObjects,
@@ -1519,7 +1595,13 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
                     project.skeleton
                 )
                 : m);
-            return touch({ ...project, paths, mechanisms, selectedPathId: project.selectedPathId === action.pathId ? undefined : project.selectedPathId });
+            return touch({
+                ...project,
+                paths,
+                pathOrder: (project.pathOrder ?? Object.keys(project.paths)).filter(id => id !== action.pathId),
+                mechanisms,
+                selectedPathId: project.selectedPathId === action.pathId ? undefined : project.selectedPathId
+            });
         }
         case 'set_mechanisms':
             return touch({ ...project, mechanisms: action.mechanisms.map(m => reconcileMechanismTargets(m, project.parts, project.paths, project.sceneObjects, { preserveGeneratedPath: preserveGeneratedPathFor(m), preserveRejectedPathFit: true }, project.skeleton)), selectedMechanismId: action.selectedMechanismId ?? project.selectedMechanismId });
@@ -1544,7 +1626,7 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
             return invalidatesExport ? touch({ ...project, settings, mechanisms }) : { ...project, settings, mechanisms };
         }
         case 'set_export':
-            return touch({ ...project, lastExport: action.fabricationPackage }, { preserveExport: true });
+            return { ...project, lastExport: action.fabricationPackage };
         case 'set_foundry_export':
             return touch({ ...project, lastFoundryExport: action.foundryExport }, { preserveExport: true });
         default:
@@ -1575,11 +1657,27 @@ export const validatePath = (path: ProjectMotionPath): ProjectMotionPath => {
     };
     return {
         ...normalized,
-        warnings: [
+        warnings: [...new Set([
             ...normalized.warnings,
             ...(normalized.points.length < 3 ? ['Path needs at least 3 points'] : []),
             ...(normalized.enabled && normalized.points.length > 1 ? [] : ['Path disabled or empty'])
-        ]
+        ])]
+    };
+};
+
+const finiteJointCoordinate = (value: unknown): number => {
+    const numeric = typeof value === 'number' || typeof value === 'string' ? Number(value) : Number.NaN;
+    return Number.isFinite(numeric) ? numeric : 0;
+};
+
+const normalizeJointPosition = (position: unknown, loc?: unknown): Point => {
+    const rawPosition = position && typeof position === 'object' && !Array.isArray(position)
+        ? position as Record<string, unknown>
+        : undefined;
+    const rawLoc = Array.isArray(loc) ? loc : [];
+    return {
+        x: finiteJointCoordinate(rawPosition?.x ?? rawLoc[0]),
+        y: finiteJointCoordinate(rawPosition?.y ?? rawLoc[1])
     };
 };
 
@@ -1590,7 +1688,7 @@ const normalizeSkeletonSnapshot = (skeleton: unknown): StandardSkeleton | null =
         return buildSkeleton(raw.skeleton.map(item => ({
             id: item.name ?? uid('joint'),
             name: item.name ?? 'joint',
-            position: Array.isArray(item.loc) ? { x: Number(item.loc[0]) || 0, y: Number(item.loc[1]) || 0 } : { x: 0, y: 0 },
+            position: normalizeJointPosition(undefined, item.loc),
             parentId: item.parent ?? null,
             locked: false,
             bendDirection: 1
@@ -1603,7 +1701,7 @@ const normalizeSkeletonSnapshot = (skeleton: unknown): StandardSkeleton | null =
         return {
             id: String(j.id || j.name || uid('joint')),
             name: String(j.name || j.id || 'joint'),
-            position: j.position ?? (Array.isArray(j.loc) ? { x: Number(j.loc[0]) || 0, y: Number(j.loc[1]) || 0 } : { x: 0, y: 0 }),
+            position: normalizeJointPosition(j.position, j.loc),
             parentId: j.parentId ?? null,
             locked: Boolean(j.locked),
             bendDirection: Number.isFinite(j.bendDirection) ? Number(j.bendDirection) : 1
@@ -1637,10 +1735,35 @@ const normalizeContourPoints = (value: unknown): Point[] | undefined => {
     return isUsableContourPoints(points) ? points : undefined;
 };
 
-const safeRasterTextureUrl = (value: unknown): string | undefined =>
-    typeof value === 'string' && /^data:image\/(?:png|jpe?g|webp);/i.test(value)
-        ? value
-        : undefined;
+const safeSceneObjectTextureUrl = (value: unknown): string | undefined => {
+    if (typeof value !== 'string') return undefined;
+    if (/^data:image\/(?:png|jpe?g|webp);/i.test(value)) return value;
+    const encoded = value.match(/^data:image\/svg\+xml;base64,([A-Za-z0-9+/]+={0,2})$/i)?.[1];
+    if (!encoded) return undefined;
+    try {
+        const binary = atob(encoded);
+        const svgText = new TextDecoder().decode(
+            Uint8Array.from(binary, character => character.charCodeAt(0)),
+        );
+        assertLocalSceneObjectSvg(svgText);
+        const rootAttributes = svgText.match(/<svg\b([^>]*)>/i)?.[1] ?? '';
+        const width = Number(rootAttributes.match(/\bwidth\s*=\s*["']([0-9]+)["']/i)?.[1]);
+        const height = Number(rootAttributes.match(/\bheight\s*=\s*["']([0-9]+)["']/i)?.[1]);
+        if (
+            !Number.isInteger(width) ||
+            !Number.isInteger(height) ||
+            width < 1 ||
+            height < 1 ||
+            width > 512 ||
+            height > 512
+        ) return undefined;
+        return boundedSceneObjectSvgDataUrl(svgText, { width, height }) === value
+            ? value
+            : undefined;
+    } catch {
+        return undefined;
+    }
+};
 
 const safeCharacterArtworkUrl = (value: unknown): string | undefined =>
     typeof value === 'string' && /^data:image\/(?:png|jpe?g|webp|svg\+xml)(?:;|,)/i.test(value)
@@ -1653,7 +1776,7 @@ const normalizeCharacterPackageSnapshot = (value: unknown): CharacterPackageArti
     const replacement = asRecord(raw.replacementContext);
     const mode = replacement.mode === 'replace-character' ? 'replace-character' : 'plain-load';
     const previousStage = typeof replacement.previousStage === 'string'
-        && (['character', 'path', 'foundry', 'design', 'blueprint', 'assembly', 'options'] as const).includes(replacement.previousStage as AppStage)
+        && (['project', 'character', 'path', 'foundry', 'design', 'blueprint', 'assembly', 'options'] as const).includes(replacement.previousStage as AppStage)
         ? replacement.previousStage as AppStage
         : undefined;
     return {
@@ -1729,7 +1852,7 @@ const normalizeSceneObjectSnapshot = (id: string, value: unknown): SceneObject =
     const raw = asRecord(value);
     const shape = pickOne(raw.shape, ['piggy-bank', 'cloud', 'star', 'block'] as const, 'block');
     const rawBounds = asRecord(raw.bounds);
-    const textureUrl = safeRasterTextureUrl(raw.textureUrl);
+    const textureUrl = safeSceneObjectTextureUrl(raw.textureUrl);
     const contourPoints = normalizeContourPoints(raw.contourPoints ?? raw.contour_points ?? raw.outlinePoints ?? raw.outline_points);
     const rawContourSource = raw.contourSource ?? raw.contour_source;
     const contourSource = rawContourSource === 'user' || rawContourSource === 'imported' ? rawContourSource : contourPoints ? 'imported' : undefined;
@@ -1777,6 +1900,44 @@ const normalizeMechanismSnapshot = (value: unknown): MechanismConfig => {
     const camProfileSamples = Array.isArray(raw.camProfileSamples)
         ? normalizeCamProfileSamples(raw.camProfileSamples.map(value => finiteNumber(value, Number.NaN)).filter(Number.isFinite)).slice(0, 64)
         : base.camProfileSamples;
+    const legacyFit = asRecord(asRecord(raw.fabricationMetadata).pathFit);
+    const outputs: MechanismOutputBinding[] = (Array.isArray(raw.outputs) ? raw.outputs : []).flatMap((value, index) => {
+        const output = asRecord(value);
+        if (typeof output.pathId !== 'string' || !output.pathId.trim()) return [];
+        const direction = output.direction === -1 ? -1 : output.direction === 1 ? 1 : undefined;
+        return [{
+            id: typeof output.id === 'string' && output.id.trim() ? output.id.slice(0, 120) : `${base.id}:output-${index + 1}`,
+            portId: typeof output.portId === 'string' && output.portId.trim()
+                ? output.portId.slice(0, 80)
+                : typeof output.outputTraceId === 'string' && output.outputTraceId.trim()
+                    ? output.outputTraceId.slice(0, 80)
+                    : '',
+            pathId: output.pathId.slice(0, 80),
+            targetPartId: typeof output.targetPartId === 'string' ? output.targetPartId.slice(0, 80) : undefined,
+            targetSceneObjectId: typeof output.targetSceneObjectId === 'string' ? output.targetSceneObjectId.slice(0, 80) : undefined,
+            targetAnchorJointId: typeof output.targetAnchorJointId === 'string' ? output.targetAnchorJointId.slice(0, 80) : undefined,
+            outputTraceId: typeof output.outputTraceId === 'string' ? output.outputTraceId.slice(0, 80) : undefined,
+            phaseOffset: optionalNumber(output.phaseOffset),
+            direction,
+            enabled: typeof output.enabled === 'boolean' ? output.enabled : true,
+            fit: output.fit && typeof output.fit === 'object' ? output.fit as NonNullable<MechanismConfig['outputs']>[number]['fit'] : undefined
+        }];
+    });
+    if (!outputs.length && typeof raw.targetPathId === 'string' && raw.targetPathId.trim()) {
+        outputs.push({
+            id: `${base.id}:output-1`,
+            portId: typeof legacyFit.outputTraceId === 'string' ? legacyFit.outputTraceId.slice(0, 80) : '',
+            pathId: raw.targetPathId.slice(0, 80),
+            outputTraceId: typeof legacyFit.outputTraceId === 'string' ? legacyFit.outputTraceId.slice(0, 80) : undefined,
+            phaseOffset: optionalNumber(legacyFit.phaseOffset),
+            direction: legacyFit.direction === -1 ? -1 : legacyFit.direction === 1 ? 1 : undefined,
+            enabled: true,
+            targetPartId: typeof raw.targetPartId === 'string' ? raw.targetPartId.slice(0, 80) : undefined,
+            targetSceneObjectId: typeof raw.targetSceneObjectId === 'string' ? raw.targetSceneObjectId.slice(0, 80) : undefined,
+            targetAnchorJointId: typeof raw.targetAnchorJointId === 'string' ? raw.targetAnchorJointId.slice(0, 80) : undefined,
+            fit: Object.keys(legacyFit).length ? legacyFit as unknown as NonNullable<MechanismConfig['outputs']>[number]['fit'] : undefined
+        });
+    }
     const normalized: MechanismConfig = {
         ...base,
         id: typeof raw.id === 'string' && raw.id.trim() ? raw.id.slice(0, 80) : base.id,
@@ -1807,6 +1968,7 @@ const normalizeMechanismSnapshot = (value: unknown): MechanismConfig => {
         camProfileSamples,
         driverGroupId: typeof raw.driverGroupId === 'string' && raw.driverGroupId.trim() ? raw.driverGroupId.slice(0, 80) : base.driverGroupId,
         driverPhaseOffset: finiteNumber(raw.driverPhaseOffset, base.driverPhaseOffset ?? 0),
+        outputs,
         rodLength: raw.rodLength === undefined ? base.rodLength : finiteNumber(raw.rodLength, base.rodLength ?? 0),
         phase: finiteNumber(raw.phase, base.phase ?? 0),
         showOutputGear: typeof raw.showOutputGear === 'boolean' ? raw.showOutputGear : base.showOutputGear,
@@ -1836,7 +1998,11 @@ const normalizeMechanismSnapshot = (value: unknown): MechanismConfig => {
         || Array.isArray(raw.gearTrainRadii)
         || Array.isArray(raw.camProfileSamples)
         || Array.isArray(raw.generatedPath);
-    return hasFittedGeometry ? normalizeMechanismToFabricationSet(normalized) : normalizeMechanismToReference(normalized);
+    const bindingNormalized = mechanismWithOutputBindings(
+        normalized,
+        mechanismOutputBindings({ ...normalized, outputs }),
+    );
+    return hasFittedGeometry ? normalizeMechanismToFabricationSet(bindingNormalized) : normalizeMechanismToReference(bindingNormalized);
 };
 
 export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
@@ -1848,11 +2014,22 @@ export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
     const partOrder = (data.partOrder ?? Object.keys(parts)).filter(id => Boolean(parts[id]));
     const sceneObjects = Object.fromEntries(Object.entries(data.sceneObjects ?? {}).map(([id, value]) => [id, normalizeSceneObjectSnapshot(id, value)]));
     const sceneObjectOrder = (data.sceneObjectOrder ?? Object.keys(sceneObjects)).filter(id => Boolean(sceneObjects[id]));
-    const paths = Object.fromEntries(Object.entries(data.paths ?? {}).flatMap(([id, path]) => {
+    const paths = Object.fromEntries(Object.entries(data.paths ?? {}).map(([id, path]) => {
         const next = validatePath({ ...asRecord(path), id } as ProjectMotionPath);
-        return next.sceneObjectId ? (sceneObjects[next.sceneObjectId] ? [[id, next] as const] : []) : (parts[next.partId] ? [[id, next] as const] : []);
+        const missingOwner = next.sceneObjectId
+            ? !sceneObjects[next.sceneObjectId]
+            : !parts[next.partId];
+        return [id, missingOwner ? {
+            ...next,
+            warnings: [...new Set([
+                ...next.warnings,
+                next.sceneObjectId
+                    ? `Missing scene object: ${next.sceneObjectId}`
+                    : `Missing body part: ${next.partId}`
+            ])]
+        } : next] as const;
     }));
-    const mechanisms = (Array.isArray(data.mechanisms) ? data.mechanisms : fallback.mechanisms).map(m => reconcileMechanismTargets(normalizeMechanismSnapshot(m), parts, paths, sceneObjects, { preserveGeneratedPath: true, preserveRejectedPathFit: true }, skeleton));
+    const mechanisms = (Array.isArray(data.mechanisms) ? data.mechanisms : fallback.mechanisms).map(normalizeMechanismSnapshot);
     const rawMetadata = asRecord(data.metadata);
     const rawProcessing = asRecord(data.processing);
     const metadata: ProjectState['metadata'] = {
@@ -1862,7 +2039,7 @@ export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
         classroomLessonId: typeof rawMetadata.classroomLessonId === 'string' ? rawMetadata.classroomLessonId.slice(0, 120) : undefined,
         classroomLessonLabel: typeof rawMetadata.classroomLessonLabel === 'string' ? rawMetadata.classroomLessonLabel.slice(0, 160) : undefined,
         createdAt: typeof rawMetadata.createdAt === 'string' ? rawMetadata.createdAt.slice(0, 80) : fallback.metadata.createdAt,
-        updatedAt: nowIso(),
+        updatedAt: typeof rawMetadata.updatedAt === 'string' ? rawMetadata.updatedAt.slice(0, 80) : fallback.metadata.updatedAt,
         normalizationScale: clampNumber(rawMetadata.normalizationScale, fallback.metadata.normalizationScale, 0.0001, 10000),
         status: pickOne(rawMetadata.status, ['empty', 'sample', 'processed', 'imported'] as const, fallback.metadata.status)
     };
@@ -1874,6 +2051,7 @@ export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
     };
     return {
         version: APP_STATE_VERSION,
+        revision: Number.isInteger(data.revision) && Number(data.revision) >= 0 ? Number(data.revision) : 0,
         metadata,
         parts,
         partOrder,
@@ -1885,6 +2063,11 @@ export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
         selectedSceneObjectId: data.selectedSceneObjectId && sceneObjects[data.selectedSceneObjectId] ? data.selectedSceneObjectId : undefined,
         skeleton,
         paths,
+        pathOrder: [
+            ...(Array.isArray(data.pathOrder) ? data.pathOrder : []).filter((id): id is string => typeof id === 'string' && Boolean(paths[id])),
+            ...Object.keys(paths).filter(id => !(Array.isArray(data.pathOrder) ? data.pathOrder : []).includes(id))
+        ],
+        motionTimeline: data.motionTimeline && typeof data.motionTimeline === 'object' ? data.motionTimeline : undefined,
         mechanisms,
         settings: normalizeAppSettings(data.settings, fallback.settings),
         processing,
@@ -1893,7 +2076,7 @@ export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
     };
 };
 
-export const loadProjectSnapshot = (raw: unknown): ProjectState => migrateProjectSnapshot(raw);
+export const loadProjectSnapshot = (raw: unknown): ProjectState => migrateProjectSnapshot(projectStateFromPortableDocument(raw));
 
 export const downloadBlob = (filename: string, blob: Blob) => {
     const url = URL.createObjectURL(blob);
@@ -1924,3 +2107,7 @@ export const projectSelfCheck = () => {
     if (removed.parts.right_arm_lower?.anchorJointId === 'right_elbow') throw new Error('selfcheck: part anchor not repaired after joint delete');
     return true;
 };
+import {
+    assertLocalSceneObjectSvg,
+    boundedSceneObjectSvgDataUrl,
+} from '../runtime/import/sceneObjectImagePolicy';

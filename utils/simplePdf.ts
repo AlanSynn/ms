@@ -1,4 +1,9 @@
-export const makePdfDocument = (content: string | string[]) => {
+export const PDF_POINTS_PER_MM = 72 / 25.4;
+export const LETTER_PDF_PAGE = Object.freeze({ width: 612, height: 792 });
+
+export type PdfPageSize = Readonly<{ width: number; height: number }>;
+
+export const makePdfDocument = (content: string | string[], pageSize: PdfPageSize = LETTER_PDF_PAGE) => {
     const pages = Array.isArray(content) && content.length ? content : [Array.isArray(content) ? '' : content];
     const fontObject = pages.length * 2 + 3;
     const pageObjects = pages.map((_, index) => 3 + index * 2);
@@ -9,7 +14,7 @@ export const makePdfDocument = (content: string | string[]) => {
             const pageObject = pageObjects[index];
             const contentObject = pageObject + 1;
             return [
-                `${pageObject} 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ${fontObject} 0 R >> >> /Contents ${contentObject} 0 R >> endobj`,
+                `${pageObject} 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageSize.width} ${pageSize.height}] /Resources << /Font << /F1 ${fontObject} 0 R >> >> /Contents ${contentObject} 0 R >> endobj`,
                 `${contentObject} 0 obj << /Length ${pageContent.length} >> stream\n${pageContent}\nendstream endobj`
             ];
         }),
@@ -45,8 +50,60 @@ export const hexRgb = (value: string | undefined) => {
     return `${num(r)} ${num(g)} ${num(b)}`;
 };
 
-export const makeSimplePdf = (title: string, lines: string[]) => {
-    const text = [title, ...lines].slice(0, 46);
-    const content = `BT /F1 14 Tf 50 760 Td ${text.map((line, i) => `${i ? '0 -16 Td ' : ''}(${pdfText(line)}) Tj`).join(' ')} ET`;
-    return makePdfDocument(content);
+export const SIMPLE_PDF_LINES_PER_PAGE = 44;
+export const SIMPLE_PDF_LINE_WIDTH = 88;
+
+export const wrapSimplePdfText = (value: unknown, width = SIMPLE_PDF_LINE_WIDTH): string[] => {
+    const text = String(value).replace(/\s+/g, ' ').trim();
+    if (!text) return [''];
+    const lines: string[] = [];
+    let current = '';
+    const pushWord = (word: string) => {
+        if (!current) current = word;
+        else if (`${current} ${word}`.length <= width) current = `${current} ${word}`;
+        else {
+            lines.push(current);
+            current = word;
+        }
+    };
+    for (const word of text.split(' ')) {
+        if (word.length <= width) {
+            pushWord(word);
+            continue;
+        }
+        if (current) {
+            lines.push(current);
+            current = '';
+        }
+        for (let offset = 0; offset < word.length; offset += width) {
+            const chunk = word.slice(offset, offset + width);
+            if (chunk.length === width) lines.push(chunk);
+            else current = chunk;
+        }
+    }
+    if (current || !lines.length) lines.push(current);
+    return lines;
 };
+
+export const makeSimplePdfPageContents = (
+    title: string,
+    lines: readonly string[],
+    linesPerPage = SIMPLE_PDF_LINES_PER_PAGE
+) => {
+    const wrappedLines = lines.flatMap(line => wrapSimplePdfText(line));
+    const pageCount = Math.max(1, Math.ceil(wrappedLines.length / linesPerPage));
+    return Array.from({ length: pageCount }, (_, pageIndex) => {
+        const pageLines = wrappedLines.slice(pageIndex * linesPerPage, (pageIndex + 1) * linesPerPage);
+        const commands = [
+            `BT /F1 14 Tf 50 760 Td (${pdfText(title)}) Tj ET`,
+            `BT /F1 8 Tf 50 742 Td (${pdfText(`Page ${pageIndex + 1} of ${pageCount}`)}) Tj ET`,
+            ...pageLines.map((line, lineIndex) =>
+                `BT /F1 9 Tf 50 ${720 - lineIndex * 14} Td (${pdfText(line)}) Tj ET`
+            )
+        ];
+        return commands.join('\n');
+    });
+};
+
+export const makeSimplePdf = (title: string, lines: string[]) =>
+    makePdfDocument(makeSimplePdfPageContents(title, lines));

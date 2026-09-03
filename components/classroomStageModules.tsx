@@ -45,6 +45,7 @@ export const mayStartAdjacentStagePreload = (
   (readiness === "safe-fallback" && safeFallbackDelayElapsed);
 
 const PUPPET_PREVIEW_BY_STAGE: Partial<Record<AppStage, string>> = {
+  project: "project-three-puppet",
   character: "character-three-puppet",
   path: "path-three-puppet",
   blueprint: "blueprint-three-puppet",
@@ -74,7 +75,7 @@ const readActiveStagePreloadReadiness = (
     ? stageRoot?.querySelector<HTMLElement>(`[data-testid="${puppetTestId}"]`)
     : stageRoot?.querySelector<HTMLElement>('[data-testid="foundry-preview"]');
   return classifyClassroomStagePreloadReadiness({
-    rendererExpected: stage !== "options",
+    rendererExpected: stage !== "options" && stage !== "blueprint",
     rendererStatus: preview?.getAttribute("data-three-renderer-status") ?? null,
     authoritativeRendererReady: puppetTestId
       ? preview?.getAttribute("data-three-initial-scene-ready") === "true"
@@ -315,6 +316,8 @@ const PathStage = (
 
 export const preloadNextClassroomStage = (stage: AppStage) => {
   switch (stage) {
+    case "project":
+      return Promise.resolve();
     case "character":
       return loadPath();
     case "path":

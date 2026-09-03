@@ -7,7 +7,7 @@ import {
 } from "./autosaveFingerprint";
 
 export type ProjectSnapshotLoadResult =
-  | { status: "loaded"; project: ProjectState; sourceVersion: 1 }
+  | { status: "loaded"; project: ProjectState; sourceVersion: 1 | 2 }
   | {
       status: "rejected";
       project: ProjectState;
@@ -338,7 +338,7 @@ export const loadedSnapshot = (
     return {
       status: "loaded",
       project: loadProjectSnapshot(raw),
-      sourceVersion: 1,
+      sourceVersion: raw && typeof raw === "object" && "version" in raw && raw.version === 2 ? 2 : 1,
     };
   } catch {
     return {

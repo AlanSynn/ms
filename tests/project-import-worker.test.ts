@@ -24,6 +24,7 @@ import {
   type ProjectImportWorkerPort,
 } from "../runtime/import/projectImportWorkerClient";
 import { createSampleProject, serializeProject } from "../utils/project";
+import { mechanismBoardPlacementErrors } from "../utils/fabrication";
 import {
   AUTOSAVE_SNAPSHOT_MAX_BYTES,
   type AutosaveStorage,
@@ -34,7 +35,6 @@ import {
   createProjectFromPackageData,
   validateCharacterPackageAssetReferences,
 } from "../utils/packageLoader";
-import { mechanismBoardPlacementErrors } from "../utils/fabrication";
 
 const pngBytes = (
   width: number,
@@ -305,14 +305,9 @@ const offBoardImported = await runProjectImportJob({
 });
 assert(
   offBoardImported.project.mechanisms.every((mechanism) =>
-    mechanismBoardPlacementErrors(offBoardImported.project, mechanism).length === 0
+    mechanism.anchorX === 9_999 && mechanism.anchorY === 9_999
   ),
-  "the import worker converges every mechanism to a board-valid placement",
-);
-assert.notEqual(
-  offBoardImported.project.mechanisms[0].anchorX,
-  9_999,
-  "import does not preserve an unsafe off-board anchor",
+  "portable project import preserves authored mechanism placement without a hidden refit",
 );
 const reopenedBoardFit = await runProjectImportJob({
   kind: "project",
@@ -331,28 +326,30 @@ assert.deepEqual(
     anchorX,
     anchorY,
   })),
-  "a successful board fit is stable across project reopen",
+  "authored mechanism placement is stable across project reopen",
 );
 
-await assert.rejects(
-  runProjectImportJob({
-    kind: "project",
-    file: new File([JSON.stringify({
-      ...offBoardImportSource,
-      mechanisms: offBoardImportSource.mechanisms.map((mechanism) => ({
-        ...mechanism,
-        anchorX: 9_999,
-        anchorY: 9_999,
-        crankLength: 5_000,
-        groundLength: 5_000,
-        couplerLength: 5_000,
-        rockerLength: 5_000,
-        couplerPointDist: 5_000,
-      })),
-    })], "unplaceable.motionsmith.json", { type: "application/json" }),
-  }),
-  /Cannot import mech-1: no valid 15x15 board placement/,
-  "the import worker returns a direct blocker when no valid placement exists",
+const unplaceableImported = await runProjectImportJob({
+  kind: "project",
+  file: new File([JSON.stringify({
+    ...offBoardImportSource,
+    mechanisms: offBoardImportSource.mechanisms.map((mechanism) => ({
+      ...mechanism,
+      anchorX: 9_999,
+      anchorY: 9_999,
+      crankLength: 5_000,
+      groundLength: 5_000,
+      couplerLength: 5_000,
+      rockerLength: 5_000,
+      couplerPointDist: 5_000,
+    })),
+  })], "unplaceable.motionsmith.json", { type: "application/json" }),
+});
+assert(
+  unplaceableImported.project.mechanisms.some((mechanism) =>
+    mechanismBoardPlacementErrors(unplaceableImported.project, mechanism).length > 0
+  ),
+  "an unplaceable authored mechanism opens unchanged and remains a fabrication blocker",
 );
 
 const unknownFieldsImported = await runProjectImportJob({

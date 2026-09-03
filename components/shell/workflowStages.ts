@@ -3,6 +3,7 @@ import type { AppStage } from '../../types';
 export const SHARED_PLAYBACK_STAGES: AppStage[] = ['path', 'design'];
 
 export const STAGES: Array<{ id: AppStage; label: string }> = [
+  { id: 'project', label: 'Project' },
   { id: 'character', label: 'Character' },
   { id: 'path', label: 'Path Editor' },
   { id: 'foundry', label: 'Mechanism Foundry' },
@@ -13,6 +14,7 @@ export const STAGES: Array<{ id: AppStage; label: string }> = [
 ];
 
 export const stageNavLabel = (stage: AppStage) => ({
+  project: 'Project',
   character: 'Character',
   path: 'Path',
   foundry: 'Foundry',

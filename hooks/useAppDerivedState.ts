@@ -7,12 +7,19 @@ import type {
   SceneObject,
   ProjectState,
 } from "../types";
+import {
+  motionPathsInProjectOrder,
+  playableMotionPaths,
+  sharedMotionPlaybackDurationMs,
+} from "../utils/motion";
 
 const isBodyPart = (part: BodyPartLayer | undefined): part is BodyPartLayer =>
   Boolean(part);
 
 export interface AppDerivedState {
   sortedParts: BodyPartLayer[];
+  motionPaths: ProjectMotionPath[];
+  activeMotionPaths: ProjectMotionPath[];
   selectedPart?: BodyPartLayer;
   selectedSceneObject?: SceneObject;
   selectedPath?: ProjectMotionPath;
@@ -58,10 +65,18 @@ export const useAppDerivedState = (project: ProjectState): AppDerivedState => {
   const selectedMechanism =
     project.mechanisms.find((m) => m.id === project.selectedMechanismId) ??
     project.mechanisms[0];
-  const playbackDurationMs =
-    selectedMechanism?.targetPathId && project.paths[selectedMechanism.targetPathId]
-      ? project.paths[selectedMechanism.targetPathId].duration
-      : (selectedPath?.duration ?? project.settings.animationDurationMs);
+  const motionPaths = useMemo(
+    () => motionPathsInProjectOrder(project),
+    [project.paths],
+  );
+  const activeMotionPaths = useMemo(
+    () => playableMotionPaths(project, motionPaths),
+    [motionPaths, project.parts, project.sceneObjects],
+  );
+  const playbackDurationMs = sharedMotionPlaybackDurationMs(
+    project,
+    activeMotionPaths,
+  );
   const mechanismConfig: GlobalConfig = useMemo(
     () => ({
       speed: project.settings.animationSpeed,
@@ -73,6 +88,8 @@ export const useAppDerivedState = (project: ProjectState): AppDerivedState => {
 
   return {
     sortedParts,
+    motionPaths,
+    activeMotionPaths,
     selectedPart,
     selectedSceneObject,
     selectedPath,

@@ -16,12 +16,18 @@ import type {
   SceneObject,
 } from "../../../types";
 import {
+  clearMotionPathGeometry,
+  createMotionPathForTarget,
   describeMotionChain,
   motionAnchorJointIds,
   motionChainOptionLabel,
   motionChainRootJointIds,
-  motionPreviewForPath,
+  motionPathsInProjectOrder,
+  motionPreviewForPaths,
+  motionTimelineMsForPhase,
+  playableMotionPaths,
   preferredMotionJointId,
+  sharedMotionPlaybackDurationMs,
 } from "../../../utils/motion";
 import { addDrawSamplePoint, normalizeDrawTimedPoints, type DrawSamplePoint } from "../../../utils/pathDrawing";
 import { PathCanvasPane } from "./PathCanvasPane";
@@ -62,6 +68,7 @@ export const PathEditor = ({
     points: Point[],
     source?: ProjectMotionPath["source"],
     timedPoints?: ProjectMotionPath["timedPoints"],
+    pathId?: string,
   ) => void;
   openTracking: () => void;
   isPlaying: boolean;
@@ -80,6 +87,7 @@ export const PathEditor = ({
   const [dragPoint, setDragPoint] = useState<number | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
   const [isFreeDrawing, setIsFreeDrawing] = useState(false);
+  const [clearedPath, setClearedPath] = useState<ProjectMotionPath | null>(null);
   const [pathViewMode, setPathViewMode] = useState<"2d" | "3d">("3d");
   const pathLocked = Boolean(selectedSceneObject?.locked ?? selectedPart?.locked);
   const pointCount = selectedPath?.points.length ?? 0;
@@ -120,7 +128,7 @@ export const PathEditor = ({
     setIsFreeDrawing(false);
     setDragPoint(null);
     setSelectedPoint(null);
-  }, [pathGestureDraft, selectedPart?.id, selectedSceneObject?.id]);
+  }, [pathGestureDraft, selectedPart?.id, selectedPath?.id, selectedSceneObject?.id]);
   useEffect(() => {
     if (pathGestureDraft.getSnapshot()) pathGestureDraft.clear();
   }, [pathGestureDraft, selectedPath?.points]);
@@ -142,6 +150,7 @@ export const PathEditor = ({
     );
   };
   const appendFreePoint = (point: Point, seed = false) => {
+    if (seed) setClearedPath(null);
     const next = addDrawSamplePoint(
       freeDraftRef.current,
       point,
@@ -235,7 +244,7 @@ export const PathEditor = ({
       return;
     }
     pathGestureDraft.flush();
-    setPathPoints(points, selectedPath.source);
+    setPathPoints(points, selectedPath.source, undefined, selectedPath.id);
   };
   const stopDrawing = () => {
     const freeDraft = freeDraftRef.current;
@@ -254,6 +263,7 @@ export const PathEditor = ({
         timed.map(({ x, y }) => ({ x, y })),
         "drawn",
         timed,
+        selectedPath?.id,
       );
     } else {
       pathGestureDraft.clear();
@@ -265,13 +275,46 @@ export const PathEditor = ({
     setPathPoints(
       selectedPath.points.filter((_, i) => i !== selectedPoint),
       selectedPath.source,
+      undefined,
+      selectedPath.id,
     );
     setSelectedPoint(null);
   };
-  const clearPath = () =>
-    selectedPath &&
-    !pathLocked &&
-    dispatch({ type: "delete_path", pathId: selectedPath.id });
+  const clearPath = () => {
+    if (!selectedPath || pathLocked) return;
+    setClearedPath({
+      ...selectedPath,
+      points: selectedPath.points.map((point) => ({ ...point })),
+      timedPoints: selectedPath.timedPoints?.map((point) => ({ ...point })),
+    });
+    dispatch({
+      type: "upsert_path",
+      path: clearMotionPathGeometry(selectedPath),
+    });
+  };
+  const undoClearPath = () => {
+    if (!clearedPath || pathLocked || selectedPath?.id !== clearedPath.id) return;
+    dispatch({ type: "upsert_path", path: clearedPath });
+    setClearedPath(null);
+  };
+  const selectMotion = (pathId: string) => {
+    setDrawMode(false);
+    setSelectedPoint(null);
+    dispatch({ type: "select_path", pathId });
+  };
+  const addMotion = () => {
+    const targetId = selectedSceneObject?.id ?? selectedPart?.id;
+    if (!targetId || pathLocked) return;
+    const targetKind = selectedSceneObject ? "scene-object" : "part";
+    const path = createMotionPathForTarget(project, targetKind, targetId);
+    if (!path) return;
+    if (targetKind === "scene-object") {
+      dispatch({ type: "select_scene_object", objectId: targetId });
+    } else {
+      dispatch({ type: "select_part", partId: targetId });
+    }
+    dispatch({ type: "upsert_path", path });
+  };
   const switchPathView = (mode: "2d" | "3d") => {
     setPathViewMode(mode);
     if (mode === "3d" && drawMode) {
@@ -285,34 +328,27 @@ export const PathEditor = ({
     else setSelectedPoint(null);
     setDrawMode(!drawMode);
   };
-  const pathMechanism = selectedPath
-    ? project.mechanisms.find(
-        (m) =>
-          m.targetPathId === selectedPath.id &&
-          (selectedPath.sceneObjectId
-            ? m.targetSceneObjectId === selectedPath.sceneObjectId
-            : m.targetPartId === selectedPath.partId),
-      )
-    : undefined;
-  const previewTargetJointId = selectedPath
-    && !selectedPath.sceneObjectId
-    ? preferredMotionJointId(
-        project,
-        selectedPath.partId,
-        pathMechanism?.targetAnchorJointId ?? selectedPath.targetAnchorJointId,
-        { preferDistalWhenRoot: !selectedPath.targetAnchorJointId },
-      )
-    : undefined;
+  const motionPaths = useMemo(
+    () => motionPathsInProjectOrder(project),
+    [project.paths],
+  );
+  const activeMotionPaths = useMemo(
+    () => playableMotionPaths(project, motionPaths),
+    [motionPaths, project.parts, project.sceneObjects],
+  );
+  const playbackDurationMs = sharedMotionPlaybackDurationMs(
+    project,
+    activeMotionPaths,
+  );
+  useEffect(() => {
+    playbackClock.setTimelineDuration(playbackDurationMs);
+  }, [playbackClock, playbackDurationMs]);
   const previewAngle = isPlaying ? angle : 0;
-  const pathPreview =
-    selectedPath?.visible &&
-    selectedPath.enabled &&
-    selectedPath.points.length > 1
-      ? motionPreviewForPath(
+  const pathPreview = activeMotionPaths.length
+      ? motionPreviewForPaths(
           project,
-          selectedPath,
-          previewAngle,
-          previewTargetJointId,
+          activeMotionPaths,
+          motionTimelineMsForPhase(previewAngle, playbackDurationMs),
         )
       : undefined;
   return (
@@ -328,6 +364,7 @@ export const PathEditor = ({
             selectedPart={selectedPart}
             selectedSceneObject={selectedSceneObject}
             selectedPath={selectedPath}
+            motionPaths={motionPaths}
             drawMode={drawMode}
             pathLocked={pathLocked}
             pointCount={pointCount}
@@ -337,16 +374,22 @@ export const PathEditor = ({
             goStage={goStage}
             togglePathDrawing={togglePathDrawing}
             clearPath={clearPath}
+            undoClearPath={undoClearPath}
+            canUndoClear={Boolean(clearedPath && selectedPath?.id === clearedPath.id)}
+            selectMotion={selectMotion}
+            addMotion={addMotion}
             updatePath={updatePath}
             openTracking={openTracking}
             setIsPlaying={setIsPlaying}
             setAngle={setAngle}
             deletePoint={deletePoint}
+            playablePathCount={activeMotionPaths.length}
           />,
         ),
         canvas: canvasPane(
           <PathCanvasPane
             project={project}
+            motionPaths={motionPaths}
             selectedPath={selectedPath}
             selectedPoint={selectedPoint}
             onDrawPoint={onDrawPoint}
@@ -362,14 +405,12 @@ export const PathEditor = ({
             angle={angle}
             playbackClock={playbackClock}
             playbackSample={(phase) =>
-              selectedPath?.visible &&
-              selectedPath.enabled &&
-              selectedPath.points.length > 1
-                ? motionPreviewForPath(
+              activeMotionPaths.length
+                ? motionPreviewForPaths(
                     project,
-                    selectedPath,
-                    phase,
-                    previewTargetJointId,
+                    activeMotionPaths,
+                    playbackClock.getTimelineMs() ||
+                      motionTimelineMsForPhase(phase, playbackDurationMs),
                   )
                 : undefined
             }

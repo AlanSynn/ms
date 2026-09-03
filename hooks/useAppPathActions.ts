@@ -10,6 +10,7 @@ import type {
 } from "../types";
 import { validatePath } from "../utils/project";
 import { pathBelongsToTarget } from "../utils/pathTargets";
+import { nextMotionPathId } from "../utils/motion";
 
 type UseAppPathActionsParams = {
   project: ProjectState;
@@ -34,6 +35,7 @@ export const useAppPathActions = ({
       points: Point[],
       source: ProjectMotionPath["source"] = "drawn",
       timedPoints?: ProjectMotionPath["timedPoints"],
+      pathId?: string,
     ) => {
       const targetKind = selectedSceneObject ? "scene-object" : "part";
       const targetId = selectedSceneObject?.id ?? selectedPart?.id;
@@ -44,26 +46,32 @@ export const useAppPathActions = ({
           : project.parts[targetId]?.locked
       )
         return;
-      const existing = (
+      const requested = pathId ? project.paths[pathId] : undefined;
+      if (
+        pathId &&
+        (!requested || !pathBelongsToTarget(requested, targetKind, targetId, project))
+      ) return;
+      const existing = requested ?? (
         Object.values(project.paths) as ProjectMotionPath[]
-      ).find((path) => pathBelongsToTarget(path, targetKind, targetId));
+      ).find((path) => pathBelongsToTarget(path, targetKind, targetId, project));
       const id =
-        project.selectedPathId &&
+        requested?.id ?? (project.selectedPathId &&
         project.paths[project.selectedPathId] &&
         pathBelongsToTarget(
           project.paths[project.selectedPathId],
           targetKind,
           targetId,
+          project,
         )
           ? project.selectedPathId
-          : (existing?.id ?? `path-${targetId}`);
+          : (existing?.id ?? nextMotionPathId(project, targetId)));
       const current = project.paths[id];
       dispatch({
         type: "upsert_path",
         path: validatePath({
           id,
-          partId: selectedPart?.id ?? "",
-          sceneObjectId: selectedSceneObject?.id,
+          partId: current?.partId ?? selectedPart?.id ?? "",
+          sceneObjectId: current?.sceneObjectId ?? selectedSceneObject?.id,
           targetAnchorJointId: selectedSceneObject ? undefined : current?.targetAnchorJointId,
           chainRootJointId: selectedSceneObject ? undefined : current?.chainRootJointId,
           smoothness: current?.smoothness ?? 0,

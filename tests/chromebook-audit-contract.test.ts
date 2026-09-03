@@ -2197,7 +2197,7 @@ assert(bundleBudget.includes("collectStaticImportClosure") && bundleBudget.inclu
 assert(bundleBudget.includes("schemaVersion: 2"), "the bundle report version identifies static-closure semantics");
 const config = read("playwright.config.ts");
 assert(config.includes("channel: 'chrome'") && config.includes("--enable-precise-memory-info"));
-assert(config.includes("reuseExistingServer: !process.env.CI && !auditEnabled"), "audit cannot reuse a stale preview server");
+assert(config.includes("reuseExistingServer: false"), "browser tests cannot reuse a stale or unrelated preview server");
 const spec = read("tests/browser/chromebook-audit.spec.ts");
 const featureSpec = read("tests/browser/chromebook-features-audit.spec.ts");
 const stageSwitchSpec = read("tests/browser/chromebook-stage-switch-audit.spec.ts");

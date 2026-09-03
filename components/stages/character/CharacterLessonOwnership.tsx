@@ -26,8 +26,10 @@ export const CharacterLessonOwnership = ({
         <span>{activeClassroomLesson.outcome}</span>
       </div>
       <div className="lesson-ownership-cues">
-        <span>Select a part</span>
+        <span>Edit parts</span>
         <span>Place joints</span>
+        <span>Change path</span>
+        <span>Fit mechanism</span>
       </div>
       <div className="lesson-ownership-actions">
         <button

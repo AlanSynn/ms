@@ -36,7 +36,7 @@ const prepareBlueprint = async (page: Page) => {
   await expect(page.getByRole("heading", { name: "Path Editor" })).toBeVisible();
   await page.getByTestId("workflow-stage-blueprint").click();
   await expect(page.getByRole("heading", { name: "Blueprint" })).toBeVisible();
-  const create = page.getByRole("button", { name: "Generate package" });
+  const create = page.getByTestId("blueprint-build-print");
   await expect(create).toBeEnabled();
   await expect(create).toHaveAttribute("data-blueprint-package-worker", "on-demand");
   await expect(page.getByTestId("blueprint-export-package-json")).toHaveCount(0);
@@ -60,7 +60,7 @@ const auditBlueprintPackage = async (
   }).toBe(0);
   const baseline = await collectStableFeatureProbe(page, client);
   const actions: FeatureActionAudit[] = [];
-  const create = page.getByRole("button", { name: "Generate package" });
+  const create = page.getByTestId("blueprint-build-print");
 
   await create.evaluate((button) => {
     const cancelOnDispatch = (event: Event) => {
@@ -85,7 +85,7 @@ const auditBlueprintPackage = async (
   const cancelledBefore = await readFeatureRuntimeProbe(page);
   const cancelledTiming = await measureClickToNextPaint(create);
   await expect(create).toHaveAttribute("data-audit-cancelled-on-dispatch", "true");
-  await expect(create).toContainText("Make files");
+  await expect(create).toContainText("Download Blueprint PDF");
   await waitForLifecycleBaseline(page, baseline.lifecycle);
   actions.push(await finishFeatureAction(page, {
     label: "blueprint-package-cancel",
@@ -97,14 +97,12 @@ const auditBlueprintPackage = async (
 
   const completedBefore = await readFeatureRuntimeProbe(page);
   const completedTiming = await measureClickToNextPaint(create);
-  await expect(
-    page.getByRole("button", { name: "Download PDF cut sheet default" }),
-  ).toBeVisible();
+  await expect(create).toContainText("Download Blueprint PDF");
   await expect(
     page.getByTestId("blueprint-export-package-json"),
     "memory audit does not retain a diagnostic copy of the package JSON",
   ).toHaveCount(0);
-  await expect(create).toContainText("Make files");
+  await expect(create).toContainText("Download Blueprint PDF");
   const jobCompletionMs = await elapsedFeatureTime(page, completedTiming);
   await waitForLifecycleBaseline(page, baseline.lifecycle);
   actions.push(await finishFeatureAction(page, {

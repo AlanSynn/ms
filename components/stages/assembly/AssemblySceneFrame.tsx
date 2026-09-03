@@ -3,6 +3,14 @@ import type { AssemblySceneFrame as AssemblySceneFrameModel } from "../../../uti
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 
 const coordText = (coords: string[]) => (coords.length ? coords.join(" · ") : "None");
+const frameBoardText = (frame: AssemblySceneFrameModel) =>
+  coordText(
+    frame.activeBoardCoords.length
+      ? frame.activeBoardCoords
+      : frame.mechanismContract?.boardCoordinate
+        ? [frame.mechanismContract.boardCoordinate]
+        : [],
+  );
 
 export const AssemblySceneFrame = ({
   frame,
@@ -75,10 +83,10 @@ export const AssemblySceneFrame = ({
       data-testid="assembly-scene-sensemaking"
       data-sensemaking-evidence={frame.mechanismContract ? "fabrication stack drives the Three build scene" : "character parts use the same Three build scene"}
     >
-      {frame.kind === "mechanism" ? "Build the mechanism, then connect the character." : "Pin fixed joints; keep moving pivots free."}
+      {frame.kind === "mechanism" ? "Mechanism stack" : "Character pins"}
     </div>
     <div className="assembly-scene-meta">
-      <span data-testid="assembly-active-board-coords">Board: {coordText(frame.activeBoardCoords)}</span>
+      <span data-testid="assembly-active-board-coords">Board: {frameBoardText(frame)}</span>
       <span data-testid="assembly-floating-references">Refs: {coordText(frame.floatingReferenceCoords)}</span>
       <span>Parts: {frame.visibleParts.length}</span>
     </div>
