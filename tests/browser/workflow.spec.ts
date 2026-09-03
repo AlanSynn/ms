@@ -422,13 +422,13 @@ test('Character tab owns separate scene objects and later tabs only render them'
     discardMessage = dialog.message();
     await dialog.dismiss();
   });
-  await page.getByTestId('command-stage-project').click();
+  await page.getByTestId('command-menu-project').click();
   await page.getByRole('button', { name: 'New Project', exact: true }).click();
   expect(discardMessage).toContain('A recovery copy will be saved first');
   await expect(page.getByTestId('status-bar')).toContainText('Cancelled');
 
   page.once('dialog', async dialog => dialog.accept());
-  await page.getByTestId('command-stage-project').click();
+  await page.getByTestId('command-menu-project').click();
   await page.getByRole('button', { name: 'New Project', exact: true }).click();
   await expect(page.getByTestId('status-bar')).toContainText('New project');
 
@@ -1156,7 +1156,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await page.getByRole('button', { name: 'Drawing free path', exact: true }).click();
 
   const projectDownloadPromise = page.waitForEvent('download');
-  await page.getByTestId('command-stage-project').click();
+  await page.getByTestId('command-menu-project').click();
   await page.getByTestId('command-download-snapshot').click();
   const projectDownload = await projectDownloadPromise;
   expect(projectDownload.suggestedFilename()).toMatch(/\.motionsmith$/);
@@ -2382,7 +2382,7 @@ test('Legacy storage namespace migrates to MotionSmith keys without losing autos
     }));
   });
 
-  await page.getByTestId('command-stage-project').click();
+  await page.getByTestId('command-menu-project').click();
   await page.getByRole('button', { name: 'Recover' }).click();
   await expect(page.getByTestId('status-bar')).toContainText('Recovered browser autosave snapshot');
   await expect.poll(async () => Boolean((await readBrowserAutosaveProbe(page)).metadata), { timeout: 5000 }).toBe(true);
@@ -4625,7 +4625,7 @@ test('Command menu and shared canvas zoom persist across workflow stages', async
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  await page.getByTestId('command-stage-project').click();
+  await page.getByTestId('command-menu-project').click();
   let dialogMessage = '';
   page.once('dialog', async dialog => {
     dialogMessage = dialog.message();
@@ -4636,7 +4636,7 @@ test('Command menu and shared canvas zoom persist across workflow stages', async
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
   await expect(page.getByTestId('status-bar')).toContainText('Cancelled');
 
-  await page.getByTestId('command-stage-project').click();
+  await page.getByTestId('command-menu-project').click();
   await page.getByRole('button', { name: 'Recover' }).click();
   await expect(page.getByTestId('status-bar')).toContainText(/No autosave found|Recovered browser autosave snapshot|Autosave changed\. Try again\./);
 
@@ -4847,7 +4847,7 @@ test('guided classroom lesson opens real baseline and can reset safely', async (
   await expect(page.getByTestId('classroom-checklist')).toHaveCount(0);
   await expect(page.getByTestId('character-three-puppet-state')).toHaveAttribute('data-three-mechanism-count', '0');
 
-  await page.getByTestId('command-stage-project').click();
+  await page.getByTestId('command-menu-project').click();
   await page.getByTestId('command-reset-lesson').click();
   await expect(page.getByTestId('status-bar')).toContainText('Lesson unchanged');
   await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
@@ -5151,7 +5151,7 @@ test('Simplified shared canvas stays non-destructive and exports blueprint', asy
   });
 
   const saveSnapshot = async () => {
-    await page.getByTestId('command-stage-project').click();
+    await page.getByTestId('command-menu-project').click();
     const [download] = await Promise.all([
       page.waitForEvent('download'),
       page.getByTestId('command-download-snapshot').click()
