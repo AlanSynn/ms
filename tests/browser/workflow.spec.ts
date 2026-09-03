@@ -422,7 +422,7 @@ test('Character tab owns separate scene objects and later tabs only render them'
     discardMessage = dialog.message();
     await dialog.dismiss();
   });
-  await page.getByTestId('top-command-bar').getByText('Project', { exact: true }).click();
+  await page.getByTestId('command-stage-project').click();
   await page.getByRole('button', { name: 'New Project', exact: true }).click();
   expect(discardMessage).toContain('A recovery copy will be saved first');
   await expect(page.getByTestId('status-bar')).toContainText('Cancelled');
