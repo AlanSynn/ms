@@ -37,6 +37,7 @@ import { createProjectDownloadWorkerClient } from "../runtime/persistence/projec
 import { createAutosaveRecoveryWorkerClient } from "../runtime/persistence/autosaveRecoveryWorkerClient";
 
 const APP_STAGE_IDS: AppStage[] = [
+  "project",
   "character",
   "path",
   "foundry",
@@ -131,22 +132,27 @@ export const useAppProjectCommands = ({
     [autosaveRecoveryClient, projectDownloadClient],
   );
   const downloadProjectSnapshot = (suffix: string, status: string) => {
-    const filename = projectSnapshotFileName(project.metadata.name, suffix);
+    const sourceProject = project;
+    const filename = projectSnapshotFileName(sourceProject.metadata.name, suffix);
     const finish = (blob: Blob) => {
       try {
+        if (latestProjectRef.current !== sourceProject) {
+          setCommandStatus("Project changed. Save again.");
+          return;
+        }
         downloadBlob(filename, blob);
-        setCommandStatus(status);
+        setCommandStatus(`${status}: ${filename}`);
       } catch (error) {
         setCommandStatus(
           `Project save failed: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     };
-    projectDownloadClient.request(project, {
+    projectDownloadClient.request(sourceProject, {
       complete: finish,
       unavailable: () => {
         try {
-          finish(createPortableProjectBlob(project));
+          finish(createPortableProjectBlob(sourceProject));
         } catch (error) {
           setCommandStatus(
             `Project save failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -155,6 +161,33 @@ export const useAppProjectCommands = ({
       },
       failed: (error) => setCommandStatus(`Project save failed: ${error.message}`),
     });
+  };
+
+  const saveRecoveryCopy = (label: string) => {
+    try {
+      const filename = projectSnapshotFileName(
+        project.metadata.name,
+        `-recovery-${Date.now()}`,
+      );
+      downloadBlob(filename, createPortableProjectBlob(project));
+      setCommandStatus(`${label}: recovery copy saved`);
+      return true;
+    } catch (error) {
+      setCommandStatus(
+        `Recovery copy failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return false;
+    }
+  };
+
+  const confirmReplacement = (label: string) => {
+    if (!projectHasUserWork(project)) return true;
+    const motions = Object.keys(project.paths).length;
+    const mechanisms = project.mechanisms.length;
+    if (!window.confirm(
+      `${label}? Current work has ${motions} motion${motions === 1 ? "" : "s"} and ${mechanisms} mechanism${mechanisms === 1 ? "" : "s"}. A recovery copy will be saved first.`,
+    )) return false;
+    return saveRecoveryCopy(label);
   };
 
   const foundryPreviewFromProject = (lessonProject: ProjectState) => {
@@ -187,11 +220,12 @@ export const useAppProjectCommands = ({
   const newProject = () => {
     if (
       projectHasUserWork(project) &&
-      !window.confirm("Discard current project and start new?")
+      !window.confirm("Start a new project? A recovery copy will be saved first.")
     ) {
       setCommandStatus("Cancelled");
       return;
     }
+    if (projectHasUserWork(project) && !saveRecoveryCopy("New project")) return;
     setCommandStatus("New project");
     startTransition(() => {
       setPendingCharacter(null);
@@ -206,6 +240,10 @@ export const useAppProjectCommands = ({
     lessonId: string,
     preparedProject?: ProjectState,
   ) => {
+    if (!preparedProject && !confirmReplacement("Open this guide")) {
+      setCommandStatus("Guide unchanged");
+      return;
+    }
     const lesson = classroomLessonById(lessonId);
     if (!lesson || !isMechanismTypeEnabled(lesson.mechanismType)) {
       setCommandStatus("Lesson unavailable");
@@ -224,6 +262,10 @@ export const useAppProjectCommands = ({
   };
 
   const openSampleProject = (preparedProject?: ProjectState) => {
+    if (!preparedProject && !confirmReplacement("Open the starter rig")) {
+      setCommandStatus("Project unchanged");
+      return;
+    }
     setPendingCharacter(null);
     setProject(preparedProject ?? createSampleProject(), { resetHistory: true });
     setShowGettingStarted(false);
@@ -235,6 +277,10 @@ export const useAppProjectCommands = ({
     const resetProject = resetProjectToLessonBaseline(project);
     if (!lesson || !resetProject) {
       setCommandStatus("No lesson");
+      return;
+    }
+    if (!confirmReplacement("Reset this lesson")) {
+      setCommandStatus("Lesson unchanged");
       return;
     }
     openLessonProject(resetProject, lesson.startStage);

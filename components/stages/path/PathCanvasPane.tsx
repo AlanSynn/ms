@@ -15,6 +15,7 @@ import type { PathGestureDraft } from "../../../runtime/path/pathGestureDraft";
 
 interface PathCanvasPaneProps {
   project: ProjectState;
+  motionPaths: ProjectMotionPath[];
   selectedPath?: ProjectMotionPath;
   selectedPoint: number | null;
   onDrawPoint: (point: Point) => void;
@@ -40,6 +41,7 @@ interface PathCanvasPaneProps {
 
 export const PathCanvasPane = ({
   project,
+  motionPaths,
   selectedPath,
   selectedPoint,
   onDrawPoint,
@@ -63,8 +65,8 @@ export const PathCanvasPane = ({
   pathGestureDraft,
 }: PathCanvasPaneProps) => {
   const pathsToRender = React.useMemo(
-    () => selectedPath ? [selectedPath] : [],
-    [selectedPath],
+    () => motionPaths.filter((path) => path.visible),
+    [motionPaths],
   );
 
   return <div className="path-canvas-shell canvas-workspace overflow-hidden p-0">
@@ -123,11 +125,11 @@ export const PathCanvasPane = ({
       onMovePathPoint={pathLocked ? undefined : onPathPointMove}
       onEndPathPointEdit={onPathPointEnd}
       pathGestureDraft={pathGestureDraft}
-      onSelectPart={(partId) => dispatch({ type: "select_part", partId })}
-      onSelectSceneObject={(objectId) =>
+      onSelectPart={pathLocked ? undefined : (partId) => dispatch({ type: "select_part", partId })}
+      onSelectSceneObject={pathLocked ? undefined : (objectId) =>
         dispatch({ type: "select_scene_object", objectId })
       }
-      onSelectJoint={onJointPick}
+      onSelectJoint={pathLocked ? undefined : onJointPick}
     />
   </div>;
 };

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { Buffer } from "node:buffer";
 
 import { serializeProject } from "../../utils/project";
+import { readableFabricationStackSummary } from "../../utils/fabrication";
 import { createFabricationReadyFourBarProject } from "../fixtures/fabricationProject";
 
 type ExportWorkerProbe = {
@@ -10,7 +11,7 @@ type ExportWorkerProbe = {
   terminated: string[];
 };
 
-test("Assembly reuses the export worker and STL stays explicit", async ({ page }) => {
+test("Blueprint owns reusable export jobs and keeps Character outputs separate", async ({ page }) => {
   await page.addInitScript(() => {
     const probe: ExportWorkerProbe = { requests: [], terminated: [] };
     const NativeWorker = window.Worker;
@@ -61,12 +62,21 @@ test("Assembly reuses the export worker and STL stays explicit", async ({ page }
   });
   await expect(page.getByRole("heading", { name: "Path Editor" })).toBeVisible();
 
-  await page.getByTestId("workflow-stage-assembly").click();
-  await expect(page.getByRole("heading", { name: "Assembly" })).toBeVisible();
-  const generate = page.getByRole("button", { name: "Generate package" });
-  await expect(generate).toHaveAttribute("data-assembly-package-worker", "on-demand");
-  await generate.click();
-  await expect(page.getByRole("button", { name: "Print", exact: true })).toBeVisible();
+  await page.getByTestId("workflow-stage-blueprint").click();
+  await expect(page.getByRole("heading", { name: "Blueprint" })).toBeVisible();
+  const generate = page.getByRole("button", { name: "Download Blueprint PDF" });
+  await expect(generate).toHaveAttribute("data-blueprint-package-worker", "on-demand");
+  const [packetDownload] = await Promise.all([
+    page.waitForEvent("download"),
+    generate.click(),
+  ]);
+  expect(packetDownload.suggestedFilename()).toMatch(/-blueprint\.pdf$/);
+  const packetPath = await packetDownload.path();
+  expect(packetPath).toBeTruthy();
+  const packetPdf = await readFile(packetPath!, "utf8");
+  expect(packetPdf).toContain("/MediaBox [0 0 864 864]");
+  expect(packetPdf).toContain("sheet=12x12in scale=1");
+  expect(packetPdf).toContain(project.mechanisms[0].id);
   await expect.poll(async () => page.evaluate(() => {
     const probe = (window as unknown as Window & {
       __MOTIONSMITH_EXPORT_WORKER_PROBE__: ExportWorkerProbe;
@@ -80,15 +90,36 @@ test("Assembly reuses the export worker and STL stays explicit", async ({ page }
     terminations: 1,
   });
 
-  await page.getByTestId("workflow-stage-blueprint").click();
-  await expect(page.getByRole("heading", { name: "Blueprint" })).toBeVisible();
-  const packageJson = await page.getByTestId("blueprint-export-package-json").textContent();
-  expect(packageJson).toBeTruthy();
-  expect(JSON.parse(packageJson!).customPartsStl).toBe("");
+  const [characterPdfDownload] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Download Character PDF" }).click(),
+  ]);
+  expect(characterPdfDownload.suggestedFilename()).toMatch(/-character\.pdf$/);
+  const characterPdfPath = await characterPdfDownload.path();
+  expect(characterPdfPath).toBeTruthy();
+  const characterPdf = await readFile(characterPdfPath!, "utf8");
+  expect(characterPdf).toContain("/MediaBox [0 0 612 792]");
+  expect(characterPdf).toContain("character cut sheet");
+  expect(characterPdf).not.toContain("MS_BLUEPRINT_PAGE");
 
+  const [characterSvgDownload] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Download Character SVG" }).click(),
+  ]);
+  expect(characterSvgDownload.suggestedFilename()).toMatch(/-character\.svg$/);
+  const characterSvgPath = await characterSvgDownload.path();
+  expect(characterSvgPath).toBeTruthy();
+  const characterSvg = await readFile(characterSvgPath!, "utf8");
+  expect(characterSvg).toContain('width="215.9mm"');
+  expect(characterSvg).toContain('height="279.4mm"');
+  expect(characterSvg).toContain('data-character-exploded-sheet="true"');
+
+  await page.getByText("Other cut files", { exact: true }).click();
+  const stlButton = page.getByRole("button", { name: "Download character STL" });
+  await expect(stlButton).toBeEnabled();
   const [download] = await Promise.all([
     page.waitForEvent("download"),
-    page.getByRole("button", { name: "Download character STL" }).click(),
+    stlButton.click(),
   ]);
   expect(download.suggestedFilename()).toMatch(/custom-parts\.stl$/);
   const path = await download.path();
@@ -96,6 +127,11 @@ test("Assembly reuses the export worker and STL stays explicit", async ({ page }
   const stl = await readFile(path!, "utf8");
   expect(stl).toContain("solid motionsmith_custom_parts");
   expect(stl).toContain("facet normal");
+  await page.getByTestId("workflow-stage-assembly").click();
+  await expect(page.getByTestId("assembly-stack-summary")).toHaveText(
+    readableFabricationStackSummary(project.mechanisms[0]),
+  );
+  await expect(page.getByRole("button", { name: "Download Blueprint PDF" })).toHaveCount(0);
   await expect.poll(async () => page.evaluate(() => {
     const probe = (window as unknown as Window & {
       __MOTIONSMITH_EXPORT_WORKER_PROBE__: ExportWorkerProbe;
@@ -103,5 +139,10 @@ test("Assembly reuses the export worker and STL stays explicit", async ({ page }
     return probe.requests
       .filter(({ name }) => name === "motionsmith-blueprint-package")
       .map(({ type }) => type);
-  })).toEqual(["create-package", "create-custom-parts-stl"]);
+  })).toEqual([
+    "create-package",
+    "create-character-template",
+    "create-character-template",
+    "create-custom-parts-stl",
+  ]);
 });

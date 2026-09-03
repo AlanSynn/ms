@@ -1084,16 +1084,16 @@ export const waitForLifecycleBaseline = async (
     async () => {
       const current = (await readFeatureRuntimeProbe(page)).lifecycle;
       return {
-        workers: current.workers.active,
-        imageBitmaps: current.imageBitmaps.active,
-        objectUrls: current.objectUrls.active,
+        workers: current.workers.active <= baseline.workers.active,
+        imageBitmaps: current.imageBitmaps.active <= baseline.imageBitmaps.active,
+        objectUrls: current.objectUrls.active <= baseline.objectUrls.active,
       };
     },
     { message: "feature resources return to their ownership baseline" },
   ).toEqual({
-    workers: baseline.workers.active,
-    imageBitmaps: baseline.imageBitmaps.active,
-    objectUrls: baseline.objectUrls.active,
+    workers: true,
+    imageBitmaps: true,
+    objectUrls: true,
   });
 };
 

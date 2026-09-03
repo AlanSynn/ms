@@ -9,9 +9,6 @@ import {
   type CharacterAssemblyStep,
 } from "../../../utils/assemblyPlayback";
 import { fabricationBoardCoordinateCallout } from "../../../utils/fabrication";
-import {
-  MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY,
-} from "../../../utils/mechanismTemplates";
 import { referenceRecipeForType } from "../../../utils/mechanismReference";
 import { ContextHelp } from "../../ui/ContextHelp";
 
@@ -24,14 +21,6 @@ type AssemblyStepItem = Pick<
 export const AssemblyControlPanel = ({
   project,
   goStage,
-  validationErrorCount,
-  packageReady,
-  packageStatus,
-  packageError,
-  onCreate,
-  onPrint,
-  onDownloadPdf,
-  onDownloadCharacterPdf,
   activeAssemblyMode,
   setAssemblyMode,
   hasCharacterAssembly,
@@ -46,14 +35,6 @@ export const AssemblyControlPanel = ({
 }: {
   project: ProjectState;
   goStage: (stage: AppStage) => void;
-  validationErrorCount: number;
-  packageReady: boolean;
-  packageStatus: "idle" | "running";
-  packageError?: string;
-  onCreate: () => void;
-  onPrint: () => void;
-  onDownloadPdf: () => void;
-  onDownloadCharacterPdf: () => void;
   activeAssemblyMode: AssemblyMode;
   setAssemblyMode: Dispatch<SetStateAction<AssemblyMode>>;
   hasCharacterAssembly: boolean;
@@ -73,33 +54,11 @@ export const AssemblyControlPanel = ({
       stage="assembly"
       goStage={goStage}
     >
-      <h3>Build</h3>
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-4">
         <button className="btn-secondary" onClick={() => goStage("blueprint")}>
           Blueprint
         </button>
-        <button
-          className="btn-primary"
-          aria-label={packageStatus === "running" ? "Cancel package" : packageReady ? "Print" : "Generate package"}
-          aria-busy={packageStatus === "running"}
-          disabled={!!validationErrorCount && packageStatus !== "running"}
-          onClick={packageStatus === "running" ? onCreate : packageReady ? onPrint : onCreate}
-          data-assembly-package-worker="on-demand"
-        >
-          {packageStatus === "running" ? "Cancel" : packageReady ? "Print" : "Generate"}
-        </button>
-        {packageReady && (
-          <button className="btn-secondary" onClick={onDownloadPdf}>
-            PDF
-          </button>
-        )}
-        {packageReady && (
-          <button className="btn-secondary" onClick={onDownloadCharacterPdf}>
-            Character PDF
-          </button>
-        )}
       </div>
-      {packageError && <div className="error mt-2">{packageError}</div>}
       {activeAssemblyMode === "mechanism" && (
         <div
           className="mt-4 flex flex-wrap gap-2"
@@ -158,14 +117,6 @@ export const AssemblyControlPanel = ({
               </div>
               <div className="text-sm text-slate-600">
                 Board {fabricationBoardCoordinateCallout(recipe.boardCoordinate, recipe.board)}
-              </div>
-              <div className="mt-2">
-                <span className="blueprint-pill">
-                  {
-                    MECHANISM_LIBRARY[recipe.type].classroomSensemaking
-                      .directTranslation
-                  }
-                </span>
               </div>
             </button>
           ))}

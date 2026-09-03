@@ -1,10 +1,11 @@
 import React, { startTransition, useEffect, useState, useSyncExternalStore } from 'react';
-import { Boxes, Download, FileJson, PenLine, Settings, UserRound, Wrench } from 'lucide-react';
+import { Boxes, Download, FileJson, FolderOpen, PenLine, Settings, UserRound, Wrench } from 'lucide-react';
 import type { AppStage, ProjectState } from '../../types';
 
-export type StageIconName = 'character' | 'path' | 'foundry' | 'design' | 'blueprint' | 'assembly' | 'options';
+export type StageIconName = 'project' | 'character' | 'path' | 'foundry' | 'design' | 'blueprint' | 'assembly' | 'options';
 
 export const STAGE_PANE_NAV_ITEMS: Array<{ ariaLabel: string; label: string; target: AppStage; activeStages: AppStage[]; icon: StageIconName }> = [
+    { ariaLabel: 'Project', label: 'Project', target: 'project', activeStages: ['project'], icon: 'project' },
     { ariaLabel: 'Character', label: 'Character', target: 'character', activeStages: ['character'], icon: 'character' },
     { ariaLabel: 'Path', label: 'Path', target: 'path', activeStages: ['path'], icon: 'path' },
     { ariaLabel: 'Foundry', label: 'Foundry', target: 'foundry', activeStages: ['foundry'], icon: 'foundry' },
@@ -15,6 +16,7 @@ export const STAGE_PANE_NAV_ITEMS: Array<{ ariaLabel: string; label: string; tar
 ];
 
 export const StagePaneNavIcon = ({ icon }: { icon: typeof STAGE_PANE_NAV_ITEMS[number]['icon'] }) => {
+    if (icon === 'project') return <FolderOpen size={16}/>;
     if (icon === 'character') return <UserRound size={16}/>;
     if (icon === 'path') return <PenLine size={16}/>;
     if (icon === 'foundry') return <Boxes size={16}/>;

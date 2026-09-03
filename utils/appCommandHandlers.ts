@@ -57,6 +57,7 @@ export const createAppCommandHandlers = ({
   "workspace.saveLayout": saveWorkspaceLayout,
   "workspace.restoreLayout": restoreWorkspaceLayout,
   "workspace.resetLayout": resetWorkspaceLayout,
+  "stage.project": () => goStage("project"),
   "stage.character": () => goStage("character"),
   "stage.path": () => goStage("path"),
   "stage.foundry": () => goStage("foundry"),

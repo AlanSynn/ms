@@ -5,6 +5,7 @@ import type {
   ProjectState,
 } from "../types";
 import { validateForFabrication } from "./fabrication";
+import { resolvedMechanismOutputBindings } from "./mechanismBindings";
 
 export type WorkflowStatus = {
   stageLabel: string;
@@ -24,7 +25,9 @@ export const workflowStatusFor = (
   );
   let blocker = "OK";
   let nextAction = "Keep going";
-  if (!project.partOrder.length) {
+  if (stage === "project") {
+    nextAction = "Save or open";
+  } else if (!project.partOrder.length) {
     blocker = "No character";
     nextAction = "Load character";
   } else if (stage === "path") {
@@ -45,12 +48,37 @@ export const workflowStatusFor = (
         ? "Pick one"
         : "Draw path";
   } else if (stage === "design") {
-    blocker = enabledMechanisms.length ? "OK" : "No mechanism";
-    nextAction = enabledMechanisms.length ? "Check target" : "Pick mechanism";
+    const bindingIssue = enabledMechanisms
+      .map((mechanism) => {
+        const bindings = resolvedMechanismOutputBindings(project, mechanism)
+          .filter((binding) => binding.enabled !== false);
+        if (!bindings.some((binding) => Boolean(project.paths[binding.pathId]))) {
+          return "No path";
+        }
+        const hasTarget = bindings.some((binding) =>
+          binding.targetSceneObjectId
+            ? Boolean(project.sceneObjects[binding.targetSceneObjectId])
+            : binding.targetPartId
+              ? Boolean(project.parts[binding.targetPartId])
+              : false,
+        );
+        return hasTarget ? undefined : "No target";
+      })
+      .find((issue) => issue !== undefined);
+    if (!enabledMechanisms.length) {
+      blocker = "No mechanism";
+      nextAction = "Pick mechanism";
+    } else if (bindingIssue) {
+      blocker = bindingIssue;
+      nextAction = bindingIssue === "No path" ? "Choose path" : "Choose target";
+    } else {
+      blocker = "OK";
+      nextAction = "Tune motion";
+    }
   } else if (stage === "blueprint") {
     const validation = validateForFabrication(project);
     blocker = validation.errors[0] ?? validation.warnings[0] ?? "OK";
-    nextAction = validation.errors.length ? "Fix" : "Make sheets";
+    nextAction = validation.errors.length ? "Fix" : "Download PDF";
   } else if (stage === "assembly") {
     const validation = validateForFabrication(project);
     blocker = validation.errors[0] ?? validation.warnings[0] ?? "OK";

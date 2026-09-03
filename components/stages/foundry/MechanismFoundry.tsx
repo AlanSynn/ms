@@ -64,14 +64,15 @@ import {
   boardToScene,
   bodyPartPivotScene,
   sceneToBoard,
-  SCENE_VIEW,
 } from "../../../utils/coordinates";
 import {
   FOUNDRY_OVERLAY_SIZE,
   FOUNDRY_VIEW_PRESETS,
+  FOUNDRY_WORK_PLANE_Z,
   clampFoundryPitch,
   clampFoundryZoom,
   projectFoundryOverlayPoint,
+  sceneToFoundryPreviewPoint,
   unprojectFoundryOverlayPoint,
   type FoundryCamera,
   type FoundryOverlaySize,
@@ -113,6 +114,7 @@ import { createMechanismFitJobInput } from "../../../runtime/fitting/mechanismFi
 import { createMechanismFitWorkerClient } from "../../../runtime/fitting/mechanismFitWorkerClient";
 import { highResolutionSessionController } from "../../../runtime/render/adaptiveHighResolutionController";
 import { createTransientValueController } from "../../../runtime/render/transientValueController";
+import { compatibleMechanismsForBinding } from "../../../utils/mechanismBindings";
 
 const traceDistanceToGeneratedPath = (
   trace: { points: Point[] },
@@ -154,7 +156,7 @@ export const MechanismFoundry = ({
   selectedPath?: ProjectMotionPath;
   playbackClock: PlaybackClock;
   goStage: (stage: AppStage) => void;
-  onExport: (pkg: FoundryExportPackage) => void;
+  onExport: (pkg: FoundryExportPackage, options?: { reuseMechanismId?: string }) => void;
 }) => {
   const renderPolicy = resolveRenderPerformancePolicy(
     project.settings.performancePreset,
@@ -223,6 +225,7 @@ export const MechanismFoundry = ({
   const [showUserPathPreview, setShowUserPathPreview] = useState(true);
   const [showPathPreview, setShowPathPreview] = useState(false);
   const [selectedOutputTraceId, setSelectedOutputTraceId] = useState<string | null>(null);
+  const [reuseMechanismId, setReuseMechanismId] = useState<string>();
   const [showFoundryGrid, setShowFoundryGrid] = useState(true);
   const [showSensemaking, setShowSensemaking] = useState(false);
   const [pathFitBusy, setPathFitBusy] = useState(false);
@@ -330,10 +333,7 @@ export const MechanismFoundry = ({
     }),
     [foundry, landing.x, landing.y],
   );
-  const anchorMarker = {
-    x: 180 + (landing.x / SCENE_VIEW.width) * 360,
-    y: 120 - (landing.y / SCENE_VIEW.height) * 240,
-  };
+  const anchorMarker = sceneToFoundryPreviewPoint(landing);
   const rawFoundryPointTraces = useMemo(
     () =>
       retainFoundryGestureAnalysis(
@@ -662,7 +662,7 @@ export const MechanismFoundry = ({
     anchorMarker,
     foundryCamera,
     foundryProjectionSize,
-    0,
+    FOUNDRY_WORK_PLANE_Z,
   );
   const playbackOverlaySample = (phase: number): FoundryOverlayPlaybackFrame => {
     const frame = createFoundryPlaybackFrame(
@@ -750,6 +750,23 @@ export const MechanismFoundry = ({
     .join(",");
   const primaryOutputTrace = rawFoundryPointTraces.find((trace) => trace.primary) ?? rawFoundryPointTraces[0];
   const outputTraceLabel = primaryOutputTrace?.id ?? "—";
+  const reusableMechanisms = useMemo(
+    () => selectedPath
+      ? compatibleMechanismsForBinding(
+          project,
+          landedFoundry,
+          selectedPath.id,
+          primaryOutputTrace?.id,
+          { ignoreMechanismId: foundry.id },
+        )
+      : [],
+    [foundry.id, landedFoundry, primaryOutputTrace?.id, project, selectedPath],
+  );
+  useEffect(() => {
+    if (reuseMechanismId && !reusableMechanisms.some(candidate => candidate.mechanism.id === reuseMechanismId)) {
+      setReuseMechanismId(undefined);
+    }
+  }, [reuseMechanismId, reusableMechanisms]);
   const cycleOutputTrace = () => {
     if (rawFoundryPointTraces.length < 2) return;
     const currentIndex = Math.max(
@@ -797,13 +814,6 @@ export const MechanismFoundry = ({
       return undefined;
     }
     setBoardPlacementWarning(null);
-    if (
-      manualAnchor &&
-      Number.isFinite(fitted.anchorX) &&
-      Number.isFinite(fitted.anchorY)
-    ) {
-      setManualAnchor({ x: fitted.anchorX!, y: fitted.anchorY! });
-    }
     setFoundry(fitted);
     onDraftChange(fitted);
     return fitted;
@@ -1240,9 +1250,9 @@ export const MechanismFoundry = ({
       createMechanismFitJobInput(project, candidate, "path", selectedPath.id),
       {
         complete: ({ mechanism: fitted }) => {
-          setPathFitBusy(false);
           startTransition(() => {
             setFoundryDraft(fitted);
+            setPathFitBusy(false);
           });
         },
         failed: () => {
@@ -1301,6 +1311,7 @@ export const MechanismFoundry = ({
       parameters: { ...landedFoundry, id: mechanismId },
       pivot: landing,
       outputPoint: state.isValid ? physicalOutputPoint : undefined,
+      outputPortId: primaryOutputTrace?.id,
       generatedPath: preview,
       simulationSummary: feasibilityText,
       visual: {
@@ -1332,7 +1343,7 @@ export const MechanismFoundry = ({
       source: "mechanism-foundry",
     };
   };
-  const useFoundryMechanism = () => onExport(makePackage());
+  const useFoundryMechanism = () => onExport(makePackage(), { reuseMechanismId });
   const selectFoundryMechanismType = (type: MechanismType) => {
     if (!isMechanismTypeEnabled(type)) return;
     setSelectedOutputTraceId(null);
@@ -1385,6 +1396,12 @@ export const MechanismFoundry = ({
             onToggleAnchorPick={() => setIsPickingAnchor((value) => !value)}
             onFitPath={() => applyPathFit()}
             onUseMechanism={useFoundryMechanism}
+            reusableMechanisms={reusableMechanisms.map(({ mechanism }) => ({
+              id: mechanism.id,
+              label: MECHANISM_LIBRARY[mechanism.type].label,
+            }))}
+            reuseMechanismId={reuseMechanismId}
+            onReuseMechanismChange={setReuseMechanismId}
             onSelectMechanismType={selectFoundryMechanismType}
           />,
         ),

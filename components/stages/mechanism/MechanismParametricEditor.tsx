@@ -56,7 +56,7 @@ export const MechanismParametricEditor = ({
       radii.length >= 2
         ? [...radii]
         : [mechanism.crankLength, mechanism.rockerLength];
-    next.splice(Math.max(1, next.length - 1), 0, gearSceneRadiusForKey("g24"));
+    next.splice(Math.max(1, next.length - 1), 0, gearSceneRadiusForKey("g8"));
     onChange({
       crankLength: next[0],
       rockerLength: next.at(-1) ?? next[0],

@@ -34,6 +34,15 @@ import {
 import {
   normalizeGearMeshMechanism,
 } from "../utils/mechanismRecommendations";
+import {
+  allocateMechanismOutput,
+  assignMechanismOutputBinding,
+  mechanismBindingTargetKey,
+  mechanismOutputBindings,
+  mechanismWithOutputBindings,
+  replacePrimaryMechanismOutputBinding,
+  resolvedMechanismOutputBindings,
+} from "../utils/mechanismBindings";
 
 const GENERATED_PATH_GEOMETRY_KEYS = new Set<keyof MechanismConfig>([
   "anchorX",
@@ -58,6 +67,7 @@ const GENERATED_PATH_GEOMETRY_KEYS = new Set<keyof MechanismConfig>([
   "targetSceneObjectId",
   "targetPathId",
   "targetAnchorJointId",
+  "outputs",
   "rodLength",
   "phase",
   "transform",
@@ -67,29 +77,11 @@ const GENERATED_PATH_GEOMETRY_KEYS = new Set<keyof MechanismConfig>([
 ]);
 
 const BOARD_FIT_GEOMETRY_KEYS = new Set<keyof MechanismConfig>([
-  "anchorX",
-  "anchorY",
-  "groundAngle",
-  "crankLength",
-  "groundLength",
-  "couplerLength",
-  "rockerLength",
-  "sliderOffset",
-  "couplerPointDist",
-  "couplerPointAngle",
-  "assemblyMode",
-  "gearRatio",
-  "gearTrainRadii",
-  "camProfileSamples",
   "targetPartId",
   "targetSceneObjectId",
   "targetPathId",
   "targetAnchorJointId",
-  "rodLength",
-  "transform",
-  "sceneAnchor",
-  "outputGearRadius",
-  "showOutputGear",
+  "outputs",
 ]);
 
 const changesGeneratedPathGeometry = (updates: Partial<MechanismConfig>) =>
@@ -198,19 +190,30 @@ export const useAppMechanismActions = ({
     (draft: MechanismConfig) => {
       if (!draft.targetPathId || !project.paths[draft.targetPathId]) return;
       const existingTarget = project.mechanisms.find(
-        (mechanism) =>
-          mechanism.targetPathId === draft.targetPathId &&
-          mechanism.targetSceneObjectId === draft.targetSceneObjectId &&
-          (!draft.targetSceneObjectId
-            ? mechanism.targetPartId === draft.targetPartId
-            : true),
+        (mechanism) => mechanismOutputBindings(mechanism).some(
+          (binding) => binding.pathId === draft.targetPathId,
+        ),
       );
+      const boundDraft = draft.targetPathId
+        ? replacePrimaryMechanismOutputBinding(project, draft, draft.targetPathId, {
+            outputTraceId: draft.fabricationMetadata?.pathFit?.outputTraceId,
+            fit: draft.fabricationMetadata?.pathFit,
+          })
+        : draft;
+      const committedDraft = existingTarget
+        ? mechanismWithOutputBindings(
+            { ...boundDraft, id: existingTarget.id },
+            [
+              ...mechanismOutputBindings(boundDraft),
+              ...mechanismOutputBindings(existingTarget).filter(
+                (binding) => binding.pathId !== draft.targetPathId,
+              ),
+            ],
+          )
+        : boundDraft;
       dispatch({
         type: "upsert_mechanism",
-        mechanism: {
-          ...draft,
-          id: existingTarget?.id ?? draft.id,
-        },
+        mechanism: committedDraft,
       });
     },
     [dispatch, project],
@@ -222,7 +225,7 @@ export const useAppMechanismActions = ({
       updates: Partial<MechanismConfig>,
       callbacks: MechanismUpdateCallbacks = {},
     ) => {
-      const requestGeneration = ++mechanismFitGenerationRef.current;
+      const requestGeneration = mechanismFitGenerationRef.current + 1;
       const mechanism = project.mechanisms.find((m) => m.id === id);
       if (!mechanism) {
         callbacks.failed?.(new Error("Mechanism is no longer available."));
@@ -276,7 +279,114 @@ export const useAppMechanismActions = ({
         nextUpdates.targetAnchorJointId = undefined;
       }
       const next = { ...mechanism, ...nextUpdates };
-      const normalized = normalizeGearMeshMechanism(next);
+      const changesBindingTarget = [
+        "targetPartId",
+        "targetSceneObjectId",
+        "targetPathId",
+        "targetAnchorJointId",
+      ].some((key) => Object.prototype.hasOwnProperty.call(updates, key));
+      let bindingAware: MechanismConfig;
+      if (Object.prototype.hasOwnProperty.call(updates, "outputs")) {
+        bindingAware = mechanismWithOutputBindings(next, next.outputs ?? []);
+      } else if (!changesBindingTarget) {
+        bindingAware = mechanismWithOutputBindings(
+          next,
+          mechanismOutputBindings(mechanism),
+        );
+      } else if (next.targetPathId) {
+        const priorPrimary = mechanismOutputBindings(mechanism)[0];
+        const candidate = replacePrimaryMechanismOutputBinding(
+          project,
+          next,
+          next.targetPathId,
+          {
+            id: priorPrimary?.id,
+            portId: priorPrimary?.portId,
+            outputTraceId:
+              priorPrimary?.outputTraceId ??
+              next.fabricationMetadata?.pathFit?.outputTraceId,
+            targetPartId: next.targetPartId,
+            targetSceneObjectId: next.targetSceneObjectId,
+            targetAnchorJointId: next.targetAnchorJointId,
+            phaseOffset: priorPrimary?.phaseOffset,
+            direction: priorPrimary?.direction,
+            fit: next.fabricationMetadata?.pathFit,
+          },
+        );
+        const requestedBinding = mechanismOutputBindings(candidate)[0];
+        if (!requestedBinding || requestedBinding.pathId !== next.targetPathId) {
+          const error = new Error("That path cannot use this mechanism output.");
+          callbacks.failed?.(error);
+          setCommandStatus(error.message);
+          return;
+        }
+        const assignment = assignMechanismOutputBinding(
+          {
+            ...project,
+            mechanisms: project.mechanisms.map((item) =>
+              item.id === id ? next : item,
+            ),
+          },
+          id,
+          requestedBinding,
+        );
+        if (!assignment.ok) {
+          const error = new Error(assignment.reason);
+          callbacks.failed?.(error);
+          setCommandStatus(error.message);
+          return;
+        }
+        bindingAware = assignment.project.mechanisms.find(
+          (item) => item.id === id,
+        )!;
+      } else {
+        const directTargetBinding = {
+          id: `${id}:direct-target`,
+          portId: "direct-target",
+          pathId: "",
+          targetPartId: next.targetPartId,
+          targetSceneObjectId: next.targetSceneObjectId,
+          targetAnchorJointId: next.targetAnchorJointId,
+          enabled: true,
+        };
+        const directTargetKey = mechanismBindingTargetKey(
+          project,
+          directTargetBinding,
+        );
+        const targetConflict = directTargetKey
+          ? project.mechanisms.some((candidateMechanism) =>
+              resolvedMechanismOutputBindings(project, candidateMechanism).some(
+                (binding, index) =>
+                  !(candidateMechanism.id === id && index === 0) &&
+                  mechanismBindingTargetKey(project, binding) === directTargetKey,
+              ),
+            )
+          : false;
+        if (targetConflict) {
+          const error = new Error(`Target ${directTargetKey} already has a mechanism output.`);
+          callbacks.failed?.(error);
+          setCommandStatus(error.message);
+          return;
+        }
+        const detached = mechanismWithOutputBindings(
+          next,
+          mechanismOutputBindings(mechanism).slice(1),
+        );
+        bindingAware = {
+          ...detached,
+          targetPartId: next.targetPartId,
+          targetSceneObjectId: next.targetSceneObjectId,
+          targetPathId: undefined,
+          targetAnchorJointId: next.targetAnchorJointId,
+          fabricationMetadata: {
+            ...(detached.fabricationMetadata ?? {}),
+            targetPathId: undefined,
+            pathFit: undefined,
+          },
+        };
+      }
+      mechanismFitGenerationRef.current = requestGeneration;
+      const normalized = normalizeGearMeshMechanism(bindingAware);
       const preserveGeneratedPath =
         hasStoredGeneratedPath(mechanism) && !changesGeneratedPathGeometry(updates);
       const requiresBoardFit = changesBoardFitGeometry(updates);
@@ -417,24 +527,18 @@ export const useAppMechanismActions = ({
   }, [angle, mechanismConfig, setCommandStatus]);
 
   const exportFoundryMechanism = useCallback(
-    (pkg: FoundryExportPackage) => {
+    (pkg: FoundryExportPackage, allocationOptions: { reuseMechanismId?: string } = {}) => {
       const existingTarget = project.mechanisms.find(
-        (mechanism) =>
-          mechanism.targetPartId === pkg.targetPartId &&
-          mechanism.targetSceneObjectId === pkg.targetSceneObjectId &&
-          mechanism.targetPathId === pkg.targetPathId &&
-          (pkg.targetSceneObjectId ||
-            preferredMotionJointId(
-              project,
-              mechanism.targetPartId,
-              mechanism.targetAnchorJointId,
-            ) === pkg.targetAnchorJointId),
+        (mechanism) => mechanismOutputBindings(mechanism).some(
+          (binding) => binding.pathId === pkg.targetPathId,
+        ),
       );
       const activeVisualPartIds = selectedPart ? [selectedPart.id] : [];
       const fittedFoundryParameters = pkg.parameters as Partial<MechanismConfig>;
       const packagePathFit =
         fittedFoundryParameters.fabricationMetadata?.pathFit ??
         foundry.fabricationMetadata?.pathFit;
+      const selectedOutputPortId = pkg.outputPortId ?? packagePathFit?.outputTraceId;
       const packageFitCandidate: MechanismConfig = {
         ...foundry,
         ...fittedFoundryParameters,
@@ -452,8 +556,7 @@ export const useAppMechanismActions = ({
         setCommandStatus("No fabrication-valid path fit.");
         return;
       }
-      const rawMechanism = mechanismWithGeneratedPath(
-        {
+      const rawCandidate: MechanismConfig = {
           ...foundry,
           ...fittedFoundryParameters,
           id: existingTarget?.id ?? pkg.mechanismId,
@@ -471,7 +574,15 @@ export const useAppMechanismActions = ({
           generatedPath: pkg.generatedPath,
           warnings: pkg.warnings,
           activeVisualPartIds,
-        },
+        };
+      const boundCandidate = pkg.targetPathId
+        ? replacePrimaryMechanismOutputBinding(project, rawCandidate, pkg.targetPathId, {
+            outputTraceId: selectedOutputPortId,
+            fit: packagePathFit,
+          })
+        : rawCandidate;
+      const rawMechanism = mechanismWithGeneratedPath(
+        boundCandidate,
         { preserveGeneratedPath: true },
       );
       setCommandStatus("Preparing mechanism");
@@ -511,11 +622,61 @@ export const useAppMechanismActions = ({
               },
               { preserveGeneratedPath: true },
             );
+            const fittedBinding = pkg.targetPathId
+              ? replacePrimaryMechanismOutputBinding(project, mechanism, pkg.targetPathId, {
+                  outputTraceId: selectedOutputPortId,
+                  fit: packagePathFit,
+                })
+              : mechanism;
+            const draftOwnerIsTemporary = Boolean(
+              allocationOptions.reuseMechanismId &&
+              existingTarget &&
+              existingTarget.id !== allocationOptions.reuseMechanismId &&
+              (existingTarget.id === foundry.id || existingTarget.id === "foundry-preview"),
+            );
+            const committedMechanism = existingTarget && !draftOwnerIsTemporary
+              ? mechanismWithOutputBindings(
+                  { ...fittedBinding, id: existingTarget.id },
+                  [
+                    ...mechanismOutputBindings(fittedBinding),
+                    ...mechanismOutputBindings(existingTarget).filter(
+                      (binding) => binding.pathId !== pkg.targetPathId,
+                    ),
+                  ],
+                )
+              : fittedBinding;
+            const allocationBase = draftOwnerIsTemporary
+              ? {
+                  ...project,
+                  mechanisms: project.mechanisms.filter((candidate) => candidate.id !== existingTarget?.id),
+                }
+              : project;
+            const allocation = pkg.targetPathId && (!existingTarget || draftOwnerIsTemporary)
+              ? allocateMechanismOutput(allocationBase, fittedBinding, pkg.targetPathId, {
+                  reuseMechanismId: allocationOptions.reuseMechanismId,
+                  portId: selectedOutputPortId,
+                  fit: packagePathFit,
+                })
+              : undefined;
+            if (allocation && !allocation.ok) {
+              setCommandStatus(`Mechanism failed: ${allocation.reason}`);
+              return;
+            }
             startTransition(() => {
               dispatch({ type: "set_foundry_export", foundryExport: pkg });
-              dispatch({ type: "upsert_mechanism", mechanism });
+              if (allocation?.ok) {
+                dispatch({
+                  type: "set_mechanisms",
+                  mechanisms: allocation.project.mechanisms,
+                  selectedMechanismId: allocation.mechanismId,
+                });
+              } else {
+                dispatch({ type: "upsert_mechanism", mechanism: committedMechanism });
+              }
               setStage("design");
-              setCommandStatus("Mechanism ready");
+              setCommandStatus(allocation?.ok && allocation.reuseRejected
+                ? "Separate mechanism ready"
+                : "Mechanism ready");
             });
           },
           failed: (error) =>
@@ -536,10 +697,43 @@ export const useAppMechanismActions = ({
 
   const applyRecommendedMechanism = useCallback(
     (mechanism: MechanismConfig) => {
-      dispatch({ type: "upsert_mechanism", mechanism });
+      const candidateBindings = resolvedMechanismOutputBindings(project, mechanism);
+      const candidatePathIds = new Set(candidateBindings.map((binding) => binding.pathId));
+      const candidateTargetKeys = new Set(
+        candidateBindings
+          .map((binding) => mechanismBindingTargetKey(project, binding))
+          .filter((key): key is string => Boolean(key)),
+      );
+      const conflictingOwners = project.mechanisms.filter(
+        (candidate) => candidate.id !== mechanism.id &&
+          resolvedMechanismOutputBindings(project, candidate).some((binding) => {
+            const targetKey = mechanismBindingTargetKey(project, binding);
+            return candidatePathIds.has(binding.pathId) ||
+              (targetKey !== undefined && candidateTargetKeys.has(targetKey));
+          }),
+      );
+      if (conflictingOwners.length > 1) {
+        setCommandStatus("Mechanism failed: recommendation conflicts with multiple owners.");
+        return;
+      }
+      const existingOwner = conflictingOwners[0];
+      const committedMechanism = existingOwner
+        ? mechanismWithOutputBindings(
+            { ...mechanism, id: existingOwner.id },
+            [
+              ...candidateBindings,
+              ...resolvedMechanismOutputBindings(project, existingOwner).filter((binding) => {
+                const targetKey = mechanismBindingTargetKey(project, binding);
+                return !candidatePathIds.has(binding.pathId) &&
+                  (targetKey === undefined || !candidateTargetKeys.has(targetKey));
+              }),
+            ],
+          )
+        : mechanism;
+      dispatch({ type: "upsert_mechanism", mechanism: committedMechanism });
       setStage("design");
     },
-    [dispatch, setStage],
+    [dispatch, project, setCommandStatus, setStage],
   );
 
   return {

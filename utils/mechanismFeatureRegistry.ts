@@ -1,9 +1,10 @@
-import type { JointState, MechanismConfig, MechanismType } from '../types';
+import type { JointState, MechanismConfig, MechanismOutputPort, MechanismType } from '../types';
 import type { FabricationRenderPlan, FabricationStackLayer } from './fabrication';
 import { fabricationRenderPlanForMechanism, fabricationStackForMechanism, sampleFeasibleRange } from './fabrication';
 import { calculateLinkage } from './kinematics';
 import { ALL_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY } from './mechanismTemplates';
 import { createDefaultMechanism, mechanismRequiredParts } from './project';
+import { mechanismOutputPortsForType } from './mechanismBindings';
 
 export type MechanismFeatureRole = 'driver' | 'linkage' | 'linear-guide' | 'gear-train' | 'cam-follower' | 'compound';
 export type MechanismProjectionRole = 'rotary' | 'linear' | 'compound';
@@ -44,6 +45,7 @@ export interface MechanismFeatureContract {
     authorable: boolean;
     defaults: (id?: string) => MechanismConfig;
     requiredParts: (mechanism: MechanismConfig) => Array<{ name: string; quantity: number }>;
+    outputPorts: (mechanism: MechanismConfig) => readonly MechanismOutputPort[];
     sampleKinematics: (mechanism: MechanismConfig, angleRad: number) => JointState;
     sampleFeasibleRange: (mechanism: MechanismConfig, samples?: number) => MechanismFeasibleRange;
     fabricationStack: (mechanism: MechanismConfig) => FabricationStackLayer[];
@@ -163,6 +165,7 @@ const buildFeature = (type: MechanismType): MechanismFeatureContract => {
         ...metadata,
         defaults: (id = `${type}-default`) => createDefaultMechanism(type, id),
         requiredParts: mechanismRequiredParts,
+        outputPorts: () => mechanismOutputPortsForType(type),
         sampleKinematics: calculateLinkage,
         sampleFeasibleRange,
         fabricationStack: fabricationStackForMechanism,
@@ -205,6 +208,12 @@ export const validateMechanismFeatureRegistry = (): string[] => {
         if (!feature) errors.push(`${type}: missing feature contract`);
         if (!metadata) errors.push(`${type}: missing template metadata`);
         if (feature && metadata && feature.label !== metadata.label) errors.push(`${type}: label must mirror template metadata`);
+        const ports = feature?.outputPorts(feature.defaults(`${type}-port-check`)) ?? [];
+        if (!ports.length) errors.push(`${type}: missing fabricable output port`);
+        if (new Set(ports.map(port => port.id)).size !== ports.length) errors.push(`${type}: duplicate output port id`);
+        ports.forEach(port => {
+            if (!port.fabricable || port.capacity < 1) errors.push(`${type}:${port.id}: invalid output port contract`);
+        });
     });
 
     actual.forEach(type => {

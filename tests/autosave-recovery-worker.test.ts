@@ -26,7 +26,10 @@ import {
   runAutosaveRecoveryJob,
   type AutosaveRecoveryJobInput,
 } from "../runtime/persistence/autosaveRecoveryJob";
-import { captureAutosaveRecoveryStorage } from "../runtime/persistence/autosaveRecoveryStorage";
+import {
+  captureAutosaveRecoveryStorage,
+  clearMigratedAutosaveStorage,
+} from "../runtime/persistence/autosaveRecoveryStorage";
 import {
   createAutosaveRecoveryWorkerClient,
   type AutosaveRecoveryFrameScheduler,
@@ -667,6 +670,38 @@ nearLimitBackend.seed(nearLimitSerialized);
 
 {
   const storage = memoryStorage();
+  const original = createEmptyProject();
+  original.metadata.name = "Cleanup source";
+  assert.equal(writeAutosaveSnapshot(original, storage).status, "saved");
+  const snapshot = captureAutosaveRecoveryStorage(storage);
+  const newer = createEmptyProject();
+  newer.metadata.name = "Newer tab recovery winner";
+  const newerRaw = serializeProjectCompact(newer);
+  let interleaved = false;
+  const interleavedStorage: AutosaveStorage = {
+    getItem: storage.getItem.bind(storage),
+    setItem: storage.setItem.bind(storage),
+    removeItem: (key) => {
+      storage.removeItem!(key);
+      if (interleaved) return;
+      interleaved = true;
+      assert.equal(writeAutosaveSnapshot(newer, storage).status, "saved");
+    },
+  };
+  assert.equal(
+    clearMigratedAutosaveStorage(snapshot, interleavedStorage),
+    false,
+    "cleanup loses ownership when another tab commits between localStorage calls",
+  );
+  assert.equal(
+    storage.values.get(AUTOSAVE_STORAGE_KEYS.autosave),
+    newerRaw,
+    "recovery cleanup never removes the interleaved newer snapshot",
+  );
+}
+
+{
+  const storage = memoryStorage();
   const legacyProject = createEmptyProject();
   legacyProject.metadata.name = "Legacy recovery candidate";
   storage.values.set(
@@ -774,7 +809,8 @@ assert(recoveryHookSource.includes("client.dispose()"));
 assert(workerSource.includes("await import("));
 assert(autosaveHookSource.includes("prepareIndexedDbAutosaveBase"));
 assert(autosaveHookSource.includes("commitIndexedDbAutosaveSnapshot"));
-assert(!autosaveHookSource.includes("commitAutosaveSnapshot("));
+assert(autosaveHookSource.includes("prepareAutosaveStorageBase"));
+assert(autosaveHookSource.includes("commitAutosaveStorageSnapshot"));
 assert(projectCommandsSource.includes("createAutosaveRecoveryWorkerClient"));
 assert(!projectCommandsSource.includes("readAutosaveProject("));
 assert(recoveryClientSource.includes("backend.readRecoverySnapshot()"));

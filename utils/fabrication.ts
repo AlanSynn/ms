@@ -3,12 +3,14 @@ import { gearTrainPitchCenterDistance, gearTrainResolvedCenterDistance, gearTrai
 import { boardToScene, sceneToBoardRaw, sceneBoundsForSheet } from './coordinates';
 import { referenceRecipeForType } from './mechanismReference';
 import { mechanismBindingWarnings } from './motion';
-import { mechanismMatchesPathOwner } from './pathTargets';
-import { makeAssemblyGuideHtml, makeAssemblyGuidePdf } from './fabricationAssemblyGuide';
+import { mechanismWithOutputBindings, resolvedMechanismOutputBindings } from './mechanismBindings';
+import { createBuildPlanV1, createCharacterBuildPlanV1, type BuildPlanLaneV1 } from './buildPlan';
+import { makeAssemblyGuideHtmlFromBuildPlan, makeAssemblyGuidePdfFromBuildPlan } from './fabricationAssemblyGuide';
 import { makeBlueprintPreviewSvg, makeBlueprintSvg } from './fabricationBlueprintSvg';
-import { makeCutSheetPdf } from './fabricationCutSheetPdf';
-import { makeCustomPartsPdf, makeCustomPartsStl, makeCustomPartsSvg } from './fabricationCustomParts';
+import { makeBlueprintPdfFromBuildPlan } from './fabricationBlueprintPdf';
+import { makeCharacterTemplatePdfFromBuildPlan, makeCustomPartsStl, makeCustomPartsSvg } from './fabricationCustomParts';
 import { createFabricationRecipe } from './fabricationRecipes';
+import { projectContentFingerprint } from './projectSerialization';
 import { boardFixedAssemblyCoordinatesForMechanism, isBoardCoordinateWithin, offBoardFixedAssemblyCoordinatesForMechanism } from './boardHoleConstraints';
 import { primaryFoundryPlaybackPath } from './foundryPlayback';
 import { FABRICATION_LINKAGE_ROLE_MIN_HOLES, planetaryRingPitchRadius } from './fabricationSizing';
@@ -295,17 +297,24 @@ export const validateForFabrication = (project: ProjectState) => {
         if (corners.some(p => !insideSheet(p))) add('warning', `${object.id}: visible object extends outside sheet bounds.`, { recoveryStage: 'character', recoveryAction: 'Move object inside sheet' });
     });
     activeMechanisms.forEach(m => {
+        const outputBindings = resolvedMechanismOutputBindings(project, m).filter(binding => binding.enabled !== false);
         validateMechanismPreviewReadiness(m).forEach(message => add('error', `${m.id}: ${message}`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Choose ready template' }));
         (bindingWarnings[m.id] ?? []).forEach(message => add('error', `${m.id}: ${message}`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Rebind mechanism target' }));
         if (!m.id) add('error', 'Mechanism missing per-instance id.', { recoveryStage: 'design', recoveryAction: 'Select or recreate mechanism' });
-        if ((!m.targetPartId && !m.targetSceneObjectId) || !m.targetPathId) add('error', `${m.id}: choose target + path.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Choose target + path' });
-        if (m.targetPartId && !project.parts[m.targetPartId]) add('error', `${m.id}: missing target part ${m.targetPartId}.`, { mechanismId: m.id, partId: m.targetPartId, recoveryStage: 'design', recoveryAction: 'Choose existing part' });
-        if (m.targetSceneObjectId && !project.sceneObjects[m.targetSceneObjectId]) add('error', `${m.id}: missing target object ${m.targetSceneObjectId}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Choose existing object' });
-        if (m.targetPathId) {
-            const path = project.paths[m.targetPathId];
-            if (!path) add('error', `${m.id}: missing path ${m.targetPathId}.`, { mechanismId: m.id, pathId: m.targetPathId, recoveryStage: 'path', recoveryAction: 'Choose valid path' });
-            else if (!mechanismMatchesPathOwner(m, path, project)) add('error', `${m.id}: path belongs to ${path.sceneObjectId ?? path.partId}.`, { mechanismId: m.id, pathId: m.targetPathId, partId: m.targetPartId, recoveryStage: 'design', recoveryAction: 'Rebind target path' });
-        }
+        if (!outputBindings.length) add('error', `${m.id}: choose target + path.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Choose target + path' });
+        outputBindings.forEach(binding => {
+            if (binding.targetPartId && !project.parts[binding.targetPartId]) add('error', `${m.id}: missing target part ${binding.targetPartId}.`, { mechanismId: m.id, partId: binding.targetPartId, recoveryStage: 'design', recoveryAction: 'Choose existing part' });
+            if (binding.targetSceneObjectId && !project.sceneObjects[binding.targetSceneObjectId]) add('error', `${m.id}: missing target object ${binding.targetSceneObjectId}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Choose existing object' });
+            const path = project.paths[binding.pathId];
+            if (!path) add('error', `${m.id}: missing path ${binding.pathId}.`, { mechanismId: m.id, pathId: binding.pathId, recoveryStage: 'path', recoveryAction: 'Choose valid path' });
+            else {
+                const boundMechanism = mechanismWithOutputBindings(m, [binding]);
+                const ownerMatches = path.sceneObjectId
+                    ? boundMechanism.targetSceneObjectId === path.sceneObjectId
+                    : boundMechanism.targetPartId === path.partId;
+                if (!ownerMatches) add('error', `${m.id}: path belongs to ${path.sceneObjectId ?? path.partId}.`, { mechanismId: m.id, pathId: binding.pathId, partId: binding.targetPartId, recoveryStage: 'design', recoveryAction: 'Rebind target path' });
+            }
+        });
         const physicalNumbers = [m.crankLength, m.couplerLength, m.groundLength, m.rockerLength, m.sliderOffset, m.couplerPointDist, m.couplerPointAngle];
         if (m.type === '5bar' || m.type === '6bar' || m.type === 'piston') physicalNumbers.push(m.rodLength ?? Number.NaN);
         if (m.type === 'gear' || m.type === 'gear_linkage' || m.type === 'planetary_gear') physicalNumbers.push(m.gearRatio ?? Number.NaN, m.speed2 ?? Number.NaN);
@@ -357,12 +366,31 @@ export const validateForFabrication = (project: ProjectState) => {
 
 export type FabricationPackageOptions = {
     includeCustomPartsStl?: boolean;
+    lane?: BuildPlanLaneV1;
+    sourceProjectFingerprint?: string;
 };
 
 export const createCustomPartsStlArtifact = (project: ProjectState): string => {
     const validation = validateForFabrication(project);
     if (validation.errors.length) throw new Error(validation.errors.join('\n'));
     return makeCustomPartsStl(project);
+};
+
+export const createCharacterTemplateArtifact = (
+    project: ProjectState,
+    sourceProjectFingerprint = projectContentFingerprint(project)
+) => {
+    const buildPlan = createCharacterBuildPlanV1(project);
+    if (!buildPlan.character.parts.length) throw new Error('No character template available.');
+    return {
+        characterTemplatePdf: makeCharacterTemplatePdfFromBuildPlan(
+            buildPlan,
+            sourceProjectFingerprint
+        ),
+        characterTemplateSvg: makeCustomPartsSvg(project),
+        buildPlanSourceDigest: buildPlan.sourceDigest,
+        sourceProjectFingerprint
+    };
 };
 
 export const createFabricationPackage = (
@@ -372,6 +400,17 @@ export const createFabricationPackage = (
     const validation = validateForFabrication(project);
     if (validation.errors.length) throw new Error(validation.errors.join('\n'));
     const recipes = project.mechanisms.filter(m => m.visible && m.enabled !== false).map(m => createFabricationRecipe(project, m));
+    const sourceProjectFingerprint = options.sourceProjectFingerprint ?? projectContentFingerprint(project);
+    const buildPlan = createBuildPlanV1(project, {
+        lane: options.lane,
+        recipes,
+        warnings: validation.warnings
+    });
+    const characterBuildPlan = createCharacterBuildPlanV1(project, { lane: options.lane });
+    const characterTemplatePdf = makeCharacterTemplatePdfFromBuildPlan(
+        characterBuildPlan,
+        sourceProjectFingerprint
+    );
     const cutList = Array.from(
         recipes.flatMap(r => r.requiredParts).reduce((map, item) => {
             map.set(item.name, (map.get(item.name) ?? 0) + item.quantity);
@@ -389,6 +428,11 @@ export const createFabricationPackage = (
         projectId: project.metadata.id,
         projectName: project.metadata.name,
         createdAt: new Date().toISOString(),
+        sourceProjectFingerprint,
+        buildPlanSourceDigest: buildPlan.sourceDigest,
+        characterBuildPlanSourceDigest: characterBuildPlan.sourceDigest,
+        buildPlan,
+        characterBuildPlan,
         profile: project.settings.physicalKit,
         validationIssues: validation.issues,
         sceneSnapshot: {
@@ -408,6 +452,7 @@ export const createFabricationPackage = (
             targetPartName: r.targetPartName,
             targetSceneObjectName: r.targetSceneObjectName,
             targetPathPointCount: r.targetPathPointCount,
+            outputBindings: r.outputBindings,
             boardCoordinate: r.boardCoordinate,
             board: r.board,
             sceneAnchor: r.sceneAnchor,
@@ -419,6 +464,7 @@ export const createFabricationPackage = (
         }))
     };
     const createdAt = metadata.createdAt;
+    const blueprintPdf = makeBlueprintPdfFromBuildPlan(buildPlan);
     return {
         id: `fab-${Date.now().toString(36)}`,
         createdAt,
@@ -439,12 +485,20 @@ export const createFabricationPackage = (
         warnings: validation.warnings,
         validationIssues: validation.issues,
         svg: makeBlueprintSvg(project, recipes),
-        cutSheetPdf: makeCutSheetPdf(project, recipes),
+        cutSheetPdf: '',
         customPartsSvg: makeCustomPartsSvg(project),
-        customPartsPdf: makeCustomPartsPdf(project),
+        customPartsPdf: characterTemplatePdf,
         customPartsStl: options.includeCustomPartsStl ? makeCustomPartsStl(project) : '',
-        assemblyGuideHtml: makeAssemblyGuideHtml(project, recipes, validation.warnings),
-        assemblyGuidePdf: makeAssemblyGuidePdf(project, recipes, validation.warnings),
+        assemblyGuideHtml: makeAssemblyGuideHtmlFromBuildPlan(buildPlan),
+        assemblyGuidePdf: makeAssemblyGuidePdfFromBuildPlan(buildPlan),
+        blueprintPdf,
+        buildPacketPdf: undefined,
+        characterTemplatePdf,
+        buildPlanSourceDigest: buildPlan.sourceDigest,
+        characterBuildPlanSourceDigest: characterBuildPlan.sourceDigest,
+        buildPlanLane: buildPlan.lane,
+        buildPlanJson: JSON.stringify(buildPlan),
+        sourceProjectFingerprint,
         metadataJson: JSON.stringify(metadata, null, 2)
     };
 };

@@ -48,7 +48,7 @@ export default defineConfig({
   webServer: {
     command: webServerCommand,
     url: `http://127.0.0.1:${serverPort}`,
-    reuseExistingServer: !process.env.CI && !auditEnabled,
+    reuseExistingServer: false,
     timeout: 120_000
   },
   projects: [

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { Point } from "../types";
+import { SCENE_VIEW } from "./coordinates";
 import {
   VIEWER3D_CAMERA_PRESETS,
   type Viewer3DCameraPreset,
@@ -46,6 +47,37 @@ export const FOUNDRY_OVERLAY_SIZE: FoundryOverlaySize = {
   height: 240,
 };
 
+export const FOUNDRY_WORK_PLANE_Z = 0;
+
+const normalizedOverlaySize = (size: FoundryOverlaySize) => ({
+  width: Math.max(1, size.width),
+  height: Math.max(1, size.height),
+});
+
+export const sceneToFoundryPreviewPoint = (
+  point: Point,
+  size: FoundryOverlaySize = FOUNDRY_OVERLAY_SIZE,
+): Point => {
+  const { width, height } = normalizedOverlaySize(size);
+  const scale = Math.min(width / SCENE_VIEW.width, height / SCENE_VIEW.height);
+  return {
+    x: width / 2 + point.x * scale,
+    y: height / 2 - point.y * scale,
+  };
+};
+
+export const foundryPreviewToScenePoint = (
+  point: Point,
+  size: FoundryOverlaySize = FOUNDRY_OVERLAY_SIZE,
+): Point => {
+  const { width, height } = normalizedOverlaySize(size);
+  const scale = Math.min(width / SCENE_VIEW.width, height / SCENE_VIEW.height);
+  return {
+    x: (point.x - width / 2) / scale,
+    y: (height / 2 - point.y) / scale,
+  };
+};
+
 
 export const clampFoundryPitch = (value: number) =>
   Math.max(-64, Math.min(68, value));
@@ -58,13 +90,11 @@ export const degToRad = (deg: number) => (deg * Math.PI) / 180;
 export const foundryCameraDistance = (camera: FoundryCamera) =>
   17 / clampFoundryZoom(camera.zoom);
 
-const FOUNDRY_CAMERA_TARGET_Z = 0.25;
-
 export const foundryCameraTarget = (camera: FoundryCamera) =>
   new THREE.Vector3(
     camera.pan?.x ?? 0,
     camera.pan?.y ?? 0,
-    FOUNDRY_CAMERA_TARGET_Z,
+    FOUNDRY_WORK_PLANE_Z,
   );
 
 export const foundryCameraPosition = (camera: FoundryCamera) => {

@@ -1,5 +1,5 @@
 export type MechanismType = 'crank' | '4bar' | 'piston' | 'yoke' | 'quick-return' | '5bar' | '6bar' | 'cam' | 'rack-pinion' | 'gear' | 'gear_linkage' | 'planetary_gear';
-export type AppStage = 'character' | 'path' | 'foundry' | 'design' | 'blueprint' | 'assembly' | 'options';
+export type AppStage = 'project' | 'character' | 'path' | 'foundry' | 'design' | 'blueprint' | 'assembly' | 'options';
 
 export interface Point {
     x: number;
@@ -41,6 +41,28 @@ export interface MechanismPathFitMetadata {
     kitProfileKey?: string;
 }
 
+export interface MechanismOutputPort {
+    id: string;
+    label: string;
+    outputTraceId: string;
+    capacity: number;
+    fabricable: boolean;
+}
+
+export interface MechanismOutputBinding {
+    id: string;
+    portId: string;
+    pathId: string;
+    targetPartId?: string;
+    targetSceneObjectId?: string;
+    targetAnchorJointId?: string;
+    outputTraceId?: string;
+    phaseOffset?: number;
+    direction?: 1 | -1;
+    enabled: boolean;
+    fit?: MechanismPathFitMetadata;
+}
+
 export interface MechanismConfig {
     id: string;
     type: MechanismType;
@@ -79,6 +101,7 @@ export interface MechanismConfig {
     camProfileSamples?: number[];
     driverGroupId?: string;
     driverPhaseOffset?: number;
+    outputs?: MechanismOutputBinding[];
     rodLength?: number;
     phase?: number;
 
@@ -117,6 +140,7 @@ export interface FoundryExportPackage {
     parameters: Partial<MechanismConfig>;
     pivot: Point;
     outputPoint?: Point;
+    outputPortId?: string;
     generatedPath: Point[];
     simulationSummary: string;
     visual: { color: string; scale: number; constraintsVisible: boolean };
@@ -211,6 +235,11 @@ export interface ProjectMotionPath {
     warnings: string[];
 }
 
+export interface ProjectMotionTimeline {
+    durationMs?: number;
+    startOffsetByPathId?: Record<string, number>;
+}
+
 export interface PhysicalKitSettings {
     profileKey: string;
     gridPitchMm: number;
@@ -278,6 +307,18 @@ export interface FabricationRecipe {
     targetPartName?: string;
     targetSceneObjectName?: string;
     targetPathPointCount?: number;
+    outputBindings: Array<{
+        bindingId: string;
+        portId: string;
+        portLabel: string;
+        outputTraceId: string;
+        pathId: string;
+        targetPartId?: string;
+        targetSceneObjectId?: string;
+        targetAnchorJointId?: string;
+        targetName?: string;
+        targetPathPointCount?: number;
+    }>;
     boardCoordinate: string;
     board: { col: number; row: number; xMm: number; yMm: number; valid?: boolean };
     sceneAnchor: Point;
@@ -318,6 +359,14 @@ export interface FabricationPackage {
     customPartsStl: string;
     assemblyGuideHtml: string;
     assemblyGuidePdf: string;
+    blueprintPdf?: string;
+    buildPacketPdf?: string;
+    characterTemplatePdf?: string;
+    buildPlanSourceDigest?: string;
+    characterBuildPlanSourceDigest?: string;
+    buildPlanLane?: 'kit' | 'custom';
+    buildPlanJson?: string;
+    sourceProjectFingerprint?: string;
     metadataJson: string;
 }
 
@@ -366,7 +415,8 @@ export interface CharacterPackageArtifact {
 }
 
 export interface ProjectState {
-    version: 1;
+    version: 1 | 2;
+    revision?: number;
     metadata: {
         id: string;
         name: string;
@@ -384,6 +434,8 @@ export interface ProjectState {
     sceneObjectOrder: string[];
     skeleton: StandardSkeleton | null;
     paths: Record<string, ProjectMotionPath>;
+    pathOrder?: string[];
+    motionTimeline?: ProjectMotionTimeline;
     mechanisms: MechanismConfig[];
     settings: AppSettings;
     selectedPartId?: string;
@@ -400,6 +452,7 @@ export type ProjectAction =
     | { type: 'load_project'; project: ProjectState }
     | { type: 'set_processing'; processing: ProcessingStatus }
     | { type: 'select_part'; partId?: string }
+    | { type: 'select_path'; pathId?: string }
     | { type: 'select_scene_object'; objectId?: string }
     | { type: 'upsert_part'; part: BodyPartLayer }
     | { type: 'delete_part'; partId: string }

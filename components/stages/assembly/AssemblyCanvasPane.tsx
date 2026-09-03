@@ -9,6 +9,7 @@ import type {
   PhysicalKitSettings,
   ProjectState,
 } from "../../../types";
+import type { BuildPlanMechanismV1 } from "../../../utils/buildPlan";
 import type {
   AssemblyLane,
   AssemblyPlaybackStep,
@@ -28,6 +29,8 @@ export const AssemblyCanvasPane = ({
   characterAssemblyPlan,
   currentCharacterStep,
   selectedRecipe,
+  selectedBuildMechanism,
+  buildPlanDigest,
   currentStep,
   lane,
   kit,
@@ -41,6 +44,8 @@ export const AssemblyCanvasPane = ({
   characterAssemblyPlan: CharacterAssemblyPlan;
   currentCharacterStep?: CharacterAssemblyStep;
   selectedRecipe?: FabricationRecipe;
+  selectedBuildMechanism?: BuildPlanMechanismV1;
+  buildPlanDigest: string;
   currentStep?: AssemblyPlaybackStep;
   lane: AssemblyLane;
   kit: PhysicalKitSettings;
@@ -49,11 +54,7 @@ export const AssemblyCanvasPane = ({
   hasCharacterAssembly: boolean;
   playbackClock: PlaybackClock;
 }) => {
-  const selectedMechanism = selectedRecipe
-    ? project.mechanisms.find(
-        (mechanism) => mechanism.id === selectedRecipe.mechanismId,
-      )
-    : undefined;
+  const selectedMechanism = selectedBuildMechanism?.mechanism;
   const characterFrame = currentCharacterStep
     ? buildCharacterAssemblySceneFrame({
         plan: characterAssemblyPlan,
@@ -78,6 +79,8 @@ export const AssemblyCanvasPane = ({
     <div
       className="assembly-canvas-document canvas-workspace"
       data-testid="assembly-canvas-preview"
+      data-build-plan-digest={buildPlanDigest}
+      data-build-geometry-signature={selectedBuildMechanism?.geometry.signature ?? "none"}
     >
       {activeAssemblyMode === "character" && currentCharacterStep && characterFrame ? (
         <div className="assembly-simulation-stack" data-testid="assembly-character-simulation-stack">

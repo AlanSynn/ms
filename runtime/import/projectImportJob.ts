@@ -12,6 +12,7 @@ import {
 import { autosaveByteLength } from "../../utils/autosaveFingerprint";
 import { AUTOSAVE_SNAPSHOT_MAX_BYTES } from "../../utils/projectAutosaveFormat";
 import { serializeProjectCompact } from "../../utils/projectSerialization";
+import { projectStateFromPortableDocument } from "../../utils/projectSerialization";
 import {
   validateCharacterPackageRasterFiles,
   validateProjectRasterSources,
@@ -135,9 +136,10 @@ export const runProjectImportJob = async (input: ProjectImportInput) => {
     };
   }
   validateProjectImportFile(input.file);
-  const raw = JSON.parse(await input.file.text());
+  const document = JSON.parse(await input.file.text());
+  const raw = projectStateFromPortableDocument(document);
   validateProjectImportShape(raw);
-  const project = fitImportedMechanismsToBoard(loadProjectSnapshot(raw));
+  const project = loadProjectSnapshot(raw);
   validateProjectRasterSources(project);
   validateImportedProjectPersistence(project);
   return {

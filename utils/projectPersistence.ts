@@ -58,7 +58,7 @@ const projectFileStem = (name: string) =>
     .replace(/^-+|-+$/g, "") || "MotionSmith-project";
 
 export const projectSnapshotFileName = (projectName: string, suffix: string) =>
-  `${projectFileStem(projectName)}${suffix}.motionsmith.json`;
+  `${projectFileStem(projectName)}${suffix}.motionsmith`;
 
 export type WorkspaceLayoutSnapshot = {
   stage: AppStage;

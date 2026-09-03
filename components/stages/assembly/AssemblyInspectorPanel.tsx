@@ -1,4 +1,4 @@
-import type { AppStage, FabricationRecipe } from "../../../types";
+import type { AppStage, FabricationRecipe, MechanismConfig } from "../../../types";
 import { DeferredClassroomExampleVideo } from "../../ui/DeferredClassroomExampleVideo";
 import type {
   AssemblyPlaybackStep,
@@ -30,6 +30,7 @@ export const AssemblyInspectorPanel = ({
   characterAssemblyPlan,
   currentCharacterStep,
   selectedRecipe,
+  selectedMechanism,
   currentStep,
   assessmentKey,
   goStage,
@@ -39,6 +40,7 @@ export const AssemblyInspectorPanel = ({
   characterAssemblyPlan: CharacterAssemblyPlan;
   currentCharacterStep?: CharacterAssemblyStep;
   selectedRecipe?: FabricationRecipe;
+  selectedMechanism?: MechanismConfig;
   currentStep?: AssemblyPlaybackStep;
   assessmentKey: string;
   goStage: (stage: AppStage) => void;
@@ -195,7 +197,7 @@ export const AssemblyInspectorPanel = ({
               className="mt-3 rounded-2xl bg-slate-100 p-3 text-sm font-bold text-slate-700"
               data-testid="assembly-stack-summary"
             >
-              {readableFabricationStackSummary(selectedRecipe)}
+              {readableFabricationStackSummary(selectedMechanism ?? selectedRecipe)}
             </div>
           </details>
           {selectedRecipe.warnings.length ? (

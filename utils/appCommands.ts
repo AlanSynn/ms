@@ -7,6 +7,7 @@ export type AppCommandSpec = {
   menu: AppMenuId;
   label: string;
   description: string;
+  menuVisible?: boolean;
   shortcuts?: readonly string[];
   stageTarget?: AppStage;
   testId?: string;
@@ -14,12 +15,12 @@ export type AppCommandSpec = {
 
 const APP_COMMAND_DEFINITIONS = [
   { id: 'project.new', menu: 'file', label: 'New Project', description: 'Start new project.', shortcuts: ['Mod+N'] },
-  { id: 'project.open', menu: 'file', label: 'Load Project…', description: 'Open project file.', shortcuts: ['Mod+O'], testId: 'command-load-project' },
-  { id: 'project.recoverAutosave', menu: 'file', label: 'Recover Autosave…', description: 'Load autosave.' },
-  { id: 'project.save', menu: 'file', label: 'Download Snapshot', description: 'Save snapshot.', shortcuts: ['Mod+S'], testId: 'command-download-snapshot' },
-  { id: 'project.saveAs', menu: 'file', label: 'Download Snapshot As…', description: 'Save named copy.', shortcuts: ['Mod+Shift+S'] },
-  { id: 'project.exportCopy', menu: 'file', label: 'Portable Copy', description: 'Save portable copy.', shortcuts: ['Mod+Alt+S'] },
-  { id: 'project.exportBlueprint', menu: 'file', label: 'Export Blueprint', description: 'Export files.', shortcuts: ['Mod+E'] },
+  { id: 'project.open', menu: 'file', label: 'Open Project', description: 'Open project file.', shortcuts: ['Mod+O'], testId: 'command-load-project' },
+  { id: 'project.recoverAutosave', menu: 'file', label: 'Recover', description: 'Restore browser autosave.' },
+  { id: 'project.save', menu: 'file', label: 'Save Project', description: 'Save project file.', shortcuts: ['Mod+S'], testId: 'command-download-snapshot' },
+  { id: 'project.saveAs', menu: 'file', label: 'Download Snapshot As…', description: 'Legacy named snapshot.', menuVisible: false },
+  { id: 'project.exportCopy', menu: 'file', label: 'Portable Copy', description: 'Legacy portable copy.', menuVisible: false },
+  { id: 'project.exportBlueprint', menu: 'file', label: 'Export Blueprint', description: 'Legacy Blueprint handoff.', menuVisible: false },
   { id: 'project.resetLesson', menu: 'file', label: 'Reset Lesson', description: 'Restore lesson.', testId: 'command-reset-lesson' },
 
   { id: 'edit.undo', menu: 'edit', label: 'Undo', description: 'Undo.', shortcuts: ['Mod+Z'] },
@@ -34,10 +35,11 @@ const APP_COMMAND_DEFINITIONS = [
   { id: 'workspace.resetLayout', menu: 'view', label: 'Reset Layout', description: 'Reset layout.' },
 
   { id: 'stage.character', menu: 'go', label: 'Character', description: 'Character.', shortcuts: ['Alt+1'], stageTarget: 'character' },
+  { id: 'stage.project', menu: 'go', label: 'Project', description: 'Project files.', stageTarget: 'project' },
   { id: 'stage.path', menu: 'go', label: 'Path', description: 'Path.', shortcuts: ['Alt+2'], stageTarget: 'path' },
   { id: 'stage.foundry', menu: 'go', label: 'Foundry', description: 'Foundry.', shortcuts: ['Alt+3'], stageTarget: 'foundry' },
   { id: 'stage.design', menu: 'go', label: 'Design', description: 'Design.', shortcuts: ['Alt+4'], stageTarget: 'design' },
-  { id: 'stage.blueprint', menu: 'go', label: 'Blueprint', description: 'Blueprint.', shortcuts: ['Alt+5'], stageTarget: 'blueprint' },
+  { id: 'stage.blueprint', menu: 'go', label: 'Blueprint', description: 'Build and print.', shortcuts: ['Alt+5'], stageTarget: 'blueprint' },
   { id: 'stage.assembly', menu: 'go', label: 'Assembly', description: 'Assembly.', shortcuts: ['Alt+6'], stageTarget: 'assembly' },
 
   { id: 'options.preferences', menu: 'options', label: 'Preferences…', description: 'Options.', shortcuts: ['Mod+,'], stageTarget: 'options' },
@@ -58,10 +60,10 @@ export type AppMenuGroup = {
 };
 
 export const APP_MENU_GROUPS = [
-  { id: 'file', label: 'File', commandIds: ['project.new', 'project.open', 'project.recoverAutosave', 'project.save', 'project.saveAs', 'project.exportCopy', 'project.exportBlueprint', 'project.resetLesson'] },
+  { id: 'file', label: 'Project', commandIds: ['project.new', 'project.save', 'project.open', 'project.recoverAutosave', 'project.resetLesson'] },
   { id: 'edit', label: 'Edit', commandIds: ['edit.undo', 'edit.redo'] },
   { id: 'view', label: 'View', commandIds: ['view.zoomIn', 'view.zoomOut', 'view.fit', 'view.reset', 'workspace.saveLayout', 'workspace.restoreLayout', 'workspace.resetLayout'] },
-  { id: 'go', label: 'Go', commandIds: ['stage.character', 'stage.path', 'stage.foundry', 'stage.design', 'stage.blueprint', 'stage.assembly'] },
+  { id: 'go', label: 'Go', commandIds: ['stage.project', 'stage.character', 'stage.path', 'stage.foundry', 'stage.design', 'stage.blueprint', 'stage.assembly'] },
   { id: 'options', label: 'Options', commandIds: ['options.preferences'] },
   { id: 'help', label: 'Help', commandIds: ['help.shortcuts', 'help.about'] }
 ] as const satisfies readonly AppMenuGroup[];
@@ -134,9 +136,10 @@ export const validateAppCommandRegistry = () => {
     const wrongMenu = group.commandIds.filter(id => commandById(id).menu !== group.id);
     wrongMenu.forEach(id => errors.push(`menu ${group.id} contains command from ${commandById(id).menu}: ${id}`));
   });
-  const menuIds = new Set(APP_MENU_GROUPS.flatMap(group => group.commandIds));
+  const menuIds = new Set<AppCommandId>(APP_MENU_GROUPS.flatMap(group => group.commandIds));
   APP_COMMANDS.forEach(command => {
-    if (!menuIds.has(command.id)) errors.push(`command is not in a menu: ${command.id}`);
+    if (command.menuVisible === false && menuIds.has(command.id)) errors.push(`hidden command is in a menu: ${command.id}`);
+    if (command.menuVisible !== false && !menuIds.has(command.id)) errors.push(`command is not in a menu: ${command.id}`);
   });
   const shortcuts = new Map<string, string>();
   APP_COMMANDS.forEach(command => command.shortcuts?.forEach(shortcut => {

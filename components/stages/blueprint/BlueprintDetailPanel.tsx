@@ -5,15 +5,20 @@ import {
 } from "../../../utils/fabrication";
 import { referenceRecipeForType } from "../../../utils/mechanismReference";
 import { MECHANISM_TEMPLATE_LIBRARY } from "../../../utils/mechanismTemplates";
+import type { BuildPlanV1 } from "../../../utils/buildPlan";
 
 export const BlueprintDetailPanel = ({
   project,
   recipes,
   selectedRecipe,
+  buildPlan,
+  packageReady,
 }: {
   project: ProjectState;
   recipes: FabricationRecipe[];
   selectedRecipe: FabricationRecipe | undefined;
+  buildPlan: BuildPlanV1;
+  packageReady: boolean;
 }) => {
   const selectedSensemaking = selectedRecipe
     ? MECHANISM_TEMPLATE_LIBRARY[selectedRecipe.type].classroomSensemaking
@@ -29,6 +34,12 @@ export const BlueprintDetailPanel = ({
   const requiredPartCount = selectedRecipe
     ? selectedRecipe.requiredParts.reduce((sum, part) => sum + part.quantity, 0)
     : 0;
+  const selectedBuildMechanism = buildPlan.mechanisms.find(
+    mechanism => mechanism.sourceMechanismId === selectedRecipe?.mechanismId,
+  );
+  const selectedMotions = selectedBuildMechanism
+    ? buildPlan.motions.filter(motion => motion.mechanismRefs.includes(selectedBuildMechanism.ref))
+    : [];
 
   return (
     <section
@@ -45,7 +56,9 @@ export const BlueprintDetailPanel = ({
           data-testid={`blueprint-recipe-${selectedRecipe.mechanismId}`}
         >
           <div className="font-bold text-slate-800">Board {boardLabel}</div>
-          <div className="mt-1 text-sm text-slate-600">Place this mechanism here.</div>
+          <div className="mt-1 text-sm text-slate-600">
+            {selectedMotions.map(motion => `${motion.label} / ${motion.id}`).join(", ") || "No motion assigned"}
+          </div>
           {selectedSensemaking && (
             <div
               className="sensemaking-cue mt-3"
@@ -78,6 +91,11 @@ export const BlueprintDetailPanel = ({
           >
             {requiredPartCount} parts · Board {boardLabel}
           </div>
+          {selectedBuildMechanism && (
+            <div className="mt-3 text-xs font-bold text-slate-500" data-testid="blueprint-geometry-summary">
+              12 x 12 in / 100% scale / {selectedBuildMechanism.geometry.points.length} pivots / {selectedBuildMechanism.geometry.signature}
+            </div>
+          )}
           {selectedRecipe.warnings.length ? (
             <div className="warning mt-3">
               Fix: {selectedRecipe.warnings.join("; ")}
@@ -89,9 +107,9 @@ export const BlueprintDetailPanel = ({
       ) : (
         <div className="warning">Add a mechanism.</div>
       )}
-      {project.lastExport && (
+      {packageReady && (
         <div className="rounded-2xl bg-white p-3 text-sm text-slate-600 shadow-sm">
-          Build sheet ready · {recipes.length} recipe
+          Blueprint PDF ready · {recipes.length} mechanism
           {recipes.length === 1 ? "" : "s"}
         </div>
       )}

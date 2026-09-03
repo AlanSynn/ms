@@ -36,6 +36,12 @@ import {
 import { createMechanismFitJobInput } from "../../../runtime/fitting/mechanismFitJob";
 import { createMechanismFitWorkerClient } from "../../../runtime/fitting/mechanismFitWorkerClient";
 import { designFamilyFitAuthorityChanged } from "../../../runtime/fitting/designFamilyFitAuthority";
+import {
+  mechanismBindingForPath,
+  mechanismBindingTargetKey,
+  mechanismOutputBindings,
+  resolvedMechanismOutputBindings,
+} from "../../../utils/mechanismBindings";
 
 const DesignRecommendationControl = ({
   project,
@@ -153,6 +159,26 @@ export const DesignWorkflowPanel = ({
       });
       return;
     }
+    const requestedBinding = mechanismBindingForPath(project, base, path.id);
+    const requestedTargetKey = requestedBinding
+      ? mechanismBindingTargetKey(project, requestedBinding)
+      : undefined;
+    const pathOrTargetOwned = project.mechanisms.some((mechanism) =>
+      resolvedMechanismOutputBindings(project, mechanism).some(
+        (binding) =>
+          binding.enabled !== false &&
+          (binding.pathId === path.id ||
+            (requestedTargetKey !== undefined &&
+              mechanismBindingTargetKey(project, binding) === requestedTargetKey)),
+      ),
+    );
+    if (pathOrTargetOwned) {
+      dispatch({
+        type: "upsert_mechanism",
+        mechanism: mechanismWithGeneratedPath(base),
+      });
+      return;
+    }
     const candidate = {
       ...base,
       targetPathId: path.id,
@@ -217,6 +243,9 @@ export const DesignWorkflowPanel = ({
           {project.mechanisms.map((m) => (
             <option key={m.id} value={m.id}>
               {mechanismTemplateLabel(m.type)}
+              {mechanismOutputBindings(m).filter((binding) => binding.enabled !== false).length > 1
+                ? ` · ${mechanismOutputBindings(m).filter((binding) => binding.enabled !== false).length} motions`
+                : ""}
             </option>
           ))}
         </select>

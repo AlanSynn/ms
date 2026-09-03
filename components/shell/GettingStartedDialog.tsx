@@ -204,7 +204,7 @@ const starterCues = {
 
 const StarterCues = ({ items }: { items: readonly string[] }) => (
     <span className="starter-card-cues" aria-hidden="true">
-        {items.map(item => <span key={item}>{item}</span>)}
+        {items.map((item, index) => <span key={item}><em>{index === 0 ? 'Change' : 'Build'}</em> {item}</span>)}
     </span>
 );
 

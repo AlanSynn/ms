@@ -158,31 +158,20 @@ export const AppWorkspaceShell = ({
               <TopCommandBar commandHandlers={commandHandlers} />
               {project.settings.toolbarVisible && (
                 <div className="quick-toolbar" data-testid="quick-toolbar">
-                  <label className="btn-secondary cursor-pointer">
-                    <Upload size={16} /> Import
-                    <input
-                      hidden
-                      type="file"
-                      accept="application/json,.json"
-                      onChange={(event) =>
-                        importIfPresent(
-                          event.currentTarget.files,
-                          importProject,
-                        )
-                      }
-                    />
-                  </label>
+                  <button className="btn-secondary" onClick={commandHandlers["project.open"]}>
+                    <Upload size={16} /> Open Project
+                  </button>
                   <button
                     className="btn-secondary"
                     onClick={commandHandlers["project.save"]}
                   >
-                    <Download size={16} /> Snapshot
+                    <Download size={16} /> Save Project
                   </button>
                   <button
                     className="btn-primary"
                     onClick={() => goStage("blueprint")}
                   >
-                    <Download size={16} /> Export
+                    <Download size={16} /> Blueprint
                   </button>
                 </div>
               )}
@@ -193,7 +182,7 @@ export const AppWorkspaceShell = ({
             data-testid="project-file-input"
             hidden
             type="file"
-            accept="application/json,.motionsmith.json,.json"
+            accept="application/json,.motionsmith,.motionsmith.json,.json"
             onChange={(event) =>
               importIfPresent(event.currentTarget.files, importProject)
             }

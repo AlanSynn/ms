@@ -33,6 +33,8 @@ import {
   useAdjacentClassroomStagePreload,
 } from "./classroomStageModules";
 import { CharacterSelection } from "./stages/character/CharacterSelection";
+import { ProjectStage } from "./stages/project/ProjectStage";
+import type { AppCommandHandlerMap } from "../utils/appCommands";
 
 export type AppStageRouterProps = {
   editorStage: AppStage;
@@ -41,6 +43,7 @@ export type AppStageRouterProps = {
   goStage: (stage: AppStage) => void;
   playerDock: ReactNode;
   playbackClock: PlaybackClock;
+  commandHandlers: AppCommandHandlerMap;
 
   characterImportProgress: CharacterImportProgressStore;
   onOpenGettingStarted: () => void;
@@ -150,6 +153,7 @@ export const AppStageRouter = ({
   goStage,
   playerDock,
   playbackClock,
+  commandHandlers,
   characterImportProgress,
   onOpenGettingStarted,
   onAcceptPendingCharacter,
@@ -217,6 +221,9 @@ export const AppStageRouter = ({
       <StageTransitionFrame />
     )}
     <Suspense fallback={mountedStage === null ? null : <StageTransitionFrame />}>
+    {mountedStage === "project" && (
+      <ProjectStage project={project} commandHandlers={commandHandlers} goStage={goStage} />
+    )}
     {mountedStage === "character" && (
       <CharacterSelection
         project={project}
@@ -301,7 +308,6 @@ export const AppStageRouter = ({
     {mountedStage === "assembly" && (
       <AssemblyGuide
         project={project}
-        dispatch={dispatch}
         goStage={goStage}
         stepIndex={assemblyStepIndex}
         setStepIndex={setAssemblyStepIndex}

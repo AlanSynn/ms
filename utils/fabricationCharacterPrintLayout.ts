@@ -83,7 +83,7 @@ export const buildCharacterPrintLayout = (project: ProjectState): CharacterPrint
     const margin = 10;
     const titleBand = 18;
     const footerBand = 10;
-    const maxPages = 2;
+    const maxPages = Math.max(1, rawItems.length);
     const pageRight = kit.sheetWidthMm - margin;
     const pageBottom = kit.sheetHeightMm - footerBand;
     const packAtScale = (scale: number): CharacterPrintPart[] | null => {
@@ -128,18 +128,12 @@ export const buildCharacterPrintLayout = (project: ProjectState): CharacterPrint
         }
         return packed;
     };
-    let low = 0.05;
-    let high = 1;
-    for (let i = 0; i < 18; i += 1) {
-        const mid = (low + high) / 2;
-        if (packAtScale(mid)) low = mid;
-        else high = mid;
-    }
-    const scale = packAtScale(1) ? 1 : low;
-    const packed = packAtScale(scale) ?? packAtScale(0.05) ?? [];
+    const scale = 1;
+    const packed = packAtScale(scale);
+    if (!packed) throw new Error('Character part exceeds the printable Letter area at 100% scale.');
     return {
         scale,
-        pageCount: Math.max(1, Math.min(maxPages, packed.reduce((max, item) => Math.max(max, item.pageIndex + 1), 1))),
+        pageCount: Math.max(1, packed.reduce((max, item) => Math.max(max, item.pageIndex + 1), 1)),
         partPaddingMm,
         holeRadiusMm: Math.max(0.5, (kit.holeDiameterMm / 2) * scale),
         parts: packed

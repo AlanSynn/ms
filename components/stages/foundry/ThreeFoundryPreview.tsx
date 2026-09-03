@@ -51,8 +51,11 @@ import {
 } from "../../../utils/viewer3d";
 import {
   degToRad,
+  foundryPreviewToScenePoint,
   foundryCameraPosition,
   foundryCameraTarget,
+  FOUNDRY_WORK_PLANE_Z,
+  sceneToFoundryPreviewPoint,
   type FoundryCamera,
   type FoundryOverlaySize,
 } from "../../../utils/foundryCamera";
@@ -328,10 +331,8 @@ const SCENE_TO_FOUNDRY_SCALE = Math.min(
 const foundryTo3 = (point: Point, z = 0) =>
   new THREE.Vector3((point.x - 180) / 18, (120 - point.y) / 18, z);
 
-const sceneToFoundryPreview = (point: Point): Point => ({
-  x: FOUNDRY_PREVIEW_WIDTH / 2 + point.x * SCENE_TO_FOUNDRY_SCALE,
-  y: FOUNDRY_PREVIEW_HEIGHT / 2 - point.y * SCENE_TO_FOUNDRY_SCALE,
-});
+const sceneToFoundryPreview = (point: Point): Point =>
+  sceneToFoundryPreviewPoint(point);
 
 const sceneTo3 = (point: Point, z = 0) =>
   foundryTo3(sceneToFoundryPreview(point), z);
@@ -1785,17 +1786,20 @@ export const ThreeFoundryPreview = ({
     const hit = new THREE.Vector3();
     if (
       !raycaster.ray.intersectPlane(
-        new THREE.Plane(new THREE.Vector3(0, 0, 1), 0),
+        new THREE.Plane(
+          new THREE.Vector3(0, 0, 1),
+          -FOUNDRY_WORK_PLANE_Z,
+        ),
         hit,
       )
     )
       return;
-    const previewX = 180 + hit.x * 18;
-    const previewY = 120 - hit.y * 18;
-    onAnchorPick({
-      x: (previewX / 360 - 0.5) * SCENE_VIEW.width,
-      y: (0.5 - previewY / 240) * SCENE_VIEW.height,
-    });
+    onAnchorPick(
+      foundryPreviewToScenePoint({
+        x: FOUNDRY_PREVIEW_WIDTH / 2 + hit.x * 18,
+        y: FOUNDRY_PREVIEW_HEIGHT / 2 - hit.y * 18,
+      }),
+    );
   };
 
   useEffect(() => {

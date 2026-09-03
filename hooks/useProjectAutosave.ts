@@ -2,8 +2,10 @@ import { useEffect, useRef } from "react";
 import type { ProjectState } from "../types";
 import type { AutosaveFailureReason } from "../utils/projectAutosaveFormat";
 import {
-  completeAutosaveSnapshot,
-  type PreparedAutosaveSnapshot,
+  commitAutosaveStorageSnapshot,
+  completeAutosaveStorageSnapshot,
+  prepareAutosaveStorageBase,
+  type PreparedAutosaveStorageSnapshot,
 } from "../utils/projectAutosaveTransactions";
 import {
   browserAutosaveIdleBoundary,
@@ -21,7 +23,7 @@ import {
 
 type ProjectAutosaveTransaction = AutosaveTransaction<
   ProjectState,
-  PreparedAutosaveSnapshot
+  PreparedAutosaveStorageSnapshot
 >;
 
 export type AutosaveLifecycleDisposal = {
@@ -87,12 +89,15 @@ export const useProjectAutosave = (
     const preparation = createBrowserAutosavePreparationDriver();
     const backend = browserAutosaveAtomicBackend();
     let baseRequestGeneration = 0;
-    transactionRef.current = createAutosaveTransaction<ProjectState, PreparedAutosaveSnapshot>({
+    transactionRef.current = createAutosaveTransaction<ProjectState, PreparedAutosaveStorageSnapshot>({
       boundary: browserAutosaveIdleBoundary(),
       preparation: {
         start: (nextProject, _generation, callbacks) => {
           const baseRequest = ++baseRequestGeneration;
-          void prepareIndexedDbAutosaveBase(nextProject, backend).then((base) => {
+          void prepareAutosaveStorageBase(
+            nextProject,
+            (candidate) => prepareIndexedDbAutosaveBase(candidate, backend),
+          ).then((base) => {
             if (baseRequest !== baseRequestGeneration) return;
             if (base.status !== "base-prepared") {
               reportFailure(base.reason);
@@ -102,8 +107,8 @@ export const useProjectAutosave = (
             preparation.start(nextProject, _generation, {
               ready: (prepared: AutosaveSerializedSnapshot) =>
                 callbacks.ready(
-                  completeAutosaveSnapshot(
-                    base.base,
+                  completeAutosaveStorageSnapshot(
+                    base.plan,
                     prepared.serialized,
                     prepared,
                   ),
@@ -129,7 +134,10 @@ export const useProjectAutosave = (
         },
       },
       commit: async (_nextProject, plan) => {
-        const result = await commitIndexedDbAutosaveSnapshot(plan, backend);
+        const result = await commitAutosaveStorageSnapshot(
+          plan,
+          (snapshot) => commitIndexedDbAutosaveSnapshot(snapshot, backend),
+        );
         if (result.status === "failed") reportFailure(result.reason);
         return result.status === "saved";
       },

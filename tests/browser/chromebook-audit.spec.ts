@@ -33,7 +33,7 @@ const stageButton = (page: Page, name: string) => {
     Path: /^Path Editor$/i,
     Foundry: /Mechanism Foundry|Foundry/i,
     Design: /Mechanism Design|Design/i,
-    Blueprint: /^Blueprint$/i,
+    Blueprint: /^Build \/ Print$/i,
     Assembly: /^Assembly$/i,
   };
   return page.getByTestId("workspace-steps").getByRole("button", { name: names[name] });

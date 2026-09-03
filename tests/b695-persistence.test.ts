@@ -15,9 +15,14 @@ import {
   readAutosaveProject,
 } from "../utils/projectAutosaveRecovery";
 import {
+  commitAutosaveStorageSnapshot,
+  completeAutosaveStorageSnapshot,
+  migrateAutosaveValue,
+  prepareAutosaveStorageBase,
   writeAutosaveSnapshot,
 } from "../utils/projectAutosaveTransactions";
 import {
+  projectStateFromPortableDocument,
   serializeProject,
   serializeProjectCompact,
 } from "../utils/projectSerialization";
@@ -340,7 +345,9 @@ const projectB = createEmptyProject();
   const compact = serializeProjectCompact(exportedProject);
   const portable = serializeProject(exportedProject);
   for (const serialized of [compact, portable]) {
-    const parsed = JSON.parse(serialized) as ProjectState;
+    const parsed = projectStateFromPortableDocument(
+      JSON.parse(serialized),
+    ) as ProjectState;
     assert.equal(parsed.lastExport, undefined, "transient generated files are not persisted");
     assert.equal(
       serialized.split("serialization-raster-marker-").length - 1,
@@ -388,8 +395,10 @@ const projectB = createEmptyProject();
   assert.equal(terminated, 1, "disposing autosave releases the injected worker");
 
   const directBlob = createPortableProjectBlob(exportedProject);
-  assert.match(directBlob.type, /^application\/json(?:;|$)/);
-  const directSnapshot = JSON.parse(await directBlob.text()) as ProjectState;
+  assert.equal(directBlob.type, "application/vnd.motionsmith.project+json");
+  const directSnapshot = projectStateFromPortableDocument(
+    JSON.parse(await directBlob.text()),
+  ) as ProjectState;
   assert.equal(directSnapshot.lastExport, undefined);
   assert.equal(directSnapshot.sceneObjects[object.id].textureUrl, object.textureUrl);
 
@@ -504,6 +513,116 @@ const projectB = createEmptyProject();
   if (recovered.status === "loaded") {
     assert(recovered.project.metadata.name.startsWith("B"));
   }
+}
+
+{
+  const storage = memoryStorage();
+  const legacy = createEmptyProject();
+  legacy.metadata.name = "Migrated after stale previous";
+  const legacyRaw = serializeProjectCompact(legacy);
+  storage.values.set(AUTOSAVE_STORAGE_KEYS.autosavePrevious, "{stale-previous");
+  const migration = migrateAutosaveValue(
+    legacyRaw,
+    legacy.metadata.id,
+    storage,
+    false,
+  );
+  assert.equal(migration.outcome, "legacy-migrated");
+  assert.equal(
+    storage.values.has(AUTOSAVE_STORAGE_KEYS.autosavePrevious),
+    false,
+    "migration removes a stale previous generation excluded by its metadata",
+  );
+  const next = { ...legacy, metadata: { ...legacy.metadata, name: "Post-migration edit" } };
+  assert.equal(
+    writeAutosaveSnapshot(next, storage).status,
+    "saved",
+    "stale pre-migration rollback bytes cannot permanently block future writes",
+  );
+}
+
+{
+  const storage = memoryStorage();
+  const project = createEmptyProject();
+  project.metadata.name = "IndexedDB unavailable fallback";
+  let primaryCommits = 0;
+  const base = await prepareAutosaveStorageBase(
+    project,
+    async () => ({
+      status: "failed" as const,
+      reason: "unavailable" as const,
+      error: "IndexedDB unavailable",
+    }),
+    storage,
+  );
+  if (base.status !== "base-prepared") assert.fail(base.error);
+  assert.equal(base.plan.destination, "local-storage");
+  const serialized = serializeProjectCompact(project);
+  const plan = completeAutosaveStorageSnapshot(base.plan, serialized, {
+    bytes: byteLength(serialized),
+    fingerprint: fingerprint(serialized),
+  });
+  const saved = await commitAutosaveStorageSnapshot(
+    plan,
+    async () => {
+      primaryCommits += 1;
+      return assert.fail("an unavailable primary base must not be committed");
+    },
+    storage,
+  );
+  assert.equal(saved.status, "saved", "normal autosave falls back to the bounded local journal");
+  assert.equal(primaryCommits, 0, "the local fallback commits exactly once");
+}
+
+{
+  const storage = memoryStorage();
+  const project = createEmptyProject();
+  project.metadata.name = "Prepared IndexedDB write";
+  const base = await prepareAutosaveStorageBase(
+    project,
+    async () => ({
+      status: "base-prepared" as const,
+      base: {
+        projectId: project.metadata.id,
+        baseGeneration: 0,
+        baseFingerprint: null,
+        transactionId: "indexed-db-fallback-source",
+        writerId: "test-writer",
+      },
+    }),
+    storage,
+  );
+  if (base.status !== "base-prepared") assert.fail(base.error);
+  const serialized = serializeProjectCompact(project);
+  const plan = completeAutosaveStorageSnapshot(base.plan, serialized, {
+    bytes: byteLength(serialized),
+    fingerprint: fingerprint(serialized),
+  });
+  const newer = createEmptyProject();
+  newer.metadata.name = "Newer local tab generation";
+  const newerRaw = serializeProjectCompact(newer);
+  assert.equal(writeAutosaveSnapshot(newer, storage).status, "saved");
+  let primaryCommits = 0;
+  const result = await commitAutosaveStorageSnapshot(
+    plan,
+    async () => {
+      primaryCommits += 1;
+      return {
+        status: "failed" as const,
+        reason: "abort" as const,
+        error: "IndexedDB transaction aborted",
+      };
+    },
+    storage,
+  );
+  assert.equal(result.status, "failed");
+  if (result.status === "failed") assert.equal(result.reason, "stale-write");
+  assert.equal(primaryCommits, 1, "a failed IndexedDB transaction is attempted once");
+  assert.equal(
+    storage.values.get(AUTOSAVE_STORAGE_KEYS.autosave),
+    newerRaw,
+    "fallback rejects rather than overwriting a newer local generation",
+  );
 }
 
 console.log("b695 persistence ok");

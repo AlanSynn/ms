@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
 import { AssemblyCanvasPane } from "./AssemblyCanvasPane";
@@ -17,20 +17,16 @@ import {
   inspectorPane,
   workflowPane,
 } from "../stageLayout";
-import type { AppStage, ProjectAction, ProjectState } from "../../../types";
-import { downloadText } from "../../../utils/project";
+import type { AppStage, ProjectState } from "../../../types";
+import { buildPlanSourceDigest } from "../../../utils/buildPlan";
+import { projectContentFingerprint } from "../../../utils/projectSerialization";
 import {
   assemblyLaneForExportMode,
   type AssemblyLane,
 } from "../../../utils/assemblyPlayback";
-import {
-  validateForFabrication,
-} from "../../../utils/fabrication";
-import { createBlueprintPackageWorkerClient } from "../../../runtime/blueprint/blueprintPackageWorkerClient";
 
 export const AssemblyGuide = ({
   project,
-  dispatch,
   goStage,
   stepIndex,
   setStepIndex,
@@ -42,7 +38,6 @@ export const AssemblyGuide = ({
   playbackClock,
 }: {
   project: ProjectState;
-  dispatch: (action: ProjectAction) => void;
   goStage: (stage: AppStage) => void;
   stepIndex: number;
   setStepIndex: Dispatch<SetStateAction<number>>;
@@ -53,40 +48,18 @@ export const AssemblyGuide = ({
   setStepCount: Dispatch<SetStateAction<number>>;
   playbackClock: PlaybackClock;
 }) => {
-  const validation = useMemo(() => validateForFabrication(project), [project]);
-  const packageClient = useMemo(() => createBlueprintPackageWorkerClient(), []);
-  const [packageStatus, setPackageStatus] = useState<"idle" | "running">("idle");
-  const [packageError, setPackageError] = useState<string>();
-  useEffect(() => () => packageClient.dispose(), [packageClient]);
-  const create = () => {
-    if (packageStatus === "running") {
-      packageClient.cancel();
-      setPackageStatus("idle");
-      return;
-    }
-    setPackageError(undefined);
-    setPackageStatus("running");
-    packageClient.request(project, {
-      complete: ({ fabricationPackage }) => {
-        setPackageStatus("idle");
-        startTransition(() => dispatch({
-          type: "set_export",
-          fabricationPackage,
-        }));
-      },
-      failed: (error) => {
-        setPackageStatus("idle");
-        setPackageError(error.message);
-      },
-    });
-  };
-  const pkg = project.lastExport;
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const [assemblyMode, setAssemblyMode] =
     useState<AssemblyGuideMode>("mechanism");
   const [lane, setLane] = useState<AssemblyLane>(() =>
     assemblyLaneForExportMode(project.settings.physicalKit.exportMode),
   );
+  const sourceProjectFingerprint = projectContentFingerprint(project);
+  const expectedBuildPlanDigest = buildPlanSourceDigest(project, "complete", lane);
+  const pkg = project.lastExport?.sourceProjectFingerprint === sourceProjectFingerprint &&
+    project.lastExport.buildPlanSourceDigest === expectedBuildPlanDigest
+    ? project.lastExport
+    : undefined;
   const preparedModel = useMemo(
     () =>
       prepareAssemblyGuideModel({
@@ -101,6 +74,8 @@ export const AssemblyGuide = ({
   const {
     recipes,
     selectedRecipe,
+    selectedBuildMechanism,
+    buildPlan,
     characterAssemblyPlan,
     hasCharacterAssembly,
     activeAssemblyMode,
@@ -123,34 +98,6 @@ export const AssemblyGuide = ({
     playbackClock,
   });
 
-  const downloadAssemblyPdf = () =>
-    pkg &&
-    downloadText(
-      `${pkg.id}-assembly.pdf`,
-      pkg.assemblyGuidePdf,
-      "application/pdf",
-    );
-  const downloadCharacterPdf = () =>
-    pkg &&
-    downloadText(
-      `${pkg.id}-character-sheet.pdf`,
-      pkg.customPartsPdf,
-      "application/pdf",
-    );
-
-  const printGuide = () => {
-    if (!pkg) return;
-    const popup = window.open("", "_blank");
-    if (popup) {
-      popup.document.write(pkg.assemblyGuideHtml);
-      popup.document.close();
-      popup.focus();
-      popup.print();
-      return;
-    }
-    downloadText(`${pkg.id}-assembly.html`, pkg.assemblyGuideHtml, "text/html");
-  };
-
   return (
     <EditorStageFrame
       stage="assembly"
@@ -160,14 +107,6 @@ export const AssemblyGuide = ({
           <AssemblyControlPanel
             project={project}
             goStage={goStage}
-            validationErrorCount={validation.errors.length}
-            packageReady={!!pkg}
-            packageStatus={packageStatus}
-            packageError={packageError}
-            onCreate={create}
-            onPrint={printGuide}
-            onDownloadPdf={downloadAssemblyPdf}
-            onDownloadCharacterPdf={downloadCharacterPdf}
             activeAssemblyMode={activeAssemblyMode}
             setAssemblyMode={setAssemblyMode}
             hasCharacterAssembly={hasCharacterAssembly}
@@ -188,6 +127,8 @@ export const AssemblyGuide = ({
             characterAssemblyPlan={characterAssemblyPlan}
             currentCharacterStep={currentCharacterStep}
             selectedRecipe={selectedRecipe}
+            selectedBuildMechanism={selectedBuildMechanism}
+            buildPlanDigest={buildPlan.sourceDigest}
             currentStep={currentStep}
             lane={lane}
             kit={project.settings.physicalKit}
@@ -204,6 +145,7 @@ export const AssemblyGuide = ({
             characterAssemblyPlan={characterAssemblyPlan}
             currentCharacterStep={currentCharacterStep}
             selectedRecipe={selectedRecipe}
+            selectedMechanism={selectedBuildMechanism?.mechanism}
             currentStep={currentStep}
             assessmentKey={project.settings.classroomAssessmentKey}
             goStage={goStage}

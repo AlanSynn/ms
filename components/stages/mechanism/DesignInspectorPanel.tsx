@@ -13,6 +13,7 @@ import {
   motionChainOptionLabel,
   preferredMotionJointId,
 } from "../../../utils/motion";
+import { resolvedMechanismOutputBindings } from "../../../utils/mechanismBindings";
 import {
   getInspectorBindingWarnings,
   getInspectorFeasibleRange,
@@ -79,6 +80,16 @@ export const DesignInspectorPanel = ({
       : "Motion may jam. Try a smaller move."
     : null;
   const bindingWarnings = getInspectorBindingWarnings(project);
+  const selectedBindingReady = selectedMechanism
+    ? resolvedMechanismOutputBindings(project, selectedMechanism).some((binding) => {
+        if (binding.enabled === false || !project.paths[binding.pathId]) return false;
+        return binding.targetSceneObjectId
+          ? Boolean(project.sceneObjects[binding.targetSceneObjectId])
+          : binding.targetPartId
+            ? Boolean(project.parts[binding.targetPartId])
+            : false;
+      })
+    : false;
   const selectedBindingWarnings = selectedMechanism
     ? (bindingWarnings[selectedMechanism.id] ?? [])
     : [];
@@ -317,12 +328,13 @@ export const DesignInspectorPanel = ({
             onChange={updateSelectedMechanism}
             testId="design-parametric-editor"
           />
-          {selectedFeasibilityStatus && (
+          {selectedFeasibilityStatus && selectedBindingReady && (
             <MechanismFeasibilityStatus
               status={selectedFeasibilityStatus}
               testId="design-feasibility-status"
             />
           )}
+          {!selectedBindingReady && <div className="warning">Choose target and path.</div>}
           <div className="section-title">Parameters</div>
           {MECHANISM_PARAM_META.filter((p) =>
             shouldShowMechanismParam(selectedMechanism.type, p.key),
@@ -389,7 +401,7 @@ export const DesignInspectorPanel = ({
             </button>
             <button
               className="btn-primary"
-              aria-label="Export Blueprint"
+              aria-label="Blueprint"
               onClick={onBlueprint}
             >
               Blueprint

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   runBlueprintCustomPartsStlJob,
+  runBlueprintCharacterTemplateJob,
   runBlueprintPackageJob,
 } from "../runtime/blueprint/blueprintPackageJob";
 import {
@@ -20,10 +21,23 @@ import {
   makeCustomPartsStl,
 } from "../utils/fabricationCustomParts";
 import { createDefaultSceneObject } from "../utils/project";
+import { projectContentFingerprint } from "../utils/projectSerialization";
 
 const project = createFabricationReadyFourBarProject();
 const pkg = runBlueprintPackageJob(project);
 assert(pkg.svg.startsWith("<svg"));
+assert(pkg.blueprintPdf?.startsWith("%PDF-1.4"));
+assert(pkg.characterTemplatePdf?.startsWith("%PDF-1.4"));
+assert.equal(pkg.sourceProjectFingerprint, projectContentFingerprint(project));
+assert(pkg.blueprintPdf?.includes(pkg.buildPlanSourceDigest!));
+const characterOnlyProject = {
+  ...project,
+  mechanisms: [],
+  selectedMechanismId: undefined,
+};
+const characterTemplate = runBlueprintCharacterTemplateJob(characterOnlyProject);
+assert(characterTemplate.characterTemplatePdf.includes(characterTemplate.buildPlanSourceDigest));
+assert.equal(characterTemplate.sourceProjectFingerprint, projectContentFingerprint(characterOnlyProject));
 assert.equal(pkg.customPartsStl, "", "ordinary package work omits the optional STL");
 const rasterObject = {
   ...createDefaultSceneObject("block", "large-export-raster"),
@@ -147,6 +161,7 @@ const completions: string[] = [];
 const completedPackages: typeof rasterPackage[] = [];
 const stlCompletions: number[] = [];
 const stlFailures: string[] = [];
+const characterTemplateCompletions: string[] = [];
 const failures: string[] = [];
 const callbacks = {
   complete: (
@@ -211,7 +226,7 @@ assert.equal(
   1,
   "restored package round trip retains exactly one canonical scene raster",
 );
-assert.deepEqual(failures, []);
+assert.deepEqual([...failures], []);
 assert.equal(workers[1].terminated, true, "completed package work releases its worker");
 
 const stlInput = {
@@ -250,6 +265,25 @@ workers[2].onmessage?.({
 assert.deepEqual(stlCompletions, [customPartsStl.length]);
 assert.deepEqual(stlFailures, []);
 assert.equal(workers[2].terminated, true, "completed STL work releases its worker");
+
+const characterTemplateGeneration = client.requestCharacterTemplate(characterOnlyProject, {
+  complete: (result) => characterTemplateCompletions.push(result.buildPlanSourceDigest),
+  failed: (error) => failures.push(error.message),
+});
+flushFrame();
+flushFrame();
+assert.equal(workers[3].posted[0].type, "create-character-template");
+const postedCharacterRequest = workers[3].posted[0];
+assert.equal(postedCharacterRequest.sourceProjectFingerprint, projectContentFingerprint(characterOnlyProject));
+workers[3].onmessage?.({
+  data: {
+    type: "character-template-result",
+    generationId: characterTemplateGeneration,
+    ...characterTemplate,
+  },
+} as MessageEvent<BlueprintPackageWorkerResponse>);
+assert.deepEqual(characterTemplateCompletions, [characterTemplate.buildPlanSourceDigest]);
+assert.equal(workers[3].terminated, true, "completed character template work releases its worker");
 
 client.dispose();
 console.log("Blueprint package worker contract ok");

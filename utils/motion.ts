@@ -1,7 +1,18 @@
 import { BodyPartLayer, MechanismConfig, Point, ProjectMotionPath, ProjectState, SceneObject, StandardJoint, StandardSkeleton } from '../types';
 import { calculateLinkage, mechanismTracePointForState } from './kinematics';
 import { placeBodyPartPivotAt } from './coordinates';
-import { mechanismMatchesPathOwner, mechanismPathFitBindingIssues } from './pathTargets';
+import {
+    mechanismMatchesPathOwner,
+    mechanismPathFitBindingIssues,
+    pathOwnerExists,
+    type PathTargetKind,
+} from './pathTargets';
+import {
+    mechanismOutputBindings,
+    mechanismOutputPortForBinding,
+    mechanismWithOutputBindings,
+    resolvedMechanismOutputBindings,
+} from './mechanismBindings';
 
 export interface MotionPreview {
     parts: Record<string, BodyPartLayer>;
@@ -52,6 +63,94 @@ export interface MotionChainDescriptor {
 }
 
 const cyclePhase = (angle: number) => (((angle / (Math.PI * 2)) % 1) + 1) % 1;
+
+const validMotionDurationMs = (durationMs: number, fallbackDurationMs: number) =>
+    Number.isFinite(durationMs) && durationMs > 0
+        ? durationMs
+        : Math.max(1, fallbackDurationMs);
+
+export const motionTimelineMsForPhase = (angle: number, durationMs: number) =>
+    cyclePhase(angle) * Math.max(1, durationMs);
+
+export const motionAngleAtTimelineMs = (timelineMs: number, durationMs: number) =>
+    (Math.max(0, timelineMs) / Math.max(1, durationMs)) * Math.PI * 2;
+
+export const motionPathsInProjectOrder = (project: ProjectState) =>
+    Object.values(project.paths) as ProjectMotionPath[];
+
+export const playableMotionPaths = (
+    project: ProjectState,
+    paths: ProjectMotionPath[] = motionPathsInProjectOrder(project),
+) => paths.filter(path =>
+    path.enabled &&
+    path.points.length > 1 &&
+    pathOwnerExists(project, path)
+);
+
+export const sharedMotionPlaybackDurationMs = (
+    project: ProjectState,
+    paths: ProjectMotionPath[] = playableMotionPaths(project),
+) => paths.length
+    ? paths.reduce(
+        (durationMs, path) => Math.max(
+            durationMs,
+            validMotionDurationMs(path.duration, project.settings.animationDurationMs),
+        ),
+        1,
+    )
+    : Math.max(1, project.settings.animationDurationMs);
+
+export type MotionPathStatus = 'Ready' | 'Draw' | 'Fix' | 'Hidden' | 'Off';
+
+export const motionPathStatus = (path: ProjectMotionPath): MotionPathStatus => {
+    if (!path.enabled) return 'Off';
+    if (path.points.length < 3) return 'Draw';
+    if (path.warnings.length) return 'Fix';
+    if (!path.visible) return 'Hidden';
+    return 'Ready';
+};
+
+export const nextMotionPathId = (project: ProjectState, targetId: string) => {
+    const baseId = `path-${targetId}`;
+    if (!project.paths[baseId]) return baseId;
+    let suffix = 2;
+    while (project.paths[`${baseId}-${suffix}`]) suffix += 1;
+    return `${baseId}-${suffix}`;
+};
+
+export const createMotionPathForTarget = (
+    project: ProjectState,
+    targetKind: PathTargetKind,
+    targetId: string,
+): ProjectMotionPath | undefined => {
+    const targetExists = targetKind === 'scene-object'
+        ? Boolean(project.sceneObjects[targetId])
+        : Boolean(project.parts[targetId]);
+    if (!targetExists) return undefined;
+    return {
+        id: nextMotionPathId(project, targetId),
+        partId: targetKind === 'part' ? targetId : '',
+        sceneObjectId: targetKind === 'scene-object' ? targetId : undefined,
+        smoothness: 0,
+        points: [],
+        timedPoints: [],
+        duration: Math.max(1, project.settings.animationDurationMs),
+        closed: true,
+        enabled: true,
+        visible: true,
+        source: 'drawn',
+        warnings: [],
+    };
+};
+
+export const clearMotionPathGeometry = (
+    path: ProjectMotionPath,
+): ProjectMotionPath => ({
+    ...path,
+    points: [],
+    timedPoints: [],
+    warnings: [],
+});
 
 const pointBetween = (a: Point, b: Point, t: number): Point => ({
     x: a.x + (b.x - a.x) * t,
@@ -779,83 +878,143 @@ export const motionPreviewForPath = (
     targetJointId?: string,
 ): MotionPreview => createMotionPathPreviewRuntime(project, path, targetJointId).previewAt(angle);
 
+export const motionPreviewForPaths = (
+    project: ProjectState,
+    paths: ProjectMotionPath[],
+    timelineMs: number,
+): MotionPreview => {
+    let preview: MotionPreview = {
+        parts: {},
+        sceneObjects: {},
+        skeleton: project.skeleton,
+    };
+    playableMotionPaths(project, paths).forEach(path => {
+        const pathAngle = motionAngleAtTimelineMs(
+            timelineMs,
+            validMotionDurationMs(path.duration, project.settings.animationDurationMs),
+        );
+        const target = pointOnProjectPath(path, pathAngle);
+        if (path.sceneObjectId) {
+            preview = motionPreviewForSceneObject(
+                project,
+                path.sceneObjectId,
+                target,
+                preview,
+            );
+            return;
+        }
+        const pathMechanism = project.mechanisms.flatMap(mechanism =>
+            resolvedMechanismOutputBindings(project, mechanism)
+                .filter(binding => binding.pathId === path.id)
+                .map(binding => ({ mechanism, binding }))
+        )[0];
+        const targetJointId = preferredMotionJointId(
+            project,
+            path.partId,
+            pathMechanism?.binding.targetAnchorJointId ?? path.targetAnchorJointId,
+            { preferDistalWhenRoot: !path.targetAnchorJointId },
+        );
+        preview = motionPreviewForTarget(
+            project,
+            path.partId,
+            targetJointId,
+            target,
+            preview,
+            { rootJointId: path.chainRootJointId },
+        );
+    });
+    return preview;
+};
+
 export const mechanismPathFitIsUsable = (project: ProjectState, mechanism: MechanismConfig) =>
     mechanism.type !== '4bar' ||
-    !mechanism.targetPathId ||
-    Boolean(mechanism.targetSceneObjectId) ||
-    (mechanism.fabricationMetadata?.pathFit?.status === 'fit' &&
-        mechanismPathFitBindingIssues(project, mechanism).length === 0);
+    !mechanismOutputBindings(mechanism).length ||
+    resolvedMechanismOutputBindings(project, mechanism).every(binding => {
+        if (binding.targetSceneObjectId) return true;
+        const boundMechanism = mechanismWithOutputBindings(mechanism, [binding]);
+        const fit = binding.fit ?? boundMechanism.fabricationMetadata?.pathFit;
+        return fit?.status === 'fit' && mechanismPathFitBindingIssues(project, boundMechanism).length === 0;
+    });
 
 export const mechanismBindingWarnings = (project: ProjectState, mechanisms: MechanismConfig[] = project.mechanisms) => {
     const warnings: Record<string, string[]> = {};
     const add = (mechanismId: string, message: string) => {
         warnings[mechanismId] = [...(warnings[mechanismId] ?? []), message];
     };
-    const drivenTargets = new Map<string, string>();
+    const drivenTargets = new Map<string, { mechanismId: string; bindingId: string }>();
+    const drivenPaths = new Map<string, { mechanismId: string; bindingId: string }>();
     mechanisms.filter(m => m.visible && m.enabled !== false).forEach(m => {
-        const pathFit = m.fabricationMetadata?.pathFit;
-        if (m.type === '4bar' && m.targetPathId && !m.targetSceneObjectId && pathFit?.status !== 'fit') {
+        resolvedMechanismOutputBindings(project, m).filter(binding => binding.enabled !== false).forEach(binding => {
+        const boundMechanism = mechanismWithOutputBindings(m, [binding]);
+        const pathFit = binding.fit ?? boundMechanism.fabricationMetadata?.pathFit;
+        if (!mechanismOutputPortForBinding(m, binding)) {
+            add(m.id, `Output ${binding.portId} is unavailable.`);
+        }
+        const pathOwner = drivenPaths.get(binding.pathId);
+        if (pathOwner) {
+            add(pathOwner.mechanismId, `${m.id} also drives path ${binding.pathId}; each motion can have only one output.`);
+            add(m.id, `${pathOwner.mechanismId} also drives path ${binding.pathId}; each motion can have only one output.`);
+        } else {
+            drivenPaths.set(binding.pathId, { mechanismId: m.id, bindingId: binding.id });
+        }
+        if (m.type === '4bar' && binding.pathId && !binding.targetSceneObjectId && pathFit?.status !== 'fit') {
             add(
                 m.id,
                 pathFit?.status === 'rejected' || pathFit?.status === 'closest'
                     ? 'No fabrication-valid path fit.'
                     : 'Fit path first.',
             );
-        } else if (mechanismPathFitBindingIssues(project, m).length) {
+        } else if (mechanismPathFitBindingIssues(project, boundMechanism).length) {
             add(m.id, 'No fabrication-valid path fit.');
         } else if (pathFit?.status === 'rejected' || pathFit?.status === 'closest') {
             add(m.id, 'No fabrication-valid path fit.');
         } else if (pathFit?.status === 'unfitted') {
             add(m.id, 'Fit path first.');
         }
-        if (m.targetSceneObjectId) {
-            const object = project.sceneObjects[m.targetSceneObjectId];
+        if (binding.targetSceneObjectId) {
+            const object = project.sceneObjects[binding.targetSceneObjectId];
             if (!object) {
-                add(m.id, `Target object ${m.targetSceneObjectId} is missing.`);
+                add(m.id, `Target object ${binding.targetSceneObjectId} is missing.`);
                 return;
             }
-            if (m.targetPathId) {
-                const path = project.paths[m.targetPathId];
-                if (!path) add(m.id, `Target path ${m.targetPathId} is missing.`);
-                else if (path.sceneObjectId !== m.targetSceneObjectId) add(m.id, `Target path ${m.targetPathId} belongs to ${path.sceneObjectId ?? path.partId}, not ${m.targetSceneObjectId}.`);
-            }
-            const key = `object:${m.targetSceneObjectId}`;
+            const path = project.paths[binding.pathId];
+            if (!path) add(m.id, `Target path ${binding.pathId} is missing.`);
+            else if (path.sceneObjectId !== binding.targetSceneObjectId) add(m.id, `Target path ${binding.pathId} belongs to ${path.sceneObjectId ?? path.partId}, not ${binding.targetSceneObjectId}.`);
+            const key = `object:${binding.targetSceneObjectId}`;
             const owner = drivenTargets.get(key);
             if (owner) {
-                add(owner, `${m.id} also drives ${key}; only one mechanism can own a target.`);
-                add(m.id, `${owner} also drives ${key}; only one mechanism can own a target.`);
+                add(owner.mechanismId, `${m.id} also drives ${key}; only one mechanism can own a target.`);
+                add(m.id, `${owner.mechanismId} also drives ${key}; only one mechanism can own a target.`);
             } else {
-                drivenTargets.set(key, m.id);
+                drivenTargets.set(key, { mechanismId: m.id, bindingId: binding.id });
             }
             return;
         }
-        if (!m.targetPartId) return;
-        const part = project.parts[m.targetPartId];
+        if (!binding.targetPartId) return;
+        const part = project.parts[binding.targetPartId];
         if (!part) {
-            add(m.id, `Target part ${m.targetPartId} is missing.`);
+            add(m.id, `Target part ${binding.targetPartId} is missing.`);
             return;
         }
-        if (m.targetPathId) {
-            const path = project.paths[m.targetPathId];
-            if (!path) add(m.id, `Target path ${m.targetPathId} is missing.`);
-            else if (!mechanismMatchesPathOwner(m, path, project)) add(m.id, `Target path ${m.targetPathId} belongs to ${path.sceneObjectId ?? path.partId}, not ${m.targetPartId}.`);
+        const path = project.paths[binding.pathId];
+        if (!path) add(m.id, `Target path ${binding.pathId} is missing.`);
+        else if (!mechanismMatchesPathOwner(boundMechanism, path, project)) add(m.id, `Target path ${binding.pathId} belongs to ${path.sceneObjectId ?? path.partId}, not ${binding.targetPartId}.`);
+        if (binding.targetAnchorJointId && !motionAnchorJointIds(project, binding.targetPartId).includes(binding.targetAnchorJointId)) {
+            add(m.id, `Target anchor ${binding.targetAnchorJointId} is outside ${binding.targetPartId}'s skeleton chain.`);
         }
-        if (m.targetAnchorJointId && !motionAnchorJointIds(project, m.targetPartId).includes(m.targetAnchorJointId)) {
-            add(m.id, `Target anchor ${m.targetAnchorJointId} is outside ${m.targetPartId}'s skeleton chain.`);
-        }
-        const path = m.targetPathId ? project.paths[m.targetPathId] : undefined;
-        const targetJointId = preferredMotionJointId(project, m.targetPartId, m.targetAnchorJointId ?? path?.targetAnchorJointId);
-        const rootOptions = motionChainRootJointIds(project, m.targetPartId, targetJointId);
-        if (path?.chainRootJointId && !rootOptions.includes(path.chainRootJointId)) add(m.id, `Chain root ${path.chainRootJointId} is outside ${m.targetPartId}'s IK path.`);
+        const targetJointId = preferredMotionJointId(project, binding.targetPartId, binding.targetAnchorJointId ?? path?.targetAnchorJointId);
+        const rootOptions = motionChainRootJointIds(project, binding.targetPartId, targetJointId);
+        if (path?.chainRootJointId && !rootOptions.includes(path.chainRootJointId)) add(m.id, `Chain root ${path.chainRootJointId} is outside ${binding.targetPartId}'s IK path.`);
         const rootJointId = path?.chainRootJointId && rootOptions.includes(path.chainRootJointId) ? path.chainRootJointId : part.anchorJointId;
-        const key = `${m.targetPartId}:${rootJointId}:${targetJointId ?? part.anchorJointId}`;
+        const key = `${binding.targetPartId}:${rootJointId}:${targetJointId ?? part.anchorJointId}`;
         const owner = drivenTargets.get(key);
         if (owner) {
-            add(owner, `${m.id} also drives ${key}; only one mechanism can own a target anchor.`);
-            add(m.id, `${owner} also drives ${key}; only one mechanism can own a target anchor.`);
+            add(owner.mechanismId, `${m.id} also drives ${key}; only one mechanism can own a target chain.`);
+            add(m.id, `${owner.mechanismId} also drives ${key}; only one mechanism can own a target chain.`);
         } else {
-            drivenTargets.set(key, m.id);
+            drivenTargets.set(key, { mechanismId: m.id, bindingId: binding.id });
         }
+        });
     });
     return warnings;
 };
@@ -873,8 +1032,9 @@ export const motionPreviewForProject = (project: ProjectState, mechanisms: Mecha
     // fabrication/export blocker, but preview that physical output so Design
     // never disconnects a valid target binding from the moving mechanism.
     mechanisms.filter(m => m.visible && m.enabled !== false).forEach(m => {
-        if (m.targetSceneObjectId) {
-            const object = project.sceneObjects[m.targetSceneObjectId];
+        resolvedMechanismOutputBindings(project, m).filter(binding => binding.enabled !== false).forEach(binding => {
+        if (binding.targetSceneObjectId) {
+            const object = project.sceneObjects[binding.targetSceneObjectId];
             if (!object) return;
             const state = calculateLinkage(m, angle);
             if (!state.isValid) {
@@ -884,15 +1044,15 @@ export const motionPreviewForProject = (project: ProjectState, mechanisms: Mecha
             const physicalTarget = mechanismTracePointForState(
                 m.type,
                 state,
-                m.fabricationMetadata?.pathFit?.outputTraceId,
+                binding.outputTraceId ?? binding.fit?.outputTraceId,
             );
-            const key = `object:${m.targetSceneObjectId}`;
+            const key = `object:${binding.targetSceneObjectId}`;
             if (drivenTargets.has(key)) return;
             drivenTargets.add(key);
-            preview = motionPreviewForSceneObject(project, m.targetSceneObjectId, physicalTarget, preview);
+            preview = motionPreviewForSceneObject(project, binding.targetSceneObjectId, physicalTarget, preview);
             return;
         }
-        if (!m.targetPartId || !project.parts[m.targetPartId]) return;
+        if (!binding.targetPartId || !project.parts[binding.targetPartId]) return;
         const state = calculateLinkage(m, angle);
         if (!state.isValid) {
             warnings[m.id] = [...(warnings[m.id] ?? []), 'Current mechanism angle is outside the valid motion range.'];
@@ -901,16 +1061,17 @@ export const motionPreviewForProject = (project: ProjectState, mechanisms: Mecha
         const physicalTarget = mechanismTracePointForState(
             m.type,
             state,
-            m.fabricationMetadata?.pathFit?.outputTraceId,
+            binding.outputTraceId ?? binding.fit?.outputTraceId,
         );
-        const path = m.targetPathId ? project.paths[m.targetPathId] : undefined;
-        const targetJointId = preferredMotionJointId(project, m.targetPartId, m.targetAnchorJointId ?? path?.targetAnchorJointId);
-        const rootOptions = motionChainRootJointIds(project, m.targetPartId, targetJointId);
+        const path = project.paths[binding.pathId];
+        const targetJointId = preferredMotionJointId(project, binding.targetPartId, binding.targetAnchorJointId ?? path?.targetAnchorJointId);
+        const rootOptions = motionChainRootJointIds(project, binding.targetPartId, targetJointId);
         const rootJointId = path?.chainRootJointId && rootOptions.includes(path.chainRootJointId) ? path.chainRootJointId : undefined;
-        const key = `${m.targetPartId}:${rootJointId ?? project.parts[m.targetPartId].anchorJointId}:${targetJointId ?? project.parts[m.targetPartId].anchorJointId}`;
+        const key = `${binding.targetPartId}:${rootJointId ?? project.parts[binding.targetPartId].anchorJointId}:${targetJointId ?? project.parts[binding.targetPartId].anchorJointId}`;
         if (drivenTargets.has(key)) return;
         drivenTargets.add(key);
-        preview = motionPreviewForTarget(project, m.targetPartId, targetJointId, physicalTarget, preview, { pinTarget: true, rootJointId });
+        preview = motionPreviewForTarget(project, binding.targetPartId, targetJointId, physicalTarget, preview, { pinTarget: true, rootJointId });
+        });
     });
     const result = { ...preview, warnings };
     const entries = motionPreviewCache.get(project) ?? [];

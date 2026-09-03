@@ -9,9 +9,10 @@ import { createFabricationPackage } from '../utils/fabrication';
 import { assemblyLaneForExportMode } from '../utils/assemblyPlayback';
 
 const project = createFabricationReadyFourBarProject();
+const pkg = createFabricationPackage(project);
 const prepared = prepareAssemblyGuideModel({
   project,
-  pkg: createFabricationPackage(project),
+  pkg,
   selectedRecipeId: project.selectedMechanismId ?? null,
   assemblyMode: 'mechanism',
   lane: assemblyLaneForExportMode(project.settings.physicalKit.exportMode),
@@ -19,6 +20,12 @@ const prepared = prepareAssemblyGuideModel({
 const first = selectAssemblyGuideStep(prepared, 0);
 const second = selectAssemblyGuideStep(prepared, 1);
 const staticSteps = prepared.activePlaybackSteps;
+
+assert.equal(
+  prepared.buildPlan.sourceDigest,
+  pkg.buildPlanSourceDigest,
+  'Assembly and the downloadable package use the same BuildPlan source digest',
+);
 
 assert(prepared.activePlaybackSteps.length > 1, 'fixture has multiple assembly steps');
 assert.notEqual(first.currentStep?.index, second.currentStep?.index, 'step selection advances');

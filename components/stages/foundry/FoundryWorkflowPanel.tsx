@@ -224,6 +224,9 @@ export const FoundryWorkflowPanel = ({
   onToggleAnchorPick,
   onFitPath,
   onUseMechanism,
+  reusableMechanisms = [],
+  reuseMechanismId,
+  onReuseMechanismChange = () => {},
   onSelectMechanismType,
 }: {
   project: ProjectState;
@@ -242,11 +245,19 @@ export const FoundryWorkflowPanel = ({
   onToggleAnchorPick: () => void;
   onFitPath: () => void;
   onUseMechanism: () => void;
+  reusableMechanisms?: Array<{ id: string; label: string }>;
+  reuseMechanismId?: string;
+  onReuseMechanismChange?: (mechanismId?: string) => void;
   onSelectMechanismType: (type: MechanismType) => void;
 }) => {
   const previewResolution = resolveRenderPerformancePolicy(
     project.settings.performancePreset,
   ).interactiveDetail.mechanismTraceSamples;
+  const targetLabel = foundry.targetSceneObjectId
+    ? project.sceneObjects[foundry.targetSceneObjectId]?.name
+    : foundry.targetPartId
+      ? project.parts[foundry.targetPartId]?.name
+      : undefined;
   return (
   <div className="stage-pane-stack">
     <StageLeftSummary
@@ -264,9 +275,12 @@ export const FoundryWorkflowPanel = ({
           aria-busy={fitBusy}
           onClick={onFitPath}
         >
-          {fitBusy ? "Cancel" : "Fit path"}
+          {fitBusy ? "Cancel" : "Fit motion"}
         </button>
         <ContextHelp helpId="foundry.fitPath" />
+      </div>
+      <div className="free-draw-status" data-testid="foundry-selected-target">
+        Target: {targetLabel ?? "No target"}
       </div>
       <button
         type="button"
@@ -274,20 +288,39 @@ export const FoundryWorkflowPanel = ({
         className={`btn-secondary w-full ${isPickingAnchor ? "active" : ""}`}
         onClick={onToggleAnchorPick}
       >
-        {isPickingAnchor ? "Cancel pick" : "Pick anchor"}
+        {isPickingAnchor ? "Cancel attach" : "Attach to part"}
       </button>
+      {isPickingAnchor && <div className="free-draw-status">Click the canvas.</div>}
+      {reusableMechanisms.length > 0 && (
+        <label className="field-label">
+          <span>Build</span>
+          <select
+            className="field"
+            aria-label="Mechanism assignment"
+            value={reuseMechanismId ?? ""}
+            onChange={(event) => onReuseMechanismChange(event.target.value || undefined)}
+          >
+            <option value="">New mechanism</option>
+            {reusableMechanisms.map((mechanism) => (
+              <option key={mechanism.id} value={mechanism.id}>
+                Use existing {mechanism.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <button
         className="btn-primary w-full"
-        aria-label="Use mechanism"
-        disabled={hardBlocked}
+        aria-label="Use this mechanism"
+        disabled={hardBlocked || fitBusy}
         onClick={onUseMechanism}
       >
-        Use mechanism
+        {reuseMechanismId ? "Use existing mechanism" : "Use this mechanism"}
       </button>
-      {!targetReady && <div className="warning">Draw a path first.</div>}
+      {!targetReady && <div className="warning">Draw path first.</div>}
       {fitJobError && <div className="warning">Fit failed. Try again.</div>}
       {fitRequired && targetReady && (!fitState || fitState === "unfitted") && (
-        <div className="warning">Fit path first.</div>
+        <div className="warning">Fit motion first.</div>
       )}
       {fitRequired && (fitState === "closest" || fitState === "rejected") && (
         <div className="warning">

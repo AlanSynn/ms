@@ -1,4 +1,6 @@
 import type { ProjectState } from "../../types";
+import type { BuildPlanLaneV1 } from "../../utils/buildPlan";
+import { projectContentFingerprint } from "../../utils/projectSerialization";
 import type {
   BlueprintPackageWorkerRequest,
   BlueprintPackageWorkerResponse,
@@ -42,7 +44,6 @@ const releaseWorker = (worker: BlueprintPackageWorkerPort) => {
 
 const projectForWorker = (
   project: ProjectState,
-  requestType: BlueprintPackageWorkerRequest["type"],
 ): ProjectState => {
   const base = {
     ...project,
@@ -62,6 +63,7 @@ export const createBlueprintPackageWorkerClient = (
     | {
         generationId: number;
         sourceProject: ProjectState;
+        sourceProjectFingerprint: string;
         project: ProjectState;
         firstFrame?: number;
         secondFrame?: number;
@@ -95,13 +97,16 @@ export const createBlueprintPackageWorkerClient = (
       ) => void;
       failed: (error: Error) => void;
     },
+    options: { lane?: BuildPlanLaneV1 } = {},
   ) => {
     releaseActive();
     const generationId = ++generationSequence;
+    const sourceProjectFingerprint = projectContentFingerprint(project);
     active = {
       generationId,
       sourceProject: project,
-      project: projectForWorker(project, requestType),
+      sourceProjectFingerprint,
+      project: projectForWorker(project),
     };
 
     const startWorker = () => {
@@ -143,15 +148,28 @@ export const createBlueprintPackageWorkerClient = (
       worker.onmessageerror = () => fail("Blueprint worker returned unreadable data.");
       worker.onerror = (event) => fail(event.message || "Blueprint worker failed.");
       try {
-        worker.postMessage(requestType === "create-package" ? {
-          type: "create-package",
-          generationId,
-          project: active.project,
-        } : {
-          type: "create-custom-parts-stl",
-          generationId,
-          project: active.project,
-        });
+        const request: BlueprintPackageWorkerRequest = requestType === "create-package"
+          ? {
+              type: "create-package",
+              generationId,
+              project: active.project,
+              lane: options.lane,
+              sourceProjectFingerprint: active.sourceProjectFingerprint,
+            }
+          : requestType === "create-character-template"
+            ? {
+                type: "create-character-template",
+                generationId,
+                project: active.project,
+                sourceProjectFingerprint: active.sourceProjectFingerprint,
+              }
+            : {
+                type: "create-custom-parts-stl",
+                generationId,
+                project: active.project,
+                sourceProjectFingerprint: active.sourceProjectFingerprint,
+              };
+        worker.postMessage(request);
       } catch (error) {
         fail(error instanceof Error ? error.message : String(error));
       }
@@ -177,13 +195,14 @@ export const createBlueprintPackageWorkerClient = (
       ) => void;
       failed: (error: Error) => void;
     },
+    options: { lane?: BuildPlanLaneV1 } = {},
   ) => requestJob("create-package", project, {
     complete: (result) => {
       if (result.type === "result") callbacks.complete(result);
       else callbacks.failed(new Error("Blueprint worker returned an unexpected STL result."));
     },
     failed: callbacks.failed,
-  });
+  }, options);
 
   const requestCustomPartsStl = (
     project: ProjectState,
@@ -201,7 +220,23 @@ export const createBlueprintPackageWorkerClient = (
     failed: callbacks.failed,
   });
 
-  return { request, requestCustomPartsStl, cancel, dispose: cancel };
+  const requestCharacterTemplate = (
+    project: ProjectState,
+    callbacks: {
+      complete: (
+        result: Extract<BlueprintPackageWorkerResponse, { type: "character-template-result" }>,
+      ) => void;
+      failed: (error: Error) => void;
+    },
+  ) => requestJob("create-character-template", project, {
+    complete: (result) => {
+      if (result.type === "character-template-result") callbacks.complete(result);
+      else callbacks.failed(new Error("Blueprint worker returned an unexpected result."));
+    },
+    failed: callbacks.failed,
+  });
+
+  return { request, requestCustomPartsStl, requestCharacterTemplate, cancel, dispose: cancel };
 };
 
 export type BlueprintPackageWorkerClient = ReturnType<

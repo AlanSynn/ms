@@ -26,34 +26,59 @@ export const captureAutosaveRecoveryStorage = (
   };
 };
 
+const RECOVERY_STORAGE_KEYS = {
+  currentRaw: AUTOSAVE_STORAGE_KEYS.autosave,
+  previousRaw: AUTOSAVE_STORAGE_KEYS.autosavePrevious,
+  metadataRaw: AUTOSAVE_STORAGE_KEYS.autosaveMetadata,
+  dirtyRaw: AUTOSAVE_STORAGE_KEYS.autosaveDirty,
+  legacyRaw: LEGACY_STORAGE_KEYS.autosave,
+} satisfies Record<keyof AutosaveRecoveryStorageSnapshot, string>;
+
+const RECOVERY_STORAGE_FIELDS = Object.keys(
+  RECOVERY_STORAGE_KEYS,
+) as Array<keyof AutosaveRecoveryStorageSnapshot>;
+
 /**
- * Journal writers always publish a dirty marker before changing a generation
- * and metadata after it. Comparing those small tokens avoids rescanning a
- * multi-megabyte committed snapshot on the main thread. Journals without
- * metadata are migration inputs, so their raw values are guarded directly.
+ * localStorage has atomic individual calls but no atomic compare-and-swap or
+ * multi-key transaction. Recovery therefore compares the complete captured
+ * journal before and after every individual mutation. This closes every race
+ * observable between calls; another browser process can still race inside the
+ * irreducible getItem/removeItem gap, so IndexedDB remains the atomic store.
+ */
+const createAutosaveRecoveryStorageGuard = (
+  snapshot: AutosaveRecoveryStorageSnapshot,
+  storage: AutosaveStorage,
+) => {
+  const expected = { ...snapshot };
+  const legacyWasCaptured = snapshot.currentRaw === null;
+  const isCurrent = () => RECOVERY_STORAGE_FIELDS.every((field) =>
+    (field === "legacyRaw" && !legacyWasCaptured) ||
+    storage.getItem(RECOVERY_STORAGE_KEYS[field]) === expected[field]
+  );
+  const replace = (
+    field: keyof AutosaveRecoveryStorageSnapshot,
+    value: string | null,
+  ) => {
+    if (!isCurrent()) return false;
+    if (expected[field] === value) return true;
+    const key = RECOVERY_STORAGE_KEYS[field];
+    if (value === null) storage.removeItem!(key);
+    else storage.setItem(key, value);
+    expected[field] = value;
+    return isCurrent();
+  };
+  return { isCurrent, replace, legacyWasCaptured };
+};
+
+/**
+ * Recovery is cold-path work, so compare all captured journal values rather
+ * than relying only on metadata tokens. That prevents cleanup from acting on
+ * bytes replaced by another tab without a completed metadata publication.
  */
 export const autosaveRecoveryStorageIsCurrent = (
   snapshot: AutosaveRecoveryStorageSnapshot,
   storage: AutosaveStorage = browserStorage(),
-) => {
-  const metadataRaw = storage.getItem(AUTOSAVE_STORAGE_KEYS.autosaveMetadata);
-  const dirtyRaw = storage.getItem(AUTOSAVE_STORAGE_KEYS.autosaveDirty);
-  if (
-    metadataRaw !== snapshot.metadataRaw ||
-    dirtyRaw !== snapshot.dirtyRaw
-  ) return false;
-  if (snapshot.metadataRaw !== null || snapshot.dirtyRaw !== null) {
-    return true;
-  }
-  const currentRaw = storage.getItem(AUTOSAVE_STORAGE_KEYS.autosave);
-  return (
-    currentRaw === snapshot.currentRaw &&
-    storage.getItem(AUTOSAVE_STORAGE_KEYS.autosavePrevious) ===
-      snapshot.previousRaw &&
-    (currentRaw !== null ||
-      storage.getItem(LEGACY_STORAGE_KEYS.autosave) === snapshot.legacyRaw)
-  );
-};
+) => createAutosaveRecoveryStorageGuard(snapshot, storage).isCurrent();
 
 export type AutosaveRecoveryMutationResult =
   | { status: "applied" }
@@ -63,16 +88,20 @@ export const clearMigratedAutosaveStorage = (
   snapshot: AutosaveRecoveryStorageSnapshot,
   storage: AutosaveStorage = browserStorage(),
 ) => {
+  if (typeof storage.removeItem !== "function") return false;
+  const guard = createAutosaveRecoveryStorageGuard(snapshot, storage);
+  if (!guard.isCurrent()) return false;
+  // Remove metadata first so an interrupted cleanup cannot leave metadata
+  // pointing at bytes this cleanup already removed.
+  if (!guard.replace("metadataRaw", null)) return false;
+  if (!guard.replace("previousRaw", null)) return false;
+  if (!guard.replace("currentRaw", null)) return false;
+  if (!guard.replace("dirtyRaw", null)) return false;
   if (
-    typeof storage.removeItem !== "function" ||
-    !autosaveRecoveryStorageIsCurrent(snapshot, storage)
+    guard.legacyWasCaptured &&
+    !guard.replace("legacyRaw", null)
   ) return false;
-  storage.removeItem(AUTOSAVE_STORAGE_KEYS.autosave);
-  storage.removeItem(AUTOSAVE_STORAGE_KEYS.autosavePrevious);
-  storage.removeItem(AUTOSAVE_STORAGE_KEYS.autosaveMetadata);
-  storage.removeItem(AUTOSAVE_STORAGE_KEYS.autosaveDirty);
-  storage.removeItem(LEGACY_STORAGE_KEYS.autosave);
-  return true;
+  return guard.isCurrent();
 };
 
 /** Apply the same ordered, recoverable migration writes as the legacy reader. */
@@ -88,14 +117,23 @@ export const applyAutosaveRecoveryMutation = (
     if (serialized === null) {
       throw new Error("autosave migration source is missing");
     }
-    storage.setItem(AUTOSAVE_STORAGE_KEYS.autosaveDirty, plan.dirtyRaw);
-    storage.setItem(AUTOSAVE_STORAGE_KEYS.autosave, serialized);
-    storage.setItem(AUTOSAVE_STORAGE_KEYS.autosaveMetadata, plan.metadataRaw);
+    const guard = createAutosaveRecoveryStorageGuard(snapshot, storage);
+    const requireCurrent = (current: boolean) => {
+      if (!current) throw new Error("autosave changed during recovery migration");
+    };
+    requireCurrent(guard.replace("dirtyRaw", plan.dirtyRaw));
+    requireCurrent(guard.replace("currentRaw", serialized));
+    requireCurrent(guard.replace("metadataRaw", plan.metadataRaw));
     if (typeof storage.removeItem !== "function") {
       throw new Error("storage cannot complete autosave migration");
     }
-    storage.removeItem(AUTOSAVE_STORAGE_KEYS.autosaveDirty);
-    if (plan.removeLegacy) storage.removeItem(LEGACY_STORAGE_KEYS.autosave);
+    // Migration metadata has no previous generation. Remove stale compatibility
+    // bytes before declaring the ordered migration complete.
+    requireCurrent(guard.replace("previousRaw", null));
+    if (plan.removeLegacy && guard.legacyWasCaptured) {
+      requireCurrent(guard.replace("legacyRaw", null));
+    }
+    requireCurrent(guard.replace("dirtyRaw", null));
     return { status: "applied" };
   } catch (error) {
     return { status: "failed", error: errorMessage(error) };

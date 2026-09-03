@@ -7,6 +7,7 @@ import { gearTrainOutputRatio, gearTrainPitchRadii, planetaryCarrierOutputRatio 
 import { isBoardFixedCoordRole, REFERENCE_DEFAULTS, referenceRecipeForType, referenceRequiredPartsForMechanism, referenceStepCoordinateCallout } from './mechanismReference';
 import { preferredMotionJointId } from './motion';
 import { sampleFeasibleRange } from './fabricationReadiness';
+import { mechanismOutputPortForBinding, resolvedMechanismOutputBindings } from './mechanismBindings';
 
 export const recipeBoardCallout = (recipe: Pick<FabricationRecipe, 'boardCoordinate' | 'board'>) =>
     fabricationBoardCoordinateCallout(recipe.boardCoordinate, recipe.board);
@@ -351,39 +352,98 @@ export const createFabricationRecipe = (project: ProjectState, mechanism: Mechan
     if (!Number.isFinite(mechanism.anchorX) || !Number.isFinite(mechanism.anchorY)) throw new Error(`${mechanism.id}: missing board coordinate anchor.`);
     const board = sceneToBoardRaw({ x: mechanism.anchorX!, y: mechanism.anchorY! }, project.settings.physicalKit);
     const boardScene = board.valid ? boardToScene(board.col, board.row, project.settings.physicalKit) : { x: mechanism.anchorX!, y: mechanism.anchorY! };
-    const targetPart = mechanism.targetPartId ? project.parts[mechanism.targetPartId] : undefined;
-    const targetSceneObject = mechanism.targetSceneObjectId ? project.sceneObjects[mechanism.targetSceneObjectId] : undefined;
-    const targetPath = mechanism.targetPathId ? project.paths[mechanism.targetPathId] : undefined;
-    const targetAnchorJointId = targetPart ? preferredMotionJointId(project, mechanism.targetPartId, mechanism.targetAnchorJointId) : undefined;
+    const bindings = resolvedMechanismOutputBindings(project, mechanism).filter(binding => binding.enabled !== false);
+    const primaryBinding = bindings[0];
+    const targetPart = primaryBinding?.targetPartId ? project.parts[primaryBinding.targetPartId] : undefined;
+    const targetSceneObject = primaryBinding?.targetSceneObjectId ? project.sceneObjects[primaryBinding.targetSceneObjectId] : undefined;
+    const targetPath = primaryBinding ? project.paths[primaryBinding.pathId] : undefined;
+    const targetAnchorJointId = targetPart ? preferredMotionJointId(project, targetPart.id, primaryBinding?.targetAnchorJointId) : undefined;
     const range = sampleFeasibleRange(mechanism);
-    const assemblySteps = prefabAssemblySteps(
+    const baseAssemblySteps = prefabAssemblySteps(
         mechanism,
         board.label,
         project.settings.physicalKit.boardCells,
     );
+    const outputBindings: FabricationRecipe['outputBindings'] = bindings.map(binding => {
+        const port = mechanismOutputPortForBinding(mechanism, binding);
+        const part = binding.targetPartId ? project.parts[binding.targetPartId] : undefined;
+        const sceneObject = binding.targetSceneObjectId ? project.sceneObjects[binding.targetSceneObjectId] : undefined;
+        return {
+            bindingId: binding.id,
+            portId: binding.portId,
+            portLabel: port?.label ?? binding.portId,
+            outputTraceId: binding.outputTraceId ?? port?.outputTraceId ?? binding.portId,
+            pathId: binding.pathId,
+            targetPartId: binding.targetPartId,
+            targetSceneObjectId: binding.targetSceneObjectId,
+            targetAnchorJointId: binding.targetAnchorJointId,
+            targetName: part?.name ?? sceneObject?.name,
+            targetPathPointCount: project.paths[binding.pathId]?.points.length,
+        };
+    });
+    const attachmentSteps: FabricationRecipe['assemblySteps'] = outputBindings.map((attachment, index) => ({
+        index: baseAssemblySteps.length + index + 1,
+        label: `Attach ${attachment.targetName ?? attachment.pathId}`,
+        role: 'attach-output',
+        boardCoordinate: board.label,
+        zMm: Number(((baseAssemblySteps.at(-1)?.zMm ?? 0) + (index + 1) * 1.2).toFixed(1)),
+        coords: [board.label],
+        coordRoles: ['mechanism-output'],
+        instruction: `Attach ${attachment.targetName ?? attachment.pathId} to ${attachment.portLabel}.`,
+        check: `Move the mechanism and confirm ${attachment.pathId} follows.`,
+        stack: [
+            { order: 1, label: attachment.portLabel, role: 'mechanism-output', part: `${mechanism.id}:output:${attachment.portId}` },
+            { order: 2, label: FABRICATION_SPACER_SPEC.label, role: 'spacer', part: 'spacers:s10' },
+            { order: 3, label: attachment.targetName ?? attachment.pathId, role: 'motion-target' },
+            { order: 4, label: 'Paper fastener', role: 'paper-fastener' },
+        ],
+    }));
+    const assemblySteps = [...baseAssemblySteps, ...attachmentSteps];
+    const requiredParts = [
+        ...(mechanism.fabricationMetadata?.requiredParts ?? referenceRequiredPartsForMechanism(mechanism)),
+        ...(bindings.length ? [
+            { name: FABRICATION_SPACER_SPEC.label, quantity: bindings.length },
+            { name: 'Paper fastener', quantity: bindings.length },
+        ] : []),
+    ].reduce<Array<{ name: string; quantity: number }>>((items, item) => {
+        const current = items.find(candidate => candidate.name === item.name);
+        if (current) {
+            current.quantity += item.quantity;
+            if ('count' in current) current.count = current.quantity;
+        }
+        else items.push({ ...item });
+        return items;
+    }, []);
     const warnings = [...new Set([
         ...(mechanism.warnings ?? []),
         ...((mechanism.fabricationMetadata as { warnings?: string[] } | undefined)?.warnings ?? []),
         ...(range.warning ? [range.warning] : []),
-        ...((targetPart && !targetPart.visible) ? ['Target part hidden'] : []),
-        ...((targetSceneObject && !targetSceneObject.visible) ? ['Target object hidden'] : [])
+        ...bindings.flatMap(binding => {
+            const part = binding.targetPartId ? project.parts[binding.targetPartId] : undefined;
+            const sceneObject = binding.targetSceneObjectId ? project.sceneObjects[binding.targetSceneObjectId] : undefined;
+            return [
+                ...(part && !part.visible ? [`${part.name} hidden`] : []),
+                ...(sceneObject && !sceneObject.visible ? [`${sceneObject.name} hidden`] : []),
+            ];
+        })
     ])];
     return {
         mechanismId: mechanism.id,
         type: mechanism.type,
-        targetPartId: mechanism.targetPartId,
-        targetSceneObjectId: mechanism.targetSceneObjectId,
-        targetPathId: mechanism.targetPathId,
+        targetPartId: primaryBinding?.targetPartId,
+        targetSceneObjectId: primaryBinding?.targetSceneObjectId,
+        targetPathId: primaryBinding?.pathId,
         targetAnchorJointId,
         targetPartName: targetPart?.name,
         targetSceneObjectName: targetSceneObject?.name,
         targetPathPointCount: targetPath?.points.length,
+        outputBindings,
         boardCoordinate: board.label,
         board,
         sceneAnchor: { x: mechanism.anchorX!, y: mechanism.anchorY! },
         offsetFromBoardMm: { x: (mechanism.anchorX! - boardScene.x) / SCENE_PX_PER_MM, y: (mechanism.anchorY! - boardScene.y) / SCENE_PX_PER_MM },
         camProfileSamples: mechanism.type === 'cam' ? [...(mechanism.camProfileSamples ?? [])] : undefined,
-        requiredParts: mechanism.fabricationMetadata?.requiredParts ?? referenceRequiredPartsForMechanism(mechanism),
+        requiredParts,
         steps: [
             `Place ${mechanism.id} main axle at ${fabricationBoardCoordinateCallout(board.label, board)}.`,
             `Kit: ${mechanismTypeLabel(mechanism.type)} module · ${project.settings.physicalKit.boardCells}×${project.settings.physicalKit.boardCells}.`,
@@ -395,11 +455,8 @@ export const createFabricationRecipe = (project: ProjectState, mechanism: Mechan
                     : mechanism.type === 'gear' || mechanism.type === 'gear_linkage' || mechanism.type === 'planetary_gear'
                         ? `Gears: ratio ${mechanism.type === 'planetary_gear' ? planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength).toFixed(2) : gearTrainOutputRatio(mechanism).toFixed(2)}.`
                         : `${mechanismTypeLabel(mechanism.type)}: crank ${mechanism.crankLength.toFixed(0)} · coupler ${mechanism.couplerLength.toFixed(0)}.`,
-            targetPart
-                ? `Output: ${targetPart.name} · ${targetPath?.id ?? 'no path'}.`
-                : targetSceneObject
-                    ? `Output: ${targetSceneObject.name} · ${targetPath?.id ?? 'no path'}.`
-                    : 'Output: standalone.',
+            ...outputBindings.map(output => `Output ${output.portLabel}: ${output.targetName ?? output.pathId} · ${output.pathId}.`),
+            outputBindings.length ? `${outputBindings.length} output attachment${outputBindings.length === 1 ? '' : 's'}.` : 'Output: standalone.',
             warnings.length ? `Fix: ${warnings.join('; ')}` : 'Ready.'
         ],
         assemblySteps,
