@@ -3373,7 +3373,7 @@ test('Trace bounds classroom video decode and releases the media element on clos
   await expect(modal).toBeVisible();
   const chooser = page.waitForEvent('filechooser');
   await modal.getByRole('button', { name: 'Load Media', exact: true }).click();
-  await (await chooser).setFiles(join(process.cwd(), 'ref', 'vid.mp4'));
+  await (await chooser).setFiles(join(process.cwd(), 'tests/fixtures/trace-video-sample.mp4'));
 
   const canvas = modal.locator('canvas');
   await expect(canvas).toBeVisible();

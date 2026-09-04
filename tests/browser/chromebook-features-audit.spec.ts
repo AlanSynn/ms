@@ -20,8 +20,8 @@ import {
 import { readBrowserAutosaveProject } from "./autosaveIndexedDbProbe";
 
 const ENABLED = process.env.CHROMEBOOK_AUDIT === "1";
-const GIF_FIXTURE = join(process.cwd(), "ref/animation.gif");
-const VIDEO_FIXTURE = join(process.cwd(), "ref/vid.mp4");
+const GIF_FIXTURE = join(process.cwd(), "tests/fixtures/trace-gif-sample.gif");
+const VIDEO_FIXTURE = join(process.cwd(), "tests/fixtures/trace-video-sample.mp4");
 
 const stageButton = (
   page: Page,
