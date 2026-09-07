@@ -9,8 +9,8 @@ import {
 const KIBIBYTE = 1024;
 
 /**
- * Project artwork is uploaded directly to Three textures, unlike the 512 px
- * scene-object import output. Keep both one source and the combined unique
+ * Original project and object artwork may be uploaded directly to Three textures.
+ * Keep both one source and the combined unique
  * source set inside a Chromebook-sized GPU upload envelope.
  */
 export const PROJECT_RASTER_IMPORT_LIMITS = Object.freeze({

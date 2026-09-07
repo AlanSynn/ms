@@ -18,6 +18,20 @@ export type ReleaseNote = {
 // owner explicitly requests removal. Older releases remain bundled and readable.
 // Versions record when an update shipped, not which build may display it.
 export const RELEASE_NOTES: readonly ReleaseNote[] = [{
+  id: 'paint-and-draw-v1',
+  version: '0.0.16',
+  highlights: [{
+    title: 'Paint your character',
+    text: 'Use Draw & paint to add faces and details that appear in Assembly and Download Build PDF.',
+    destination: 'character.drawPaint',
+    image: { path: 'release-notes/paint-character-v1.png', alt: 'A painted face with a red band, green center, dark eyes and smile, and one attachment hole.' },
+  }, {
+    title: 'Draw your own prop',
+    text: 'Choose Draw object, paint a prop, and use Change shape to edit its cut outline.',
+    destination: 'character.drawObject',
+    image: { path: 'release-notes/draw-object-v1.png', alt: 'A blue rocket with a yellow window, red stripe, and a custom physical outline.' },
+  }],
+}, {
   id: 'release-history-v1',
   version: '0.0.15',
   highlights: [{

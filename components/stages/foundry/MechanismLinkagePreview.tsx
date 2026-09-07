@@ -3,7 +3,7 @@ import type {
   PhysicalKitSettings,
   Point,
 } from "../../../types";
-import { gearPathD } from "../../../utils/exporter";
+import { gearPathD } from "../../../utils/fabricationProfiles";
 import {
   FABRICATION_HOLE_RADIUS_MM,
   FABRICATION_LINKAGE_WIDTH_MM,

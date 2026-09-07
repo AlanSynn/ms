@@ -269,6 +269,11 @@ export const DesignFoundryPreview = React.memo(({
         automataContext={automataContext}
         children={null}
       />
+      {Object.values(sceneModel.warnings).some(messages => messages.includes("Move target within reach")) && (
+        <div className="absolute bottom-3 left-3 z-10 rounded-lg bg-amber-100 px-3 py-2 text-xs font-bold text-amber-900" role="status" data-testid="mechanism-reach-warning">
+          Move mechanism within reach
+        </div>
+      )}
     </section>
   );
 });

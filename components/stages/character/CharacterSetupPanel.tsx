@@ -97,6 +97,7 @@ export const CharacterSetupPanel = ({
       ) : (
         selectedEditablePart && (
           <PartInspector
+            project={partPanelProject}
             part={selectedEditablePart}
             skeleton={partPanelProject.skeleton}
             sourceTextureUrl={partPanelProject.characterPackage?.sourceTextureUrl}

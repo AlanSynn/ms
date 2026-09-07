@@ -45,14 +45,17 @@ const withoutPartMedia = (part: BodyPartLayer): BodyPartLayer => {
     maskUrl: _maskUrl,
     originalSvgPath: _originalSvgPath,
     enhancedSvgPath: _enhancedSvgPath,
+    artwork: _artwork,
+    sourceImageFrame: _sourceImageFrame,
     ...domainPart
   } = part;
-  return domainPart;
+  // These fields are required by the part contract but never fitting inputs.
+  return { ...domainPart, fillColor: '#64748b', opacity: 1 };
 };
 
 const withoutSceneObjectMedia = (object: SceneObject): SceneObject => {
-  const { textureUrl: _textureUrl, ...domainObject } = object;
-  return domainObject;
+  const { textureUrl: _textureUrl, artwork: _artwork, sourceImageName: _sourceImageName, ...domainObject } = object;
+  return { ...domainObject, fillColor: '#64748b', opacity: 1 };
 };
 
 /**

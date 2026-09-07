@@ -7,6 +7,8 @@ import type {
 } from "../types";
 import { sceneToBoardRaw, SCENE_PX_PER_MM } from "./coordinates";
 
+import { motionChainRootJointIds, preferredMotionJointId } from "./motionChains";
+
 export type PathTargetKind = "part" | "scene-object";
 
 export const pathTargetKind = (path?: ProjectMotionPath): PathTargetKind =>
@@ -50,7 +52,7 @@ export const partCanOwnPathTarget = (
   if (!partId) return false;
   if (path.partId === partId) return true;
   if (!project) return false;
-  const targetJointId = path.targetAnchorJointId ?? project.parts[path.partId]?.anchorJointId;
+  const targetJointId = preferredMotionJointId(project, path.partId, path.targetAnchorJointId);
   return partCanReachJoint(project.parts[partId], targetJointId, project.skeleton);
 };
 
@@ -94,32 +96,9 @@ export const mechanismMatchesPathOwner = (
     ? mechanism.targetSceneObjectId === path.sceneObjectId
     : partCanOwnPathTarget(project, mechanism.targetPartId, path);
 
-const jointDescendsFrom = (
-  skeleton: StandardSkeleton | null | undefined,
-  rootJointId: string | undefined,
-  targetJointId: string | undefined,
-) => {
-  if (!skeleton || !rootJointId || !targetJointId || !skeleton.joints[rootJointId] || !skeleton.joints[targetJointId]) return false;
-  const seen = new Set<string>();
-  const stack = [rootJointId];
-  while (stack.length) {
-    const current = stack.pop()!;
-    if (seen.has(current)) continue;
-    seen.add(current);
-    if (current === targetJointId) return true;
-    stack.push(...(skeleton.hierarchy[current] ?? []));
-  }
-  return false;
-};
-
-const pathChainRootIsValid = (project: ProjectState, path: ProjectMotionPath) => {
-  if (path.sceneObjectId || !path.chainRootJointId) return true;
-  const part = project.parts[path.partId];
-  const targetJointId = path.targetAnchorJointId ?? part?.anchorJointId;
-  if (!part || !targetJointId) return false;
-  if (!jointDescendsFrom(project.skeleton, path.chainRootJointId, part.anchorJointId)) return false;
-  return jointDescendsFrom(project.skeleton, path.chainRootJointId, targetJointId);
-};
+const pathChainRootIsValid = (project: ProjectState, path: ProjectMotionPath) =>
+  Boolean(path.sceneObjectId || !path.chainRootJointId ||
+    motionChainRootJointIds(project, path.partId, path.targetAnchorJointId).includes(path.chainRootJointId));
 
 /**
  * A stored fit is usable only while its binding still describes the current

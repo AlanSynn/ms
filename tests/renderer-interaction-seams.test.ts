@@ -129,10 +129,12 @@ const puppetSceneObjectSettlement = puppet.slice(
 );
 assert(
   puppetSceneObjectSettlement.indexOf("initialSceneSettlementCheckRef.current?.invalidate();") <
-    puppetSceneObjectSettlement.indexOf("clearGroup(roots.objectsLayer);") &&
+    puppetSceneObjectSettlement.indexOf("retainArtworkGroup(roots.objectsLayer") &&
+    !puppetSceneObjectSettlement.includes("clearGroup(roots.objectsLayer);") &&
+    puppetSceneObjectSettlement.includes("updatePartArtMaterial(") &&
     puppetSceneObjectSettlement.lastIndexOf("initialSceneSettlementCheckRef.current?.check();") >
       puppetSceneObjectSettlement.lastIndexOf("render();"),
-  "scene-object replacement invalidates an older readiness generation and rechecks only after the new retained layer is installed and submitted",
+  "scene-object edits retain unaffected owners, invalidate older readiness, and recheck after updated surfaces are installed and submitted",
 );
 assert(
   puppet.includes("ref={previewRef}") &&

@@ -26,7 +26,7 @@ Save Project file -> next class -> Open Project file -> keep editing
 Rules:
 
 - Open Project is the normal classroom return. Guide and Starter rig create new work. Browser backups are secondary explicit recovery candidates; discovering one never chooses it or overwrites it with boot defaults.
-- Character owns character/scene-object creation and editing. Full-project Save/Open is available from entry, Project, and shared commands. Image recognition is not shipped.
+- Character owns character/scene-object creation, retained drawing/painting, and physical-outline editing. Full-project Save/Open is available from entry, Project, and shared commands. Image recognition is not shipped.
 - Later tabs select, move, fit, tune, export, or assemble existing project data; they do not create new character/object sources.
 - `ProjectState` is the authoring truth for durable project data. Current snapshots also carry recovery-compatible selected ids and last-result fields; new work must not add more transient UI state there without a documented migration rule.
 - Foundry/fabrication helpers are the mechanism visual/physical truth. Design and Assembly consume that truth.
@@ -52,27 +52,27 @@ Rules:
 |---|---|---|---|---|---|---|
 | Getting Started | Compact creation tiles, full-width Open Project, secondary character/recovery actions | none | none | Guide, Starter rig, Open Project | none | Session suppression with no chosen work shows Project entry; close retains current work. |
 | Project | Title, Save/Open, secondary recovery and build/edit navigation | shared live working scene; all visible authored paths, selected highlight, distinct fitted trace | counts and source-specific backup status | Open Project when empty; Save Project with work; Edit paths | none | Reuse Design/Foundry for mechanisms and Path preview without one; no edit handles. |
-| Character | Getting Started, Load character file, Add object, Open Project, parts/objects, ownership/reset | character/scene-object workbench and selection handles | selected part/object/skeleton inspector | Getting Started, Load character file, Add object, Open Project | `character.loadCharacterFile`, `character.loadObjectFile` | Character is correct creation owner. Keep rig creation here; remove creation controls from later tabs. |
+| Character | Getting Started, Load character file, Draw object, Import object, Open Project, parts/objects, ownership/reset | character/scene-object workbench, Draw & paint, physical-outline handles | selected part/object/skeleton inspector | Draw & paint, Draw object, Import object, Open Project | `character.loadCharacterFile`, `character.loadObjectFile`, `character.drawPaint`, `character.drawObject` | Character owns creation and editing; later tabs consume the same retained art and physical shape. |
 | Path | motion target, Draw/Clear, Open/Closed, Smoothness, Trace/Play/Reset in More | path drawing/editing, character/object target preview, 2D/3D view | selected path/target, IK start/handle, bend | Draw, Clear path, Open, Closed, Trace, Reset | `path.draw`, `path.smoothness`, `path.trace` | Path no longer owns rig creation controls; default path topology stays closed unless explicitly changed. |
 | Foundry | target summary, Fit path, Pick anchor, Use mechanism, mechanism templates | Foundry physical preview, user path, mechanism path, camera/layer/play controls | sensemaking first, view controls, opacity/explode, selected mechanism params | Fit path, Pick anchor, Use mechanism | `foundry.fitPath`, `viewer.layers` | Center is dense but acceptable. Mechanism cards must stay front-view Foundry-derived, not separate drawings. |
 | Design | mechanism instance list, Trace, Recommend, Blueprint | one Foundry-backed automata scene: mechanism drives character/object target, target/driven/error layers | selected mechanism binding, visible/enabled, target/path/handle, params, export | Trace, Recommend, Blueprint, SVG/DXF | none yet | Keep `buildAutomataSceneModel` + `ThreeFoundryPreview`; do not reintroduce split Foundry/Puppet layers. |
-| Blueprint | validation blockers, Generate, downloads, recipes, Assembly handoff | board/cut preview only | selected recipe parts, stack, warnings | Generate, PDF/SVG/JSON, Assembly, Guide | `blueprint.boardPreview`, `blueprint.customParts`, `blueprint.prefabKit` | Keep Assembly preview out of Blueprint. Files only. |
-| Assembly | Build list, Blueprint, Generate/Print/PDF, Kit/Custom, Mechanism/Character, step list | one contract-driven Three build truth, read-only step strip only, z-only explode | current step, active parts, coordinates, checks, blockers, Edit links | Generate/Print, Kit, Custom, Mechanism, Character, step buttons | `assembly.steps` | `AssemblySceneFrame` drives Three layer focus, board markers, floating refs, and motion guides; keep future Assembly visuals Three-first. |
+| Blueprint | validation blockers, downloads, recipes, Assembly handoff | painted pieces and board/cut preview | selected recipe parts, stack, warnings | Download Build PDF, Character outlines PDF, Cut pieces SVG, Assembly | `blueprint.boardPreview`, `blueprint.customParts`, `blueprint.prefabKit` | Build PDF includes painted physical pieces, mechanism sheets when present, and instructions; piece printing does not require a mechanism. |
+| Assembly | Build list, Blueprint, Kit/Custom, Mechanism/Character, step list | one contract-driven Three build truth, read-only step strip only, z-only explode | current step, active parts, coordinates, checks, blockers, Edit links | Blueprint, Kit, Custom, Mechanism, Character, step buttons | `assembly.steps` | `AssemblySceneFrame` drives Three layer focus and placement; character/object steps reuse the shared part renderer without a mechanism. |
 | Options | settings sections | static preview only | settings controls | setting fields only | `options.devMode`, `options.fabricationExport`, `options.strictChecks` | Large but acceptable; avoid turning Options into a workflow. |
 
 
 ## Confirmed current implementation inventory
 
-Facts verified from code and tests on 2026-07-05:
+Initial inventory verified on 2026-07-05; Character artwork and Blueprint/Assembly ownership refreshed on 2026-09-07:
 
 - Getting Started keeps compact `Guide` and `Starter rig` tiles, followed by prominent `Open Project`. `Character file` and a validated `Recover browser backup` candidate are secondary. Recognition starters are not shipped.
 - The three-pane shell is implemented through `EditorStageFrame` surfaces with `stage-left-pane`, `stage-canvas-pane`, and `stage-right-inspector` browser contracts.
-- Character owns source creation: character package load, ordinary scene-object image load, starter entry, rig/body-part edits, and lesson reset.
+- Character owns source creation: character package load, Import object, Draw object, starter entry, rig/body-part edits, and lesson reset. Draw & paint stores editable commands; Change shape edits only the physical contour.
 - Path owns motion target selection, draw/clear, open/closed topology, smoothing, trace import, path visibility/enabled state, and path point editing; it no longer owns rig creation.
 - Foundry owns mechanism template choice, 15 x 15 board fit, anchor picking, physical mechanism preview, user/mechanism path overlays, and `Use mechanism` handoff.
 - Design owns mechanism instance selection/tuning, trace/recommend/fit, target/path/handle binding, visibility/enabled flags, deletion, and export handoff.
-- Blueprint owns local package/cut-sheet generation, board preview, recipe details, downloads, and Assembly handoff.
-- Assembly owns mechanism/character build lanes, kit/custom switching, step list, Three-backed build scene, read-only callouts, print/PDF, and final motion checks.
+- Blueprint owns local painted package/cut-sheet generation, board preview, recipe details, downloads, and Assembly handoff. Full packets preserve image resources and native physical page sizes.
+- Assembly owns mechanism/character build lanes, cuttable-object placement, kit/custom switching, step list, Three-backed build scene, read-only callouts, and final motion checks. Build files remain in Blueprint.
 - Registry-backed visible help ids match `utils/contextHelp.ts`; `ContextHelp` renders a portal tooltip with fixed positioning and no layout shift.
 - `utils/mechanismSceneContract.ts`, `utils/foundryPreviewModel.ts`, and `utils/assemblySceneFrame.ts` are harnessable plain-data seams. Design consumes Foundry-style live preview state through `foundryPreviewModel`; Assembly consumes `AssemblySceneFrame` through the shared Foundry Three renderer.
 - Classroom content is data-driven through `utils/classroomContent.ts`: assessment keys are slug-normalized, default prompts are local, generated-loop examples are primary, reviewed YouTube no-cookie slots are optional enrichment.
@@ -82,19 +82,19 @@ Facts verified from code and tests on 2026-07-05:
 
 | Action family | Owning stage | Valid outside owner? | Notes |
 |---|---|---:|---|
-| Load character file, Add object, Rename object, rig/body-part edits | Character | no | Later tabs may select or bind existing targets only. |
+| Load character file, Import object, Draw object, Draw & paint, Change shape, rig/body-part edits | Character | no | Later tabs consume the canonical artwork and contour; they may select or bind existing targets. |
 | Draw, Clear path, Open/Closed, Smoothness, Trace, Delete point | Path | no | Design/Foundry consume selected paths; they do not draw new ones. |
 | Fit path, Pick anchor, Use mechanism, mechanism template selection | Foundry | partly | Design can fit/tune existing instances, but primary new mechanism choice should stay Foundry-first. |
 | Mechanism target/path/handle binding, param tuning, visibility/enabled, delete, export | Design | yes, for selected instance only | Must not invent private geometry, stack, z, pin, or fabrication rules. |
-| Generate package, board/cut downloads, metadata/export artifacts | Blueprint | no | Assembly may print/read guide, not own file package semantics. |
-| Kit/Custom, Mechanism/Character, step selection, step playback, Print/PDF | Assembly | no | The center scene is build truth; lower strip/callouts are read-only. |
+| Download Build PDF, character outlines, cut/kit files, metadata/export artifacts | Blueprint | no | Complete packets and separate fabrication files share the canonical build plan. |
+| Kit/Custom, Mechanism/Character, step selection, step playback | Assembly | no | The center scene is build truth; lower strip/callouts are read-only. |
 | Theme, autosave, physics, fabrication mode, debug/strict checks | Options | no | Settings only; not a workflow or tutorial surface. |
 
 ## Tooltip/help coverage ledger
 
 | Surface | Required registry help | Current coverage | Risk |
 |---|---|---|---|
-| Character import | `character.loadCharacterFile`, `character.loadObjectFile` | covered | low |
+| Character creation and artwork | `character.loadCharacterFile`, `character.loadObjectFile`, `character.drawPaint`, `character.drawObject` | covered | low; search reveals the annotated control without creating or editing a piece. |
 | Path draw/smooth/trace | `path.draw`, `path.smoothness`, `path.trace` | covered | low; one raw IK `title` remains. |
 | Foundry fit/layers | `foundry.fitPath`, `viewer.layers` | partially covered | medium; `Pick anchor` is direct manipulation with no registry help yet. |
 | Design instance tuning | none required yet | none | medium; `Recommend`, `Fit`, path toggles, and type chips may need help if they remain visible. |
@@ -123,16 +123,19 @@ Guardrails:
 ### 2. Character and scene object ownership
 
 1. Character imports or creates the main character.
-2. Character adds prop/scene-object images, names them, and manages object selection.
-3. Path can select body parts or scene objects as motion targets.
-4. Foundry/Design can fit mechanisms to those targets.
-5. Assembly shows target attachments as real build steps.
+2. Character uses Draw object for a cuttable piece or Import object for an image, names it, and manages selection.
+3. Draw & paint edits retained marks on the selected piece. Change shape edits one outer physical cut contour separately.
+4. Path can select body parts or scene objects as motion targets.
+5. Foundry/Design can fit mechanisms to those targets.
+6. Blueprint prints the same artwork and cut shape; Assembly shows actual attachments and cuttable-object placement.
 
 Guardrails:
 
-- Add object is Character-only.
+- Draw object, Import object, Draw & paint, and Change shape are Character-only.
 - Path/Design/Assembly may select scene objects, not import/create them.
 - Scene-object motion is rigid path motion unless explicit IK/body-part data exists.
+- Paint uses one stable owner-local frame. Contour edits clip retained art without stretching it. Invalid candidates disable Use and preserve the committed shape; fabrication rejects invalid committed user outlines. Paint and partial erase never cut holes.
+- Unattached cuttable props receive cut/place steps without invented pins, holes, or mechanisms. Save Project preserves their editable source for the next class.
 
 ### 3. Motion path flow
 
@@ -181,13 +184,15 @@ Guardrails:
 ### 6. Blueprint flow
 
 1. Blueprint validates the live project.
-2. Student generates the package.
-3. Student downloads cut/kit files or opens Assembly.
+2. Student chooses Download Build PDF for painted cut sheets, existing mechanism drawings, and assembly instructions.
+3. Student optionally downloads Character outlines PDF or Cut pieces SVG, or opens Assembly.
 
 Guardrails:
 
 - Blueprint is printable/export output, not a live build simulation.
 - Part names and recipe labels must match Assembly.
+- Print imagery is regenerated at 300 ppi from retained commands and original embedded raster data. Piece artwork, vector contours, and actual joint holes use the same physical transform. The download never uses viewport pixels.
+- The complete packet supports visible character parts and explicitly cuttable objects before a mechanism is fitted. Cut pieces SVG contains physical contours and actual holes only.
 
 ### 7. Assembly build flow
 
@@ -201,7 +206,7 @@ Guardrails:
 
 - `explode_z` changes z only.
 - `mount_travel_xy` and `connect_travel_xy` are the only x/y build travel motions.
-- Character assembly uses real parts, art decals, pins, pivots, and anchors.
+- Character assembly uses the same retained art, contours, and real pin/pivot plan as Blueprint. Object cut/place steps show the actual object without invented hardware.
 - Foundry visuals, Blueprint labels, and Assembly parts must agree.
 
 ## Tooltip/help contract
@@ -216,7 +221,8 @@ Current required help ids:
 ```text
 character.loadCharacterFile
 character.loadObjectFile
-character.createFromImage
+character.drawPaint
+character.drawObject
 path.draw
 path.smoothness
 path.trace
@@ -261,7 +267,7 @@ None known from this audit. This pass is documentation-only; full browser QA was
 | Mechanism parity testing | Foundry, Design, and Assembly do not yet have an exact browser parity assertion for same mechanism id/type/layers/z/labels/validation. | `tests/browser/workflow.spec.ts` has broad coverage but no exact cross-tab equality gate. | Add Foundry -> Design -> Assembly parity test before the next renderer refactor. |
 | Path purity testing | Path hides mechanisms in code, but browser coverage should prove no mechanism geometry/pins/overlays after a mechanism exists. | `PathCanvasPane.tsx` passes `mechanisms={[]}`; test gap from audit. | Add a regression after applying a mechanism and returning to Path. |
 | Assembly z-only explode | `AssemblySceneFrame` names `explode_z`, but direct x/y invariance over progress is not fully locked. | `utils/assemblySceneFrame.ts`, Foundry overlay frame motion. | Add pure and browser tests that x/y stay unchanged for z-only explode. |
-| Assembly character no-mechanism fallback | Character art/pin Assembly now uses the Foundry preview when an active mechanism exists, but a blank no-mechanism project can only show a blocker. | `AssemblyThreePreview.tsx`, `ThreeFoundryPreview.tsx`, `AssemblySceneFrame.tsx` | Do not invent a fake mechanism. Keep the blocker honest, or require a lesson/mechanism before 3D build simulation. |
+| Assembly without a mechanism | Character/object steps reuse the shared part renderer and canonical assembly frame; mechanism steps still require a real mechanism. | `AssemblyThreePreview.tsx`, `AssemblyLocalPartsPreview.tsx`, `utils/assemblySceneFrame.ts` | Preserve artwork, transforms, real holes, and board visibility through cut/place steps; never fabricate hardware for an unattached prop. |
 | Assembly realism | Assembly is now Three-first for mechanism steps, but full Lego-like clarity for character art, fasteners, spacers, board holes, and final motion remains a polish/coverage risk. | `AssemblyCanvasPane.tsx`, `AssemblyInspectorPanel.tsx`, `AssemblySceneFrame.tsx` | Keep enriching `AssemblySceneFrame`; do not reintroduce lower SVG/ghost truth. |
 | Blueprint/Assembly labels | Labels mostly share fabrication helpers, but all mechanism-family label parity is not exhaustively tested. | `fabricationPartDisplayLabel`, `readableFabricationStackSummary`, browser tests. | Add all-mechanism contract parity for recipe labels, cut labels, and assembly labels. |
 | Multiple paths | Independent target paths share one preview timeline; physically independent multiple mechanisms remain outside this classroom mission. | `ProjectMotionPath`, `utils/motion.ts`, path inventory | Verify two targets, conflict reporting, actual arm transforms, explicit binding replacement, and portable file return. |

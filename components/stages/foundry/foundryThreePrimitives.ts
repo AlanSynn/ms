@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { disposePartArtMaterial } from "../../../runtime/render/partArtMaterial";
 import type {
   MechanismConfig,
   PhysicalKitSettings,
@@ -30,6 +31,10 @@ export const disposeFoundryThreeObject = (object: THREE.Object3D) =>
     keepMaterial: (material) => Boolean(material.userData[FOUNDRY_CACHE_MARKER]),
     beforeDisposeMaterial: (material) => {
       if (material.userData[FOUNDRY_CACHE_MARKER]) return;
+      if (material.userData.ownedByPartArt) {
+        disposePartArtMaterial(material);
+        return;
+      }
       Object.values(material).forEach((value) => {
         if (value instanceof THREE.Texture) value.dispose();
       });

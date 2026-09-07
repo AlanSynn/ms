@@ -38,6 +38,13 @@ const clickOptionalButton = async (button: Locator, label: string) => {
   return true;
 };
 
+const openMotionJointOptions = async (page: Page) => {
+  const options = page.getByTestId('motion-joint-options');
+  if (!await options.evaluate(element => (element as HTMLDetailsElement).open)) {
+    await options.locator('summary').click();
+  }
+};
+
 const recoverBrowserBackup = async (page: Page, activate: () => Promise<void>) => {
   const acceptRecovery = async (dialog: Dialog) => {
     expect(dialog.message()).toContain('Recover browser backup');
@@ -330,96 +337,186 @@ test('Context help opens compact registry popovers', async ({ page }) => {
   expectCleanPage(pageErrors, consoleErrors);
 });
 
-test('Character part cut outline editor bakes and edits contour points', async ({ page }) => {
+test('Character shape editor keeps candidates local until Use shape', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
-  page.on('console', msg => {
-    if (msg.type() === 'error') consoleErrors.push(msg.text());
-  });
-
+  page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
   await page.goto(process.env.PLAYWRIGHT_BASE_PATH || '/');
   await dismissStartupAnnouncement(page);
   await openCharacterScreen(page);
   await page.getByTestId('character-part-item-head').click();
-  await expect(page.getByTestId('part-cut-controls')).toBeVisible();
-  await expect(page.getByTestId('part-cut-summary')).toContainText(/cut/i);
-  await expect(page.getByTestId('part-cut-summary')).not.toContainText(/pts/i);
-
+  const summary = page.getByTestId('part-cut-summary');
+  const originalSummary = await summary.textContent();
   await page.getByTestId('part-cut-bake').click();
-  const cutDialog = page.getByTestId('cut-outline-dialog');
-  await expect(cutDialog).toBeVisible();
-  const cutArt = cutDialog.getByTestId('cut-outline-art');
-  await expect(cutArt).toBeVisible();
-  await expect(cutArt).toHaveAttribute('href', /data:image/);
-  await expect(page.getByTestId('part-cut-summary')).toContainText('user cut');
-  const dialogBox = await cutDialog.boundingBox();
+  const editor = page.getByTestId('shape-editor');
+  await expect(editor).toBeVisible();
+  await expect(summary).toHaveText(originalSummary ?? '');
+  const dialogBox = await editor.boundingBox();
   const viewport = page.viewportSize();
-  expect(dialogBox, 'cut editor overlay has a visible box').toBeTruthy();
-  expect(viewport, 'browser viewport is available').toBeTruthy();
-  if (!dialogBox || !viewport) throw new Error('Missing cut editor overlay or viewport metrics');
-  expect(dialogBox.width, 'cut editor opens as a large canvas-first overlay').toBeGreaterThan(700);
-  expect(Math.abs((dialogBox.x + dialogBox.width / 2) - viewport.width / 2), 'cut editor is centered over the workbench').toBeLessThan(12);
-  await expect(cutDialog.getByLabel('Cut point X number')).toHaveCount(0);
-  await cutDialog.getByTestId('part-cut-add-point').click();
-  await expect(page.getByTestId('part-cut-summary')).toContainText('user cut');
-  const canvas = page.getByTestId('cut-outline-canvas');
-  const parseViewBox = async () => {
-    const viewBox = await canvas.getAttribute('viewBox');
-    if (!viewBox) throw new Error('Missing cut editor viewBox');
-    const [minX, minY, width, height] = viewBox.split(/\s+/).map(Number);
-    return { minX, minY, width, height };
+  if (!dialogBox || !viewport) throw new Error('Missing shape editor metrics');
+  expect(dialogBox.width).toBeGreaterThan(700);
+  expect(dialogBox.height).toBeLessThan(viewport.height);
+  expect(Math.abs(dialogBox.x + dialogBox.width / 2 - viewport.width / 2)).toBeLessThan(12);
+  const canvas = editor.getByTestId('shape-editor-canvas');
+  const points = canvas.locator('[data-shape-point]');
+  const initialPointCount = await points.count();
+  await editor.getByRole('button', { name: 'Add point', exact: true }).click();
+  await expect(points).toHaveCount(initialPointCount + 1);
+  await expect(summary).toHaveText(originalSummary ?? '');
+  await editor.getByRole('button', { name: 'Undo shape', exact: true }).click();
+  await expect(points).toHaveCount(initialPointCount);
+  await editor.getByRole('button', { name: 'Redo shape', exact: true }).click();
+  await expect(points).toHaveCount(initialPointCount + 1);
+  const parseView = async () => {
+    const [x, y, width, height] = (await canvas.getAttribute('viewBox'))!.split(/\s+/).map(Number);
+    return { x, y, width, height };
   };
-  const initialView = await parseViewBox();
-  await cutDialog.getByTestId('cut-outline-zoom-in').click();
-  await expect.poll(async () => (await parseViewBox()).width, {
-    message: 'cut editor zoom-in tightens the editable view',
-  }).toBeLessThan(initialView.width);
-  const zoomedView = await parseViewBox();
-  const canvasBox = await canvas.boundingBox();
-  if (!canvasBox) throw new Error('Missing cut editor canvas metrics');
-  await expect(canvas).toHaveAttribute('data-cut-tool', 'edit');
-  await expect(cutDialog.getByTestId('cut-tool-hint')).toContainText('Drag a point');
-  await cutDialog.getByTestId('cut-tool-pan').click();
-  await expect(canvas).toHaveAttribute('data-cut-tool', 'pan');
-  await page.mouse.move(canvasBox.x + canvasBox.width * 0.45, canvasBox.y + canvasBox.height * 0.45);
+  const initialView = await parseView();
+  await editor.getByRole('slider', { name: 'Shape zoom' }).focus();
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(async () => (await parseView()).width).toBeLessThan(initialView.width);
+  await editor.getByRole('button', { name: 'Pan', exact: true }).click();
+  const box = (await canvas.boundingBox())!;
+  const beforePan = await parseView();
+  await page.mouse.move(box.x + box.width * .45, box.y + box.height * .45);
   await page.mouse.down();
-  await page.mouse.move(canvasBox.x + canvasBox.width * 0.58, canvasBox.y + canvasBox.height * 0.52);
+  await page.mouse.move(box.x + box.width * .6, box.y + box.height * .55);
   await page.mouse.up();
-  await expect.poll(async () => (await parseViewBox()).minX, {
-    message: 'blank-canvas drag pans instead of moving a cut point',
-  }).not.toBe(zoomedView.minX);
-  await cutDialog.getByTestId('cut-outline-fit').click();
-  await expect.poll(async () => (await parseViewBox()).width, {
-    message: 'fit restores the classroom-friendly part view',
-  }).toBeGreaterThan(zoomedView.width);
-  await cutDialog.getByTestId('cut-tool-edit').click();
-  await expect(canvas).toHaveAttribute('data-cut-tool', 'edit');
-  const editedPoint = cutDialog.getByTestId('cut-outline-point-1');
-  const beforeClickX = Number(await editedPoint.getAttribute('cx'));
-  await canvas.click({ position: { x: 260, y: 140 } });
-  await expect.poll(async () => Number(await editedPoint.getAttribute('cx')), { message: 'canvas click moves the selected cut point' }).not.toBe(beforeClickX);
-  const pointCountBeforeDraw = await cutDialog.locator('[data-testid^="cut-outline-point-"]').count();
-  await cutDialog.getByTestId('cut-tool-draw').click();
-  await expect(canvas).toHaveAttribute('data-cut-tool', 'draw');
-  await expect(cutDialog.getByTestId('cut-tool-hint')).toContainText('one clean loop');
-  await page.mouse.move(canvasBox.x + canvasBox.width * 0.42, canvasBox.y + canvasBox.height * 0.28);
+  await expect.poll(async () => (await parseView()).x).not.toBe(beforePan.x);
+  await editor.getByRole('button', { name: 'Fit', exact: true }).click();
+  await expect.poll(async () => (await parseView()).width).toBeCloseTo(initialView.width, 3);
+  await editor.getByRole('button', { name: 'Edit points', exact: true }).click();
+  const editedPoint = canvas.locator('[data-shape-point="1"]');
+  const pointBox = (await editedPoint.boundingBox())!;
+  const beforeX = await editedPoint.getAttribute('cx');
+  await page.mouse.move(pointBox.x + pointBox.width / 2, pointBox.y + pointBox.height / 2);
   await page.mouse.down();
-  await page.mouse.move(canvasBox.x + canvasBox.width * 0.52, canvasBox.y + canvasBox.height * 0.24, { steps: 3 });
-  await page.mouse.move(canvasBox.x + canvasBox.width * 0.58, canvasBox.y + canvasBox.height * 0.38, { steps: 3 });
-  await page.mouse.move(canvasBox.x + canvasBox.width * 0.46, canvasBox.y + canvasBox.height * 0.48, { steps: 3 });
-  await page.mouse.move(canvasBox.x + canvasBox.width * 0.39, canvasBox.y + canvasBox.height * 0.35, { steps: 3 });
+  await page.mouse.move(pointBox.x + pointBox.width / 2 + 12, pointBox.y + pointBox.height / 2 - 6);
   await page.mouse.up();
-  await expect.poll(async () => cutDialog.locator('[data-testid^="cut-outline-point-"]').count(), {
-    message: 'Draw cut replaces the contour with a one-stroke student outline',
-  }).not.toBe(pointCountBeforeDraw);
-  await cutDialog.getByRole('button', { name: 'Done' }).click();
-  await expect(cutDialog).toHaveCount(0);
-
+  await expect.poll(() => editedPoint.getAttribute('cx')).not.toBe(beforeX);
+  await editor.getByRole('button', { name: 'Reset', exact: true }).click();
+  const bounds = await points.evaluateAll(nodes => {
+    const xs = nodes.map(node => Number(node.getAttribute('cx'))), ys = nodes.map(node => Number(node.getAttribute('cy')));
+    return { left: Math.min(...xs) - 10, top: Math.min(...ys) - 10, right: Math.max(...xs) + 10, bottom: Math.max(...ys) + 10 };
+  });
+  const view = await parseView();
+  const toClient = (x: number, y: number) => ({ x: box.x + (x - view.x) / view.width * box.width, y: box.y + (y - view.y) / view.height * box.height });
+  const corners = [toClient(bounds.left, bounds.top), toClient(bounds.right, bounds.top), toClient(bounds.right, bounds.bottom), toClient(bounds.left, bounds.bottom)];
+  await editor.getByRole('button', { name: 'Draw outline', exact: true }).click();
+  // A crossed candidate remains visible and cannot overwrite the physical part.
+  await page.mouse.move(corners[0].x, corners[0].y); await page.mouse.down();
+  for (const index of [2, 1, 3, 0]) await page.mouse.move(corners[index].x, corners[index].y);
+  await page.mouse.up();
+  await expect(editor.getByTestId('use-shape')).toBeDisabled();
+  await expect(editor.getByRole('status')).toContainText(/Uncross|overlapping/);
+  await expect(summary).toHaveText(originalSummary ?? '');
+  await editor.getByRole('button', { name: 'Reset', exact: true }).click();
+  // Pointer cancellation discards only this unfinished outline.
+  await page.mouse.move(corners[0].x, corners[0].y); await page.mouse.down();
+  await page.mouse.move(corners[1].x, corners[1].y);
+  await canvas.dispatchEvent('pointercancel', { pointerId: 1, pointerType: 'mouse', bubbles: true });
+  await page.mouse.up();
+  await expect(editor.getByTestId('use-shape')).toBeEnabled();
+  await page.mouse.move(corners[0].x, corners[0].y); await page.mouse.down();
+  for (const corner of [...corners.slice(1), corners[0]]) await page.mouse.move(corner.x, corner.y, { steps: 3 });
+  await page.mouse.up();
+  await expect(editor.getByTestId('use-shape')).toBeEnabled();
+  await expect(summary).toHaveText(originalSummary ?? '');
+  await editor.getByTestId('use-shape').click();
+  await expect(editor).toHaveCount(0);
+  await expect(summary).toHaveText('Custom');
   const puppet = page.getByTestId('character-three-puppet-state');
-  await expect(puppet).toHaveAttribute('data-part-outline-mode', 'model-or-user-contour-with-fabrication-fallback');
-  await expect.poll(async () => Number(await puppet.getAttribute('data-three-render-triangles')), { message: 'edited cut contour still renders as 3D solid plates' }).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await puppet.getAttribute('data-three-render-triangles'))).toBeGreaterThan(0);
   expectCleanPage(pageErrors, consoleErrors);
+});
+
+test('Imported shape editing retains its source guide and Cancel keeps the outline', async ({ page }) => {
+  const pageErrors: string[] = [], consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
+  const project = createLessonProject('head-bob');
+  const sourceImageFrame = { x: -120, y: -160, width: 240, height: 200 };
+  const sourceTextureUrl = `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="240" height="200"><rect width="240" height="200" fill="#ffca42"/><rect width="120" height="100" fill="#134e8c"/></svg>').toString('base64')}`;
+  project.parts.head = { ...project.parts.head, contourSource: 'imported', sourceImageFrame };
+  project.characterPackage = {
+    id: 'legacy-source-guide', createdAt: '2026-09-07T00:00:00.000Z', sourceImageName: 'source-guide.svg',
+    outputDir: '', partsInfo: {}, charCfg: {}, sourceTextureUrl,
+  };
+  const directory = await mkdtemp(join(tmpdir(), 'motionsmith-shape-source-'));
+  const file = join(directory, 'legacy-source-guide.motionsmith.json');
+  await writeFile(file, serializeProject(project));
+  await page.goto(process.env.PLAYWRIGHT_BASE_PATH || '/');
+  await dismissStartupAnnouncement(page);
+  await importProjectFile(page, file, 'character');
+  await page.getByTestId('character-part-item-head').click();
+  await expect(page.getByTestId('part-cut-summary')).toHaveText('Imported');
+  await page.getByTestId('part-cut-bake').click();
+  const editor = page.getByTestId('shape-editor');
+  await expect(editor).toBeVisible();
+  const original = await editor.locator('.shape-candidate').getAttribute('d');
+  await expect(editor.getByTestId('shape-source-image')).toHaveCount(0);
+  await editor.getByRole('button', { name: 'Source guide', exact: true }).click();
+  const source = editor.getByTestId('shape-source-image');
+  await expect(source).toBeVisible();
+  await expect(source).toHaveAttribute('href', sourceTextureUrl);
+  for (const [key, value] of Object.entries(sourceImageFrame)) await expect(source).toHaveAttribute(key, String(value));
+  await expect.poll(() => editor.locator('canvas').evaluate(element => {
+    const canvas = element as HTMLCanvasElement;
+    const pixels = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let index = 3; index < pixels.length; index += 4) if (pixels[index] > 0) return true;
+    return false;
+  }), { message: 'retained artwork is drawn by the live shape preview' }).toBe(true);
+  await editor.getByRole('button', { name: 'Shrink', exact: true }).click();
+  await expect(editor.locator('.shape-candidate')).not.toHaveAttribute('d', original!);
+  await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  await expect(page.getByTestId('part-cut-summary')).toHaveText('Imported');
+  await page.getByTestId('part-cut-bake').click();
+  await expect(editor.locator('.shape-candidate')).toHaveAttribute('d', original!);
+  await editor.getByRole('button', { name: 'Source guide', exact: true }).click();
+  await expect(editor.getByTestId('shape-source-image')).toHaveAttribute('href', sourceTextureUrl);
+  await page.keyboard.press('Escape');
+  await expect(editor).toHaveCount(0);
+  expectCleanPage(pageErrors, consoleErrors);
+});
+
+test('Blueprint keeps a painted prop visible beyond the real board', async ({ page }, info) => {
+  await page.goto(process.env.PLAYWRIGHT_BASE_PATH || '/');
+  await dismissStartupAnnouncement(page);
+  await openCharacterScreen(page);
+  await page.getByTestId('character-draw-object').click();
+  await page.getByRole('textbox', { name: 'Object name', exact: true }).fill('Moved painted prop');
+  await page.getByRole('button', { name: 'Paint color #ef476f', exact: true }).click();
+  const paint = page.getByTestId('paint-canvas');
+  const paintBox = (await paint.boundingBox())!;
+  await page.mouse.move(paintBox.x + paintBox.width * .45, paintBox.y + paintBox.height * .5);
+  await page.mouse.down();
+  await page.mouse.move(paintBox.x + paintBox.width * .55, paintBox.y + paintBox.height * .5, { steps: 5 });
+  await page.mouse.up();
+  await page.getByTestId('paint-workspace').getByRole('button', { name: 'Add object', exact: true }).click();
+  await page.getByTestId('scene-object-inspector').getByLabel('X number', { exact: true }).fill('500');
+  await page.getByTestId('workflow-stage-blueprint').click();
+  const piece = page.locator('[data-blueprint-artwork-owner]').last();
+  await expect(piece).toHaveAttribute('data-blueprint-artwork-status', 'current');
+  const framing = await piece.evaluate((element: SVGGraphicsElement) => {
+    const svg = element.ownerSVGElement!;
+    const target = element.querySelector('polygon')!.getBoundingClientRect();
+    const viewport = svg.getBoundingClientRect();
+    const board = svg.querySelector('.blueprint-board-fill')!;
+    return {
+      inside: target.left >= viewport.left && target.right <= viewport.right
+        && target.top >= viewport.top && target.bottom <= viewport.bottom,
+      boardWidth: board.getAttribute('width'),
+      artwork: Boolean(element.querySelector('image')?.getAttribute('href')),
+    };
+  });
+  expect(framing.inside, 'the moved physical piece is fully visible').toBe(true);
+  expect(framing.artwork, 'the visible piece contains retained painting').toBe(true);
+  expect(framing.boardWidth, 'fitting never scales up the physical board').toBe('300');
+  await expect(page.getByRole('button', { name: 'Download Build PDF', exact: true })).toBeEnabled();
+  await expect(page.getByTestId('stage-left-pane')).toContainText('outside sheet bounds');
+  await page.getByTestId('blueprint-canvas-preview').screenshot({ path: info.outputPath('moved-painted-prop-blueprint.png') });
 });
 
 test('Character tab owns separate scene objects and later tabs only render them', async ({ page }) => {
@@ -2488,6 +2585,9 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
   await expect(page.getByText('No path.')).toHaveCount(0);
   await expect(page.getByTestId('quick-rig-helper')).toContainText('Move part');
+  await expect(page.getByTestId('ik-chain-summary')).toHaveAttribute('data-chain-root', 'right_shoulder');
+  await expect(page.getByTestId('ik-chain-summary')).toHaveAttribute('data-chain-handle', 'right_hand');
+  await openMotionJointOptions(page);
   await expect(page.getByLabel('Motion start')).toHaveValue('right_shoulder');
   await expect(page.getByLabel('Motion handle')).toHaveValue('right_hand');
   await expect(page.getByTestId('ik-chain-summary')).toContainText('Motion ready');
@@ -2498,7 +2598,8 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await expect(page.getByLabel('Motion handle')).toHaveValue('right_hand');
   await expect(page.getByLabel('Motion start')).toHaveValue('right_elbow');
   await expect(page.getByTestId('ik-chain-summary')).toContainText('Motion ready');
-  await expect(page.getByTestId('fold-direction-control')).toContainText('No bend');
+  await expect(page.getByTestId('ik-chain-summary')).toHaveAttribute('data-chain-kind', 'two-joint-direct');
+  await expect(page.getByTestId('fold-direction-control')).toHaveCount(0);
   await expect(page.getByTestId('path-shape-controls')).toBeVisible();
   await page.getByRole('button', { name: 'Closed', exact: true }).click();
   await expect(pathState).toHaveAttribute('data-three-selected-path-closed', 'true');
@@ -2514,6 +2615,7 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await page.getByTestId('novice-path-panel').getByText('More', { exact: true }).click();
   const stopButtonBeforePreview = page.getByTestId('novice-path-panel').getByRole('button', { name: 'Pause all paths', exact: true });
   await clickOptionalButton(stopButtonBeforePreview, 'Path Stop');
+  await openMotionJointOptions(page);
   await page.getByLabel('Motion handle').selectOption('right_hand');
   await page.getByTestId('ik-chain-root-options').getByRole('button', { name: 'right shoulder' }).click();
   await expect(page.getByLabel('Motion start')).toHaveValue('right_shoulder');
@@ -2523,6 +2625,7 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
   await expect(pathState).toHaveAttribute('data-three-part-count', /[1-9]/);
   await page.getByTestId('novice-path-panel').getByRole('button', { name: 'Pause all paths', exact: true }).click();
+  await openMotionJointOptions(page);
   await page.getByTestId('ik-chain-root-options').getByRole('button', { name: 'right elbow' }).click();
   await expect(page.getByLabel('Motion start')).toHaveValue('right_elbow');
   await expect(page.getByLabel('Motion handle')).toHaveValue('right_hand');
@@ -2534,6 +2637,7 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await page.getByLabel('Art offset X number').fill('-12');
   await page.getByLabel('Art offset X number').press('Enter');
   const partLocked = page.locator('label').filter({ hasText: 'Locked' }).first().locator('input[type="checkbox"]');
+  await page.getByTestId('stage-right-inspector').getByText('Edit skeleton', { exact: true }).click();
   await page.getByLabel('Part pivot').selectOption('right_elbow');
   await expect(page.getByLabel('Part pivot')).toHaveValue('right_elbow');
   await partLocked.check();
@@ -2642,6 +2746,9 @@ test('Mechanism target ownership stays on the arm when a foot path is added', as
   await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.58, canvasBox!.y + canvasBox!.height * 0.54, { steps: 3 });
   await page.mouse.up();
   await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
+  await expect(page.getByTestId('ik-chain-summary')).toHaveAttribute('data-chain-root', 'right_hip');
+  await expect(page.getByTestId('ik-chain-summary')).toHaveAttribute('data-chain-handle', 'right_foot');
+  await openMotionJointOptions(page);
   await page.getByLabel('Motion handle').selectOption('right_foot');
   await expect(page.getByLabel('Motion handle')).toHaveValue('right_foot');
 
@@ -5062,7 +5169,8 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   const anchorOptionValues = await page.getByLabel('Motion handle').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
   expect(anchorOptionValues).toEqual(['', 'right_elbow', 'right_hand']);
   const anchorOptions = await page.getByLabel('Motion handle').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
-  expect(anchorOptions.join(' ')).toContain('1 joint');
+  expect(anchorOptions.join(' ')).toContain('right elbow · 2 joints');
+  expect(anchorOptions.join(' ')).toContain('right hand · 3 joints');
   expect(anchorOptions.join(' ')).not.toContain('left hand');
   await expect(page.getByLabel('Motion handle')).toHaveValue('right_hand');
   await expect(page.getByTestId('mechanism-ik-chain-summary')).toHaveCount(0);
@@ -5075,8 +5183,9 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   await enabledCheckbox.uncheck();
   await expect(enabledCheckbox).not.toBeChecked();
   await clickStage(page, 'Blueprint');
-  await expect(page.getByTestId('blueprint-control-panel').getByText('No enabled mechanism to export.')).toBeVisible();
-  await expect(page.getByTestId('blueprint-build-print')).toBeDisabled();
+  await expect(page.getByTestId('blueprint-build-print')).toBeEnabled();
+  await page.getByTestId('blueprint-build-print').click();
+  expect((await downloadMetadataJson(page)).recipes).toHaveLength(0);
 
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await page.locator('label').filter({ hasText: 'Enabled' }).locator('input[type="checkbox"]').check();

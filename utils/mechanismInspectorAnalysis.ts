@@ -6,11 +6,13 @@ import {
   FABRICATION_GEAR_SPECS,
   FABRICATION_LINKAGE_SPECS,
   fabricationGearSpecForPitchRadius,
+} from "./fabricationContract";
+import {
   fabricationLinkageSpecForSceneLength,
   fabricationStackSummary,
   readableFabricationStackSummary,
-  sampleFeasibleRange,
-} from "./fabrication";
+} from "./fabricationStackModel";
+import { sampleFeasibleRange } from "./fabricationReadiness";
 import { SCENE_PX_PER_MM } from "./coordinates";
 import { gearTrainPitchRadii } from "./kinematics";
 import { mechanismBindingWarnings } from "./motion";

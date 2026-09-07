@@ -2,6 +2,8 @@
 
 This manual describes the exported fabrication package produced by MotionSmith.
 
+In Blueprint, **Download Build PDF** creates the normal complete packet: painted character and cuttable object sheets, existing native-size mechanism drawings, and assembly/placement steps. It preserves both the student's artwork and physical cut geometry. Print at 100% scale. The separate clean character outline PDF and SVG are cutting references; they do not replace the painted packet. Save Project remains the portable editable project file.
+
 ## Package contents
 
 - `*.json`: complete project and fabrication package metadata.

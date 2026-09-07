@@ -6,6 +6,11 @@ import React, {
   useState,
 } from "react";
 import * as THREE from "three";
+import { createPartArtMaterial, updatePartArtMaterial } from "../../../runtime/render/partArtMaterial";
+import {
+  artworkSurfaceFrame, artworkSurfaceFrameKey, collectArtworkSurfaceState, mapArtworkSurfaceUvs,
+  retainArtworkGroup, type ArtworkSurfaceOwner,
+} from "../../../runtime/render/artworkSurface";
 import { registerCanvasCapture } from "../../../utils/canvasCapture";
 import { fitWorkingPreviewCamera, visibleObjectBounds, workingPreviewFrame, type WorkingPreviewFit } from "../../../utils/workingPreviewCamera";
 import type {
@@ -26,7 +31,6 @@ import {
   planetaryCarrierOutputRatio,
 } from "../../../utils/kinematics";
 import {
-  FABRICATION_HOLE_RADIUS_MM,
   FABRICATION_RENDER_LAYER_Z_STEP,
   FABRICATION_RENDER_MIN_CLEARANCE,
   FABRICATION_RENDER_PART_DEPTH,
@@ -39,8 +43,9 @@ import { SCENE_PX_PER_MM, SCENE_VIEW, boardToScene, sceneBoundsForSheet } from "
 import {
   fabricablePartOutlinePoints,
   partLandmarkLocalPoints,
-  pointInsideOutline,
 } from "../../../utils/partGeometry";
+import { characterFabricationHoles, type CharacterFabricationHole } from "../../../utils/characterFabricationHoles";
+import { sceneObjectOutline } from "../../../utils/artworkTargets";
 import {
   loadRapierPhysicsKernel,
   physicsKernelErrorMessage,
@@ -375,17 +380,7 @@ const foundrySceneLocalHole = (point: Point, radius: number) =>
     (radius * SCENE_TO_FOUNDRY_SCALE) / 18,
   );
 
-const foundrySceneObjectShape = (object: SceneObject) => {
-  const points = object.contourPoints && object.contourPoints.length >= 3
-    ? object.contourPoints
-    : [
-        { x: -object.bounds.width / 2, y: -object.bounds.height / 2 },
-        { x: object.bounds.width / 2, y: -object.bounds.height / 2 },
-        { x: object.bounds.width / 2, y: object.bounds.height / 2 },
-        { x: -object.bounds.width / 2, y: object.bounds.height / 2 },
-      ];
-  return foundrySceneLocalShape(points);
-};
+const foundrySceneObjectShape = (object: SceneObject) => foundrySceneLocalShape(sceneObjectOutline(object));
 
 type FoundryScreenTarget = {
   kind: "object" | "part";
@@ -434,28 +429,13 @@ const foundryAutomataMaterial = (
   return material;
 };
 
-const foundryAutomataTextureMaterial = (
-  textureUrl: string | undefined,
-  opacity: number,
-  onLoaded: () => void,
-) => {
-  const material = new THREE.MeshBasicMaterial({
-    color: textureUrl ? "#ffffff" : "#f8fafc",
-    transparent: true,
-    opacity,
-    depthWrite: false,
-    polygonOffset: true,
-    polygonOffsetFactor: -1,
-  });
-  if (textureUrl) {
-    const texture = new THREE.TextureLoader().load(textureUrl, onLoaded);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.anisotropy = 4;
-    material.map = texture;
-    material.needsUpdate = true;
-  }
-  return material;
-};
+const foundryArtworkOptions = (owner: ArtworkSurfaceOwner, outline: Point[], holes: readonly CharacterFabricationHole[] = []) => ({
+  targetFrame: artworkSurfaceFrame(owner, outline),
+  clip: outline.length >= 3 ? { kind: "contour" as const, points: outline,
+    holes }
+    : { kind: "none" as const },
+  opacity: owner.artwork ? owner.opacity : Math.min("x" in owner.bounds ? 0.82 : 0.86, owner.opacity),
+});
 
 const placeFoundryLocalGroup = (
   group: THREE.Group,
@@ -532,6 +512,7 @@ const renderFoundryAutomataContext = ({
         skeleton: StandardSkeleton | null | undefined;
         pathTopologyKey: string;
         topologyDetailKey: string;
+        holeDiameterMm: number;
       }
     | undefined;
   const topologyMatches = Boolean(
@@ -543,24 +524,29 @@ const renderFoundryAutomataContext = ({
       topologyRefs.skeleton === skeleton &&
       topologyRefs.pathTopologyKey === pathTopologyKey &&
       topologyRefs.topologyDetailKey ===
-        `${partTopology.bevelEnabled}:${partTopology.edgeGeometryEnabled}:${partTopology.curveSegments}`,
+        `${partTopology.bevelEnabled}:${partTopology.edgeGeometryEnabled}:${partTopology.curveSegments}` &&
+      topologyRefs.holeDiameterMm === project.settings.physicalKit.holeDiameterMm,
   );
   const edge = partTopology.edgeGeometryEnabled
     ? foundryAutomataMaterial("#334155", 0.58, materialCache)
     : null;
   const selected = foundryAutomataMaterial("#a78bfa", 0.56, materialCache);
-  const holeRadius = Math.max(
-    1,
-    FABRICATION_HOLE_RADIUS_MM * SCENE_PX_PER_MM,
-  );
   let topologyChanged = false;
   if (!topologyMatches) {
-    if (automataRoot) {
-      automataRoot.removeFromParent();
-      disposeFoundryThreeObject(automataRoot);
+    if (!automataRoot) {
+      automataRoot = new THREE.Group();
+      automataRoot.name = "foundry-automata-context";
+      root.add(automataRoot);
     }
-    automataRoot = new THREE.Group();
-    automataRoot.name = "foundry-automata-context";
+    const partIds = new Set(project.partOrder);
+    const objectIds = new Set(project.sceneObjectOrder);
+    [...automataRoot.children].forEach(child => {
+      const removed = (child.userData.partId && !partIds.has(child.userData.partId)) ||
+        (child.userData.sceneObjectId && !objectIds.has(child.userData.sceneObjectId));
+      if (!removed) return;
+      child.removeFromParent();
+      disposeFoundryThreeObject(child);
+    });
     automataRoot.userData.topologyRefs = {
       parts: project.parts,
       partOrder: project.partOrder,
@@ -569,10 +555,11 @@ const renderFoundryAutomataContext = ({
       skeleton,
       pathTopologyKey,
       topologyDetailKey: `${partTopology.bevelEnabled}:${partTopology.edgeGeometryEnabled}:${partTopology.curveSegments}`,
+      holeDiameterMm: project.settings.physicalKit.holeDiameterMm,
     };
-    root.add(automataRoot);
     topologyChanged = true;
 
+    const physicalHolesByPart = characterFabricationHoles(project);
     project.partOrder.forEach((partId) => {
       const base = project.parts[partId];
       if (!base) return;
@@ -580,13 +567,20 @@ const renderFoundryAutomataContext = ({
       const outline = fabricablePartOutlinePoints(base, landmarks);
       if (outline.length < 3) return;
       const shape = foundrySceneLocalShape(outline);
-      const localHoles = landmarks.filter((local) =>
-        pointInsideOutline(local, outline, 0.5)
+      const physicalHoles = physicalHolesByPart.get(partId) ?? [];
+      const localHoles = physicalHoles.map(hole => hole.center);
+      physicalHoles.forEach(hole =>
+        shape.holes.push(foundrySceneLocalHole(hole.center, hole.radius))
       );
-      localHoles.forEach((local) =>
-        shape.holes.push(foundrySceneLocalHole(local, holeRadius))
-      );
-      const geometryKey = `automata-part:${partId}:${foundryTopologyPointKey(outline)}:${foundryTopologyPointKey(localHoles)}:${partTopology.bevelEnabled}:${partTopology.curveSegments}`;
+      const geometryKey = `automata-part:${partId}:${foundryTopologyPointKey(outline)}:${foundryTopologyPointKey(localHoles)}:${physicalHoles.map(hole => hole.radius).join(',')}:${partTopology.bevelEnabled}:${partTopology.curveSegments}`;
+      const artOptions = foundryArtworkOptions(base, outline, physicalHoles);
+      const ownerGeometryKey = `${geometryKey}:art:${artworkSurfaceFrameKey(artOptions.targetFrame)}:${Boolean(base.textureUrl || base.artwork)}:${partTopology.edgeGeometryEnabled}`;
+      const retained = retainArtworkGroup(automataRoot!, `foundry-automata-part-${partId}`, ownerGeometryKey, disposeFoundryThreeObject);
+      if (retained) {
+        const art = retained.getObjectByName(`foundry-automata-art-${partId}`) as THREE.Mesh | undefined;
+        if (art) updatePartArtMaterial(art.material as THREE.MeshBasicMaterial, base, onLoaded, artOptions);
+        return;
+      }
       const geometry = cachedThreeResource(
         geometryCache,
         geometryKey,
@@ -603,6 +597,7 @@ const renderFoundryAutomataContext = ({
       );
       const group = new THREE.Group();
       group.name = `foundry-automata-part-${partId}`;
+      group.userData.geometryKey = ownerGeometryKey;
       group.userData.partId = partId;
       const mesh = new THREE.Mesh(
         geometry,
@@ -626,38 +621,19 @@ const renderFoundryAutomataContext = ({
         ));
       }
       group.add(mesh);
-      if (base.textureUrl) {
+      if (base.textureUrl || base.artwork) {
         const artGeometry = cachedThreeResource(
           geometryCache,
-          `art:${geometryKey}`,
+          `art:${geometryKey}:${artworkSurfaceFrameKey(artOptions.targetFrame)}`,
           () => {
             const next = new THREE.ShapeGeometry(shape, partTopology.curveSegments);
-            const positions = next.getAttribute("position");
-            const uvs: number[] = [];
-            const width = Math.max(1, base.bounds.width);
-            const height = Math.max(1, base.bounds.height);
-            for (let index = 0; index < positions.count; index += 1) {
-              const local = sceneLocalFromFoundryGeometry(
-                positions.getX(index),
-                positions.getY(index),
-              );
-              uvs.push(
-                (local.x - base.bounds.x) / width,
-                (local.y - base.bounds.y) / height,
-              );
-            }
-            next.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
-            return next;
+            return mapArtworkSurfaceUvs(next, artOptions.targetFrame, sceneLocalFromFoundryGeometry);
           },
           FOUNDRY_CACHE_MARKER,
         );
         const art = new THREE.Mesh(
           artGeometry,
-          foundryAutomataTextureMaterial(
-            base.textureUrl,
-            Math.min(0.82, base.opacity),
-            onLoaded,
-          ),
+          createPartArtMaterial(base, onLoaded, artOptions),
         );
         art.name = `foundry-automata-art-${partId}`;
         art.position.z = 0.09;
@@ -671,7 +647,15 @@ const renderFoundryAutomataContext = ({
       const base = project.sceneObjects[objectId];
       if (!base) return;
       const shape = foundrySceneObjectShape(base);
-      const geometryKey = `automata-object:${objectId}:${base.bounds.width.toFixed(2)}:${base.bounds.height.toFixed(2)}:${partTopology.bevelEnabled}:${partTopology.curveSegments}`;
+      const geometryKey = `automata-object:${objectId}:${base.shape}:${foundryTopologyPointKey(base.contourPoints ?? [])}:${base.bounds.width.toFixed(2)}:${base.bounds.height.toFixed(2)}:${partTopology.bevelEnabled}:${partTopology.curveSegments}`;
+      const artOptions = foundryArtworkOptions(base, sceneObjectOutline(base));
+      const ownerGeometryKey = `${geometryKey}:art:${artworkSurfaceFrameKey(artOptions.targetFrame)}:${base.artwork ? 'document' : Boolean(base.textureUrl)}:${partTopology.edgeGeometryEnabled}`;
+      const retained = retainArtworkGroup(automataRoot!, `foundry-automata-object-${objectId}`, ownerGeometryKey, disposeFoundryThreeObject);
+      if (retained) {
+        const art = retained.getObjectByName(`foundry-automata-art-${objectId}`) as THREE.Mesh | undefined;
+        if (art) updatePartArtMaterial(art.material as THREE.MeshBasicMaterial, base, onLoaded, artOptions);
+        return;
+      }
       const geometry = cachedThreeResource(
         geometryCache,
         geometryKey,
@@ -688,6 +672,7 @@ const renderFoundryAutomataContext = ({
       );
       const group = new THREE.Group();
       group.name = `foundry-automata-object-${objectId}`;
+      group.userData.geometryKey = ownerGeometryKey;
       group.userData.sceneObjectId = objectId;
       const mesh = new THREE.Mesh(
         geometry,
@@ -711,35 +696,19 @@ const renderFoundryAutomataContext = ({
         ));
       }
       group.add(mesh);
-      if (base.textureUrl) {
+      if (base.textureUrl || base.artwork) {
         const artGeometry = cachedThreeResource(
           geometryCache,
-          `art:${geometryKey}`,
+          `art:${geometryKey}:${artworkSurfaceFrameKey(artOptions.targetFrame)}:${Boolean(base.artwork)}`,
           () => {
             const next = new THREE.ShapeGeometry(shape, partTopology.curveSegments);
-            const positions = next.getAttribute("position");
-            const uvs: number[] = [];
-            const width = Math.max(1, base.bounds.width);
-            const height = Math.max(1, base.bounds.height);
-            for (let index = 0; index < positions.count; index += 1) {
-              const local = sceneLocalFromFoundryGeometry(
-                positions.getX(index),
-                positions.getY(index),
-              );
-              uvs.push(local.x / width + 0.5, 0.5 - local.y / height);
-            }
-            next.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
-            return next;
+            return mapArtworkSurfaceUvs(next, artOptions.targetFrame, sceneLocalFromFoundryGeometry, !base.artwork);
           },
           FOUNDRY_CACHE_MARKER,
         );
         const art = new THREE.Mesh(
           artGeometry,
-          foundryAutomataTextureMaterial(
-            base.textureUrl,
-            Math.min(0.86, base.opacity),
-            onLoaded,
-          ),
+          createPartArtMaterial(base, onLoaded, artOptions),
         );
         art.name = `foundry-automata-art-${objectId}`;
         art.position.z = 0.08;
@@ -749,6 +718,12 @@ const renderFoundryAutomataContext = ({
       automataRoot?.add(group);
     });
 
+    if (topologyRefs?.pathTopologyKey !== pathTopologyKey) {
+      [...automataRoot.children].forEach(child => {
+        if (!child.name.startsWith("foundry-automata-path-")) return;
+        child.removeFromParent();
+        disposeFoundryThreeObject(child);
+      });
     paths
       .filter((path) => path.points.length > 1)
       .forEach((path) => {
@@ -765,6 +740,7 @@ const renderFoundryAutomataContext = ({
         line.name = `foundry-automata-path-${path.id}`;
         automataRoot?.add(line);
       });
+    }
   }
 
   const activeAssemblyPartIds = new Set(
@@ -1570,6 +1546,7 @@ export const ThreeFoundryPreview = ({
     }
     if (!E2E_DIAGNOSTICS || !stateRef.current) return;
     renderSubmissionCountRef.current += 1;
+    stateRef.current.dataset.threeArtworkSurfaces = JSON.stringify(collectArtworkSurfaceState(scene));
     stateRef.current.dataset.threeRenderSubmissions = String(
       renderSubmissionCountRef.current,
     );
@@ -2390,7 +2367,7 @@ export const ThreeFoundryPreview = ({
             )
           : [];
       const visiblePartArtIds = visiblePartIds.filter(
-        (id) => Boolean(activeAutomataContext?.project.parts[id]?.textureUrl),
+        (id) => Boolean(activeAutomataContext?.project.parts[id]?.textureUrl || activeAutomataContext?.project.parts[id]?.artwork),
       );
       stateRef.current.dataset.threeDynamicBuildCount = String(
         dynamicBuildCountRef.current,

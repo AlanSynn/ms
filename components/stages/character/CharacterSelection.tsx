@@ -1,6 +1,5 @@
 import {
   lazy,
-  startTransition,
   Suspense,
   useEffect,
   useMemo,
@@ -32,6 +31,13 @@ import { CharacterImportControls } from "./CharacterImportControls";
 import { CharacterLessonOwnership } from "./CharacterLessonOwnership";
 import { ContextHelp } from "../../ui/ContextHelp";
 import type { CharacterImportProgressStore } from "../../../runtime/import/characterImportProgressStore";
+import type { AppCommandHandlerMap } from "../../../utils/appCommands";
+import { createDrawableObject } from "../../../utils/artworkTargets";
+import { Paintbrush } from "lucide-react";
+
+const CharacterArtworkWorkspace = lazy(async () => ({
+  default: (await import("./CharacterArtworkWorkspace")).CharacterArtworkWorkspace,
+}));
 
 const loadCharacterImportOverlays = () => import("./CharacterImportOverlays");
 const CharacterImportReviewBoundary = lazy(async () => ({
@@ -78,6 +84,8 @@ export const CharacterSelection = ({
   goStage,
   viewport,
   setViewport,
+  commandHandlers,
+  onPause,
 }: {
   project: ProjectState;
   dispatch: (action: ProjectAction) => void;
@@ -94,16 +102,37 @@ export const CharacterSelection = ({
   goStage: (stage: AppStage) => void;
   viewport: CanvasViewport;
   setViewport: Dispatch<SetStateAction<CanvasViewport>>;
+  commandHandlers: AppCommandHandlerMap;
+  onPause: () => void;
 }) => {
   const packageInputRef = useRef<HTMLInputElement>(null);
   const objectInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [toolsReady, setToolsReady] = useState(false);
+  const [painting, setPainting] = useState(false);
+  const [draftObject, setDraftObject] = useState<SceneObject>();
+  useEffect(() => { setPainting(false); setDraftObject(undefined); }, [project.metadata.id]);
   const objectImageClient = useMemo(
     () => createSceneObjectImageWorkerClient(),
     [],
   );
-  useEffect(() => () => objectImageClient.dispose(), [objectImageClient]);
+  const latestObjectImportProjectRef = useRef(project);
+  latestObjectImportProjectRef.current = project;
+  const pendingObjectImportProjectRef = useRef<ProjectState | undefined>(undefined);
+  useEffect(() => () => {
+    pendingObjectImportProjectRef.current = undefined;
+    objectImageClient.dispose();
+  }, [objectImageClient]);
+  useEffect(() => {
+    const source = pendingObjectImportProjectRef.current;
+    if (!source || source === project) return;
+    pendingObjectImportProjectRef.current = undefined;
+    objectImageClient.cancel();
+    if (source.metadata.id === project.metadata.id) dispatch({
+      type: "set_processing",
+      processing: { stage: "error", message: "Project changed. Import object again.", progress: 0 },
+    });
+  }, [project, dispatch, objectImageClient]);
   useEffect(() => {
     const host = window as typeof window & {
       requestIdleCallback?: (
@@ -138,12 +167,29 @@ export const CharacterSelection = ({
       ? project.parts[project.selectedPartId]
       : undefined) ?? editableParts[0];
   const selectedPartId = selectedEditablePart?.id ?? "";
+  const paintOwner = draftObject ?? selectedSceneObject ?? selectedEditablePart;
+  const paintKind = draftObject || selectedSceneObject ? "object" : "part";
+  const creativeOpen = painting && Boolean(paintOwner);
+  const closePainting = () => { setPainting(false); setDraftObject(undefined); };
   const addSceneObject = (file: File) => {
+    const source = project;
+    pendingObjectImportProjectRef.current = source;
+    const accept = () => {
+      if (pendingObjectImportProjectRef.current !== source || latestObjectImportProjectRef.current !== source) return false;
+      pendingObjectImportProjectRef.current = undefined;
+      return true;
+    };
     objectImageClient.request(file, uid("object"), {
-      complete: ({ object }) => startTransition(() =>
-        dispatch({ type: "upsert_scene_object", object }),
-      ),
-      failed: (error) =>
+      complete: ({ object }) => {
+        if (!accept()) return;
+        dispatch({ type: "upsert_scene_object", object });
+        if (source.processing.stage === "error") dispatch({
+          type: "set_processing",
+          processing: { stage: "ready", message: "Object added", progress: 100 },
+        });
+      },
+      failed: (error) => {
+        if (!accept()) return;
         dispatch({
           type: "set_processing",
           processing: {
@@ -151,8 +197,9 @@ export const CharacterSelection = ({
             message: error.message,
             progress: 0,
           },
-        }),
-    });
+        });
+      },
+    }, source);
   };
   return (
     <>
@@ -181,7 +228,7 @@ export const CharacterSelection = ({
                   </span>
                   <span>
                     {project.partOrder.some((id) =>
-                      Boolean(project.parts[id]?.textureUrl),
+                      Boolean(project.parts[id]?.textureUrl || project.parts[id]?.artwork?.operations.length),
                     )
                       ? "art on plates"
                       : "gray plates"}
@@ -200,10 +247,16 @@ export const CharacterSelection = ({
                   importInputRef={importInputRef}
                   onOpenGettingStarted={onOpenGettingStarted}
                   onAddSceneObject={addSceneObject}
+                  onDrawObject={() => { onPause(); setDraftObject(createDrawableObject(uid("object"))); setPainting(true); }}
                   sceneObjectDisabled={partPanelDisabled}
                   onPackage={onPackage}
                   onImport={onImport}
                 />
+                {paintOwner && <button className="btn-primary w-full mt-3" data-testid="character-draw-paint"
+                  data-feature-id="character.drawPaint" disabled={paintOwner.locked} data-feature-blocker={paintOwner.locked ? "Unlock the selected piece." : undefined}
+                  onClick={() => { onPause(); setPainting(true); }}>
+                  <Paintbrush size={16} /> Draw &amp; paint
+                </button>}
                 <details
                   className="advanced-panel mt-4"
                   data-testid="character-processing-panel"
@@ -250,7 +303,7 @@ export const CharacterSelection = ({
                           type="button"
                           data-testid={`character-part-item-${part.id}`}
                           className={`character-part-list-item ${isActive ? "active" : ""}`}
-                          disabled={partPanelDisabled}
+                          disabled={partPanelDisabled || Boolean(draftObject)}
                           aria-pressed={isActive}
                           onClick={() =>
                             dispatch({ type: "select_part", partId: part.id })
@@ -266,7 +319,7 @@ export const CharacterSelection = ({
                             <small>{part.locked ? "Locked part" : "Editable part"}</small>
                           </span>
                           <span className="part-list-badges">
-                            {part.textureUrl ? <b>art</b> : <b>plate</b>}
+                            {part.textureUrl || part.artwork?.operations.length ? <b>art</b> : <b>plate</b>}
                             {part.locked && <b>lock</b>}
                           </span>
                         </button>
@@ -294,7 +347,7 @@ export const CharacterSelection = ({
                           type="button"
                           data-testid={`scene-object-item-${object.id}`}
                           className={`character-part-list-item ${isActive ? "active" : ""}`}
-                          disabled={partPanelDisabled}
+                          disabled={partPanelDisabled || Boolean(draftObject)}
                           aria-pressed={isActive}
                           onClick={() =>
                             dispatch({
@@ -328,6 +381,7 @@ export const CharacterSelection = ({
                 className="character-preview-pane canvas-workspace"
                 data-testid="character-preview-pane"
               >
+                <div style={{ position: "absolute", inset: 0, visibility: creativeOpen ? "hidden" : "visible" }} inert={creativeOpen}>
                 <CanvasZoomToolbar
                   viewport={viewport}
                   setViewport={setViewport}
@@ -346,11 +400,21 @@ export const CharacterSelection = ({
                     dispatch({ type: "select_scene_object", objectId })
                   }
                 />
+                </div>
+                {creativeOpen && paintOwner && <Suspense fallback={<div className="paint-workspace" aria-busy="true">Opening paint…</div>}>
+                  <CharacterArtworkWorkspace key={`${draftObject ? "draft" : paintKind}:${paintOwner.id}`} project={project}
+                    sourceOwner={paintOwner} kind={paintKind} draft={Boolean(draftObject)} dispatch={dispatch}
+                    commandHandlers={commandHandlers} onClose={closePainting} />
+                </Suspense>}
               </div>,
             ),
             inspector: inspectorPane(
               <div className="stage-pane-stack character-inspector">
-                {toolsReady ? (
+                {creativeOpen ? <section className="character-setup-panel" aria-label="Painting selection">
+                  <div className="section-title">{draftObject ? "Object draft" : "Selected piece"}</div>
+                  <strong className="block mt-2">{paintOwner?.name}</strong>
+                  <span className="block mt-2 text-xs text-slate-500">{paintKind === "part" ? "Character part" : "Flat object"}</span>
+                </section> : toolsReady ? (
                   <Suspense fallback={
                     <CharacterInspectorPlaceholder
                       name={selectedSceneObject?.name ?? selectedEditablePart?.name ?? "No part"}

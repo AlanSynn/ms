@@ -17,7 +17,7 @@ import {
   validateProjectRasterSources,
 } from "./projectRasterImportPolicy";
 import { fitMechanismInWorkerJob } from "../fitting/mechanismFitJob";
-import { mechanismBoardPlacementErrors } from "../../utils/fabrication";
+import { mechanismBoardPlacementErrors } from "../../utils/fabricationValidation";
 
 export type ProjectImportInput =
   | { kind: "project"; file: File }

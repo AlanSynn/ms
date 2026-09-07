@@ -62,7 +62,7 @@ export const AssemblySceneFrame = ({
         <p className="section-title">Step {frame.stepIndex}</p>
         <h3>{frame.label}</h3>
       </div>
-      <span className="badge">{frame.motion === "scrub_time" ? "Test" : frame.explodeAxis === "z" ? "Add" : "Place"}</span>
+      <span className="badge">{frame.phase === "cut-object" ? "Cut" : frame.motion === "scrub_time" ? "Test" : frame.explodeAxis === "z" ? "Add" : "Place"}</span>
     </div>
     <p className="assembly-scene-instruction">{frame.instruction}</p>
     {frame.check && <p className="assembly-scene-check">Check: {frame.check}</p>}
@@ -83,11 +83,13 @@ export const AssemblySceneFrame = ({
       data-testid="assembly-scene-sensemaking"
       data-sensemaking-evidence={frame.mechanismContract ? "fabrication stack drives the Three build scene" : "character parts use the same Three build scene"}
     >
-      {frame.kind === "mechanism" ? "Mechanism stack" : "Character pins"}
+      {frame.kind === "mechanism" ? "Mechanism stack"
+        : frame.phase === "cut-object" || frame.phase === "place-object" ? "Object placement"
+        : "Character pins"}
     </div>
     <div className="assembly-scene-meta">
-      <span data-testid="assembly-active-board-coords">Board: {frameBoardText(frame)}</span>
-      <span data-testid="assembly-floating-references">Refs: {coordText(frame.floatingReferenceCoords)}</span>
+      {frame.boardMode !== "hidden" && <span data-testid="assembly-active-board-coords">Board: {frameBoardText(frame)}</span>}
+      {frame.floatingReferenceCoords.length > 0 && <span data-testid="assembly-floating-references">Refs: {coordText(frame.floatingReferenceCoords)}</span>}
       <span>Parts: {frame.visibleParts.length}</span>
     </div>
     <div className="assembly-scene-part-list" data-testid="assembly-scene-part-list">

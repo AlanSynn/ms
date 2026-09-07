@@ -32,7 +32,7 @@ const runtimeSurface = [
 
 assert.doesNotMatch(runtimeSurface, /Create from image|Get AI|onnx-input|onnx-cache-status/);
 assert.match(runtimeSurface, /Character file/);
-assert.match(runtimeSurface, /Add object/);
+assert.match(runtimeSurface, /Import object/);
 
 const scripts = packageJson.scripts as Record<string, string>;
 assert.match(scripts.build, /check-no-image-recognition\.mjs --source/);

@@ -26,6 +26,7 @@ import {
     pointInsideOutline
 } from '../utils/partGeometry';
 import { createSampleProject } from '../utils/project';
+import { convexOutline as convexHull } from '../utils/shapeEditing';
 import { circlePath, makePdfDocument, num, pdfText } from '../utils/simplePdf';
 
 type Piece = {
@@ -82,26 +83,6 @@ const boundsOf = (points: Point[]) => {
         width: Math.max(...xs) - Math.min(...xs),
         height: Math.max(...ys) - Math.min(...ys)
     };
-};
-
-const convexHull = (points: Point[]): Point[] => {
-    const sorted = [...points].sort((a, b) => a.x - b.x || a.y - b.y);
-    const cross = (o: Point, a: Point, b: Point) =>
-        (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-    const lower: Point[] = [];
-    for (const point of sorted) {
-        while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], point) <= 0) lower.pop();
-        lower.push(point);
-    }
-    const upper: Point[] = [];
-    for (let i = sorted.length - 1; i >= 0; i -= 1) {
-        const point = sorted[i];
-        while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], point) <= 0) upper.pop();
-        upper.push(point);
-    }
-    upper.pop();
-    lower.pop();
-    return lower.concat(upper);
 };
 
 /** Separating-axis intersection test for convex polygons. */

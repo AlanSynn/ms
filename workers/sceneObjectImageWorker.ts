@@ -17,7 +17,7 @@ worker.onmessage = async ({ data }) => {
     worker.postMessage({
       type: "result",
       generationId: data.generationId,
-      object: await runSceneObjectImageJob(data.file, data.objectId),
+      object: await runSceneObjectImageJob(data.file, data.objectId, data.project),
     });
   } catch (error) {
     worker.postMessage({

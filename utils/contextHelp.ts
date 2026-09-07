@@ -3,6 +3,8 @@ export type HelpLocale = "en";
 export type ContextHelpId =
   | "character.loadCharacterFile"
   | "character.loadObjectFile"
+  | "character.drawPaint"
+  | "character.drawObject"
   | "character.bodySides"
   | "path.draw"
   | "path.smoothness"
@@ -36,8 +38,20 @@ export const CONTEXT_HELP: Record<
   },
   "character.loadObjectFile": {
     en: {
-      title: "Object",
-      body: "Load one prop image here. Other tabs can move it, not create it.",
+      title: "Import object",
+      body: "Import one picture as an editable scene object.",
+    },
+  },
+  "character.drawPaint": {
+    en: {
+      title: "Draw & paint",
+      body: "Paint the selected piece. Change shape edits its cut outline.",
+    },
+  },
+  "character.drawObject": {
+    en: {
+      title: "Draw object",
+      body: "Draw one flat piece, then choose Add object to keep it.",
     },
   },
   "character.bodySides": {
@@ -84,8 +98,8 @@ export const CONTEXT_HELP: Record<
   },
   "blueprint.customParts": {
     en: {
-      title: "Character sheet",
-      body: "Print 1–2 letter pages with spaced character cut parts.",
+      title: "Character outlines",
+      body: "Clean character cut lines and holes. Use Build PDF to print artwork.",
     },
   },
   "blueprint.prefabKit": {
@@ -97,7 +111,7 @@ export const CONTEXT_HELP: Record<
   "assembly.steps": {
     en: {
       title: "Steps",
-      body: "Move one step at a time to see which part goes on the board next.",
+      body: "See the next part, attachment, or object placement.",
     },
   },
   "options.devMode": {

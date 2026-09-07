@@ -161,6 +161,7 @@ const priorWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
 const priorDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
 let confirms = 0;
 let downloads = 0;
+let removedDownloads = 0;
 try {
   Object.defineProperty(globalThis, "window", { configurable: true, value: { confirm: () => { confirms += 1; return false; } } });
   Object.defineProperty(globalThis, "document", { configurable: true, value: {
@@ -172,11 +173,12 @@ try {
   Object.defineProperty(globalThis, "window", { configurable: true, value: { confirm: () => true } });
   assert.throws(() => confirmProjectReplacement(project, "Recover browser backup"), /Download should not start/);
   Object.defineProperty(globalThis, "document", { configurable: true, value: {
-    createElement: () => ({ click: () => { downloads += 1; } }),
+    createElement: () => ({ click: () => { downloads += 1; }, remove: () => { removedDownloads += 1; } }),
     body: { appendChild: () => {}, removeChild: () => {} },
   } });
   assert.equal(confirmProjectReplacement(project, "Open the prepared starter rig"), true);
   assert.equal(downloads, 1);
+  assert.equal(removedDownloads, 1, "temporary download links are released");
 } finally {
   for (const [key, descriptor] of [["window", priorWindow], ["document", priorDocument]] as const) {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);

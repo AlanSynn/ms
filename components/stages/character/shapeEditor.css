@@ -1,0 +1,33 @@
+.shape-editor { width: min(880px, calc(100vw - 32px)); height: min(680px, calc(100dvh - 40px)); max-width: none; max-height: none; padding: 0; border: 1px solid #cbd3df; border-radius: 16px; color: #172033; background: #fff; box-shadow: 0 24px 90px #0f172a40; overflow: hidden; }
+.shape-editor[open] { display: flex; flex-direction: column; }
+.shape-editor::backdrop { background: #17203355; }
+.shape-editor-head { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; border-bottom: 1px solid #e1e6ec; }
+.shape-editor-head h2 { font-size: 17px; font-weight: 750; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; }
+.shape-editor-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 8px 12px; }
+.shape-editor-tools button, .shape-point-controls button { min-height: 34px; padding: 6px 8px; display: inline-flex; gap: 5px; align-items: center; border: 0; border-radius: 7px; background: transparent; font-size: 12px; font-weight: 650; white-space: nowrap; }
+.shape-editor-tools button:hover, .shape-point-controls button:hover { background: #edf1f7; }
+.shape-editor-tools button[aria-pressed=true] { background: #e7efff; color: #1d4ed8; }
+.shape-editor-surface { position: relative; flex: 1; min-height: 180px; overflow: hidden; background-color: #f1f3f6; background-image: radial-gradient(#cbd1d9 .7px, transparent .7px); background-size: 16px 16px; }
+.shape-editor-surface canvas, .shape-editor-canvas, .shape-source-guide { width: 100%; height: 100%; position: absolute; inset: 0; display: block; }
+.shape-source-guide { pointer-events: none; opacity: .3; }
+.shape-editor-surface canvas { pointer-events: none; }
+.shape-editor-canvas { touch-action: none; }
+.shape-editor-canvas.tool-draw { cursor: crosshair; }
+.shape-editor-canvas.tool-pan { cursor: grab; }
+.shape-original { fill: none; stroke: #7b8799; stroke-width: 1; stroke-dasharray: 4 4; opacity: .6; pointer-events: none; }
+.shape-candidate { fill: none; stroke: #2457c7; stroke-width: 2; pointer-events: none; }
+.shape-candidate.invalid { stroke: #bd3c34; }
+.shape-draft { fill: none; stroke: #1d4ed8; stroke-width: 2; stroke-dasharray: 4 3; pointer-events: none; }
+.shape-handle { fill: #fff; stroke: #2457c7; stroke-width: 1.5; cursor: grab; }
+.shape-handle.selected { fill: #2457c7; stroke: #fff; stroke-width: 2; }
+.shape-handle:focus-visible { outline: none; stroke: #0f172a; stroke-width: 3; }
+.shape-attachment circle { fill: #fff; stroke: #7a4c19; stroke-width: 1.4; }
+.shape-attachment path { fill: none; stroke: #7a4c19; stroke-width: 1; }
+.shape-editor-status { position: absolute; bottom: 10px; left: 12px; right: 12px; border: 1px solid #d4b06a; border-radius: 7px; background: #fff5d9; padding: 8px 11px; font-size: 12px; pointer-events: none; }
+.shape-editor-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border-top: 1px solid #e1e6ec; }
+.shape-point-controls { display: flex; gap: 3px; }
+.shape-editor-footer label { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 650; }
+.shape-editor-footer input { width: 90px; }
+.shape-editor button:disabled { opacity: .4; cursor: default; }
+.shape-editor button:focus-visible, .shape-editor input:focus-visible { outline: 2px solid #3563dc; outline-offset: 2px; }
+@media(max-width: 700px) { .shape-editor-head { padding: 10px 12px; }.shape-editor-tools { gap: 2px; }.shape-editor-footer label { display: none; } }

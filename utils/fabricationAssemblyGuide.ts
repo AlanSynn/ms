@@ -118,8 +118,10 @@ const readableBuildStepCoordinate = (step: BuildPlanStepV1, recipe?: Fabrication
     return step.coords.length ? step.coords.join(', ') : 'no board coordinate';
 };
 
+const isObjectStep = (step: BuildPlanStepV1) => step.phase === 'cut-object' || step.phase === 'place-object';
+
 const buildStepHtml = (step: BuildPlanStepV1, recipe?: FabricationRecipe) =>
-    `<li class="assembly-step" data-build-step-ref="${htmlEsc(step.id)}" style="--i:${step.index}"><strong>${step.index}. ${htmlEsc(step.label)}</strong><span>${htmlEsc(step.instruction)}</span><em>${htmlEsc(step.phase)} · ${htmlEsc(readableBuildStepCoordinate(step, recipe))} · Z ${step.zMm.toFixed(1)}mm</em>${step.check ? `<small>${htmlEsc(step.check)}</small>` : ''}</li>`;
+    `<li class="assembly-step" data-build-step-ref="${htmlEsc(step.id)}" style="--i:${step.index}"><strong>${step.index}. ${htmlEsc(step.label)}</strong><span>${htmlEsc(step.instruction)}</span>${isObjectStep(step) ? '' : `<em>${htmlEsc(step.phase)} · ${htmlEsc(readableBuildStepCoordinate(step, recipe))} · Z ${step.zMm.toFixed(1)}mm</em>`}${step.check ? `<small>${htmlEsc(step.check)}</small>` : ''}</li>`;
 
 export const makeAssemblyGuideHtmlFromBuildPlan = (plan: BuildPlanV1) => {
     const characterSteps = buildPlanSectionSteps(plan, plan.character.id);
@@ -144,6 +146,7 @@ ${makeExplodedStackSvg(recipe, htmlEsc)}
 <h3>Assembly steps</h3><ol class="stepper" data-testid="prefab-assembly-steps">${steps.map(step => buildStepHtml(step, recipe)).join('')}</ol>
 </section>`;
     }).join('');
+    const objectSection = plan.objects.parts.length ? `<section data-build-section="objects"><h2>Object placement</h2><p><strong>Pieces:</strong> ${plan.objects.parts.map(part => htmlEsc(part.name)).join(', ')}</p><ol class="stepper">${buildPlanSectionSteps(plan, 'objects').map(step => buildStepHtml(step)).join('')}</ol></section>` : '';
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${htmlEsc(plan.projectName)} assembly</title><style>
 body{margin:0;background:#f8f9ff;color:#172033;font-family:Inter,Arial,sans-serif;}
 .page{max-width:980px;margin:0 auto;padding:28px;}
@@ -159,19 +162,19 @@ section{break-inside:avoid;margin:18px 0;padding:20px;border:1px solid #dbe3f0;b
 li{margin:.32rem 0;line-height:1.42;}
 .stepper{display:grid;gap:10px;padding-left:0;list-style:none}.assembly-step{display:grid;gap:3px;border:1px solid #dbe3f0;border-radius:16px;padding:10px 12px;background:linear-gradient(135deg,#fff,#f8f9ff);animation:step-rise .8s ease both;animation-delay:calc(var(--i) * 90ms)}.assembly-step span{font-weight:750;color:#334155}.assembly-step em,.assembly-step small{font-style:normal;color:#64748b;font-weight:800;font-size:12px}@keyframes step-rise{from{opacity:.25;transform:translateY(12px)}to{opacity:1;transform:none}}
 @media print{body{background:#fff}.page{max-width:none;padding:10mm}.print-actions{display:none}.exploded-guide,section{box-shadow:none}section{page-break-inside:avoid}}
-</style></head><body><main class="page" data-build-plan-digest="${htmlEsc(plan.sourceDigest)}"><div class="print-actions"><strong>Printable assembly guide</strong><button onclick="window.print()">Print guide</button></div><h1>${htmlEsc(plan.projectName)} assembly guide</h1><p class="subtitle">Profile ${htmlEsc(plan.profile.profileKey)} · ${plan.profile.gridPitchMm}mm grid · ${plan.mechanisms.length} mechanism${plan.mechanisms.length === 1 ? '' : 's'}.</p>${plan.warnings.map(warning => `<p class="warning"><strong>Fix:</strong> ${htmlEsc(warning)}</p>`).join('')}${characterSection}${mechanismSections}</main></body></html>`;
+</style></head><body><main class="page" data-build-plan-digest="${htmlEsc(plan.sourceDigest)}"><div class="print-actions"><strong>Printable assembly guide</strong><button onclick="window.print()">Print guide</button></div><h1>${htmlEsc(plan.projectName)} assembly guide</h1><p class="subtitle">Profile ${htmlEsc(plan.profile.profileKey)} · ${plan.profile.gridPitchMm}mm grid · ${plan.mechanisms.length} mechanism${plan.mechanisms.length === 1 ? '' : 's'}.</p>${plan.warnings.map(warning => `<p class="warning"><strong>Fix:</strong> ${htmlEsc(warning)}</p>`).join('')}${characterSection}${objectSection}${mechanismSections}</main></body></html>`;
 };
 
 const pdfStepLine = (step: BuildPlanStepV1, recipe?: FabricationRecipe) =>
-    `Step ${step.index}: ${step.label} / ${readableBuildStepCoordinate(step, recipe)} / Z ${step.zMm.toFixed(1)}mm / ${step.instruction}${step.check ? ` / Check: ${step.check}` : ''}`;
+    `Step ${step.index}: ${step.label} / ${isObjectStep(step) ? '' : `${readableBuildStepCoordinate(step, recipe)} / Z ${step.zMm.toFixed(1)}mm / `}${step.instruction}${step.check ? ` / Check: ${step.check}` : ''}`;
 
 export const makeAssemblyGuidePdfPageContentsFromBuildPlan = (plan: BuildPlanV1) => makeSimplePdfPageContents(
     `${plan.projectName} Printable assembly guide`,
     [
         `Build plan ${plan.sourceDigest}`,
-        'Exploded view / Base board below / Module stack low-Z to high-Z',
-        'Character sheet: print the 1-2 letter pages from Blueprint before pinning.',
-        `Profile ${plan.profile.profileKey} / ${plan.profile.gridPitchMm}mm grid / ${plan.mechanisms.length} mechanisms`,
+        ...(plan.mechanisms.length ? ['Exploded view / Base board below / Module stack low-Z to high-Z'] : []),
+        'Print painted cut sheets at 100% scale before cutting.',
+        ...(plan.character.parts.length || plan.mechanisms.length ? [`Profile ${plan.profile.profileKey} / ${plan.profile.gridPitchMm}mm grid / ${plan.mechanisms.length} mechanisms`] : []),
         ...plan.warnings.map(warning => `Warning: ${warning}`),
         ...(plan.character.parts.length ? [
             'Character assembly',
@@ -179,7 +182,11 @@ export const makeAssemblyGuidePdfPageContentsFromBuildPlan = (plan: BuildPlanV1)
             `Fixed pins: ${plan.character.fixedPins.map(pin => `${pin.label} ${pin.boardCoordinate ?? 'board pin'}`).join(', ') || 'none'}`,
             ...buildPlanSectionSteps(plan, plan.character.id).map(step => pdfStepLine(step))
         ] : []),
-        'Path projection / Z=0 Base / washer- or spacer-separated moving layers',
+        ...(plan.objects.parts.length ? [
+            'Object placement',
+            ...buildPlanSectionSteps(plan, 'objects').map(step => pdfStepLine(step)),
+        ] : []),
+        ...(plan.mechanisms.length ? ['Path projection / Z=0 Base / washer- or spacer-separated moving layers'] : []),
         ...plan.mechanisms.flatMap(mechanism => {
             const recipe = mechanism.recipe;
             return [

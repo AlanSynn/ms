@@ -1,3 +1,5 @@
+import { ARTWORK_LIMITS, artworkPointCount, normalizeArtworkDocument } from '../../utils/artwork';
+
 const MEBIBYTE = 1024 * 1024;
 
 export const PROJECT_IMPORT_LIMITS = Object.freeze({
@@ -264,8 +266,15 @@ export const validateProjectImportShape = (value: unknown) => {
   );
 
   let totalContourPoints = 0;
+  let totalArtworkOperations = 0;
+  let totalArtworkPoints = 0;
   for (const item of [...Object.values(parts), ...Object.values(sceneObjects)]) {
     const record = asRecord(item);
+    const artwork = normalizeArtworkDocument(record.artwork, { textureUrl: record.textureUrl });
+    if (artwork) {
+      totalArtworkOperations += artwork.operations.length;
+      totalArtworkPoints += artworkPointCount(artwork);
+    }
     const contour = record.contourPoints ?? record.contour_points;
     const count = Array.isArray(contour) ? contour.length : 0;
     assertMaximum(
@@ -280,6 +289,8 @@ export const validateProjectImportShape = (value: unknown) => {
     PROJECT_IMPORT_LIMITS.totalContourPoints,
     "Total contour points",
   );
+  assertMaximum(totalArtworkOperations, ARTWORK_LIMITS.totalProjectOperations, 'Total artwork operations');
+  assertMaximum(totalArtworkPoints, ARTWORK_LIMITS.totalProjectPoints, 'Total artwork points');
   validateObjectGraph(
     project,
     PROJECT_IMPORT_LIMITS.objectGraphDepth,

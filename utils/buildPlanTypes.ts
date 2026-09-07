@@ -1,19 +1,23 @@
 import type {
     AssemblyStepStackItem,
+    Bounds,
     FabricationRecipe,
     MechanismConfig,
     PhysicalKitSettings,
-    Point
+    Point,
+    Transform
 } from '../types';
 
 export const BUILD_PLAN_SCHEMA_V1 = 'motionsmith.build-plan.v1' as const;
 
 export type BuildPlanScopeV1 = 'complete' | 'character';
 export type BuildPlanLaneV1 = 'kit' | 'custom';
-export type BuildPlanPartKindV1 = 'character' | 'mechanism';
-export type BuildPlanStepScopeV1 = 'character' | 'mechanism';
+export type BuildPlanPartKindV1 = 'character' | 'object' | 'mechanism';
+export type BuildPlanStepScopeV1 = 'character' | 'object' | 'mechanism';
 export type BuildPlanStepPhaseV1 =
     | 'character-parts'
+    | 'cut-object'
+    | 'place-object'
     | 'fixed-pins'
     | 'free-pivots'
     | 'attach-character'
@@ -33,6 +37,7 @@ export type BuildPlanPartV1 = {
     displayName: string;
     quantity: number;
     sourcePartId?: string;
+    sourceSceneObjectId?: string;
     mechanismId?: string;
     category?: string;
     key?: string;
@@ -74,6 +79,27 @@ export type BuildPlanCharacterPartV1 = {
     fillColor: string;
     outline: Point[];
     pivot: Point;
+    /** Authoritative owner-local Y-up to scene transform, shared with print placement. */
+    localToScene: Transform;
+    artwork: BuildPlanArtworkV1;
+};
+
+export type BuildPlanArtworkV1 = {
+    ownerKind: 'part' | 'scene-object';
+    ownerId: string;
+    revision: string;
+    frame: Bounds;
+};
+
+export type BuildPlanObjectPartV1 = Omit<BuildPlanCharacterPartV1, 'sourcePartId'> & {
+    sourceSceneObjectId: string;
+};
+
+export type BuildPlanObjectsV1 = {
+    id: 'objects';
+    parts: BuildPlanObjectPartV1[];
+    partRefs: string[];
+    stepIds: string[];
 };
 
 export type BuildPlanBoardPointV1 = {
@@ -194,6 +220,7 @@ export type BuildPlanV1 = {
     scope: BuildPlanScopeV1;
     lane: BuildPlanLaneV1;
     sourceDigest: string;
+    artworkSourceDigest: string;
     source: {
         projectId: string;
         projectVersion: 1 | 2;
@@ -203,6 +230,7 @@ export type BuildPlanV1 = {
     warnings: string[];
     parts: BuildPlanPartV1[];
     character: BuildPlanCharacterV1;
+    objects: BuildPlanObjectsV1;
     motions: BuildPlanMotionPathV1[];
     mechanisms: BuildPlanMechanismV1[];
     sections: BuildPlanSectionV1[];

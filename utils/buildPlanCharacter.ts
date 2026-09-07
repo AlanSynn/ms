@@ -1,9 +1,11 @@
 import type { BodyPartLayer, Point, ProjectState } from '../types';
 import { bodyPartPivotScene, sceneToBoardRaw } from './coordinates';
-import { fabricablePartOutlinePoints, partLandmarkJointIds, partLandmarkLocalPoints } from './partGeometry';
+import { fabricablePartOutlinePoints, partLandmarkLocalPoints } from './partGeometry';
+import { buildTargetArtworkReference } from './buildPlanArtwork';
+import { characterPinPlan, type CharacterPin } from './characterPinPlan';
 import type {
-    BuildPlanCharacterPinV1,
     BuildPlanCharacterV1,
+    BuildPlanCharacterPinV1,
     BuildPlanPartV1,
     BuildPlanSectionV1,
     BuildPlanStepV1
@@ -12,6 +14,8 @@ import type {
 const characterPartRef = (partId: string) => `character:part:${encodeURIComponent(partId)}`;
 const characterPinRef = (role: BuildPlanCharacterPinV1['role'], jointId: string) =>
     `character:pin:${role}:${encodeURIComponent(jointId)}`;
+const titleCaseJointLabel = (jointId: string) =>
+    jointId.replace(/[_-]/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
 
 const transformPartLocalPoint = (part: BodyPartLayer, point: Point): Point => {
     const angle = (part.transform.rotation * Math.PI) / 180;
@@ -23,9 +27,6 @@ const transformPartLocalPoint = (part: BodyPartLayer, point: Point): Point => {
         y: part.transform.y + x * Math.sin(angle) + y * Math.cos(angle)
     };
 };
-
-const titleCaseJointLabel = (jointId: string) =>
-    jointId.replace(/[_-]/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
 
 export type CharacterBuildSectionV1 = {
     character: BuildPlanCharacterV1;
@@ -57,56 +58,30 @@ export const buildCharacterBuildSectionV1 = (project: ProjectState): CharacterBu
     const skeleton = project.skeleton;
     if (!skeleton) return emptyCharacterSection(project.settings.physicalKit.boardCells);
 
-    const visibleParts = project.partOrder
-        .map(id => project.parts[id])
-        .filter((part): part is BodyPartLayer => Boolean(part) && part.visible !== false);
-    const jointToParts = new Map<string, BodyPartLayer[]>();
-    for (const part of visibleParts) {
-        const jointIds = new Set([part.anchorJointId, ...partLandmarkJointIds(part, skeleton)]);
-        for (const jointId of jointIds) {
-            if (!skeleton.joints[jointId]) continue;
-            const parts = jointToParts.get(jointId) ?? [];
-            parts.push(part);
-            jointToParts.set(jointId, parts);
-        }
-    }
-
-    const anchorJointIds = [...new Set(
-        visibleParts.map(part => part.anchorJointId).filter(jointId => Boolean(skeleton.joints[jointId]))
-    )];
-    const fixedJointIds = [...new Set([
-        ...anchorJointIds.filter(jointId => skeleton.joints[jointId]?.locked),
-        'hip',
-        'torso',
-        ...skeleton.rootJointIds,
-        anchorJointIds[0]
-    ].filter((jointId): jointId is string => Boolean(jointId && skeleton.joints[jointId])))]
-        .slice(0, Math.min(2, Math.max(1, anchorJointIds.length)));
-    const fixedSet = new Set(fixedJointIds);
-    const createPin = (jointId: string, role: BuildPlanCharacterPinV1['role']): BuildPlanCharacterPinV1 => {
+    const pinPlan = characterPinPlan(project);
+    const { visibleParts } = pinPlan;
+    const buildPin = (pin: CharacterPin, role: BuildPlanCharacterPinV1['role']): BuildPlanCharacterPinV1 => {
+        const jointId = pin.jointId;
         const joint = skeleton.joints[jointId];
-        const parts = jointToParts.get(jointId) ?? visibleParts.filter(part => part.anchorJointId === jointId);
-        const board = role === 'fixed_pin' ? sceneToBoardRaw(joint.position, project.settings.physicalKit) : undefined;
+        const board = role === 'fixed_pin' ? sceneToBoardRaw(pin.scene, project.settings.physicalKit) : undefined;
         return {
             id: `${role}-${jointId}`,
             ref: characterPinRef(role, jointId),
             jointId,
             label: joint.name || titleCaseJointLabel(jointId),
             role,
-            scene: { ...joint.position },
+            scene: pin.scene,
             boardCoordinate: board?.valid ? board.label : undefined,
             board: board ? { ...board } : undefined,
-            partIds: [...new Set(parts.map(part => part.id))],
-            partNames: [...new Set(parts.map(part => part.name))],
+            partIds: pin.partIds,
+            partNames: pin.partNames,
             stack: role === 'fixed_pin'
                 ? ['board', 'paper fastener', 'spacer', 'character part', 'retaining clip']
                 : ['character part', 'free washer', 'retaining clip']
         };
     };
-    const fixedPins = fixedJointIds.map(jointId => createPin(jointId, 'fixed_pin'));
-    const freePivots = anchorJointIds
-        .filter(jointId => !fixedSet.has(jointId))
-        .map(jointId => createPin(jointId, 'free_pivot'));
+    const fixedPins = pinPlan.fixedPins.map(pin => buildPin(pin, 'fixed_pin'));
+    const freePivots = pinPlan.freePivots.map(pin => buildPin(pin, 'free_pivot'));
 
     const characterParts = visibleParts.map(part => {
         const localJoints = partLandmarkLocalPoints(part, skeleton);
@@ -120,7 +95,9 @@ export const buildCharacterBuildSectionV1 = (project: ProjectState): CharacterBu
             name: part.name,
             fillColor: part.fillColor ?? '#cbd5e1',
             outline,
-            pivot: bodyPartPivotScene(part, skeleton)
+            pivot: bodyPartPivotScene(part, skeleton),
+            localToScene: { ...part.transform },
+            artwork: buildTargetArtworkReference(part, 'part')
         };
     }).filter((part): part is NonNullable<typeof part> => Boolean(part));
     const partRefsById = new Map(characterParts.map(part => [part.sourcePartId, part.ref]));
@@ -190,4 +167,3 @@ export const buildCharacterBuildSectionV1 = (project: ProjectState): CharacterBu
         section: { id: 'character', kind: 'character', label: 'Character', partRefs, stepIds }
     };
 };
-

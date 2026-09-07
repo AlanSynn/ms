@@ -4,7 +4,7 @@ import type {
   ProjectMotionPath,
   ProjectState,
 } from "../types";
-import { validateForFabrication } from "./fabrication";
+import { validateForFabrication } from "./fabricationValidation";
 import { resolvedMechanismOutputBindings } from "./mechanismBindings";
 
 export type WorkflowStatus = {
@@ -17,7 +17,7 @@ export const workflowStatusFor = (
   stage: AppStage,
   stageLabel: string,
   project: ProjectState,
-  selectedPart?: BodyPartLayer,
+  selectedTarget?: Pick<BodyPartLayer, "name" | "locked">,
   selectedPath?: ProjectMotionPath,
 ): WorkflowStatus => {
   const enabledMechanisms = project.mechanisms.filter(
@@ -27,12 +27,12 @@ export const workflowStatusFor = (
   let nextAction = "Keep going";
   if (stage === "project") {
     nextAction = "Save or open";
-  } else if (!project.partOrder.length) {
+  } else if (!project.partOrder.length && !project.sceneObjectOrder.some(id => project.sceneObjects[id])) {
     blocker = "No character";
     nextAction = "Load character";
   } else if (stage === "path") {
-    blocker = selectedPart?.locked
-      ? `${selectedPart.name} locked`
+    blocker = selectedTarget?.locked
+      ? `${selectedTarget.name} locked`
       : selectedPath && selectedPath.points.length >= 3
         ? "OK"
         : "Need 3 points";

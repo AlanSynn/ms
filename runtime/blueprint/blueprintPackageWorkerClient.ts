@@ -1,4 +1,4 @@
-import type { ProjectState } from "../../types";
+import type { FabricationPackage, ProjectState } from "../../types";
 import type { BuildPlanLaneV1 } from "../../utils/buildPlan";
 import { projectContentFingerprint } from "../../utils/projectSerialization";
 import type {
@@ -22,6 +22,17 @@ export type BlueprintPackageWorkerFactory = () => BlueprintPackageWorkerPort;
 export type BlueprintPackageFrameScheduler = {
   requestFrame(callback: FrameRequestCallback): number;
   cancelFrame(handle: number): void;
+};
+
+export type BlueprintPackageFinalizer = (
+  fabricationPackage: FabricationPackage,
+  source: ProjectState,
+  options: { signal: AbortSignal },
+) => Promise<FabricationPackage>;
+
+const finalizePaintedPackage: BlueprintPackageFinalizer = async (fabricationPackage, source, options) => {
+  const { createPaintedBlueprintPackage } = await import('./blueprintPaintedPackage');
+  return createPaintedBlueprintPackage(fabricationPackage, source, options);
 };
 
 const browserWorkerFactory: BlueprintPackageWorkerFactory = () =>
@@ -57,6 +68,7 @@ const projectForWorker = (
 export const createBlueprintPackageWorkerClient = (
   workerFactory: BlueprintPackageWorkerFactory = browserWorkerFactory,
   frameScheduler: BlueprintPackageFrameScheduler = browserFrameScheduler,
+  finalizePackage: BlueprintPackageFinalizer = finalizePaintedPackage,
 ) => {
   let generationSequence = 0;
   let active:
@@ -65,6 +77,7 @@ export const createBlueprintPackageWorkerClient = (
         sourceProject: ProjectState;
         sourceProjectFingerprint: string;
         project: ProjectState;
+        controller: AbortController;
         firstFrame?: number;
         secondFrame?: number;
         worker?: BlueprintPackageWorkerPort;
@@ -73,6 +86,7 @@ export const createBlueprintPackageWorkerClient = (
 
   const releaseActive = () => {
     if (!active) return;
+    active.controller.abort();
     if (active.firstFrame !== undefined) {
       frameScheduler.cancelFrame(active.firstFrame);
     }
@@ -107,6 +121,7 @@ export const createBlueprintPackageWorkerClient = (
       sourceProject: project,
       sourceProjectFingerprint,
       project: projectForWorker(project),
+      controller: new AbortController(),
     };
 
     const startWorker = () => {
@@ -126,24 +141,34 @@ export const createBlueprintPackageWorkerClient = (
         releaseWorker(worker);
         callbacks.failed(new Error(message));
       };
-      worker.onmessage = ({ data }) => {
+      worker.onmessage = async ({ data }) => {
         if (
           !active ||
           active.worker !== worker ||
           data.generationId !== generationId
         ) return;
         const sourceProject = active.sourceProject;
-        active = undefined;
+        const signal = active.controller.signal;
+        active.worker = undefined;
         releaseWorker(worker);
-        if (data.type === "error") callbacks.failed(new Error(data.message));
-        else if (data.type === "result") callbacks.complete({
-          ...data,
-          fabricationPackage: restoreBlueprintPackageSceneArtwork(
-            data.fabricationPackage,
-            sourceProject,
-          ),
-        });
-        else callbacks.complete(data);
+        try {
+          if (data.type === "error") throw new Error(data.message);
+          const result = data.type === "result" ? {
+            ...data,
+            fabricationPackage: await finalizePackage(
+              restoreBlueprintPackageSceneArtwork(data.fabricationPackage, sourceProject),
+              sourceProject,
+              { signal },
+            ),
+          } : data;
+          if (!active || active.generationId !== generationId || signal.aborted) return;
+          active = undefined;
+          callbacks.complete(result);
+        } catch (error) {
+          if (!active || active.generationId !== generationId || signal.aborted) return;
+          active = undefined;
+          callbacks.failed(error instanceof Error ? error : new Error(String(error)));
+        }
       };
       worker.onmessageerror = () => fail("Blueprint worker returned unreadable data.");
       worker.onerror = (event) => fail(event.message || "Blueprint worker failed.");

@@ -100,7 +100,7 @@ export const AssemblyControlPanel = ({
           disabled={!hasCharacterAssembly}
           onClick={() => setAssemblyMode("character")}
         >
-          Character
+          {project.partOrder.some(id => project.parts[id]) ? "Character" : "Objects"}
         </button>
       </div>
       {activeAssemblyMode === "mechanism" && (

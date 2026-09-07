@@ -12,7 +12,8 @@ import {
 } from "../../../runtime/blueprint/BlueprintModel";
 import { createBlueprintPackageWorkerClient } from "../../../runtime/blueprint/blueprintPackageWorkerClient";
 import { downloadText } from "../../../utils/project";
-import { buildPlanSourceDigest } from "../../../utils/buildPlan";
+import { downloadPdf } from "../../../utils/pdfDownload";
+import { buildPlanArtworkSourceDigest, buildPlanSourceDigest } from "../../../utils/buildPlan";
 import { projectContentFingerprint } from "../../../utils/projectSerialization";
 import {
   EditorStageFrame,
@@ -55,20 +56,26 @@ export const BlueprintExport = ({
   useEffect(() => () => packageClient.dispose(), [packageClient]);
   const sourceProjectFingerprint = projectContentFingerprint(project);
   const expectedBuildPlanDigest = buildPlanSourceDigest(project);
+  const expectedArtworkDigest = buildPlanArtworkSourceDigest(project);
   const expectedCharacterPlanDigest = buildPlanSourceDigest(project, "character");
   const currentPackage = pkg?.sourceProjectFingerprint === sourceProjectFingerprint &&
-    pkg.buildPlanSourceDigest === expectedBuildPlanDigest
+    pkg.buildPlanSourceDigest === expectedBuildPlanDigest &&
+    pkg.buildPlanArtworkSourceDigest === expectedArtworkDigest
     ? pkg
     : undefined;
   const downloadBlueprint = (fabricationPackage: NonNullable<typeof pkg>) => {
-    const pdf = fabricationPackage.blueprintPdf ?? fabricationPackage.cutSheetPdf;
-    if (!pdf) return false;
-    downloadText(
-      `${fabricationPackage.id}-blueprint.pdf`,
-      pdf,
-      "application/pdf",
-    );
-    return true;
+    const pdf = fabricationPackage.buildPacketPdf;
+    if (!pdf) {
+      setPackageError("Build file missing. Download Build PDF again.");
+      return false;
+    }
+    try {
+      downloadPdf(`${fabricationPackage.id}-build.pdf`, pdf);
+      return true;
+    } catch (error) {
+      setPackageError(`PDF download failed: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
   };
   const create = () => {
     if (stlStatus === "running" || characterTemplateStatus === "running") return;
@@ -77,25 +84,29 @@ export const BlueprintExport = ({
       setPackageStatus("idle");
       return;
     }
-    if (currentPackage && downloadBlueprint(currentPackage)) return;
     setPackageError(undefined);
+    if (currentPackage) {
+      downloadBlueprint(currentPackage);
+      return;
+    }
     setPackageStatus("running");
     const sourceFingerprint = projectContentFingerprint(project);
     packageClient.request(project, {
       complete: ({ fabricationPackage }) => {
         setPackageStatus("idle");
         if (projectContentFingerprint(latestProjectRef.current) !== sourceFingerprint) {
-          setPackageError("Project changed. Download Blueprint PDF again.");
+          setPackageError("Project changed. Download Build PDF again.");
           return;
         }
         if (
           fabricationPackage.sourceProjectFingerprint !== sourceFingerprint ||
           fabricationPackage.buildPlanSourceDigest !== expectedBuildPlanDigest ||
-          !downloadBlueprint(fabricationPackage)
+          fabricationPackage.buildPlanArtworkSourceDigest !== expectedArtworkDigest
         ) {
-          setPackageError("Project changed. Download Blueprint PDF again.");
+          setPackageError("Project changed. Download Build PDF again.");
           return;
         }
+        if (!downloadBlueprint(fabricationPackage)) return;
         startTransition(() => dispatch({
           type: "set_export",
           fabricationPackage,
@@ -154,7 +165,7 @@ export const BlueprintExport = ({
       complete: ({ customPartsStl }) => {
         setStlStatus("idle");
         if (projectContentFingerprint(latestProjectRef.current) !== sourceFingerprint) {
-          setStlError("Project changed. Download Blueprint PDF again.");
+          setStlError("Project changed. Download Build PDF again.");
           return;
         }
         downloadText(
@@ -217,6 +228,7 @@ export const BlueprintExport = ({
             </div>
             <BlueprintBuildPreview
               buildPlan={buildPlan}
+              project={project}
               selectedMechanism={selectedBuildMechanism}
               onSelectMechanism={setSelectedRecipeId}
             />

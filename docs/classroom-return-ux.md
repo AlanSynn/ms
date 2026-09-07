@@ -45,6 +45,8 @@ Read/validate a candidate before committing replacement. Preserve the existing r
 
 Keep the current portable format and embedded assets. Share safe candidate validation between Save and Open; do not make browser-backup capacity a portable-file validity rule. Character-only and path-only projects remain valid. File operations work when browser storage fails. Label browser downloads as initiated downloads, not proven overwrites or confirmed disk writes.
 
+The current artwork extension also preserves each part/object's versioned paint commands, stable owner-local frame, original embedded raster, base color, and separate physical cut contour. Save Project must reopen these as editable source, including a second edit/save/open cycle; a flattened preview is insufficient. Raster/Three/PDF caches stay transient. Unknown artwork versions and unsafe or missing referenced assets fail candidate validation while keeping current work. The [retained artwork ADR](adr/2026-09-07-retained-artwork-printing.md) defines the frame, clipping, and print contract.
+
 Discover recovery without committing it or rotating its storage. Authorize recovery writes only after a successful open/new/recover choice or an authored edit; presentation, startup previews, import progress, errors, and delayed callbacks do not authorize writes. Preserve the existing newest/previous rotation policy once a project is chosen. Report actual backup state instead of a constant success chip.
 
 ### Working Project overview
@@ -53,7 +55,7 @@ Reuse the Design preview boundary and Foundry scene for configured mechanism con
 
 Fit the camera to visible character/paths, with an explicit full-scene fit. Reuse camera controls and preserve view state where practical. Project has no editing handles or parameter controls; Edit paths uses ordinary navigation. Pass the same clock/phase as Design. Keep one mounted viewer and no render loop per path.
 
-Without a mechanism, reuse the existing Path/Puppet character and path-preview pipeline with editing handles disabled. Do not create a sentinel mechanism or inherit Design's Add a mechanism guard. Character-only shows its actual character; empty work shows restrained file/create actions. Keep Blueprint's fabrication scene and exports unchanged.
+Without a mechanism, reuse the existing Path/Puppet character and path-preview pipeline with editing handles disabled. Do not create a sentinel mechanism or inherit Design's Add a mechanism guard. Character-only shows its actual character; empty work shows restrained file/create actions. Blueprint uses the canonical fabrication geometry and can print painted character parts or explicitly cuttable objects before fitting a mechanism.
 
 ### Multiple paths
 
@@ -67,6 +69,7 @@ Use one readiness definition for inventory, playback, and fitting. The existing 
 
 - Startup: unseen/acknowledged update × Getting Started shown/suppressed × backup absent/present; ordering, one dialog, dismissal/focus, storage fallbacks, manual reopen, and no recovery overwrite.
 - Files: real UI Save bytes → clean profile Open → edit → Save → another clean Open, with embedded artwork, two paths, and a supported mechanism; repeat character-only/path-only.
+- Artwork return: partial erase/repaint ordering, shape shrink/grow clipping, original raster detail, stable owner frame, and cuttable prop identity survive file-only continuation. Compare actual shared-renderer pixels and downloaded PDF pages as well as serialized fields.
 - Safety: file wins over newer same-ID backup; delayed recovery/import loses authority after another choice/edit; canceled/invalid files, missing assets, failed writes, repeated selection, and replacement cancel preserve work/backup.
 - Scene: matched phase and comparable cameras in Project/Path/Design; actual parts, path IDs, targets, transforms, traces, and mechanism geometry; no-mechanism/character-only/empty states; inspect without saved-state drift.
 - Paths: draw A/B, cancel Add, switch/edit/undo B with A unchanged, gesture identity changes, both real arm transforms over time, pause, conflicts/incomplete paths, file round-trip, fitting and Assembly continuity.

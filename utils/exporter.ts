@@ -3,7 +3,8 @@ import { GlobalConfig, MechanismConfig, Point } from '../types';
 import { calculateLinkage, gearTrainCenters, gearTrainOutputRatio, gearTrainPitchRadii, generateCurvePoints, sampledCamProfileScale } from './kinematics';
 import { SCENE_PX_PER_MM, SCENE_VIEW, sceneToSvg } from './coordinates';
 import { finiteNumber, sanitizeHexColor, sanitizeMechanismRuntime, svgNumber } from './sanitize';
-import { fabricationGearPathD } from './fabrication';
+import { gearPathD } from './fabricationProfiles';
+export { gearPathD } from './fabricationProfiles';
 
 // --- DXF HELPER FUNCTIONS ---
 
@@ -29,7 +30,6 @@ const dxfPolyline = (points: Point[], layer: string = "TRACE", color: number = 3
 
 // --- SVG HELPER FUNCTIONS ---
 
-export const gearPathD = (radius: number) => fabricationGearPathD(radius, radius / SCENE_PX_PER_MM);
 
 const rawPath = (points: Point[]) => points.length ? `M ${points.map(p => `${svgNumber(p.x)} ${svgNumber(p.y)}`).join(' L ')}` : '';
 const camProfilePoints = (center: Point, radius: number, samples?: number[], steps = 64) => Array.from({ length: steps }, (_, index) => {

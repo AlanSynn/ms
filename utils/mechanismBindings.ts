@@ -7,6 +7,7 @@ import type {
     ProjectMotionPath,
     ProjectState,
 } from '../types';
+import { describeMotionChain, motionMovingJointIds } from './motionChains';
 
 /** Existing authored bindings that this same mechanism would lose on commit. */
 export const replacedMechanismPathIds = (project: ProjectState, candidate: MechanismConfig): string[] => {
@@ -275,8 +276,23 @@ export const replacePrimaryMechanismOutputBinding = (
     return next ? mechanismWithOutputBindings(mechanism, [next, ...current.slice(1)]) : mechanism;
 };
 
+type BindingTargetProject = Pick<ProjectState, 'paths'> & Partial<Pick<ProjectState, 'parts' | 'skeleton'>>;
+
+const bindingMotionChain = (project: BindingTargetProject, binding: MechanismOutputBinding) => {
+    const path = project.paths[binding.pathId];
+    const partId = binding.targetPartId ?? path?.partId;
+    if (binding.targetSceneObjectId || path?.sceneObjectId || !partId || !project.parts || !project.skeleton) return undefined;
+    const chain = describeMotionChain(
+        { parts: project.parts, skeleton: project.skeleton },
+        partId,
+        binding.targetAnchorJointId ?? path?.targetAnchorJointId,
+        { rootJointId: path?.chainRootJointId },
+    );
+    return chain.kind === 'invalid' ? undefined : chain;
+};
+
 export const mechanismBindingTargetKey = (
-    project: Pick<ProjectState, 'paths'>,
+    project: BindingTargetProject,
     binding: MechanismOutputBinding,
 ) => {
     const path = project.paths[binding.pathId];
@@ -284,7 +300,29 @@ export const mechanismBindingTargetKey = (
     if (sceneObjectId) return `object:${sceneObjectId}`;
     const partId = binding.targetPartId ?? path?.partId;
     if (!partId) return undefined;
+    const chain = bindingMotionChain(project, binding);
+    if (chain) return `chain:${chain.rootJointId}:${chain.targetJointId}`;
     return `part:${partId}:${binding.targetAnchorJointId ?? path?.targetAnchorJointId ?? ''}`;
+};
+
+/** Physical outputs own moving joints regardless of the path's selected part. */
+export const mechanismBindingsConflict = (
+    project: BindingTargetProject,
+    left: MechanismOutputBinding,
+    right: MechanismOutputBinding,
+) => {
+    const a = bindingMotionChain(project, left);
+    const b = bindingMotionChain(project, right);
+    if (a && b && project.skeleton) {
+        const movingA = motionMovingJointIds(project.skeleton, a.jointIds);
+        const movingB = motionMovingJointIds(project.skeleton, b.jointIds);
+        const fixedA = a.jointCount > 1 ? a.rootJointId : undefined;
+        const fixedB = b.jointCount > 1 ? b.rootJointId : undefined;
+        return movingA.some(id => movingB.includes(id) || id === fixedB)
+            || movingB.some(id => id === fixedA);
+    }
+    const key = mechanismBindingTargetKey(project, left);
+    return Boolean(key && key === mechanismBindingTargetKey(project, right));
 };
 
 export type MechanismBindingAssignmentResult =
@@ -316,7 +354,7 @@ export const assignMechanismOutputBinding = (
             if (candidateBinding.pathId === binding.pathId) {
                 return { ok: false, project, code: 'path-conflict', reason: `Motion ${binding.pathId} already has a mechanism output.` };
             }
-            if (targetKey && mechanismBindingTargetKey(project, candidateBinding) === targetKey) {
+            if (mechanismBindingsConflict(project, binding, candidateBinding)) {
                 return { ok: false, project, code: 'target-conflict', reason: `Target ${targetKey} already has a mechanism output.` };
             }
         }

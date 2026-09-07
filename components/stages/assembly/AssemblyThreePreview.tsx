@@ -27,6 +27,7 @@ import type { AssemblySceneFrame } from "../../../utils/assemblySceneFrame";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 import { highResolutionSessionController } from "../../../runtime/render/adaptiveHighResolutionController";
 import { createTransientValueController } from "../../../runtime/render/transientValueController";
+import { AssemblyLocalPartsPreview } from "./AssemblyLocalPartsPreview";
 
 const assemblyMechanismForProject = (project: ProjectState) =>
   project.mechanisms.find((item) => item.id === project.selectedMechanismId) ??
@@ -288,9 +289,16 @@ export const AssemblyCharacterThreePreview = ({
         data-assembly-three-mode="character"
         data-assembly-three-phase={step.phase}
         data-assembly-three-progress={Math.round(progress * 100)}
+        data-assembly-frame-version={sceneFrame.version}
+        data-assembly-motion-kind={sceneFrame.motion}
+        data-assembly-explode-axis={sceneFrame.explodeAxis}
+        data-assembly-one-scene-automata="shown"
+        data-assembly-renderer="shared-local-parts"
         data-automata-model-source="automata-scene-runtime"
+        aria-label="3D character assembly preview"
       >
-        Add a mechanism.
+        <AssemblyLocalPartsPreview project={project} step={step} sceneFrame={sceneFrame}
+          progress={progress} playing={playing} />
       </section>
     );
   }

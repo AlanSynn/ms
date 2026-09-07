@@ -1,5 +1,6 @@
 import type { Point } from '../types';
 import { svgNumber } from './numberFormat';
+import { SCENE_PX_PER_MM } from './coordinates';
 import {
     FABRICATION_HOLE_RADIUS_MM,
     FABRICATION_RING_GEAR_SPEC,
@@ -83,6 +84,8 @@ export const fabricationGearPathD = (pitchRadius: number, presetPitchRadiusMm = 
         ...profile.attachmentHoleCenters.map(point => circlePathD(profile.axleHoleRadius, point.x, point.y))
     ].join(' ');
 };
+
+export const gearPathD = (radius: number) => fabricationGearPathD(radius, radius / SCENE_PX_PER_MM);
 
 export const fabricationRingGearProfileForPitchRadius = (pitchRadius: number): FabricationRingGearProfile => {
     const safePitchRadius = Math.max(0.001, Math.abs(pitchRadius));

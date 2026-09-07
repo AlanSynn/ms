@@ -45,6 +45,7 @@ export const AssemblyInspectorPanel = ({
   assessmentKey: string;
   goStage: (stage: AppStage) => void;
 }) => {
+  const objectStep = currentCharacterStep?.phase === "cut-object" || currentCharacterStep?.phase === "place-object";
   const selectedSensemaking =
     activeAssemblyMode === "mechanism" && selectedRecipe
       ? MECHANISM_LIBRARY[selectedRecipe.type].classroomSensemaking
@@ -71,16 +72,16 @@ export const AssemblyInspectorPanel = ({
         >
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="font-bold text-slate-800">Character fasteners</div>
-              <div className="text-sm text-slate-600">
+              <div className="font-bold text-slate-800">{objectStep ? "Object" : "Character fasteners"}</div>
+              {!objectStep && <div className="text-sm text-slate-600">
                 Board pins and moving joints
-              </div>
+              </div>}
             </div>
             <button className="chip" onClick={() => goStage("character")}>
               Edit
             </button>
           </div>
-          <div
+          {!objectStep && <><div
             className="mt-3 flex flex-wrap gap-2"
             data-testid="character-fixed-pin-callouts"
           >
@@ -112,7 +113,7 @@ export const AssemblyInspectorPanel = ({
                 {pin.label}
               </span>
             ))}
-          </div>
+          </div></>}
           {currentCharacterStep && (
             <div
               className="mt-3 rounded-2xl bg-white p-3 shadow-sm"

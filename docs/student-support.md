@@ -27,8 +27,12 @@ Representative queries and acceptable results are executable in `tests/feature-s
 |---|---|
 | keep this for next class; downlod proj; save my | Save Project |
 | continue yesterday's work; reopn; load file | Open Project |
-| paper body pieces; cut out my person; character PDF | Character PDF |
-| print; PDF | Blueprint PDF and Character PDF |
+| paper body pieces; cut out my person; character PDF | Character outlines PDF |
+| print my painting; print my prop; print my character | Download Build PDF |
+| print; PDF | Download Build PDF and Character outlines PDF |
+| paint a face; paint clothes; erase the middle; change shape | Draw & paint |
+| draw my own object; make a prop; draw a sign | Draw object |
+| import a picture; object image | Import object |
 | make the hand move; sketch movement; pathw | Draw path |
 | other arm; different body part | Motion target |
 | second motion; another path | Add motion |
@@ -44,6 +48,8 @@ Representative queries and acceptable results are executable in `tests/feature-s
 | weather tomorrow; pizza oven; xyzqv | No result; editable suggestion draft available |
 
 New destinations must name an existing annotated control, reuse its availability rules, and add paraphrase/partial/unknown query cases. Never surface hidden legacy commands or developer tools. Search queries stay on the device; a suggestion is editable text and is not transmitted until Send.
+
+Artwork destinations are `character.drawPaint` and `character.drawObject`; imported pictures retain `character.loadObjectFile` with the label Import object. These destinations reveal controls only. They do not open an editor, add a piece, apply paint, or start a file picker. A missing/locked selection keeps its compact prerequisite. Aliases describe supported retained brush/pencil, partial erase, line, filled rectangle/ellipse, base color, and physical-outline editing; they must not advertise flood fill, vector boolean tools, or whole-object raster tracing.
 
 ## Adding a release note
 

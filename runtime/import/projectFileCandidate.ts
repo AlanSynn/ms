@@ -3,6 +3,8 @@ import { loadProjectSnapshot } from "../../utils/project";
 import { APP_STATE_VERSION, projectStateFromPortableDocument } from "../../utils/projectSerialization";
 import { validateProjectImportShape } from "./projectImportPolicy";
 import { validateProjectRasterSources } from "./projectRasterImportPolicy";
+import { characterFabricationHoles } from '../../utils/characterFabricationHoles';
+import { validatePhysicalOutline } from '../../utils/shapeEditing';
 
 const record = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value)
@@ -46,5 +48,13 @@ export const readProjectFileCandidate = (document: unknown): ProjectState => {
   const project = loadProjectSnapshot(raw);
   validateProjectImportShape(project);
   validateProjectRasterSources(project);
+  const authoredParts = Object.values(project.parts).filter(part => part.artwork && part.contourSource === 'user');
+  if (authoredParts.length) {
+    const holes = characterFabricationHoles(project);
+    for (const part of authoredParts) {
+      const result = validatePhysicalOutline(part.contourPoints, { attachments: holes.get(part.id) ?? [] });
+      if (!result.ok) throw new Error(`${part.name}: ${result.blocker} The original project is unchanged.`);
+    }
+  }
   return project;
 };

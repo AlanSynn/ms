@@ -194,10 +194,28 @@ export interface StandardSkeleton {
     };
 }
 
+/** Retained drawing commands use the owner's existing local, Y-up coordinates. */
+export type ArtworkOperation =
+    | { readonly id: string; readonly kind: 'brush'; readonly points: readonly Readonly<Point>[]; readonly width: number; readonly color: string }
+    | { readonly id: string; readonly kind: 'erase'; readonly points: readonly Readonly<Point>[]; readonly width: number }
+    | { readonly id: string; readonly kind: 'line'; readonly from: Readonly<Point>; readonly to: Readonly<Point>; readonly width: number; readonly color: string }
+    | { readonly id: string; readonly kind: 'rectangle' | 'ellipse'; readonly from: Readonly<Point>; readonly to: Readonly<Point>; readonly color: string };
+
+export interface ArtworkDocument {
+    readonly version: 1;
+    /** Captured once. Changing the cut contour must never redefine this frame. */
+    readonly frame: Readonly<Bounds>;
+    /** The original embedded owner.textureUrl remains the retained asset. */
+    readonly sourceImage?: { readonly asset: 'textureUrl'; readonly frame: Readonly<Bounds> };
+    readonly operations: readonly ArtworkOperation[];
+    readonly revision: string;
+}
+
 export interface BodyPartLayer {
     id: string;
     name: string;
     textureUrl?: string;
+    artwork?: ArtworkDocument;
     maskUrl?: string;
     sourceImageFrame?: Bounds;
     contourPoints?: Point[];
@@ -363,6 +381,7 @@ export interface FabricationPackage {
     buildPacketPdf?: string;
     characterTemplatePdf?: string;
     buildPlanSourceDigest?: string;
+    buildPlanArtworkSourceDigest?: string;
     characterBuildPlanSourceDigest?: string;
     buildPlanLane?: 'kit' | 'custom';
     buildPlanJson?: string;
@@ -385,6 +404,8 @@ export interface SceneObject {
     name: string;
     shape: 'piggy-bank' | 'cloud' | 'star' | 'block';
     textureUrl?: string;
+    artwork?: ArtworkDocument;
+    fabrication?: 'cuttable' | 'decoration';
     contourPoints?: Point[];
     contourSource?: 'imported' | 'user';
     sourceImageName?: string;

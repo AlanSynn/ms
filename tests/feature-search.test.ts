@@ -18,6 +18,16 @@ export const FEATURE_QUERY_CASES: readonly [string, readonly FeatureId[]][] = [
   ['continue yesterday’s work', ['project.open']],
   ['reopn', ['project.open']],
   ['load my project', ['project.open']],
+  ['paint a face', ['character.drawPaint']],
+  ['paint clothes', ['character.drawPaint']],
+  ['erase the middle', ['character.drawPaint']],
+  ['filled rectangle', ['character.drawPaint']],
+  ['change shape', ['character.drawPaint']],
+  ['draw my own object', ['character.drawObject']],
+  ['make a prop', ['character.drawObject']],
+  ['import a picture', ['character.loadObjectFile']],
+  ['print my painting', ['blueprint.pdf']],
+  ['print my prop', ['blueprint.pdf']],
   ['print body', ['blueprint.customParts']],
   ['paper body pieces', ['blueprint.customParts']],
   ['cut out my person', ['blueprint.customParts']],
@@ -58,6 +68,7 @@ export const FEATURE_QUERY_CASES: readonly [string, readonly FeatureId[]][] = [
   ['pizza oven', []],
   ['save my pizza', []],
   ['cloud sync account', []],
+  ['paint bucket flood fill', []],
   ['xyzqv', []],
   ['', []],
   ['  ', []],
@@ -101,7 +112,9 @@ const annotationFiles: Record<string, string> = {
   playback: 'components/shell/WorkspacePlayerDock.tsx',
 };
 for (const feature of FEATURE_DESTINATIONS.filter(feature => !feature.commandId)) {
-  const source = readFileSync(annotationFiles[feature.stage!], 'utf8');
+  const source = feature.id === 'character.drawPaint' || feature.id === 'character.drawObject'
+    ? readFileSync('components/stages/character/CharacterSelection.tsx', 'utf8') + readFileSync(annotationFiles.character, 'utf8')
+    : readFileSync(annotationFiles[feature.stage!], 'utf8');
   assert(source.includes(`data-feature-id="${feature.id}"`) || source.includes(`featureId="${feature.id}"`), `${feature.id} is explicitly annotated in its stage's actual control source`);
 }
 const foundryChrome = readFileSync('components/stages/foundry/FoundryCanvasChrome.tsx', 'utf8');
@@ -117,6 +130,12 @@ const blocked = planFeatureReveal('path.draw', empty, 'character');
 assert.deepEqual(blocked, { ok: false, message: 'Load a character first.' });
 assert.equal(JSON.stringify(empty), emptyBefore, 'blocked search does not write processing or create a character');
 assert.equal(planFeatureReveal('blueprint.customParts', createSampleProject({ includeMechanism: false }), 'character').ok, true, 'printing a character does not invent a mechanism prerequisite');
+for (const id of ['character.drawPaint', 'character.drawObject'] as const) {
+  assert.equal(featureDestinationById(id)?.commandId, undefined, 'drawing discovery never dispatches an editing command');
+  assert.equal(featureDestinationById(id)?.targetId, id, 'drawing discovery reveals its actual control');
+  assert.equal(planFeatureReveal(id, empty, 'project').ok, true, 'Character creation can be located without creating work');
+}
+assert.equal(JSON.stringify(empty), emptyBefore, 'locating drawing controls creates no draft or artwork');
 assert.equal(planFeatureReveal('project.saveAs', sample, 'path').ok, false, 'hidden command cannot be revealed by forged id');
 assert.equal(planFeatureReveal('not.a.feature' as FeatureId, sample, 'path').ok, false, 'unknown id has no destination');
 for (const stage of ['path', 'design', 'foundry', 'assembly'] as const) {

@@ -1,10 +1,7 @@
 import type { FabricationRecipe, MechanismConfig, MechanismType } from '../types';
-import type { FabricationRenderKind } from './fabrication';
-import {
-    fabricationRenderPlanForMechanism,
-    readableFabricationStackSummary,
-    validateMechanismPreviewReadiness
-} from './fabrication';
+import { fabricationRenderPlanForMechanism, type FabricationRenderKind } from './fabricationRenderPlan';
+import { readableFabricationStackSummary } from './fabricationStackModel';
+import { validateMechanismPreviewReadiness } from './fabricationValidation';
 
 export const MECHANISM_SCENE_CONTRACT_VERSION = 1;
 

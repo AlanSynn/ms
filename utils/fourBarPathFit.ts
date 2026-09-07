@@ -6,7 +6,7 @@ import type {
 } from '../types';
 import { boardToScene, sceneToBoardRaw, SCENE_PX_PER_MM } from './coordinates';
 import { FABRICATION_DEFAULT_GRID_PITCH_MM, FABRICATION_LINKAGE_SPECS } from './fabricationContract';
-import { validateMechanismPreviewReadiness, validateForFabrication } from './fabrication';
+import { validateMechanismPreviewReadiness, validateForFabrication } from './fabricationValidation';
 import { generateMechanismPointTraces } from './kinematics';
 import { normalizeMechanismToFabricationSet } from './mechanismReference';
 

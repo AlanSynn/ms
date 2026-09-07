@@ -1,0 +1,116 @@
+import { chromium, expect, test } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { PDFDocument, PDFName } from 'pdf-lib';
+import { dismissStartupAnnouncement } from './startupHarness';
+
+import { APP_PATH, saveFile, paintHead, drawMark, pixel, physicalState, installedArtwork } from './paintingHarness';
+test.use({ viewport: { width: 1366, height: 768 }, trace: 'on' });
+
+test('retained paint erases chronologically, returns through a file, and reaches the full PDF', async ({ page, baseURL }, testInfo) => {
+  await page.goto(APP_PATH);
+  await dismissStartupAnnouncement(page);
+  await page.getByTestId('getting-started-card-guided').click();
+  await page.getByTestId('guided-project-card-waving-arm').click();
+  const before = await saveFile(page, testInfo, 'before-paint');
+  await paintHead(page);
+  const opened = await saveFile(page, testInfo, 'opened-editor');
+  expect(opened.project.parts).toEqual(before.project.parts);
+
+  await drawMark(page, [{ x: -23, y: 12 }, { x: 23, y: 12 }]);
+  await expect.poll(() => pixel(page, { x: -15, y: 12 })).toEqual([239, 71, 111, 255]);
+  await page.getByRole('button', { name: 'Eraser', exact: true }).click();
+  await drawMark(page, [{ x: 0, y: 20 }, { x: 0, y: 4 }]);
+  const base = before.project.parts.head.fillColor;
+  const baseRgb = [1, 3, 5].map(i => parseInt(base.slice(i, i + 2), 16));
+  await expect.poll(() => pixel(page, { x: 0, y: 12 })).toEqual([...baseRgb, 255]);
+  await expect.poll(() => pixel(page, { x: -15, y: 12 })).toEqual([239, 71, 111, 255]);
+  await page.getByRole('button', { name: 'Brush', exact: true }).click();
+  await page.getByRole('button', { name: 'Paint color #06a77d', exact: true }).click();
+  await drawMark(page, [{ x: 0, y: 12 }]);
+  await expect.poll(() => pixel(page, { x: 0, y: 12 })).toEqual([6, 167, 125, 255]);
+  await page.getByRole('button', { name: 'Undo paint', exact: true }).click();
+  await expect.poll(() => pixel(page, { x: 0, y: 12 })).toEqual([...baseRgb, 255]);
+  await page.getByRole('button', { name: 'Redo paint', exact: true }).click();
+  await expect.poll(() => pixel(page, { x: 0, y: 12 })).toEqual([6, 167, 125, 255]);
+
+  await page.getByRole('button', { name: 'Thin brush', exact: true }).click();
+  await page.getByRole('button', { name: 'Paint color #172033', exact: true }).click();
+  await drawMark(page, [{ x: -12, y: 2 }]);
+  await drawMark(page, [{ x: 12, y: 2 }]);
+  await drawMark(page, [{ x: -13, y: -10 }, { x: -7, y: -17 }, { x: 7, y: -17 }, { x: 13, y: -10 }]);
+  await page.mouse.move(0, 0);
+  await page.getByTestId('paint-workspace').screenshot({ path: testInfo.outputPath('paint-face.png') });
+  // An independently owned mark belongs to the part driven by the existing mechanism.
+  await page.getByTestId('character-part-item-right_arm_lower').click();
+  await expect(page.getByTestId('paint-workspace')).toHaveAttribute('data-paint-owner', 'right_arm_lower');
+  await page.getByRole('button', { name: 'Paint color #2389da', exact: true }).click();
+  await drawMark(page, [{ x: -15, y: 0 }, { x: 15, y: 0 }]);
+  const painted = await saveFile(page, testInfo, 'painted-class-one');
+  expect(painted.project.parts.head.artwork?.operations.map(op => op.kind)).toEqual(['brush', 'erase', 'brush', 'brush', 'brush', 'brush']);
+  expect(physicalState(painted.project)).toEqual(physicalState(before.project));
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(page.getByTestId('paint-workspace')).toHaveCount(0);
+  await installedArtwork(page, 'head', painted.project.parts.head.artwork!.revision);
+  await installedArtwork(page, 'right_arm_lower', painted.project.parts.right_arm_lower.artwork!.revision);
+  await page.getByTestId('workflow-stage-project').click();
+  await expect(page.getByTestId('foundry-preview')).toHaveAttribute('data-three-topology-ready', 'true');
+  await installedArtwork(page, 'head', painted.project.parts.head.artwork!.revision);
+  await installedArtwork(page, 'right_arm_lower', painted.project.parts.right_arm_lower.artwork!.revision);
+  await page.getByTestId('design-foundry-camera-controls').getByRole('button', { name: 'Front', exact: true }).click();
+  await page.getByRole('slider', { name: 'Workspace scrubber' }).fill('30');
+  await page.screenshot({ path: testInfo.outputPath('painted-project.png') });
+  await page.getByTestId('workflow-stage-assembly').click();
+  await page.getByTestId('assembly-mode-switch').getByRole('button', { name: 'Character', exact: true }).click();
+  await expect(page.getByTestId('assembly-readonly-step-strip')).toBeVisible();
+  await installedArtwork(page, 'head', painted.project.parts.head.artwork!.revision);
+  await installedArtwork(page, 'right_arm_lower', painted.project.parts.right_arm_lower.artwork!.revision);
+  await page.screenshot({ path: testInfo.outputPath('painted-assembly.png') });
+  await page.getByTestId('workflow-stage-blueprint').click();
+  const pending = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download Build PDF', exact: true }).click();
+  const pdfFile = testInfo.outputPath('painted-build.pdf');
+  await (await pending).saveAs(pdfFile);
+  const pdf = await PDFDocument.load(await readFile(pdfFile));
+  expect(pdf.getPages().length).toBeGreaterThan(2);
+  expect(pdf.getPage(0).getSize()).toEqual({ width: 612, height: 792 });
+  expect(pdf.getPage(0).node.Resources()?.has(PDFName.of('XObject'))).toBe(true);
+
+  // File-only continuation uses a fresh browser process, not an autosave restore.
+  const nextBrowser = await chromium.launch();
+  try {
+    const context = await nextBrowser.newContext({ baseURL, viewport: { width: 1280, height: 720 }, acceptDownloads: true });
+    const next = await context.newPage();
+    await next.goto(APP_PATH);
+    await dismissStartupAnnouncement(next);
+    await expect(next.getByTestId('recover-browser-backup')).toHaveCount(0);
+    const chooser = next.waitForEvent('filechooser');
+    await next.getByTestId('getting-started-dialog').getByRole('button', { name: 'Open Project', exact: true }).click();
+    await (await chooser).setFiles(painted.file);
+    await expect(next.getByTestId('status-bar')).toContainText('Loaded project');
+    const reopened = await saveFile(next, testInfo, 'reopened-class-one');
+    expect(reopened.project.parts).toEqual(painted.project.parts);
+    expect(physicalState(reopened.project)).toEqual(physicalState(painted.project));
+    await paintHead(next);
+    await expect.poll(() => pixel(next, { x: 0, y: 12 })).toEqual([6, 167, 125, 255]);
+    await drawMark(next, [{ x: -19, y: -4 }, { x: -16, y: -4 }]);
+    const continued = await saveFile(next, testInfo, 'painted-class-two');
+    expect(continued.project.parts.head.artwork?.operations.length).toBe(7);
+    expect(continued.project.parts.head.artwork?.operations.slice(0, 6)).toEqual(painted.project.parts.head.artwork?.operations);
+    await next.screenshot({ path: testInfo.outputPath('continued-1280.png') });
+    await context.close();
+    const finalContext = await nextBrowser.newContext({ baseURL, viewport: { width: 1280, height: 720 }, acceptDownloads: true });
+    const final = await finalContext.newPage();
+    await final.goto(APP_PATH);
+    await dismissStartupAnnouncement(final);
+    const finalChooser = final.waitForEvent('filechooser');
+    await final.getByTestId('getting-started-dialog').getByRole('button', { name: 'Open Project', exact: true }).click();
+    await (await finalChooser).setFiles(continued.file);
+    await expect(final.getByTestId('status-bar')).toContainText('Loaded project');
+    const finalSaved = await saveFile(final, testInfo, 'reopened-class-two');
+    expect(finalSaved.project.parts).toEqual(continued.project.parts);
+    expect(physicalState(finalSaved.project)).toEqual(physicalState(painted.project));
+    await paintHead(final);
+    await expect.poll(() => pixel(final, { x: 0, y: 12 })).toEqual([6, 167, 125, 255]);
+    await finalContext.close();
+  } finally { await nextBrowser.close(); }
+});

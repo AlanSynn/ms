@@ -1,0 +1,28 @@
+.paint-workspace { position: absolute; inset: 0; z-index: 12; display: flex; flex-direction: column; background: #f7f8fa; color: #172033; overflow: hidden; }
+.paint-header { display: flex; align-items: center; justify-content: space-between; min-height: 54px; padding: 8px 16px; border-bottom: 1px solid #dde2e9; background: white; }
+.paint-header strong { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.paint-toolbar, .paint-colors { display: flex; align-items: center; gap: 5px; padding: 8px 12px; flex-wrap: wrap; background: white; }
+.paint-toolbar button, .paint-clear { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 8px; min-width: 34px; min-height: 34px; padding: 5px 8px; font-size: 12px; font-weight: 700; }
+.paint-toolbar button:hover, .paint-clear:hover { background: #edf1f7; }
+.paint-toolbar button[aria-pressed=true] { color: #7546dc; background: #f1eaff; }
+.paint-toolbar i { display: inline-block; border-radius: 50%; background: currentColor; }
+.paint-divider { align-self: stretch; width: 1px; margin: 3px; background: #dde2e9; }
+.paint-toolbar-spacer { flex: 1; }
+.paint-surface { position: relative; flex: 1; min-height: 120px; min-width: 0; overflow: hidden; background-color: #f1f3f6; background-image: radial-gradient(#cbd1d9 0.7px, transparent 0.7px); background-size: 16px 16px; }
+.paint-surface canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%; cursor: none; touch-action: none; }
+.paint-surface canvas:focus-visible { outline: 2px solid #5379e7; outline-offset: -3px; }
+.paint-cursor { display: none; position: absolute; pointer-events: none; transform: translate(-50%, -50%); border: 1px solid #172033; box-shadow: 0 0 0 1px white; border-radius: 50%; }
+.paint-cursor.erasing { background: #ffffff50; border-style: dashed; }
+.paint-colors { border-top: 1px solid #dde2e9; min-height: 55px; }
+.paint-swatch { height: 24px; width: 24px; border-radius: 50%; border: 1px solid #b7bfcb; flex-shrink: 0; }
+.paint-swatch[aria-pressed=true] { outline: 2px solid #172033; outline-offset: 2px; }
+.paint-custom-color { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; margin-left: 5px; white-space: nowrap; }
+.paint-custom-color input { width: 28px; height: 28px; padding: 1px; border: 1px solid #cbd1d9; border-radius: 6px; cursor: pointer; }
+.paint-status { position: absolute; bottom: 12px; left: 12px; right: 12px; padding: 8px 12px; background: #fff6dc; border: 1px solid #d6b46a; border-radius: 8px; font-size: 12px; }
+.paint-workspace button:focus-visible, .paint-workspace input:focus-visible { outline: 2px solid #3563dc; outline-offset: 2px; }
+.paint-workspace button:disabled { opacity: .4; cursor: default; }
+.paint-header-actions { display: flex; align-items: center; gap: 6px; }
+.paint-header-actions button { font-size: 11px; min-height: 32px; padding: 5px 10px; white-space: nowrap; }
+.paint-draft-name { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; min-width: 0; }
+.paint-draft-name input { width: 110px; max-width: 100%; min-width: 50px; padding: 5px; border: 1px solid #dde2e9; border-radius: 6px; }
+@media (max-width: 1366px) { .paint-toolbar { gap: 2px; padding: 6px 8px; } .paint-colors { gap: 4px; padding: 7px 8px; } .paint-clear { font-size: 11px; } }
