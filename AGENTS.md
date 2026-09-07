@@ -23,6 +23,7 @@ MotionSmith is a tinkerable workbench, not a reading-heavy tutorial. Users shoul
 - Opening any guided project must land on Character with a compact `Make it yours` ownership cluster for parts, joints, path, mechanism fit, and reset. Guided starters are editable baselines, never locked demos.
 - Repository text and product UI are English-only. Do not add bilingual labels, Korean prose, or mixed-language examples; tests must block non-English Hangul text from returning.
 - Startup is one static logo/wordmark/version boot loader, then one eligible unseen What's new update, then Getting Started unless session-suppressed. Acknowledge the stable update ID only after rendered content is dismissed, independently of project/history and the Getting Started preference. With no chosen project and suppressed entry, show Project with Open Project primary.
+- What's new is a cumulative release history. Keep published entries, stable IDs, and their assets until the owner explicitly requests removal; never replace, truncate, or hide older notes on a version bump or acknowledgement. Show all bundled releases up to the running version, newest first, with version labels and a keyboard-scrollable body; keep Close and startup Continue reachable. Only the newest eligible update controls the automatic announcement, and older entries remain available by scrolling.
 - Getting Started can be reopened without replacing current work. Show compact Guide and Starter rig choices, then a full-width Open Project action using the shared file picker. Character file and Recover browser backup (only a validated candidate, named with its actual known backup time) are secondary; the session preference follows. Do not ship image-recognition or Boy/Girl recognition starter assets.
 - `Reset Lesson` must restore a known-good lesson baseline while preserving app settings; Foundry reset must restore finite mechanism preview state, not just stop playback.
 - Prefer direct manipulation over explanatory prose: draw on the canvas, drag joints, scrub playback, rotate the view, tune sliders, and see the result immediately.
@@ -31,6 +32,20 @@ MotionSmith is a tinkerable workbench, not a reading-heavy tutorial. Users shoul
 - Make every visible control answer one novice question: “What can I do now?”
 - Favor icons, handles, ghost previews, hover affordances, short labels, and status chips over paragraphs.
 - Every workflow must remain compact enough to understand at a glance on one screen.
+
+### Release-note authoring contract
+
+What's new is written for students and ordinary users. Apply this format to future entries and keep the published archive unless the owner explicitly requests a correction or removal.
+
+- Each highlight must describe one explicit student/user-visible change.
+- Use the current format: short title, one concrete sentence, relevant screenshot, and a safe Show me action when a destination exists.
+- Each screenshot must show only the relevant UI area for that change.
+- Name the actual control, action, or visible result. Answer "What can I do now?" in plain English. Do not publish internal refactors, architecture/dependency changes, vague improvements, marketing claims, or future promises as student-facing highlights.
+- Keep titles at most 60 characters, descriptions at most 180 characters, and each entry to one to three highlights. Split distinct changes into separate highlights; never truncate retained content in the renderer.
+- Every new highlight requires a genuine screenshot from the running implemented app. Crop to the changed control or result with only enough nearby context to locate it. Exclude unrelated navigation, blank space, desktop/terminal chrome, and private student work. Do not use a full-app overview when a focused crop explains the change, or use generated/mock images as runtime evidence.
+- Inspect each crop at its actual note-display size. The pictured state, alt text, and sentence must agree; keep text and changed controls readable. Recapture stale UI instead of editing pixels to imply a newer implementation.
+- Keep screenshot assets bundled locally and Show me destinations in the existing safe feature registry. Follow the capture and verification procedure in `docs/student-support.md`.
+- Tests enforce the entry format, image presence, local PNG assets, and complete archive rendering. The four existing text-only highlights are explicitly grandfathered in `tests/student-support.test.ts`; do not expand that list to bypass the new format. Factual relevance and screenshot framing require runtime/visual review and cannot be claimed from those assertions alone.
 
 ### Result-first UI copy policy
 

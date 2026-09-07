@@ -1,6 +1,6 @@
 # Student support maintenance and evidence
 
-The support surfaces follow [the workbench UX contract](workbench-flow-ux-contract.md). `Find a feature` locates real controls, `Feedback` prepares a local screenshot and sends only on request, and `What's new` shows one eligible unseen bundled update before Getting Started and can also be reopened manually. These are shell concerns, outside `ProjectState` and undo history. The [feedback relay guide](feedback-relay.md) owns the one-Worker configuration and delivery limitations.
+The support surfaces follow [the workbench UX contract](workbench-flow-ux-contract.md). `Find a feature` locates real controls, `Feedback` prepares a local screenshot and sends only on request, and `What's new` keeps a cumulative, newest-first history that can be reopened manually. An unseen latest update opens this history once before Getting Started. These are shell concerns, outside `ProjectState` and undo history. The [feedback relay guide](feedback-relay.md) owns the one-Worker configuration and delivery limitations.
 
 ## Baseline
 
@@ -47,14 +47,55 @@ New destinations must name an existing annotated control, reuse its availability
 
 ## Adding a release note
 
-1. Add a typed entry in `utils/releaseNotes.ts` for the version in `package.json`. Use a stable ID that changes only for a genuinely new entry. Keep at most three highlights, each with a short title and sentence about a feature present in that build.
-2. Capture an implemented visual change with a synthetic project through Orca. Crop to useful controls; save a lightweight local PNG under `public/release-notes/`. Supply useful alt text. Do not use student work or a mock screenshot.
-3. Choose an existing `FeatureId` for each useful Show me action. It uses the same safe reveal flow as search.
-4. Verify the image at `/ms/` and under the relative desktop base, test image failure, and exercise Show me. Run `bun run test:support` and the focused production-preview browser tests.
+Each highlight must describe one explicit student/user-visible change.
 
-Entries select by exact application version; no latest-release request is made. `motionsmith.releaseNotes.viewed.v1` stores viewed IDs as a browser/device preference. The entry becomes viewed after its explicitly opened content renders, and New clears immediately. Existing tabs synchronize on storage events. Rebuilding or correcting an entry's text must preserve its ID. Older-build revisits retain earlier viewed IDs.
+Use the current format: short title, one concrete sentence, relevant screenshot, and a safe Show me action when a destination exists.
+
+Each screenshot must show only the relevant UI area for that change.
+
+Write for students and ordinary users. Name the actual control and what they can do or see after the change. Omit internal architecture, refactors, dependencies, vague "improvements", marketing, and unimplemented promises. Keep titles within 60 characters and descriptions within 180 characters. Describe one change per highlight in plain English.
+
+An example of the required content shape:
+
+- Title: `Open your project`
+- Sentence: `Choose Open Project to continue from your saved .motionsmith file.`
+- Screenshot: the actual Open Project control and only the local context needed to recognize it.
+- Show me: `project.open`, which locates the control without opening the picker.
+
+1. Add a typed entry in `utils/releaseNotes.ts` for the version in `package.json`. Preserve all published entries, stable IDs, and assets unless the owner explicitly requests removal. Never overwrite the previous release or cap the archive length. Keep at most three highlights per entry, each with a short title and sentence about a feature present in that build.
+2. Every new highlight needs a genuine screenshot of its implemented control or visible result. Use a synthetic project through Orca and capture only the relevant region. If Orca capture is unavailable, record the exact failure and use a real production-preview browser capture. Exclude unrelated navigation, blank canvas, desktop/terminal chrome, and private student work. Do not use generated/mock images, a full-app screenshot for a small change, or retouched pixels that imply a different version.
+3. Inspect the crop at its actual rendered note size, including a narrow viewport. The changed control/result must remain readable, and the sentence, alt text, and pictured state must match. Save the focused PNG under `public/release-notes/` and retain its capture route, build version, and source region in the verification record.
+4. Choose an existing `FeatureId` for each useful Show me action. It uses the same safe reveal flow as search.
+5. Verify the image at `/ms/` and under the relative desktop base, test image failure, and exercise Show me. Run `bun run test:support` and the focused production-preview browser tests. Those checks enforce structure, title/sentence length, image presence, local PNG assets, and complete rendering; they do not prove semantic accuracy or screenshot framing. Complete the runtime/visual review before publishing.
+
+The existing text-only highlights `release-history-v1::Earlier updates`, `classroom-return-v1::Open your project`, `classroom-return-v1::Two paths`, and `student-support-v1::Share a problem or idea` are the only grandfathered exceptions. Their archive content remains valid; new highlights cannot reuse or expand these exceptions to avoid a screenshot.
+
+All bundled stable releases at or below the running application version appear newest first, with entries from the same version grouped together. At the owner's explicit request, the initial three entries are now labeled v0.0.15; their stable IDs remain unchanged. This is a one-time version-label correction, not permission to relabel the archive on later releases. A build without a new entry still shows its earlier history. The running version is separate from each update's release label. No changelog request is made.
+
+The history body scrolls independently of its fixed heading, Close, and startup Continue controls. It is keyboard focusable and lazily loads bundled images. Reading or acknowledging an entry never removes it. `motionsmith.releaseNotes.viewed.v1` stores viewed IDs as a browser/device preference. Only entries that entered the visible history area are acknowledged when the panel is dismissed or a Show me action leaves it. The newest entry alone controls New and automatic opening; unread archives do not cause a queue of startup dialogs. Existing tabs synchronize on storage events. Rebuilding or correcting text preserves the entry ID, and older-build revisits retain earlier viewed IDs.
 
 Denied/corrupt local storage falls back to session storage and memory. Persistence cannot survive cleared/blocked storage, a different browser profile, or every form of private browsing. On a shared profile, viewing notes affects that profile; this is not per-student tracking.
+
+## v0.0.15 release-history verification
+
+The inspected checkout was `ae5aca49ba05ac0d9768689d80702c2f41500d8b`, with package version `0.0.15`. The loaded classroom deployment reported `0.0.14`. Before this change, the local v0.0.14 preview showed only `classroom-return-v1`; exact-version selection also left v0.0.15 without an entry. The following initial archive verification preceded the owner's request to relabel the two older entries as v0.0.15. Its two-version captures remain historical evidence; the current catalog groups all three entries under v0.0.15. No deployment or version tag was created in this change.
+
+- `bun run test` and `VITE_BASE_PATH=/ms/ bun run build` passed.
+- `env -u NO_COLOR VITE_BASE_PATH=/ms/ PLAYWRIGHT_BASE_PATH=/ms/ PLAYWRIGHT_SERVER=preview PLAYWRIGHT_PORT=5178 bunx playwright test tests/browser/student-support-notes.spec.ts --workers=3` passed all 22 cases in 25.6 seconds.
+- Production browser checks cover 1366 x 768, 1280 x 720, 390 x 844, and enlarged text. They verify fixed Close/Continue positions while history scrolls, keyboard access and focus return, retained read entries, startup ordering, browser-process restart, cross-tab acknowledgement, storage denial/corruption, image failure, and unchanged saved projects.
+- The image-failure test waits for the actual fallback paragraph before scrolling it, avoiding a test race with the replaced image node. The final run has no failed cases.
+- Orca confirmed v0.0.15, both version groups, all three stable entry IDs, Continue leading to Getting Started, and manual reopening with the archive intact. Orca's screenshot command timed out; its End/wheel commands reported success without advancing the history scroll position in that embedded session. Scrolling and final visual inspection are supported by the production Playwright results and captures, not by those Orca commands.
+- The 1280px latest/earlier and 390px earlier-history captures were visually inspected. Local evidence is retained under `artifacts/release-history/`; this is viewport/browser validation, not a physical-device claim.
+
+## Authoring-format and version-label correction
+
+At the owner's request, all initial update entries now belong to v0.0.15. Stable entry IDs, viewed-state continuity, and the archived content remain intact. The history hint also remains visible when several entries share one version.
+
+The `Your working view` highlight now uses `public/release-notes/project-working-view-v1.png`, a real 624 x 600 crop of the shared Project canvas. It was captured from the local production v0.0.15 preview in Chromium 149.0.7827.55 at 1366 x 768 and DPR 1, using Guide -> Waving arm -> Project -> Front -> Fit. The observed project had 14 parts, one path, and one mechanism. The crop excludes the app header, workflow rail, sidebars, and obsolete sidebar version label; the original full-app `classroom-return-v1.png` remains retained. The existing tightly framed Find a feature image remains unchanged.
+
+The support contract test now locks the authoring-policy text, title/description bounds, PNG asset presence and alt text, the four explicit text-only archive exceptions, and rendering without highlight truncation. It cannot judge whether a screenshot or claim is relevant; authors must still inspect the actual UI and rendered note as described above.
+
+After the policy and version correction, `bun tests/student-support.test.ts`, `bun run test`, and the production `/ms/` build passed. The same focused production browser command above passed all 22 cases in 28.8 seconds. The new note captures were visually inspected at 1280 x 720 and 390 x 844: the single v0.0.15 group, focused working-view image, and scroll hint are present. Capture provenance and these final images are retained locally under `artifacts/release-note-policy/`. No version tag or deployment was created.
 
 ## Capture implementation and limits
 

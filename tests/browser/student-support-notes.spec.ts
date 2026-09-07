@@ -2,7 +2,7 @@ import { expect, test, chromium, type Page } from '@playwright/test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { releaseNoteForVersion } from '../../utils/releaseNotes';
+import { releaseNoteForVersion, releaseNotesForVersion } from '../../utils/releaseNotes';
 import { RELEASE_READ_KEY } from '../../utils/releaseReadState';
 import { GETTING_STARTED_SESSION_KEY } from '../../utils/startupFlow';
 import { createSampleProject } from '../../utils/project';
@@ -14,6 +14,8 @@ import { dismissStartupAnnouncement } from './startupHarness';
 const APP_PATH = process.env.PLAYWRIGHT_BASE_PATH ?? process.env.VITE_BASE_PATH ?? '/';
 const version = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8')).version;
 const note = releaseNoteForVersion(version)!;
+const notes = releaseNotesForVersion(version);
+const highlights = notes.flatMap(entry => entry.highlights);
 const notesPanel = (page: Page) => page.getByTestId('support-whatsNew');
 const storedViewed = (page: Page) => page.evaluate(key => JSON.parse(localStorage.getItem(key) || '[]') as string[], RELEASE_READ_KEY);
 const boot = async (page: Page) => {
@@ -126,10 +128,11 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1280, height: 720
     await welcome.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(page.locator('.editor-stage-frame[data-stage="path"]')).toBeVisible();
     const panel = await openManualNotes(page);
-    expect(await panel.locator('article').count()).toBeLessThanOrEqual(3);
-    const firstImage = note.highlights.find(highlight => highlight.image)?.image;
+    expect(await panel.locator('article').count()).toBe(highlights.length);
+    const firstImage = highlights.find(highlight => highlight.image)?.image;
     if (firstImage) {
-      const image = panel.locator('img.release-note-image');
+      const image = panel.getByRole('img', { name: firstImage.alt, exact: true });
+      await image.scrollIntoViewIfNeeded();
       await expect(image).toHaveAttribute('alt', firstImage.alt);
       await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(100);
       expect(new URL((await image.getAttribute('src'))!, page.url()).pathname).toBe(new URL(`${APP_PATH}${firstImage.path}`, page.url()).pathname);
@@ -203,7 +206,7 @@ test('manual update links locate controls without invoking file actions or chang
   let downloads = 0, pickers = 0;
   page.on('download', () => downloads++);
   page.on('filechooser', () => pickers++);
-  for (const highlight of note.highlights.filter(highlight => highlight.destination && !highlight.destination.startsWith('help.'))) {
+  for (const highlight of highlights.filter(highlight => highlight.destination && !highlight.destination.startsWith('help.'))) {
     const panel = await openManualNotes(page);
     await panel.getByRole('button', { name: `Show me: ${highlight.title}`, exact: true }).click();
     await expect(panel).toHaveCount(0);
@@ -280,10 +283,101 @@ test('corrupt preferences and missing screenshot keep notes usable without start
   await page.goto(APP_PATH); await boot(page);
   const panel = notesPanel(page);
   await expect(panel).toBeVisible();
-  const image = note.highlights.find(highlight => highlight.image)?.image;
-  if (image) await expect(panel.getByRole('img', { name: image.alt, exact: true })).toBeVisible();
+  const image = highlights.find(highlight => highlight.image)?.image;
+  if (image) {
+    const fallback = panel.locator('p[role="img"]').filter({ hasText: image.alt });
+    await expect(fallback).toHaveCount(1);
+    await fallback.scrollIntoViewIfNeeded();
+    await expect(fallback).toBeVisible();
+  }
   await panel.getByRole('button', { name: 'Continue', exact: true }).click();
   await page.getByTestId('getting-started-dialog').getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.getByTestId('project-empty-state')).toBeVisible();
   expect(await storedViewed(page)).toContain(note.id);
+});
+
+for (const viewport of [
+  { width: 1366, height: 768 }, { width: 1280, height: 720 }, { width: 390, height: 844 },
+]) {
+  test('release history keeps startup actions fixed at ' + viewport.width, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    await page.goto(APP_PATH);
+    await boot(page);
+    const panel = notesPanel(page);
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText('MotionSmith v' + version);
+    const versions = [...new Set(notes.map(entry => entry.version))];
+    expect(await panel.locator('[data-release-version]').evaluateAll(elements =>
+      elements.map(element => element.getAttribute('data-release-version')))).toEqual(versions);
+    expect(await panel.locator('[data-release-note-id]').evaluateAll(elements =>
+      elements.map(element => element.getAttribute('data-release-note-id')))).toEqual(notes.map(entry => entry.id));
+    const history = panel.getByRole('region', { name: 'Update history', exact: true });
+    const close = panel.getByRole('button', { name: 'Close', exact: true });
+    const proceed = panel.getByRole('button', { name: 'Continue', exact: true });
+    await expect(close).toBeInViewport();
+    await expect(proceed).toBeInViewport();
+    const closeBefore = await close.boundingBox();
+    const proceedBefore = await proceed.boundingBox();
+    await page.screenshot({ path: testInfo.outputPath('history-latest.png') });
+    await history.focus();
+    await page.keyboard.press('End');
+    await expect.poll(() => history.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+    await expect(panel.getByRole('heading', { name: highlights.at(-1)!.title, exact: true })).toBeInViewport();
+    await expect(close).toBeInViewport();
+    await expect(proceed).toBeInViewport();
+    expect(Math.abs((await close.boundingBox())!.y - closeBefore!.y)).toBeLessThan(1);
+    expect(Math.abs((await proceed.boundingBox())!.y - proceedBefore!.y)).toBeLessThan(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    // Rendering/scanning the archive does not acknowledge it before dismissal.
+    expect(await storedViewed(page)).not.toContain(note.id);
+    await page.screenshot({ path: testInfo.outputPath('history-earlier.png') });
+    await page.keyboard.press('Tab');
+    await expect(proceed).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(close).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('getting-started-dialog')).toBeVisible();
+    await expect.poll(() => storedViewed(page)).toContain(note.id);
+    await expect.poll(() => storedViewed(page)).toContain(notes.at(-1)!.id);
+  });
+}
+
+test('read updates remain in history after reopen and only the latest controls startup', async ({ page }) => {
+  await page.addInitScript(({ key, id }) => {
+    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify([id]));
+  }, { key: RELEASE_READ_KEY, id: note.id });
+  await page.goto(APP_PATH); await boot(page);
+  await expect(notesPanel(page)).toHaveCount(0);
+  await page.getByTestId('getting-started-dialog').getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(page.getByTestId('whats-new-badge')).toHaveCount(0);
+  const panel = await openManualNotes(page);
+  const history = panel.getByRole('region', { name: 'Update history', exact: true });
+  expect(await storedViewed(page)).toEqual([note.id]);
+  await history.focus();
+  await page.keyboard.press('End');
+  await expect(panel.getByRole('heading', { name: highlights.at(-1)!.title, exact: true })).toBeInViewport();
+  expect(await storedViewed(page)).toEqual([note.id]);
+  await panel.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect.poll(() => storedViewed(page)).toContain(notes.at(-1)!.id);
+  await page.reload(); await boot(page);
+  await expect(notesPanel(page)).toHaveCount(0);
+  await page.getByTestId('getting-started-dialog').getByRole('button', { name: 'Close', exact: true }).click();
+  await openManualNotes(page);
+  expect(await panel.locator('[data-release-note-id]').evaluateAll(elements =>
+    elements.map(element => element.getAttribute('data-release-note-id')))).toEqual(notes.map(entry => entry.id));
+});
+
+test('enlarged text keeps release history and close controls keyboard reachable', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto(APP_PATH); await boot(page);
+  await page.addStyleTag({ content: 'html { font-size: 32px !important; }' });
+  const panel = notesPanel(page);
+  const history = panel.getByRole('region', { name: 'Update history', exact: true });
+  await history.focus();
+  await page.keyboard.press('End');
+  await expect.poll(() => history.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  await expect(panel.getByRole('button', { name: 'Close', exact: true })).toBeInViewport();
+  await expect(panel.getByRole('button', { name: 'Continue', exact: true })).toBeInViewport();
+  expect(await history.evaluate(element => element.clientHeight)).toBeGreaterThan(100);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

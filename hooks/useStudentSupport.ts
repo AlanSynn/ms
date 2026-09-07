@@ -27,11 +27,18 @@ export const useStudentSupport = ({ rootRef, project, stage, goStage, onStatus, 
   const [notice, setNotice] = useState('');
   const [menuRequest, setMenuRequest] = useState<SupportMenuRequest>();
   const returnFocus = useRef<SupportReturnFocus>({ target: null, restore: true });
-  const renderedNote = useRef<string | null>(null);
+  const renderedNotes = useRef(new Set<string>());
   const feedback = useFeedbackDraft({ rootRef, stage });
 
+  const acknowledgeNotes = () => {
+    if (surfaceRef.current === 'whatsNew') {
+      for (const id of renderedNotes.current) notes.markViewed(id);
+    }
+    renderedNotes.current.clear();
+  };
   const open = (next: SupportSurface, suggestion?: string) => {
     if (startupAnnouncement) return;
+    acknowledgeNotes();
     if (!surfaceRef.current) {
       returnFocus.current = {
         target: document.activeElement instanceof HTMLElement ? document.activeElement : null,
@@ -39,7 +46,6 @@ export const useStudentSupport = ({ rootRef, project, stage, goStage, onStatus, 
       };
     }
     if (next === 'feedback') feedback.openDraft(suggestion, suggestion ? 'idea' : 'problem');
-    if (next === 'whatsNew') renderedNote.current = null;
     setNotice('');
     surfaceRef.current = next;
     setSurface(next);
@@ -50,12 +56,6 @@ export const useStudentSupport = ({ rootRef, project, stage, goStage, onStatus, 
     openSupport: next => open(next),
     onStatus: message => { setNotice(message); onStatus(message); },
   });
-  const acknowledgeNotes = () => {
-    if (surface === 'whatsNew' && notes.entry?.id === renderedNote.current) {
-      notes.markViewed(renderedNote.current);
-    }
-    renderedNote.current = null;
-  };
   const close = () => {
     acknowledgeNotes();
     cancelReveal();
@@ -77,7 +77,7 @@ export const useStudentSupport = ({ rootRef, project, stage, goStage, onStatus, 
   return {
     surface, returnFocus: startupAnnouncement ? { target: null, restore: false } : returnFocus.current,
     startupAnnouncement, notice, menuRequest, notes, feedback,
-    noteRendered: (id: string) => { renderedNote.current = id; },
+    noteRendered: (id: string) => { renderedNotes.current.add(id); },
     open, close, reveal,
     suggest: (draft: string) => open('feedback', draft),
     discard: () => { feedback.discard(); close(); },

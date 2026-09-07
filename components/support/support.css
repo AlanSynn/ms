@@ -34,15 +34,27 @@
 .feedback-discard { justify-self: start; }
 .feedback-sent { padding: 1.3rem 0; }
 .feedback-sent strong { font-size: 1.1rem; color: var(--ms-accent); }
+.modal-sheet.support-release-panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.release-heading { flex: none; margin-bottom: .75rem; }
+.release-heading .support-muted { margin: .2rem 0 0; font-size: .75rem; }
+.release-history { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding-right: .35rem; }
+.release-history:focus-visible { outline: 2px solid var(--ms-accent); outline-offset: -2px; border-radius: .4rem; }
+.release-version-group + .release-version-group { border-top: 1px solid var(--ms-line); margin-top: 1.4rem; padding-top: 1.1rem; }
+.release-version-heading { display: flex; align-items: center; gap: .55rem; margin-bottom: .7rem; }
+.release-version-heading h4 { margin: 0; font-size: .82rem; font-weight: 750; color: var(--ms-muted); }
+.release-latest { font-size: .66rem; font-weight: 700; padding: .2rem .45rem; border-radius: .35rem; color: var(--ms-accent); background: var(--ms-accent-soft); }
+.release-note + .release-note { border-top: 1px solid var(--ms-line); margin-top: 1rem; padding-top: 1rem; }
 .release-highlights { display: grid; gap: 1rem; }
 .release-highlights article + article { border-top: 1px solid var(--ms-line); padding-top: 1rem; }
-.release-highlights h4 { margin: .4rem 0; font-size: 1rem; }
+.release-highlights h5 { margin: .4rem 0; font-size: 1rem; overflow-wrap: anywhere; }
 .release-highlights p { color: var(--ms-text-soft); }
 .release-note-image { display: block; width: 100%; height: auto; border: 1px solid var(--ms-line); border-radius: .65rem; margin: .7rem 0; }
 .support-startup { align-items: center; justify-content: center; padding: 1rem; background: rgba(248,250,252,.62); backdrop-filter: blur(10px); }
 .support-startup .support-panel { width: min(100%, 34rem); max-height: calc(100dvh - 2rem); }
 .support-startup .release-note-image { max-height: 10rem; object-fit: contain; }
-.release-continue { width: 100%; margin-top: 1.25rem; }
+.release-footer { flex: none; display: grid; gap: .65rem; padding-top: .8rem; margin-top: .6rem; border-top: 1px solid var(--ms-line); font-size: .72rem; }
+.release-footer:empty { display: none; }
+.release-continue { width: 100%; }
 @media (min-width: 901px) and (max-width: 1180px) {
   .app-header .current-stage-title { display: none; }
   .command-bar { gap: .1rem; }
