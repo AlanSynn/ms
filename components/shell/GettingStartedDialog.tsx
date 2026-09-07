@@ -1,5 +1,7 @@
-import React, { startTransition, useEffect, useMemo, useRef, useState } from 'react';
-import { FileJson, Sparkles, Upload } from 'lucide-react';
+import React, { startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { FileJson, FolderOpen, Sparkles } from 'lucide-react';
+import type { BrowserRecoveryCandidate } from '../../hooks/useColdAutosaveRecovery';
+import { BrowserRecoveryAction } from './BrowserRecoveryAction';
 import type { BodyPartLayer, MechanismConfig, Point, ProjectState } from '../../types';
 import { pathFromPoints, sceneToSvg } from '../../utils/coordinates';
 import { gearTrainCenters, gearTrainPitchRadii } from '../../utils/kinematics';
@@ -192,35 +194,22 @@ const GuidedLessonMotionPreview = ({ lessonId, project }: { lessonId: string; pr
     </span>;
 };
 
-const starterCopy = {
-    guide: 'Pick a working motion project.',
-    humanoid: 'Start with a simple body.'
-} as const;
-
-const starterCues = {
-    guide: ['Edit one move', 'Ready to build'],
-    humanoid: ['Move arms or legs', 'Add a path next']
-} as const;
-
-const StarterCues = ({ items }: { items: readonly string[] }) => (
-    <span className="starter-card-cues" aria-hidden="true">
-        {items.map((item, index) => <span key={item}><em>{index === 0 ? 'Change' : 'Build'}</em> {item}</span>)}
-    </span>
-);
-
-export const GettingStartedDialog = ({ guidedLessons, hideForSession, onLesson, onSample, onPackage, onImport, onHideForSessionChange, onClose }: {
+export const GettingStartedDialog = ({ guidedLessons, hideForSession, onLesson, onSample, onPackage, onOpenProject, recoveryCandidate, onRecover, status, onHideForSessionChange, onClose }: {
     guidedLessons: readonly GuidedLessonTile[];
     hideForSession: boolean;
     onLesson: (lessonId: string, preparedProject?: ProjectState) => void;
     onSample: (preparedProject?: ProjectState) => void;
     onPackage: (files: File[]) => void;
-    onImport: (file: File) => void;
+    onOpenProject: () => void;
+    recoveryCandidate?: BrowserRecoveryCandidate;
+    onRecover: () => void;
+    status?: string;
     onHideForSessionChange: (hidden: boolean) => void;
     onClose: () => void;
 }) => {
     const dialogRef = useRef<HTMLElement>(null);
+    const returnFocus = useRef(typeof document === 'undefined' ? null : document.activeElement);
     const packageInputRef = useRef<HTMLInputElement>(null);
-    const importInputRef = useRef<HTMLInputElement>(null);
     const [showGuided, setShowGuided] = useState(false);
     const [previewProjects, setPreviewProjects] = useState<Record<string, ProjectState | null>>({});
     const starterRigProject = useMemo(createSampleProject, []);
@@ -228,7 +217,14 @@ export const GettingStartedDialog = ({ guidedLessons, hideForSession, onLesson, 
         () => starterRigPreviewProject(starterRigProject),
         [starterRigProject]
     );
-    useEffect(() => { dialogRef.current?.focus(); }, []);
+    useLayoutEffect(() => { dialogRef.current?.focus(); }, [showGuided]);
+    useEffect(() => () => {
+        queueMicrotask(() => {
+            const previous = returnFocus.current;
+            if (previous instanceof HTMLElement && previous !== document.body && previous.isConnected) previous.focus();
+            else document.querySelector<HTMLElement>('[data-testid="workflow-stage-project"]')?.focus();
+        });
+    }, []);
     useEffect(() => {
         if (!showGuided) return;
         let cancelled = false;
@@ -316,23 +312,22 @@ export const GettingStartedDialog = ({ guidedLessons, hideForSession, onLesson, 
                             <GuidedLessonMotionPreview lessonId="starter-rig" project={starterRigPreview} />
                         </span>
                         <strong>Guide</strong>
-                        <small>{starterCopy.guide}</small>
-                        <StarterCues items={starterCues.guide} />
                         <b><Sparkles size={16}/> Open</b>
                     </button>
                     <button type="button" className="template-tile primary" data-testid="getting-started-card-humanoid" aria-label="Open starter rig" onClick={() => onSample(starterRigProject)}>
                         <span className="template-icon-slot"><Sparkles size={18}/></span>
                         <strong>Starter rig</strong>
-                        <small>{starterCopy.humanoid}</small>
-                        <StarterCues items={starterCues.humanoid} />
                         <b><Sparkles size={16}/> Start</b>
                     </button>
                 </div>
+                <button type="button" className="getting-started-open-project"
+                    data-testid="getting-started-open-project" aria-label="Open Project" onClick={onOpenProject}>
+                    <FolderOpen size={28} aria-hidden="true" />
+                    <span><strong>Open Project</strong><small>Open a project file you saved.</small></span>
+                    <span className="open-project-choose" aria-hidden="true">Choose file</span>
+                </button>
+                {status && <div className="text-sm" role="status" data-testid="entry-file-status" data-capture-mask>{status}</div>}
                 <div className="getting-started-foot">
-                    <label className="flex items-center gap-2 text-sm font-bold text-slate-600" data-testid="getting-started-hide-session">
-                        <input type="checkbox" checked={hideForSession} onChange={event => onHideForSessionChange(event.currentTarget.checked)}/>
-                        Don&apos;t show again this session
-                    </label>
                     <div className="getting-started-file-actions" data-testid="getting-started-file-actions">
                         <button type="button" className="btn-secondary cursor-pointer" data-testid="getting-started-open-character" onClick={() => packageInputRef.current?.click()}><FileJson size={16}/> Character file</button>
                         <input ref={packageInputRef} data-testid="getting-started-package-input" hidden type="file" multiple accept=".json,.yaml,.yml,image/png,image/jpeg,image/webp,image/svg+xml" onChange={e => {
@@ -340,13 +335,12 @@ export const GettingStartedDialog = ({ guidedLessons, hideForSession, onLesson, 
                             e.currentTarget.value = '';
                             if (files.length) onPackage(files);
                         }}/>
-                        <button type="button" className="btn-secondary cursor-pointer" data-testid="getting-started-open-project" onClick={() => importInputRef.current?.click()}><Upload size={16}/> Open full project</button>
-                        <input ref={importInputRef} data-testid="getting-started-import-input" hidden type="file" accept="application/json,.json" onChange={e => {
-                            const file = e.currentTarget.files?.[0];
-                            e.currentTarget.value = '';
-                            if (file) onImport(file);
-                        }}/>
+                        {recoveryCandidate && <BrowserRecoveryAction candidate={recoveryCandidate} onRecover={onRecover} />}
                     </div>
+                    <label className="flex items-center gap-2 text-sm font-bold text-slate-600" data-testid="getting-started-hide-session">
+                        <input type="checkbox" checked={hideForSession} onChange={event => onHideForSessionChange(event.currentTarget.checked)}/>
+                        Don&apos;t show again this session
+                    </label>
                 </div>
             </>}
         </section>

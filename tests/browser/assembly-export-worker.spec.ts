@@ -1,3 +1,4 @@
+import { dismissStartupAnnouncement } from './startupHarness';
 import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { Buffer } from "node:buffer";
@@ -49,7 +50,8 @@ test("Blueprint owns reusable export jobs and keeps Character outputs separate",
     });
   });
 
-  await page.goto("/");
+  await page.goto(process.env.PLAYWRIGHT_BASE_PATH ?? '/');
+  await dismissStartupAnnouncement(page);
   await expect(page.locator("#boot-loader")).toHaveCount(0, {
     timeout: 180_000,
   });

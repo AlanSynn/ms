@@ -1,37 +1,29 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import type { MechanismConfig, Point, ProjectAction, ProjectState } from "../../../types";
+import React, { useEffect, useMemo, useState } from "react";
+import type { MechanismConfig, ProjectAction, ProjectState } from "../../../types";
 import {
-  FOUNDRY_OVERLAY_SIZE,
   FOUNDRY_VIEW_PRESETS,
-  clampFoundryPitch,
-  clampFoundryZoom,
-  projectFoundryOverlayPoint,
   type FoundryCamera,
-  type FoundryOverlaySize,
-  type FoundryViewPreset,
 } from "../../../utils/foundryCamera";
 import {
   reuseAutomataSceneRuntime,
   sampleReusableAutomataSceneRuntime,
 } from "../../../utils/automataSceneModel";
-import { pointsToSvgPath } from "../../../utils/mechanismPreview";
 import { DeferredThreeFoundryPreview } from "../foundry/DeferredThreeFoundryPreview";
 import type { FoundryPlaybackFrame } from "../foundry/ThreeFoundryPreview";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
-import { highResolutionSessionController } from "../../../runtime/render/adaptiveHighResolutionController";
-import { createTransientValueController } from "../../../runtime/render/transientValueController";
+import { useWorkingPreviewCamera, type WorkingPreviewCameraProps } from "./useWorkingPreviewCamera";
+import { visibleWorkingProjectPaths } from "../../../utils/workingProjectPreview";
 
-type DesignFoundryPreviewProps = {
+type DesignFoundryPreviewProps = WorkingPreviewCameraProps & {
   project: ProjectState;
   mechanism?: MechanismConfig;
   angle: number;
   playbackClock: PlaybackClock;
   isPlaying: boolean;
   showTrace: boolean;
-  dispatch: (action: ProjectAction) => void;
+  dispatch?: (action: ProjectAction) => void;
+  presentation?: "design" | "project";
 };
-
-const noPoint = { x: 0, y: 0 };
 
 const cameraLabel = (camera: FoundryCamera) =>
   camera.preset === "custom"
@@ -46,45 +38,21 @@ export const DesignFoundryPreview = React.memo(({
   isPlaying,
   showTrace,
   dispatch,
+  presentation = "design",
+  camera: controlledCamera,
+  onCameraChange,
 }: DesignFoundryPreviewProps) => {
   const [showGrid, setShowGrid] = useState(true);
   const [showUserPathPreview, setShowUserPathPreview] = useState(true);
   const [showMechanismPathPreview, setShowMechanismPathPreview] = useState(true);
-  const [camera, setCamera] = useState<FoundryCamera>({
-    ...FOUNDRY_VIEW_PRESETS.iso,
-    preset: "iso",
-    pan: { x: 0, y: 0 },
-  });
-  const [projectionSize, setProjectionSize] =
-    useState<FoundryOverlaySize>(FOUNDRY_OVERLAY_SIZE);
-  const [isOrbiting, setIsOrbiting] = useState(false);
-  const [isZooming, setIsZooming] = useState(false);
-  const [isPanning, setIsPanning] = useState(false);
   const [characterLayerReady, setCharacterLayerReady] = useState(false);
-  const orbitStartRef = useRef<{
-    pointerId: number;
-    x: number;
-    y: number;
-    yaw: number;
-    pitch: number;
-    zoom: number;
-    pan: Point;
-    mode: "orbit" | "zoom" | "pan";
-  } | null>(null);
-  const cameraGestureOwnerRef = useRef<object>({});
-  const transientCamera = useMemo(
-    () => createTransientValueController<FoundryCamera>({
-      onActiveChange: (active) => {
-        if (active) highResolutionSessionController.resetSubmissionWindow();
-        highResolutionSessionController.setGestureActive(
-          cameraGestureOwnerRef.current,
-          active,
-        );
-      },
-    }),
-    [],
-  );
-  useEffect(() => () => transientCamera.dispose(), [transientCamera]);
+  const {
+    camera, setCamera, transientCamera, fitRequest, requestFit, setCameraPreset,
+    isOrbiting, isZooming, isPanning, ...cameraEvents
+  } = useWorkingPreviewCamera({ camera: controlledCamera, onCameraChange });
+  const authoredPaths = useMemo(() => visibleWorkingProjectPaths(project), [project.paths, project.pathOrder]);
+  const showUserPath = showTrace && showUserPathPreview;
+  const showMechanismPath = showTrace && showMechanismPathPreview;
 
   useEffect(() => {
     setCharacterLayerReady(false);
@@ -109,15 +77,14 @@ export const DesignFoundryPreview = React.memo(({
             animatedSceneObjects: sceneModel.animatedSceneObjects,
             geometrySkeleton: project.skeleton,
             skeleton: sceneModel.skeleton,
-            paths: [],
+            paths: showUserPath ? authoredPaths : [],
+            selectedPathId: project.selectedPathId,
             showCharacter: true,
             showSkeleton: false,
           }
         : undefined,
-    [characterLayerReady, project, sceneModel],
+    [authoredPaths, characterLayerReady, project, sceneModel, showUserPath],
   );
-  const showUserPath = showTrace && showUserPathPreview;
-  const showMechanismPath = showTrace && showMechanismPathPreview;
   const playbackSample = useMemo(
     () => (phase: number): FoundryPlaybackFrame | undefined => {
       const frame = sampleReusableAutomataSceneRuntime(sceneRuntime, phase);
@@ -131,116 +98,16 @@ export const DesignFoundryPreview = React.memo(({
               animatedSceneObjects: frame.animatedSceneObjects,
               geometrySkeleton: project.skeleton,
               skeleton: frame.skeleton,
-              paths: [],
+              paths: showUserPath ? authoredPaths : [],
+              selectedPathId: project.selectedPathId,
               showCharacter: true,
               showSkeleton: false,
             }
           : undefined,
       };
     },
-    [characterLayerReady, project, sceneRuntime],
+    [authoredPaths, characterLayerReady, project, sceneRuntime, showUserPath],
   );
-  const userPathD = useMemo(() => {
-    if (!showUserPath || !sceneModel.foundryPreview?.userPathPoints.length) return "";
-    const projected = sceneModel.foundryPreview.userPathPoints
-      .map((point) => projectFoundryOverlayPoint(point, camera, projectionSize, 0.08))
-      .filter((point): point is Point => Boolean(point));
-    return projected.length >= 2 ? pointsToSvgPath(projected) : "";
-  }, [camera, sceneModel.foundryPreview?.userPathPoints, projectionSize, showUserPath]);
-
-  const updateProjectionSize = (size: FoundryOverlaySize) =>
-    setProjectionSize((prev) =>
-      Math.abs(prev.width - size.width) < 1 &&
-      Math.abs(prev.height - size.height) < 1
-        ? prev
-        : size,
-    );
-
-  const setCameraPreset = (preset: Exclude<FoundryViewPreset, "custom">) =>
-    setCamera({ ...FOUNDRY_VIEW_PRESETS[preset], preset, pan: { x: 0, y: 0 } });
-
-  const handlePointerDown: React.PointerEventHandler<HTMLDivElement> = (event) => {
-    if (event.button !== 0 && event.button !== 1 && event.button !== 2) return;
-    const mode: "orbit" | "zoom" | "pan" =
-      event.shiftKey || event.button === 1
-        ? "pan"
-        : event.altKey || event.button === 2
-          ? "zoom"
-          : "orbit";
-    orbitStartRef.current = {
-      pointerId: event.pointerId,
-      x: event.clientX,
-      y: event.clientY,
-      yaw: camera.yaw,
-      pitch: camera.pitch,
-      zoom: camera.zoom,
-      pan: camera.pan ?? noPoint,
-      mode,
-    };
-    transientCamera.begin(camera);
-    setIsOrbiting(mode === "orbit");
-    setIsZooming(mode === "zoom");
-    setIsPanning(mode === "pan");
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-
-  const handlePointerMove: React.PointerEventHandler<HTMLDivElement> = (event) => {
-    const start = orbitStartRef.current;
-    if (!start || start.pointerId !== event.pointerId) return;
-    event.preventDefault();
-    const dx = event.clientX - start.x;
-    const dy = event.clientY - start.y;
-    if (start.mode === "zoom") {
-      transientCamera.update({
-        yaw: start.yaw,
-        pitch: start.pitch,
-        zoom: clampFoundryZoom(start.zoom * (1 - dy * 0.006)),
-        preset: "custom",
-        pan: start.pan,
-      });
-      return;
-    }
-    if (start.mode === "pan") {
-      transientCamera.update({
-        yaw: start.yaw,
-        pitch: start.pitch,
-        zoom: start.zoom,
-        pan: { x: start.pan.x - dx * 0.018, y: start.pan.y + dy * 0.018 },
-        preset: "custom",
-      });
-      return;
-    }
-    transientCamera.update({
-      yaw: start.yaw + dx * 0.38,
-      pitch: clampFoundryPitch(start.pitch + dy * 0.28),
-      zoom: start.zoom,
-      pan: start.pan,
-      preset: "custom",
-    });
-  };
-
-  const finishPointerMove: React.PointerEventHandler<HTMLDivElement> = (event) => {
-    if (orbitStartRef.current?.pointerId !== event.pointerId) return;
-    const finalCamera = transientCamera.finish();
-    orbitStartRef.current = null;
-    setIsOrbiting(false);
-    setIsZooming(false);
-    setIsPanning(false);
-    if (finalCamera) setCamera(finalCamera);
-    if (event.currentTarget.hasPointerCapture(event.pointerId))
-      event.currentTarget.releasePointerCapture(event.pointerId);
-  };
-
-  const handleWheel: React.WheelEventHandler<HTMLDivElement> = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setCamera((prev) => ({
-      ...prev,
-      zoom: clampFoundryZoom(prev.zoom * (event.deltaY < 0 ? 1.1 : 0.9)),
-      preset: "custom",
-    }));
-  };
 
   if (!sceneModel.mechanism || !sceneModel.foundryPreview) {
     return (
@@ -256,8 +123,9 @@ export const DesignFoundryPreview = React.memo(({
 
   return (
     <section
-      className="design-automata-preview canvas-workspace"
-      data-testid="design-shared-foundry-preview"
+      className="design-automata-preview foundry-canvas-shell canvas-workspace"
+      style={{ height: "100%" }}
+      data-testid={presentation === "project" ? "project-working-preview" : "design-shared-foundry-preview"}
       data-renderer-source="ThreeFoundryPreview"
       data-shared-with="foundry-renderer"
       data-design-scene-mode="single-foundry-automata-scene"
@@ -268,7 +136,10 @@ export const DesignFoundryPreview = React.memo(({
       data-foundry-feature-issue-count={sceneModel.featureIssues.length}
       data-guided-context-mode="single-scene-automata"
       data-guided-context-part-count={project.partOrder.length}
-      data-guided-context-path-count={sceneModel.userPath ? 1 : 0}
+      data-guided-context-path-count={authoredPaths.length}
+      data-authored-path-ids={authoredPaths.map(path => path.id).join(",")}
+      data-working-camera={JSON.stringify(camera)}
+      data-working-phase={angle}
       data-guided-context-path-id={sceneModel.userPath?.id ?? ""}
       data-user-path-preview={showUserPath ? "shown" : "hidden"}
       data-mechanism-path-preview={showMechanismPath ? "shown" : "hidden"}
@@ -301,6 +172,7 @@ export const DesignFoundryPreview = React.memo(({
     >
       <div
         className="foundry-camera-hud design-foundry-camera-hud"
+        style={{ width: "max-content" }}
         data-testid="design-foundry-camera-controls"
         aria-label="Automata viewer controls"
       >
@@ -318,6 +190,8 @@ export const DesignFoundryPreview = React.memo(({
             {FOUNDRY_VIEW_PRESETS[preset].label}
           </button>
         ))}
+        <button type="button" onClick={() => requestFit("content")}>Fit</button>
+        <button type="button" onClick={() => requestFit("scene")}>Full scene</button>
         <span className="viewer-toolbar-divider" aria-hidden="true" />
         <button
           type="button"
@@ -362,6 +236,8 @@ export const DesignFoundryPreview = React.memo(({
         }
         kit={project.settings.physicalKit}
         camera={camera}
+        cameraFit={fitRequest}
+        onCameraFit={setCamera}
         transientCamera={transientCamera}
         rigOpacity={0.94}
         color={sceneModel.foundryPreview.mechanism.color}
@@ -385,40 +261,14 @@ export const DesignFoundryPreview = React.memo(({
         isZooming={isZooming}
         isPanning={isPanning}
         onAnchorPick={() => {}}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={finishPointerMove}
-        onPointerCancel={finishPointerMove}
-        onWheel={handleWheel}
-        onProjectionSizeChange={updateProjectionSize}
-        onAutomataPartSelect={(partId) =>
-          dispatch({ type: "select_part", partId })
-        }
-        onAutomataSceneObjectSelect={(objectId) =>
-          dispatch({ type: "select_scene_object", objectId })
-        }
-        viewerTab="design"
+        {...cameraEvents}
+        onProjectionSizeChange={() => {}}
+        onAutomataPartSelect={dispatch ? (partId) => dispatch({ type: "select_part", partId }) : undefined}
+        onAutomataSceneObjectSelect={dispatch ? (objectId) => dispatch({ type: "select_scene_object", objectId }) : undefined}
+        viewerTab={presentation}
         automataContext={automataContext}
-      >
-        {userPathD && (
-          <svg
-            data-testid="design-user-path-overlay"
-            viewBox={`0 0 ${projectionSize.width} ${projectionSize.height}`}
-            className="foundry-preview-overlay"
-            aria-hidden="true"
-          >
-            <path
-              d={userPathD}
-              fill="none"
-              stroke="#10b981"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeDasharray="10 8"
-              opacity="0.86"
-            />
-          </svg>
-        )}
-      </DeferredThreeFoundryPreview>
+        children={null}
+      />
     </section>
   );
 });

@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { registerCanvasCapture } from '../utils/canvasCapture';
+import { fitPuppetViewport, visibleObjectBounds, workingPreviewFrame, type WorkingPreviewFit } from '../utils/workingPreviewCamera';
 import type { BodyPartLayer, CanvasViewport, MechanismConfig, MechanismType, Point, ProjectMotionPath, ProjectState, SceneObject, StandardSkeleton } from '../types';
 import { boardGridLines, defaultPhysicalKit, SCENE_PX_PER_MM, sceneBoundsForSheet } from '../utils/coordinates';
 import { calculateLinkage, normalizeCamProfileSamples, sampledCamProfileScale, gearPairOutputRatio, gearTrainCenters, gearTrainMeshPhaseRadAt, gearTrainOutputRatio, gearTrainPitchRadii, gearTrainRotationRatioAt, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
@@ -791,7 +793,7 @@ const mechanismGeometrySignature = (mechanisms: MechanismConfig[]) => mechanisms
   mechanism.showOutputGear
 ].join(':')).join('|');
 
-export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PARTS, animatedSceneObjects = EMPTY_ANIMATED_SCENE_OBJECTS, skeleton, mechanisms, paths, selectedPathId, selectedPathPointIndex, angle = 0, playback, viewport, setViewport, inputMode = 'always', testId = 'three-puppet', cameraPresets = PUPPET_CAMERA_PRESETS, showToolbar = true, showCameraPresets = true, initialCameraPreset, initialLayers, assemblyOverlay, drawMode = false, onDrawPoint, onDrawEnd, onSelectPathPoint, onMovePathPoint, onEndPathPointEdit, pathGestureDraft, onSelectPart, onSelectSceneObject, onSelectMechanism, onSelectJoint, onSelectOnlyPointerDown, onSelectOnlyPointerMove, onSelectOnlyPointerUp, onSelectOnlyPointerCancel, onSelectOnlyWheel }: {
+export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PARTS, animatedSceneObjects = EMPTY_ANIMATED_SCENE_OBJECTS, skeleton, mechanisms, paths, selectedPathId, selectedPathPointIndex, showPathHandles = true, angle = 0, playback, viewport, setViewport, fitRequest, inputMode = 'always', testId = 'three-puppet', cameraPresets = PUPPET_CAMERA_PRESETS, showToolbar = true, showCameraPresets = true, showLayerControls = true, initialCameraPreset, initialLayers, assemblyOverlay, drawMode = false, onDrawPoint, onDrawEnd, onDrawCancel, onSelectPathPoint, onMovePathPoint, onEndPathPointEdit, onCancelPathPointEdit, pathGestureDraft, onSelectPart, onSelectSceneObject, onSelectMechanism, onSelectJoint, onSelectOnlyPointerDown, onSelectOnlyPointerMove, onSelectOnlyPointerUp, onSelectOnlyPointerCancel, onSelectOnlyWheel }: {
   project?: ProjectState;
   animatedParts?: Record<string, BodyPartLayer>;
   animatedSceneObjects?: Record<string, SceneObject>;
@@ -800,24 +802,29 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
   paths?: ProjectMotionPath[];
   selectedPathId?: string;
   selectedPathPointIndex?: number | null;
+  showPathHandles?: boolean;
   angle?: number;
   playback?: PuppetPlayback;
   viewport?: CanvasViewport;
+  fitRequest?: WorkingPreviewFit;
   setViewport?: React.Dispatch<React.SetStateAction<CanvasViewport>>;
   inputMode?: 'always' | '3d-only' | 'select-only' | 'none';
   testId?: string;
   cameraPresets?: Viewer3DCameraPreset[];
   showToolbar?: boolean;
   showCameraPresets?: boolean;
+  showLayerControls?: boolean;
   initialCameraPreset?: Viewer3DCameraPreset;
   initialLayers?: Partial<typeof DEFAULT_PUPPET_VIEWER_LAYERS>;
   assemblyOverlay?: PuppetAssemblyOverlay;
   drawMode?: boolean;
   onDrawPoint?: (point: Point) => void;
   onDrawEnd?: () => void;
+  onDrawCancel?: () => void;
   onSelectPathPoint?: (pathId: string, pointIndex: number) => void;
   onMovePathPoint?: (point: Point) => void;
   onEndPathPointEdit?: () => void;
+  onCancelPathPointEdit?: () => void;
   pathGestureDraft?: PathGestureDraft;
   onSelectPart?: (partId: string) => void;
   onSelectSceneObject?: (objectId: string) => void;
@@ -834,6 +841,8 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
   const hostRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef<HTMLDivElement | null>(null);
   const initialSceneReadyRef = useRef(false);
+  const applyCameraFitRef = useRef<(() => void) | undefined>(undefined);
+  const completedCameraFitRef = useRef<WorkingPreviewFit | undefined>(undefined);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -868,6 +877,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
   const [rendererStatus, setRendererStatus] = useState<RendererStatus>('pending');
   const publishInitialSceneReady = (ready: boolean) => {
     initialSceneReadyRef.current = ready;
+    if (ready) applyCameraFitRef.current?.();
     if (previewRef.current) {
       previewRef.current.dataset.threeInitialSceneReady = ready ? 'true' : 'false';
     }
@@ -934,7 +944,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
   const mechanismsToRender = useMemo(() => (mechanisms ?? project?.mechanisms ?? [])
     .filter(mechanism => mechanism.visible !== false && mechanism.enabled !== false), [mechanisms, project?.mechanisms]);
   const pathsToRender = useMemo(() => (paths ?? [])
-    .filter(path => path.visible !== false && path.enabled !== false && path.points.length > 1), [paths]);
+    .filter(path => path.visible !== false && path.points.length > 1), [paths]);
   const pathLineSamples = useMemo(
     () => new Map(pathsToRender.map((path) => [
       path.id,
@@ -954,7 +964,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     ],
   );
   const pathHandleSamples = useMemo(
-    () => new Map(pathsToRender.map((path) => [
+    () => new Map(pathsToRender.filter(path => showPathHandles && path.id === selectedPathId).map((path) => [
       path.id,
       sampleIndexedValues(
         path.points,
@@ -969,6 +979,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
       renderPolicy.interactiveDetail.maxPathHandles,
       selectedPathId,
       selectedPathPointIndex,
+      showPathHandles,
     ],
   );
   const selectedRenderedPath = pathsToRender.find(path => path.id === selectedPathId);
@@ -1207,12 +1218,20 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
       stateRef.current.dataset.threeSceneVisibleObjectCount = String(estimatedObjectCount);
       stateRef.current.dataset.threeSceneObjectCount = String(estimatedObjectCount);
       stateRef.current.dataset.threeRenderSubmissions = String(renderSubmissionCountRef.current);
+      stateRef.current.dataset.threePlaybackTimelineMs = String(playback?.clock.getTimelineMs() ?? 0);
+      stateRef.current.dataset.threePlaybackPhase = String(playback?.clock.getPhase() ?? 0);
       stateRef.current.dataset.threeRenderCalls = String(renderer.info.render.calls);
       stateRef.current.dataset.threeRenderTriangles = String(renderer.info.render.triangles);
       stateRef.current.dataset.threeRendererGeometryCount = String(renderer.info.memory.geometries);
       stateRef.current.dataset.threeRendererTextureCount = String(renderer.info.memory.textures);
       stateRef.current.dataset.threeSceneObjectScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'object'));
       stateRef.current.dataset.threePartScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'part'));
+      stateRef.current.dataset.threePartTransforms = JSON.stringify(Object.fromEntries(
+        [...partMeshesRef.current.entries()].map(([id, mesh]) => [id, {
+          x: mesh.position.x, y: mesh.position.y, z: mesh.position.z,
+          rotation: mesh.rotation.z, scale: mesh.scale.x,
+        }]),
+      ));
       stateRef.current.dataset.threeMechanismScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'mechanism'));
       stateRef.current.dataset.threePathPointScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'path-point'));
     }
@@ -1289,6 +1308,10 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     rendererRef.current = renderer;
     sceneRef.current = scene;
     cameraRef.current = camera;
+    const unregisterCapture = registerCanvasCapture(renderer.domElement, () => {
+      if (renderer.getContext().isContextLost()) throw new Error('Scene unavailable');
+      renderer.render(scene, camera);
+    });
     rootsRef.current = { root, staticLayer, partsLayer, objectsLayer, skeletonLayer, pathsLayer, mechanismsLayer };
     activePuppetScenes.set(
       scene,
@@ -1343,6 +1366,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
 
     return () => {
       publishInitialSceneReady(false);
+      unregisterCapture();
       ro.disconnect();
       unsubscribeAdaptive?.();
       rendererResizeRef.current = null;
@@ -1940,6 +1964,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
       line.visible = path.id !== activeDraftPathId;
       line.renderOrder = 90;
       roots.pathsLayer.add(line);
+      if (!handleSamples.length) return;
       const markers = new THREE.InstancedMesh(
         cachedGeometry('path-point:node', () => new THREE.SphereGeometry(0.075, 12, 6)),
         materials.pathPoint,
@@ -2518,6 +2543,23 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     if (E2E_DIAGNOSTICS && stateRef.current) stateRef.current.dataset.threeSceneObjectCount = String(estimatedObjectCount);
   }, [estimatedObjectCount]);
 
+  applyCameraFitRef.current = () => {
+    const roots = rootsRef.current, camera = cameraRef.current;
+    if (!fitRequest || completedCameraFitRef.current === fitRequest || !initialSceneReadyRef.current ||
+        !roots || !camera || !viewportRef.current || !setViewport) return;
+    const bounds = fitRequest.scope === 'scene' ? visibleObjectBounds(roots.root) : new THREE.Box3();
+    if (fitRequest.scope === 'content') {
+      [roots.partsLayer, roots.objectsLayer, roots.pathsLayer].forEach(layer => {
+        if (layer.visible) bounds.union(visibleObjectBounds(layer));
+      });
+    }
+    if (bounds.isEmpty()) return;
+    completedCameraFitRef.current = fitRequest;
+    setViewport(fitPuppetViewport(camera, bounds, viewportRef.current, VIEW_SCALE,
+      hostRef.current ? workingPreviewFrame(hostRef.current) : undefined));
+  };
+  useEffect(() => { applyCameraFitRef.current?.(); }, [fitRequest, rendererStatus]);
+
   const handleViewerWheel = (event: React.WheelEvent<HTMLDivElement>) => {
     if (inputMode === 'select-only') {
       event.stopPropagation();
@@ -2840,12 +2882,14 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     viewerDragRef.current = null;
     setIsViewerDragging(false);
     if (start.mode === 'draw') {
-      onDrawEnd?.();
+      if (event.type === 'pointercancel') onDrawCancel?.();
+      else onDrawEnd?.();
       if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
       return;
     }
     if (start.mode === 'path-point') {
-      onEndPathPointEdit?.();
+      if (event.type === 'pointercancel') onCancelPathPointEdit?.();
+      else onEndPathPointEdit?.();
       if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
       return;
     }
@@ -2953,12 +2997,13 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
               data-testid={`${testId}-view-${preset === 'front' ? '2d' : preset === 'iso' ? '3d' : preset}`}
               className={cameraPreset === preset ? 'active' : ''}
               aria-pressed={cameraPreset === preset}
-              onClick={() => setCameraPreset(preset)}
+              onClick={() => { setCameraPreset(preset); setCameraOrbit(cameraOrbitFromPreset(preset)); }}
             >{VIEWER3D_CAMERA_PRESETS[preset].label}</button>
           ))}
           <span className="viewer-toolbar-divider" aria-hidden="true" />
         </>}
         {(['grid', 'character', 'skeleton', 'mechanisms'] as Array<keyof typeof DEFAULT_PUPPET_VIEWER_LAYERS>)
+          .filter(layer => showLayerControls || layer === 'grid')
           .filter(layer => layer !== 'mechanisms' || mechanismsToRender.length > 0)
           .map(layer => (
             <button

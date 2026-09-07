@@ -1,5 +1,5 @@
 import type { ProjectMotionPath, ProjectState, StandardJoint } from "../../../types";
-import { motionChainOptionLabel, type MotionChainDescriptor } from "../../../utils/motion";
+import { motionChainOptionLabel, motionPathReadiness, type MotionChainDescriptor } from "../../../utils/motion";
 
 interface PathInspectorPanelProps {
   project: ProjectState;
@@ -51,11 +51,11 @@ export const PathInspectorPanel = ({
       <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
         <div className="font-bold text-slate-800">Path</div>
         <div>
-          {pointCount >= 3
+          {motionPathReadiness(project, selectedPath).playable
             ? selectedPath.closed
               ? "Loop ready"
               : "Curve ready"
-            : `${pointCount}/3 points`}
+            : motionPathReadiness(project, selectedPath).reason}
         </div>
         <div>
           {selectedPoint !== null && selectedPath.points[selectedPoint]
@@ -135,14 +135,12 @@ export const PathInspectorPanel = ({
         <div
           className="rounded-2xl border border-violet-100 bg-violet-50/70 p-3 text-sm text-slate-600"
           data-testid="ik-chain-summary"
-          title={pointCount < 3 ? "Draw 3 points." : ikDescriptor ? "Motion target." : "Pick handle."}
+          title={selectedPath ? motionPathReadiness(project, selectedPath).reason ?? "Motion target" : "Draw 3 points"}
         >
           <div className="font-bold text-slate-800">
-            {pointCount < 3
-              ? "Draw 3 points"
-              : ikDescriptor
-                ? "Motion ready"
-                : "Pick a handle"}
+            {selectedPath
+              ? motionPathReadiness(project, selectedPath).playable ? "Motion ready" : motionPathReadiness(project, selectedPath).reason
+              : "Draw 3 points"}
           </div>
         </div>
       )}

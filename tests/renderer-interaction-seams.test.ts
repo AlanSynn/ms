@@ -12,6 +12,7 @@ const puppet = source("components/ThreePuppetPreview.tsx");
 const initialSceneResourceUpload = source("runtime/render/initialSceneResourceUpload.ts");
 const foundry = source("components/stages/foundry/ThreeFoundryPreview.tsx");
 const design = source("components/stages/mechanism/DesignFoundryPreview.tsx");
+const workingCamera = source("components/stages/mechanism/useWorkingPreviewCamera.ts");
 const assembly = source("components/stages/assembly/AssemblyThreePreview.tsx");
 const foundryStage = source("components/stages/foundry/MechanismFoundry.tsx");
 const foundryGesture = source("components/stages/foundry/foundryHandleGesture.ts");
@@ -174,7 +175,7 @@ assert(
 );
 for (const [name, text] of [
   ["Foundry", foundryStage],
-  ["Design", design],
+  ["Design", `${design}\n${workingCamera}`],
   ["Assembly", assembly],
 ] as const) {
   assert(text.includes("transientCamera") || text.includes("transientFoundryCamera"), `${name} uses the shared transient camera seam`);

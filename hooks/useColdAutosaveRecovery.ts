@@ -1,70 +1,68 @@
-import { useEffect, useRef, useState, type SetStateAction } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ProjectState } from "../types";
 import { createAutosaveRecoveryWorkerClient } from "../runtime/persistence/autosaveRecoveryWorkerClient";
-
-type ProjectSetter = (
-  update: SetStateAction<ProjectState>,
-  options?: { history?: boolean; resetHistory?: boolean },
-) => void;
+import {
+  createProjectDecisionBoundary,
+  projectAuthoringChanged,
+  type BrowserRecoveryCandidate,
+} from "../runtime/persistence/projectDecisionBoundary";
+export type { BrowserRecoveryCandidate } from "../runtime/persistence/projectDecisionBoundary";
 
 export const useColdAutosaveRecovery = ({
   project,
-  setProject,
 }: {
   project: ProjectState;
-  setProject: ProjectSetter;
 }) => {
   const initialProjectRef = useRef(project);
-  const latestProjectRef = useRef(project);
-  latestProjectRef.current = project;
-  const setProjectRef = useRef(setProject);
-  setProjectRef.current = setProject;
+  const previousProjectRef = useRef(project);
+  const [hasChosenProject, setHasChosenProject] = useState(false);
+  const decisionRef = useRef<ReturnType<typeof createProjectDecisionBoundary> | null>(null);
+  decisionRef.current ??= createProjectDecisionBoundary(() => setHasChosenProject(true));
+  const decision = decisionRef.current;
   const clientRef = useRef<ReturnType<
     typeof createAutosaveRecoveryWorkerClient
   > | null>(null);
   clientRef.current ??= createAutosaveRecoveryWorkerClient();
   const client = clientRef.current;
   const [pending, setPending] = useState(true);
-  const [recoveredBaseline, setRecoveredBaseline] = useState<
-    ProjectState | undefined
-  >();
+  const [candidate, setCandidate] = useState<BrowserRecoveryCandidate>();
 
   useEffect(() => {
     const initialProject = initialProjectRef.current;
-    const stillInitial = () =>
-      latestProjectRef.current === initialProject &&
-      latestProjectRef.current.metadata.id === initialProject.metadata.id;
+    const stillChoosing = () => !decision.isAuthorized();
     client.request(
       initialProject,
       {
         complete: (result) => {
-          if (result.status === "loaded" && stillInitial()) {
-            setRecoveredBaseline(result.project);
-            setProjectRef.current(
-              (current) =>
-                current === initialProject &&
-                current.metadata.id === initialProject.metadata.id
-                  ? result.project
-                  : current,
-              { resetHistory: true },
-            );
+          if (result.status === "loaded" && stillChoosing()) {
+            setCandidate({
+              projectId: result.project.metadata.id,
+              projectName: result.project.metadata.name,
+              backedUpAt: result.backedUpAt,
+            });
           }
           setPending(false);
         },
         failed: () => setPending(false),
         superseded: () => setPending(false),
       },
-      stillInitial,
+      stillChoosing,
+      { readOnly: true },
     );
     return () => client.dispose();
-  }, [client]);
+  }, [client, decision]);
 
   useEffect(() => {
-    if (pending && project !== initialProjectRef.current) {
+    if (projectAuthoringChanged(previousProjectRef.current, project)) {
+      decision.authoredEdit();
+    }
+    previousProjectRef.current = project;
+    if (decision.isAuthorized()) {
       client.cancel();
       setPending(false);
+      setCandidate(undefined);
     }
-  }, [client, pending, project]);
+  }, [client, decision, hasChosenProject, project]);
 
-  return { pending, recoveredBaseline };
+  return { pending, candidate, decision, hasChosenProject };
 };

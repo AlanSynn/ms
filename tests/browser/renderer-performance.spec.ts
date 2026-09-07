@@ -1,3 +1,4 @@
+import { dismissStartupAnnouncement } from './startupHarness';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 const nextTwoFrames = (page: Page) =>
@@ -6,7 +7,8 @@ const nextTwoFrames = (page: Page) =>
   }));
 
 const openWavingArm = async (page: Page) => {
-  await page.goto('/');
+  await page.goto(process.env.PLAYWRIGHT_BASE_PATH ?? '/');
+  await dismissStartupAnnouncement(page);
   await expect(page.locator('#boot-loader')).toHaveCount(0, { timeout: 180_000 });
   const dialog = page.getByTestId('getting-started-dialog');
   await expect(dialog).toBeVisible();

@@ -16,7 +16,7 @@ export type AppCommandSpec = {
 const APP_COMMAND_DEFINITIONS = [
   { id: 'project.new', menu: 'file', label: 'New Project', description: 'Start new project.', shortcuts: ['Mod+N'] },
   { id: 'project.open', menu: 'file', label: 'Open Project', description: 'Open project file.', shortcuts: ['Mod+O'], testId: 'command-load-project' },
-  { id: 'project.recoverAutosave', menu: 'file', label: 'Recover', description: 'Restore browser autosave.' },
+  { id: 'project.recoverAutosave', menu: 'file', label: 'Recover browser backup', description: 'Recover a browser backup after a problem.' },
   { id: 'project.save', menu: 'file', label: 'Save Project', description: 'Save project file.', shortcuts: ['Mod+S'], testId: 'command-download-snapshot' },
   { id: 'project.saveAs', menu: 'file', label: 'Download Snapshot As…', description: 'Legacy named snapshot.', menuVisible: false },
   { id: 'project.exportCopy', menu: 'file', label: 'Portable Copy', description: 'Legacy portable copy.', menuVisible: false },
@@ -44,6 +44,9 @@ const APP_COMMAND_DEFINITIONS = [
 
   { id: 'options.preferences', menu: 'options', label: 'Preferences…', description: 'Options.', shortcuts: ['Mod+,'], stageTarget: 'options' },
 
+  { id: 'help.findFeature', menu: 'help', label: 'Find a feature', description: 'Find an existing control.' },
+  { id: 'help.feedback', menu: 'help', label: 'Feedback', description: 'Send a problem or idea.' },
+  { id: 'help.whatsNew', menu: 'help', label: "What's new", description: 'See updates in this version.' },
   { id: 'help.shortcuts', menu: 'help', label: 'Shortcuts', description: 'Shortcuts.', shortcuts: ['?'] },
   { id: 'help.about', menu: 'help', label: 'About MotionSmith…', description: 'About.' }
 ] as const satisfies readonly AppCommandSpec[];
@@ -65,7 +68,7 @@ export const APP_MENU_GROUPS = [
   { id: 'view', label: 'View', commandIds: ['view.zoomIn', 'view.zoomOut', 'view.fit', 'view.reset', 'workspace.saveLayout', 'workspace.restoreLayout', 'workspace.resetLayout'] },
   { id: 'go', label: 'Go', commandIds: ['stage.project', 'stage.character', 'stage.path', 'stage.foundry', 'stage.design', 'stage.blueprint', 'stage.assembly'] },
   { id: 'options', label: 'Options', commandIds: ['options.preferences'] },
-  { id: 'help', label: 'Help', commandIds: ['help.shortcuts', 'help.about'] }
+  { id: 'help', label: 'Help', commandIds: ['help.findFeature', 'help.feedback', 'help.whatsNew', 'help.shortcuts', 'help.about'] }
 ] as const satisfies readonly AppMenuGroup[];
 
 export const commandById = (id: AppCommandId) => APP_COMMANDS.find(command => command.id === id)!;

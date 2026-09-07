@@ -130,6 +130,10 @@ export const createAutosaveRecoveryWorkerClient = (
       superseded?: () => void;
     },
     shouldApply: () => boolean = () => true,
+    options: {
+      readOnly?: boolean;
+      accept?: (candidate: Extract<AutosaveProjectReadResult, { status: "loaded" }>) => boolean;
+    } = {},
   ) => {
     releaseActive();
     const generationId = ++generationSequence;
@@ -266,8 +270,18 @@ export const createAutosaveRecoveryWorkerClient = (
             return;
           }
 
+          if (data.output.result.status === "loaded" && options.accept &&
+            !options.accept(data.output.result)) {
+            active = undefined;
+            releaseWorker(worker);
+            return;
+          }
+          if (!requestState.shouldApply()) {
+            supersede();
+            return;
+          }
           let result = data.output.result;
-          if (data.output.mutation) {
+          if (data.output.mutation && !options.readOnly) {
             const serialized = data.output.mutation.serializedSource === "legacy"
               ? snapshot.legacyRaw
               : snapshot.currentRaw;
@@ -300,6 +314,7 @@ export const createAutosaveRecoveryWorkerClient = (
                 }
                 const legacyStillCurrent =
                   active === requestState &&
+                  requestState.shouldApply() &&
                   autosaveRecoveryStorageIsCurrent(snapshot, storage);
                 if (!legacyStillCurrent || !migratedTokenIsCurrent) {
                   if (migratedTokenIsCurrent) {

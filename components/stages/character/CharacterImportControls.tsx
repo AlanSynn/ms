@@ -26,6 +26,7 @@ export const CharacterImportControls = ({
     <button
       className="btn-primary"
       aria-label="Open Getting Started"
+      data-feature-id="character.gettingStarted"
       onClick={onOpenGettingStarted}
     >
       <Sparkles size={16} /> Getting Started
@@ -36,6 +37,7 @@ export const CharacterImportControls = ({
           type="button"
           className="btn-secondary flex-1 cursor-pointer"
           aria-label="Load character file"
+          data-feature-id="character.loadCharacterFile"
           onClick={() => packageInputRef.current?.click()}
         >
           <FileJson size={16} /> Load character file
@@ -47,6 +49,8 @@ export const CharacterImportControls = ({
           type="button"
           className="btn-secondary flex-1 cursor-pointer"
           data-testid="character-add-scene-object"
+          data-feature-id="character.loadObjectFile"
+          data-feature-blocker={sceneObjectDisabled ? "Finish loading the character first." : undefined}
           disabled={sceneObjectDisabled}
           onClick={() => objectInputRef.current?.click()}
         >
@@ -89,14 +93,14 @@ export const CharacterImportControls = ({
       className="btn-secondary cursor-pointer"
       onClick={() => importInputRef.current?.click()}
     >
-      <Upload size={16} /> Open full project
+      <Upload size={16} /> Open Project
     </button>
     <input
       ref={importInputRef}
       data-testid="onboarding-import-input"
       hidden
       type="file"
-      accept="application/json,.json"
+      accept="application/json,.motionsmith,.motionsmith.json,.json"
       onChange={(e) => {
         const file = e.currentTarget.files?.[0];
         e.currentTarget.value = "";

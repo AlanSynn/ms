@@ -107,6 +107,8 @@ const source = (relativePath: string) =>
 const playbackHook = source("hooks/useWorkspacePlaybackLoop.ts");
 const puppetPreview = source("components/ThreePuppetPreview.tsx");
 const pathCanvasPane = source("components/stages/path/PathCanvasPane.tsx");
+const pathEditor = source("components/stages/path/PathEditor.tsx");
+const externalClock = source("runtime/playback/externalPlaybackClock.ts");
 const foundryPreview = source("components/stages/foundry/ThreeFoundryPreview.tsx");
 const foundryOverlay = source("components/stages/foundry/FoundryOverlayLayer.tsx");
 const playerDock = source("components/shell/WorkspacePlayerDock.tsx");
@@ -120,11 +122,16 @@ assert(playerDock.includes("time - lastControlUpdate < 100"), "the playback cont
 assert(
   pathCanvasPane.includes("playback={{") &&
     !pathCanvasPane.includes("playback={isPlaying ?") &&
-    pathCanvasPane.includes("sample: (phase) => isPlaying ? playbackSample(phase) : undefined") &&
+    pathCanvasPane.includes("sample: playbackSample") &&
+    pathEditor.includes("playbackClock.getTimelineMs() ||") &&
+    pathEditor.includes("motionTimelineMsForPhase(phase, playbackDurationMs)") &&
+    playbackHook.includes("!isPlaying ||") &&
+    playbackHook.includes("return () => playbackClock.stop()") &&
+    externalClock.includes("scheduler.cancelFrame(frameHandle)") &&
     pathCanvasPane.includes("mechanisms={[]}") &&
     pathCanvasPane.includes("const pathsToRender = React.useMemo(") &&
     pathCanvasPane.includes("paths={pathsToRender}"),
-  "Path retains one shared-clock subscription and the canonical path prop across pause while skipping idle projection and mechanism geometry",
+  "Path preserves held elapsed-time sampling while the shared clock gates idle animation and the scene excludes mechanism geometry",
 );
 
 console.log("b695 playback contract ok");

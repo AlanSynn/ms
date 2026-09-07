@@ -8,9 +8,7 @@ import type {
   SceneObject,
   ProjectState,
 } from "../types";
-import { validatePath } from "../utils/project";
-import { pathBelongsToTarget } from "../utils/pathTargets";
-import { nextMotionPathId } from "../utils/motion";
+import { motionPathWithPoints } from "../utils/pathEditing";
 
 type UseAppPathActionsParams = {
   project: ProjectState;
@@ -40,60 +38,8 @@ export const useAppPathActions = ({
       const targetKind = selectedSceneObject ? "scene-object" : "part";
       const targetId = selectedSceneObject?.id ?? selectedPart?.id;
       if (!targetId) return;
-      if (
-        targetKind === "scene-object"
-          ? project.sceneObjects[targetId]?.locked
-          : project.parts[targetId]?.locked
-      )
-        return;
-      const requested = pathId ? project.paths[pathId] : undefined;
-      if (
-        pathId &&
-        (!requested || !pathBelongsToTarget(requested, targetKind, targetId, project))
-      ) return;
-      const existing = requested ?? (
-        Object.values(project.paths) as ProjectMotionPath[]
-      ).find((path) => pathBelongsToTarget(path, targetKind, targetId, project));
-      const id =
-        requested?.id ?? (project.selectedPathId &&
-        project.paths[project.selectedPathId] &&
-        pathBelongsToTarget(
-          project.paths[project.selectedPathId],
-          targetKind,
-          targetId,
-          project,
-        )
-          ? project.selectedPathId
-          : (existing?.id ?? nextMotionPathId(project, targetId)));
-      const current = project.paths[id];
-      dispatch({
-        type: "upsert_path",
-        path: validatePath({
-          id,
-          partId: current?.partId ?? selectedPart?.id ?? "",
-          sceneObjectId: current?.sceneObjectId ?? selectedSceneObject?.id,
-          targetAnchorJointId: selectedSceneObject ? undefined : current?.targetAnchorJointId,
-          chainRootJointId: selectedSceneObject ? undefined : current?.chainRootJointId,
-          smoothness: current?.smoothness ?? 0,
-          points,
-          timedPoints:
-            timedPoints ??
-            points.map((p, i) => ({
-              ...p,
-              time:
-                points.length <= 1
-                  ? 0
-                  : (i / (points.length - 1)) *
-                    (current?.duration ?? project.settings.animationDurationMs),
-            })),
-          duration: current?.duration ?? project.settings.animationDurationMs,
-          closed: current?.closed ?? true,
-          enabled: current?.enabled ?? true,
-          visible: current?.visible ?? true,
-          source,
-          warnings: [],
-        }),
-      });
+      const path = motionPathWithPoints(project, targetKind, targetId, points, source, timedPoints, pathId);
+      if (path) dispatch({ type: "upsert_path", path });
     },
     [dispatch, project, selectedPart?.id, selectedSceneObject?.id],
   );

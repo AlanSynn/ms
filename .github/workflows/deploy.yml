@@ -67,6 +67,7 @@ jobs:
       - name: Build release artifact
         env:
           VITE_BASE_PATH: /ms/
+          VITE_FEEDBACK_ENDPOINT: ${{ vars.VITE_FEEDBACK_ENDPOINT }}
         run: bun run build
 
       - name: Check production bundle budget

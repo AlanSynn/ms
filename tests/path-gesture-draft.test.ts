@@ -53,3 +53,18 @@ assert.equal(emissions.at(-1), null, 'subscribers restore the canonical path aft
 draft.dispose();
 
 console.log('path gesture draft contract ok');
+
+import { capturePathGestureIdentity, pathGestureIdentityMatches } from '../runtime/path/pathGestureIdentity';
+import { createSampleProject, applyProjectAction } from '../utils/project';
+const project = createSampleProject({ includeMechanism: false });
+const path = Object.values(project.paths)[0];
+const identity = capturePathGestureIdentity(project, 'part', path.partId, path);
+assert(pathGestureIdentityMatches(identity, project, 'part', path.partId, path));
+assert(!pathGestureIdentityMatches(identity, project, 'part', 'left_arm_lower', path), 'a target change cancels the gesture');
+assert(!pathGestureIdentityMatches(identity, project, 'part', path.partId, { ...path, id: 'path-b' }), 'a path change cancels the gesture');
+assert(!pathGestureIdentityMatches(identity, { ...project }, 'part', path.partId, path), 'even a reopened project with the same IDs cancels the old gesture');
+const switched = applyProjectAction(project, { type: 'select_part', partId: 'left_arm_lower' });
+assert(!pathGestureIdentityMatches(identity, switched, 'part', 'left_arm_lower'), 'late pointer-up cannot commit to the newly selected part');
+assert.equal(capturePathGestureIdentity(project, 'part', 'torso', path), undefined, 'a gesture cannot capture an ancestor as the owner of another path');
+assert.equal(capturePathGestureIdentity({ ...project, parts: { ...project.parts, [path.partId]: { ...project.parts[path.partId], locked: true } } }, 'part', path.partId, path), undefined);
+console.log('path gesture identity contract ok');

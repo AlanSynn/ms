@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from "react";
+import { useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Pause, Play, Plus, Route, Trash2 } from "lucide-react";
 
 import { ContextHelp } from "../../ui/ContextHelp";
@@ -12,11 +12,13 @@ import type {
   ProjectState,
   SceneObject,
 } from "../../../types";
-import { motionPathStatus } from "../../../utils/motion";
+import { motionPathReadiness, motionPathStatus } from "../../../utils/motion";
+import { PathTargetChooser } from "./PathTargetChooser";
 import {
   pathOwnerLabel,
   pathTargetId,
   pathTargetKind,
+  type PathTargetKind,
 } from "../../../utils/pathTargets";
 
 interface PathWorkflowPanelProps {
@@ -39,7 +41,7 @@ interface PathWorkflowPanelProps {
   undoClearPath: () => void;
   canUndoClear: boolean;
   selectMotion: (pathId: string) => void;
-  addMotion: () => void;
+  addMotion: (kind: PathTargetKind, id: string) => void;
   updatePath: (updates: Partial<ProjectMotionPath>) => void;
   openTracking: () => void;
   setIsPlaying: (value: boolean) => void;
@@ -74,7 +76,10 @@ export const PathWorkflowPanel = ({
   setAngle,
   deletePoint,
 }: PathWorkflowPanelProps) => {
+  const [addingPath, setAddingPath] = useState(false);
+  const addButtonRef = useRef<HTMLButtonElement>(null);
   const selectedTargetId = selectedSceneObject?.id ?? selectedPart?.id ?? "";
+  const readiness = selectedPath ? motionPathReadiness(project, selectedPath) : undefined;
   const motionLabel = (path: ProjectMotionPath) => {
     const ownerId = pathTargetId(path);
     const ownerKind = pathTargetKind(path);
@@ -91,7 +96,7 @@ export const PathWorkflowPanel = ({
     <div className="path-panel stage-pane-stack" data-testid="novice-path-panel">
       <StageLeftSummary project={project} title="Path" stage="path" goStage={goStage}>
         <div className="flex items-center justify-between gap-2">
-          <h3>Motions</h3>
+          <h3>Paths</h3>
           <span className="status-chip" data-testid="motion-count">
             {motionPaths.length}
           </span>
@@ -99,11 +104,12 @@ export const PathWorkflowPanel = ({
         <div
           className="mt-2 flex flex-col gap-1.5"
           data-testid="motion-inventory"
-          aria-label="Motions"
+          data-feature-id="path.switchMotion"
+          aria-label="Paths"
         >
           {motionPaths.map((path) => {
             const selected = path.id === selectedPath?.id;
-            const status = path.points.length >= 3 ? motionPathStatus(path) : "Draw";
+            const status = motionPathStatus(project, path);
             return (
               <button
                 type="button"
@@ -134,15 +140,17 @@ export const PathWorkflowPanel = ({
           })}
           {!motionPaths.length && (
             <div className="free-draw-status" data-testid="motion-inventory-empty">
-              No motions
+              No paths
             </div>
           )}
         </div>
 
-        <div className="mt-3 flex gap-2">
+        <label className="mt-3 block text-xs font-bold text-slate-500">
+          Selected target
           <select
             aria-label="Motion target"
             data-testid="selected-motion-target"
+            data-feature-id="path.target"
             className="field min-w-0 flex-1"
             value={selectedTargetId}
             onChange={(event) => {
@@ -174,15 +182,26 @@ export const PathWorkflowPanel = ({
               </optgroup>
             )}
           </select>
+        </label>
           <button
+            ref={addButtonRef}
             type="button"
-            className="btn-secondary shrink-0"
-            disabled={!selectedTargetId || pathLocked}
-            onClick={addMotion}
+            className="btn-secondary mt-2 w-full"
+            aria-expanded={addingPath}
+            disabled={!sortedParts.some(part => !part.locked) && !Object.values(project.sceneObjects).some(object => !object.locked)}
+            onClick={() => setAddingPath(true)}
+            data-feature-id="path.addMotion"
           >
-            <Plus size={16} /> Add motion
+            <Plus size={16} /> Add path
           </button>
-        </div>
+        {addingPath && <PathTargetChooser
+          project={project}
+          paths={motionPaths}
+          initialTarget={selectedTargetId ? `${selectedSceneObject ? "scene-object" : "part"}:${selectedTargetId}` : ""}
+          onAdd={(kind, id) => { addMotion(kind, id); setAddingPath(false); }}
+          onSelect={id => { selectMotion(id); setAddingPath(false); }}
+          onCancel={() => { setAddingPath(false); addButtonRef.current?.focus(); }}
+        />}
 
         <div className="mt-4 flex items-center gap-2">
           <h3>{selectedPath ? `Edit ${motionLabel(selectedPath)}` : "Draw path"}</h3>
@@ -193,13 +212,15 @@ export const PathWorkflowPanel = ({
             type="button"
             className={drawMode ? "btn-primary active" : "btn-secondary"}
             aria-label={drawMode ? "Drawing free path" : "Draw free path"}
+            data-feature-id="path.draw"
+            data-feature-blocker={pathLocked ? "Unlock target first." : undefined}
             disabled={pathLocked}
             onClick={togglePathDrawing}
           >
             <Route size={16} />
             {drawMode ? "Drawing" : selectedPath && pointCount ? "Redraw" : "Draw"}
           </button>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
               className="btn-secondary flex-1"
@@ -219,12 +240,12 @@ export const PathWorkflowPanel = ({
             <button
               type="button"
               className="btn-secondary flex-1"
-              aria-label={isPlaying ? "Stop all motions" : "Play motions"}
+              aria-label={isPlaying ? "Pause all paths" : "Play paths"}
               disabled={playablePathCount === 0}
               onClick={() => setIsPlaying(!isPlaying)}
             >
               {isPlaying ? <Pause size={16} /> : <Play size={16} />}
-              {isPlaying ? "Stop" : playablePathCount > 1 ? "Play all" : "Play"}
+              {isPlaying ? "Pause" : playablePathCount > 1 ? "Play all" : "Play"}
             </button>
           </div>
         </div>
@@ -236,9 +257,7 @@ export const PathWorkflowPanel = ({
           data-selected-point={selectedPoint ?? "none"}
         >
           {selectedPath
-            ? pointCount >= 3
-              ? "Path ready"
-              : "Keep drawing"
+            ? readiness?.playable ? "Path ready" : readiness?.reason
             : "No path yet"}
           {pathLocked ? " / locked" : ""}
         </div>
@@ -264,6 +283,8 @@ export const PathWorkflowPanel = ({
             </div>
             <MiniNumber
               label="Smoothness"
+              featureId="path.smoothness"
+              featureBlocker={pathLocked ? "Unlock target first." : undefined}
               helpId="path.smoothness"
               value={selectedPath.smoothness ?? 0}
               min={0}
@@ -275,15 +296,7 @@ export const PathWorkflowPanel = ({
           </div>
         )}
         {!selectedPath && <div className="warning">Draw a path.</div>}
-        {selectedPath && selectedPath.points.length < 3 && (
-          <div className="warning">Keep drawing.</div>
-        )}
         {pathLocked && <div className="warning">Unlock target.</div>}
-        {selectedPath?.warnings.map((warning, index) => (
-          <div key={`${warning}-${index}`} className="warning">
-            {warning}
-          </div>
-        ))}
         <details className="advanced-panel mt-4">
           <summary>More</summary>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -293,6 +306,8 @@ export const PathWorkflowPanel = ({
                 className="btn-secondary"
                 disabled={pathLocked}
                 onClick={openTracking}
+                data-feature-id="path.trace"
+                data-feature-blocker={pathLocked ? "Unlock target first." : undefined}
               >
                 <Route size={16} /> Trace
               </button>

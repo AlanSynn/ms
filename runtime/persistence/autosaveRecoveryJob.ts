@@ -44,6 +44,7 @@ export type AutosaveRecoveryMutationPlan = {
 export type AutosaveProjectReadResult =
   | (Extract<ProjectSnapshotLoadResult, { status: "loaded" }> & {
       recovery: AutosaveRecovery;
+      backedUpAt?: number;
     })
   | (Extract<ProjectSnapshotLoadResult, { status: "rejected" }> & {
       recovery: AutosaveRecovery;
@@ -272,7 +273,7 @@ export const runAutosaveRecoveryJob = ({
             legacyRaw !== null &&
             legacyFingerprint === metadata.currentFingerprint;
           return {
-            result: loadedWithRecovery(current, {
+            result: { ...loadedWithRecovery(current, {
               outcome: dirty
                 ? "interrupted-write"
                 : previousIssue
@@ -285,7 +286,7 @@ export const runAutosaveRecoveryJob = ({
               error: previousIssue
                 ? "autosave previous generation is missing or corrupt"
                 : undefined,
-            }),
+            }), backedUpAt: metadata.committedAt },
           };
         }
       }
@@ -294,12 +295,12 @@ export const runAutosaveRecoveryJob = ({
         const previous = loadedSnapshot(previousRaw, currentProject);
         if (previous.status === "loaded") {
           return {
-            result: loadedWithRecovery(previous, {
+            result: { ...loadedWithRecovery(previous, {
               outcome: "interrupted-write",
               source: "previous",
               generation: metadata.currentGeneration,
               error: "current autosave generation is missing or corrupt",
-            }),
+            }), backedUpAt: metadata.committedAt },
           };
         }
       }

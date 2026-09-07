@@ -3,16 +3,17 @@ import {
   useEffect,
   useMemo,
   useRef,
+  type SetStateAction,
 } from "react";
 import type { AppStage, MechanismConfig, ProjectAction, ProjectState } from "../types";
 import {
   createDefaultMechanism,
-  downloadBlob,
   downloadText,
   replaceCharacterProject,
 } from "../utils/project";
-import { createPortableProjectBlob } from "../runtime/persistence/projectDownloadJob";
-import { projectSnapshotFileName } from "../utils/projectPersistence";
+import { confirmProjectReplacement } from "../runtime/persistence/projectReplacementSafety";
+import { projectHasStudentWork, type ProjectDecisionBoundary } from "../runtime/persistence/projectDecisionBoundary";
+export { projectHasStudentWork } from "../runtime/persistence/projectDecisionBoundary";
 import {
   createCharacterImportProgressStore,
   type CharacterImportProgressStore,
@@ -27,7 +28,8 @@ type SetProjectOptions = {
 type UseAppCharacterImportActionsParams = {
   project: ProjectState;
   dispatch: (action: ProjectAction) => void;
-  setProject: (project: ProjectState, options?: SetProjectOptions) => void;
+  setProject: (project: SetStateAction<ProjectState>, options?: SetProjectOptions) => void;
+  projectDecision: ProjectDecisionBoundary;
   setFoundry: (mechanism: MechanismConfig) => void;
   setStage: (stage: AppStage) => void;
   setCommandStatus: (status: string) => void;
@@ -74,17 +76,11 @@ export const projectImportGuardAllows = (
     candidate.processing.message === guard.loadingMessage;
 };
 
-export const projectHasStudentWork = (candidate: ProjectState): boolean =>
-  candidate.partOrder.length > 0 ||
-  Object.keys(candidate.paths).length > 0 ||
-  candidate.mechanisms.length > 0 ||
-  candidate.sceneObjectOrder.length > 0 ||
-  Object.keys(candidate.sceneObjects).length > 0;
-
 export const useAppCharacterImportActions = ({
   project,
   dispatch,
   setProject,
+  projectDecision,
   setFoundry,
   setStage,
   setCommandStatus,
@@ -123,34 +119,29 @@ export const useAppCharacterImportActions = ({
 
   const importCharacterPackage = (files: FileList | File[]) => {
     const sourceProject = latestProjectRef.current;
+    const decisionToken = projectDecision.begin();
     const guard = createProjectImportGuard(sourceProject, "loading-model", "Loading character…");
-    dispatch({
-      type: "set_processing",
-      processing: {
+    progressStore.publishProgress({
         stage: "loading-model",
         message: "Loading character…",
         progress: 20,
-      },
     });
     importClient.requestCharacterPackage(files, {
       complete: ({ project: next }) => {
-        if (!projectImportGuardAllows(guard, latestProjectRef.current)) {
+        if (!projectDecision.isCurrent(decisionToken) || !projectImportGuardAllows(guard, latestProjectRef.current)) {
           setCommandStatus("Character import cancelled because the project changed.");
           return;
         }
         queueCharacterReview(next, "Ready to use.");
       },
       failed: (error) => {
-        if (!projectImportGuardAllows(guard, latestProjectRef.current)) return;
-        dispatch({
-          type: "set_processing",
-          processing: {
+        if (!projectDecision.isCurrent(decisionToken) || !projectImportGuardAllows(guard, latestProjectRef.current)) return;
+        progressStore.publishProgress({
             stage: "error",
             message: "Couldn’t load character",
             progress: 0,
-            error: error.message,
-          },
         });
+        setCommandStatus(`Character import failed: ${error.message}`);
         setStage("character");
       },
     });
@@ -158,44 +149,31 @@ export const useAppCharacterImportActions = ({
 
   const importProject = (file: File) => {
     const sourceProject = latestProjectRef.current;
+    const decisionToken = projectDecision.begin();
     const guard = createProjectImportGuard(sourceProject, "loading-model", "Loading project…");
-    const hasWork = projectHasStudentWork(sourceProject);
-    if (hasWork && !window.confirm(
-      `Open ${file.name}? Current work has ${Object.keys(sourceProject.paths).length} motions and ${sourceProject.mechanisms.length} mechanisms. A recovery copy will be saved first.`,
-    )) {
-      setCommandStatus("Project unchanged");
-      return;
-    }
-    if (hasWork) {
-      try {
-        downloadBlob(
-          projectSnapshotFileName(sourceProject.metadata.name, `-recovery-${Date.now()}`),
-          createPortableProjectBlob(sourceProject),
-        );
-      } catch (error) {
-        setCommandStatus(`Open cancelled: ${error instanceof Error ? error.message : String(error)}`);
-        return;
-      }
-    }
-    if (!projectImportGuardAllows(guard, latestProjectRef.current)) {
-      setCommandStatus("Open cancelled because the project changed.");
-      return;
-    }
-    dispatch({
-      type: "set_processing",
-      processing: {
-        stage: "loading-model",
-        message: "Loading project…",
-        progress: 20,
-      },
-    });
+    const isCurrent = (current: ProjectState) => projectDecision.isCurrent(decisionToken) &&
+      projectImportGuardAllows(guard, current);
+    setCommandStatus(`Opening ${file.name}…`);
     importClient.requestProject(file, {
-      complete: ({ project: next }) => startTransition(() => {
-        if (!projectImportGuardAllows(guard, latestProjectRef.current)) {
+      complete: ({ project: next }) => {
+        if (!isCurrent(latestProjectRef.current)) {
           setCommandStatus("Project changed while opening. Open it again.");
           return;
         }
-        setProject(next, { resetHistory: true });
+        try {
+          if (!confirmProjectReplacement(sourceProject, `Open ${file.name}`)) {
+            setCommandStatus("Project unchanged");
+            return;
+          }
+        } catch (error) {
+          setCommandStatus(`Open cancelled: ${error instanceof Error ? error.message : String(error)}`);
+          return;
+        }
+        if (!isCurrent(latestProjectRef.current)) return;
+        projectDecision.complete(decisionToken);
+        setProject((current) => isCurrent(current) ? next : current, { resetHistory: true });
+        progressStore.publishPending(null);
+        progressStore.publishProgress(null);
         setFoundry(
           next.mechanisms[0]
             ? { ...next.mechanisms[0], id: "foundry-preview" }
@@ -204,21 +182,10 @@ export const useAppCharacterImportActions = ({
         setCommandStatus(`Loaded project ${file.name}`);
         setShowGettingStarted(false);
         setStage("path");
-      }),
+      },
       failed: (error) => {
-        if (!projectImportGuardAllows(guard, latestProjectRef.current)) return;
-        dispatch({
-          type: "set_processing",
-          processing: {
-            stage: "error",
-            message: "Project import failed",
-            progress: 0,
-            error: error.message,
-          },
-        });
+        if (!isCurrent(latestProjectRef.current)) return;
         setCommandStatus(`Project import failed: ${error.message}`);
-        setShowGettingStarted(false);
-        setStage("character");
       },
     });
   };
@@ -246,29 +213,25 @@ export const useAppCharacterImportActions = ({
   const acceptPendingCharacter = () => {
     const pendingCharacter = progressStore.getPending();
     if (!pendingCharacter) return;
-    const hasCurrentWork = projectHasStudentWork(project);
+    const sourceProject = latestProjectRef.current;
+    const hasCurrentWork = projectHasStudentWork(sourceProject);
     const replacement = hasCurrentWork
-      ? replaceCharacterProject(pendingCharacter.project, project, pendingCharacter.returnStage)
+      ? replaceCharacterProject(pendingCharacter.project, sourceProject, pendingCharacter.returnStage)
       : pendingCharacter.project;
-    if (hasCurrentWork && !window.confirm(
-      `Replace the character and keep ${Object.keys(replacement.paths).length} motions and ${replacement.mechanisms.length} mechanisms? A recovery copy will be saved first.`,
-    )) {
-      setCommandStatus("Character unchanged");
-      return;
-    }
-    if (hasCurrentWork) {
-      try {
-        downloadBlob(
-          projectSnapshotFileName(project.metadata.name, `-before-character-${Date.now()}`),
-          createPortableProjectBlob(project),
-        );
-      } catch (error) {
-        setCommandStatus(`Character unchanged: ${error instanceof Error ? error.message : String(error)}`);
+    const decisionToken = projectDecision.begin();
+    try {
+      if (!confirmProjectReplacement(sourceProject, `Replace the character and keep ${Object.keys(replacement.paths).length} paths`)) {
+        setCommandStatus("Character unchanged");
         return;
       }
+    } catch (error) {
+      setCommandStatus(`Character unchanged: ${error instanceof Error ? error.message : String(error)}`);
+      return;
     }
+    if (!projectDecision.complete(decisionToken)) return;
     startTransition(() => {
-      setProject(replacement, { resetHistory: true });
+      setProject((current) => current === sourceProject && projectDecision.isCurrent(decisionToken)
+        ? replacement : current, { resetHistory: true });
       progressStore.publishPending(null);
       progressStore.publishProgress(null);
       setShowGettingStarted(false);
@@ -290,7 +253,6 @@ export const useAppCharacterImportActions = ({
   };
 
   const startFromProject = (file: File) => {
-    setShowGettingStarted(false);
     importProject(file);
   };
 

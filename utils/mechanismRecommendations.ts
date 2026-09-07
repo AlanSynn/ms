@@ -11,7 +11,7 @@ import { generateSmartConfig } from "./optimizer";
 import { createDefaultMechanism, mechanismWithGeneratedPath } from "./project";
 import { mechanismBoardPlacementErrors, sampleFeasibleRange, validateMechanismPreviewReadiness, validateForFabrication } from "./fabrication";
 import { boardToScene, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, SCENE_PX_PER_MM } from "./coordinates";
-import { motionAnchorJointIds, preferredMotionJointId } from "./motion";
+import { motionAnchorJointIds, motionPathReadiness, preferredMotionJointId } from "./motion";
 import {
   MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY,
   isMechanismTypeEnabled,
@@ -24,6 +24,7 @@ import {
   rejectedFourBarPathFit,
 } from "./fourBarPathFit";
 import { generateFoundryPlaybackPointTraces, primaryFoundryPlaybackPath } from "./foundryPlayback";
+import { replacePrimaryMechanismOutputBinding } from "./mechanismBindings";
 
 export type MechanismRecommendation = {
   type: MechanismType;
@@ -782,10 +783,22 @@ export const fitMechanismToTargetPath = (
   const object = path?.sceneObjectId ? project.sceneObjects[path.sceneObjectId] : undefined;
   if (!path || (!part && !object))
     return snapMechanismAnchor(normalizeGearMeshMechanism(mechanism), project);
-  if (path.points.length < 3) {
+  if (!motionPathReadiness(project, path).playable) {
     return mechanism.type === "4bar"
       ? rejectedFourBarPathFit(project, mechanism, path)
       : snapMechanismAnchor(normalizeGearMeshMechanism(mechanism), project);
+  }
+  // A reopened mechanism has explicit outputs. Keep the candidate's output
+  // aligned with the requested fit; the project binding is committed separately.
+  if (mechanism.outputs?.length) {
+    const priorFit = mechanism.fabricationMetadata?.pathFit;
+    mechanism = replacePrimaryMechanismOutputBinding(project, {
+      ...mechanism,
+      fabricationMetadata: {
+        ...mechanism.fabricationMetadata,
+        pathFit: priorFit?.targetPathId === path.id ? priorFit : undefined,
+      },
+    }, path.id);
   }
   const acceptedFourBarFit = mechanism.type === "4bar"
     ? fitFourBarKitMechanismToPath(project, mechanism, path)
@@ -874,7 +887,7 @@ export const buildMechanismRecommendations = (
   selectedPath?: ProjectMotionPath,
   options: MechanismRecommendationBuildOptions = {},
 ): MechanismRecommendation[] => {
-  if (!selectedPath || (!selectedPart && !selectedPath.sceneObjectId) || selectedPath.points.length < 3)
+  if (!selectedPath || (!selectedPart && !selectedPath.sceneObjectId) || !motionPathReadiness(project, selectedPath).playable)
     return [];
   const metrics = pathMetrics(selectedPath);
   const compact = Math.max(metrics.width, metrics.height) < 120;

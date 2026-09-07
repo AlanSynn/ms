@@ -1,6 +1,6 @@
 import type { AppStage } from '../../types';
 
-export const SHARED_PLAYBACK_STAGES: AppStage[] = ['path', 'design'];
+export const SHARED_PLAYBACK_STAGES: AppStage[] = ['project', 'path', 'design'];
 
 export const STAGES: Array<{ id: AppStage; label: string }> = [
   { id: 'project', label: 'Project' },

@@ -9,6 +9,10 @@ type BaseRouterProps = Pick<
   | "playerDock"
   | "playbackClock"
   | "commandHandlers"
+  | "projectBackup"
+  | "recoveryCandidate"
+  | "workingCamera"
+  | "onWorkingCameraChange"
 >;
 
 type CharacterRouterProps = Pick<
@@ -98,6 +102,10 @@ export const buildAppStageRouterProps = ({
   playerDock,
   playbackClock,
   commandHandlers,
+  projectBackup,
+  recoveryCandidate,
+  workingCamera,
+  onWorkingCameraChange,
   character,
   selection,
   path,
@@ -113,6 +121,10 @@ export const buildAppStageRouterProps = ({
   playerDock,
   playbackClock,
   commandHandlers,
+  projectBackup,
+  recoveryCandidate,
+  workingCamera,
+  onWorkingCameraChange,
   ...character,
   ...selection,
   ...path,

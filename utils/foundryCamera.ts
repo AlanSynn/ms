@@ -14,6 +14,7 @@ export type FoundryCamera = {
   zoom: number;
   preset: FoundryViewPreset;
   pan: Point;
+  targetZ?: number;
 };
 
 export type FoundryCameraPreset = {
@@ -88,13 +89,13 @@ export const clampFoundryZoom = (value: number) =>
 export const degToRad = (deg: number) => (deg * Math.PI) / 180;
 
 export const foundryCameraDistance = (camera: FoundryCamera) =>
-  17 / clampFoundryZoom(camera.zoom);
+  17 / Math.max(0.05, Math.min(2.4, camera.zoom));
 
 export const foundryCameraTarget = (camera: FoundryCamera) =>
   new THREE.Vector3(
     camera.pan?.x ?? 0,
     camera.pan?.y ?? 0,
-    FOUNDRY_WORK_PLANE_Z,
+    camera.targetZ ?? FOUNDRY_WORK_PLANE_Z,
   );
 
 export const foundryCameraPosition = (camera: FoundryCamera) => {

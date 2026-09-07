@@ -2496,8 +2496,10 @@ assert(
   featureRunner.indexOf("await prepare?.(page)") < featureRunner.indexOf("await applyChromebookEmulation(page, client)"),
   "short feature audits prepare the fixture before throttling the measured action",
 );
+const featureIsolationIndex = featureRunner.indexOf("await installChromebookAuditIsolation(page)");
+const featureNavigationIndex = featureRunner.indexOf("await page.goto(");
 assert(
-  featureRunner.indexOf("installChromebookAuditIsolation(page)") < featureRunner.indexOf('page.goto("/"'),
+  featureIsolationIndex >= 0 && featureNavigationIndex > featureIsolationIndex,
   "feature audits install diagnostic COOP/COEP response headers before navigation",
 );
 assert(featureRunner.includes('"feature-action"'), "feature reports disclose their throttling scope");

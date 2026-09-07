@@ -25,7 +25,8 @@ import {
   createMechanismFitWorkerClient,
   type MechanismFitWorkerClient,
 } from "../runtime/fitting/mechanismFitWorkerClient";
-import { mechanismPathFitIsUsable, preferredMotionJointId } from "../utils/motion";
+import { mechanismPathFitIsUsable, motionPathReadiness, preferredMotionJointId } from "../utils/motion";
+import { pathOwnerLabel } from "../utils/pathTargets";
 import {
   downloadText,
   invalidateMechanismPathFit,
@@ -39,8 +40,10 @@ import {
   assignMechanismOutputBinding,
   mechanismBindingTargetKey,
   mechanismOutputBindings,
+  mechanismOwnerForDraft,
   mechanismWithOutputBindings,
   replacePrimaryMechanismOutputBinding,
+  replacedMechanismPathIds,
   resolvedMechanismOutputBindings,
 } from "../utils/mechanismBindings";
 
@@ -144,6 +147,10 @@ export const useAppMechanismActions = ({
   } | undefined>(undefined);
   const currentProjectRef = useRef(project);
   currentProjectRef.current = project;
+  const foundryOwnerIdRef = useRef<string | undefined>(undefined);
+  const foundryOwner = mechanismOwnerForDraft(project, foundry);
+  if (foundryOwner) foundryOwnerIdRef.current = foundryOwner.id;
+  else if (!project.mechanisms.some(mechanism => mechanism.id === foundryOwnerIdRef.current)) foundryOwnerIdRef.current = undefined;
   const optimizerScheduleRef = useRef<{
     generation: number;
     firstFrame?: number;
@@ -186,14 +193,29 @@ export const useAppMechanismActions = ({
     setCommandStatus("Fit cancelled");
   }, [cancelScheduledOptimizer, optimizerClient, setCommandStatus]);
 
+  const confirmBindingReplacement = useCallback((candidate: MechanismConfig) => {
+    const replaced = replacedMechanismPathIds(project, candidate);
+    if (!replaced.length) return true;
+    const labels = replaced.map(id => project.paths[id] ? pathOwnerLabel(project, project.paths[id]) : id);
+    const target = candidate.targetPathId ? project.paths[candidate.targetPathId] : undefined;
+    const accepted = window.confirm(`Replace the ${labels.join(", ")} fit${target ? ` with ${pathOwnerLabel(project, target)}` : ""}? All paths will be kept.`);
+    if (!accepted) setCommandStatus("Fit kept");
+    return accepted;
+  }, [project, setCommandStatus]);
+
   const commitFoundryDraft = useCallback(
     (draft: MechanismConfig) => {
+      if (currentProjectRef.current !== project) return false;
       if (!draft.targetPathId || !project.paths[draft.targetPathId]) return;
+      const readiness = motionPathReadiness(project, project.paths[draft.targetPathId]);
+      if (!readiness.playable) { setCommandStatus(readiness.reason ?? "Check path"); return false; }
       const existingTarget = project.mechanisms.find(
         (mechanism) => mechanismOutputBindings(mechanism).some(
           (binding) => binding.pathId === draft.targetPathId,
         ),
       );
+      const draftOwner = existingTarget ?? mechanismOwnerForDraft(project, draft) ??
+        project.mechanisms.find(mechanism => mechanism.id === foundryOwnerIdRef.current);
       const boundDraft = draft.targetPathId
         ? replacePrimaryMechanismOutputBinding(project, draft, draft.targetPathId, {
             outputTraceId: draft.fabricationMetadata?.pathFit?.outputTraceId,
@@ -210,13 +232,15 @@ export const useAppMechanismActions = ({
               ),
             ],
           )
-        : boundDraft;
+        : { ...boundDraft, id: draftOwner?.id ?? boundDraft.id };
+      if (!confirmBindingReplacement(committedDraft)) return false;
       dispatch({
         type: "upsert_mechanism",
         mechanism: committedDraft,
       });
+      return true;
     },
-    [dispatch, project],
+    [confirmBindingReplacement, dispatch, foundry, project, setCommandStatus],
   );
 
   const updateMechanism = useCallback(
@@ -385,6 +409,10 @@ export const useAppMechanismActions = ({
           },
         };
       }
+      if (!confirmBindingReplacement(bindingAware)) {
+        callbacks.failed?.(new Error("Fit kept"));
+        return;
+      }
       mechanismFitGenerationRef.current = requestGeneration;
       const normalized = normalizeGearMeshMechanism(bindingAware);
       const preserveGeneratedPath =
@@ -398,6 +426,15 @@ export const useAppMechanismActions = ({
             project.paths[fittedInput.targetPathId]
           ? fittedInput.targetPathId
           : undefined;
+        if (targetPathId) {
+          const readiness = motionPathReadiness(project, project.paths[targetPathId]);
+          if (!readiness.playable) {
+            const error = new Error(readiness.reason ?? "Check path");
+            callbacks.failed?.(error);
+            setCommandStatus(error.message);
+            return;
+          }
+        }
         activeMechanismFitRef.current = {
           generation: requestGeneration,
           failed: callbacks.failed,
@@ -454,14 +491,14 @@ export const useAppMechanismActions = ({
       }, { preserveGeneratedPath });
       dispatch({ type: "upsert_mechanism", mechanism: refreshed });
     },
-    [dispatch, mechanismFitClient, project, setCommandStatus],
+    [confirmBindingReplacement, dispatch, mechanismFitClient, project, setCommandStatus],
   );
 
   const optimizeSelectedMechanism = useCallback(() => {
     const fitPath = selectedMechanism?.targetPathId
       ? project.paths[selectedMechanism.targetPathId]
       : selectedPath;
-    if (!selectedMechanism || !fitPath || fitPath.points.length < 3) return;
+    if (!selectedMechanism || !fitPath || !motionPathReadiness(project, fitPath).playable) return;
     setOptimizerBusy(true);
     const iterations =
       project.settings.performancePreset === "fast"
@@ -559,7 +596,7 @@ export const useAppMechanismActions = ({
       const rawCandidate: MechanismConfig = {
           ...foundry,
           ...fittedFoundryParameters,
-          id: existingTarget?.id ?? pkg.mechanismId,
+          id: existingTarget?.id ?? foundryOwnerIdRef.current ?? pkg.mechanismId,
           anchorX: pkg.pivot.x,
           anchorY: pkg.pivot.y,
           color: fittedFoundryParameters.color ?? foundry.color,
@@ -581,6 +618,12 @@ export const useAppMechanismActions = ({
             fit: packagePathFit,
           })
         : rawCandidate;
+      if (pkg.targetPathId && (!project.paths[pkg.targetPathId] || !motionPathReadiness(project, project.paths[pkg.targetPathId]).playable)) {
+        setCommandStatus("Check target path");
+        return;
+      }
+      const replacementOwner = project.mechanisms.find(candidate => candidate.id === boundCandidate.id);
+      if (!confirmBindingReplacement(boundCandidate)) return;
       const rawMechanism = mechanismWithGeneratedPath(
         boundCandidate,
         { preserveGeneratedPath: true },
@@ -594,6 +637,7 @@ export const useAppMechanismActions = ({
         ),
         {
           complete: ({ mechanism: fittedMechanism }) => {
+            if (currentProjectRef.current !== project) return;
             const generatedPath =
               fittedMechanism.generatedPath ??
               rawMechanism.generatedPath ??
@@ -651,7 +695,7 @@ export const useAppMechanismActions = ({
                   mechanisms: project.mechanisms.filter((candidate) => candidate.id !== existingTarget?.id),
                 }
               : project;
-            const allocation = pkg.targetPathId && (!existingTarget || draftOwnerIsTemporary)
+            const allocation = pkg.targetPathId && ((!existingTarget && !replacementOwner) || draftOwnerIsTemporary)
               ? allocateMechanismOutput(allocationBase, fittedBinding, pkg.targetPathId, {
                   reuseMechanismId: allocationOptions.reuseMechanismId,
                   portId: selectedOutputPortId,
@@ -686,6 +730,7 @@ export const useAppMechanismActions = ({
     },
     [
       dispatch,
+      confirmBindingReplacement,
       foundry,
       mechanismFitClient,
       project,
@@ -698,6 +743,9 @@ export const useAppMechanismActions = ({
   const applyRecommendedMechanism = useCallback(
     (mechanism: MechanismConfig) => {
       const candidateBindings = resolvedMechanismOutputBindings(project, mechanism);
+      const blocked = candidateBindings.map(binding => project.paths[binding.pathId])
+        .find(path => path && !motionPathReadiness(project, path).playable);
+      if (blocked) { setCommandStatus(motionPathReadiness(project, blocked).reason ?? "Check path"); return; }
       const candidatePathIds = new Set(candidateBindings.map((binding) => binding.pathId));
       const candidateTargetKeys = new Set(
         candidateBindings

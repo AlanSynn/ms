@@ -23,6 +23,11 @@ import { useAppMechanismActions } from "./useAppMechanismActions";
 import { useAppPathActions } from "./useAppPathActions";
 import { useAppProjectCommands } from "./useAppProjectCommands";
 import { useModalInertEffect } from "./useModalInertEffect";
+import { useStudentSupport } from "./useStudentSupport";
+import { useReleaseNotes } from "./useReleaseNotes";
+import { useStartupFlow } from "./useStartupFlow";
+import { playableMotionPaths } from "../utils/motion";
+import type { FoundryCamera } from "../utils/foundryCamera";
 import { useProjectAutosave } from "./useProjectAutosave";
 import { useColdAutosaveRecovery } from "./useColdAutosaveRecovery";
 import { useProjectHistory } from "./useProjectHistory";
@@ -43,28 +48,6 @@ const ENABLED_GUIDED_LESSONS = CLASSROOM_LESSONS.filter((lesson) =>
 
 type FoundryState = MechanismConfig;
 
-const GETTING_STARTED_SESSION_KEY =
-  "motionsmith.gettingStarted.hiddenSession";
-
-const readGettingStartedHiddenForSession = () => {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.sessionStorage.getItem(GETTING_STARTED_SESSION_KEY) === "true";
-  } catch {
-    return false;
-  }
-};
-
-const writeGettingStartedHiddenForSession = (hidden: boolean) => {
-  if (typeof window === "undefined") return;
-  try {
-    if (hidden) window.sessionStorage.setItem(GETTING_STARTED_SESSION_KEY, "true");
-    else window.sessionStorage.removeItem(GETTING_STARTED_SESSION_KEY);
-  } catch {
-    // Session-only onboarding preference is best-effort.
-  }
-};
-
 export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   const {
     project,
@@ -73,13 +56,11 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     undoProject: undoProjectHistory,
     redoProject: redoProjectHistory,
   } = useProjectHistory(createEmptyProject);
-  const autosaveRecovery = useColdAutosaveRecovery({ project, setProject });
-  const [stage, setStage] = useState<AppStage>("character");
-  const [showGettingStarted, setShowGettingStarted] = useState(
-    () => !readGettingStartedHiddenForSession(),
-  );
-  const [hideGettingStartedThisSession, setHideGettingStartedThisSession] =
-    useState(readGettingStartedHiddenForSession);
+  const autosaveRecovery = useColdAutosaveRecovery({ project });
+  const notes = useReleaseNotes();
+  const startup = useStartupFlow(notes.hasNew);
+  const { showGettingStarted, setShowGettingStarted } = startup;
+  const [stage, setStage] = useState<AppStage>("project");
   const [angle, setAngle] = useState(0);
   const playbackClockRef = useRef<PlaybackClock | null>(null);
   if (!playbackClockRef.current) playbackClockRef.current = createPlaybackClock();
@@ -91,25 +72,27 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   const [showTrace, setShowTrace] = useState(true);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
-  const modalOpen = showGettingStarted || showShortcuts || showAbout;
+  const modalOpen = startup.booting || startup.showAnnouncement || showGettingStarted || showShortcuts || showAbout;
   const [foundry, setFoundry] = useState<FoundryState>(() =>
     createDefaultMechanism("4bar", "foundry-preview"),
   );
   const [canvasViewport, setCanvasViewport] = useState<CanvasViewport>(
     DEFAULT_CANVAS_VIEWPORT,
   );
+  const [workingCamera, setWorkingCamera] = useState<FoundryCamera>();
+  useEffect(() => setWorkingCamera(undefined), [project.metadata.id]);
   const [commandStatus, setCommandStatus] = useState("Ready");
   const projectInputRef = useRef<HTMLInputElement>(null);
   const appShellRef = useRef<HTMLDivElement>(null);
   const assessmentQueryApplied = useRef(false);
-  useProjectAutosave(project, {
-    suspended: autosaveRecovery.pending,
-    recoveredBaseline: autosaveRecovery.recoveredBaseline,
+  const projectBackup = useProjectAutosave(project, {
+    projectDecision: autosaveRecovery.decision,
     onFailure: setCommandStatus,
   });
+  const recoveryCandidate = autosaveRecovery.candidate ?? projectBackup.candidate;
 
   useEffect(() => {
-    playbackClock.setPhase(angle);
+    if (playbackClock.getPhase() !== angle) playbackClock.setPhase(angle);
   }, [angle, playbackClock]);
 
   useEffect(() => {
@@ -145,6 +128,10 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     stageLabel: (item) =>
       STAGES.find((stageItem) => stageItem.id === item)?.label ?? item,
   });
+  const support = useStudentSupport({
+    rootRef: appShellRef, project, stage, goStage, onStatus: setCommandStatus,
+    notes, startupAnnouncement: startup.showAnnouncement, onDismissStartup: startup.dismissAnnouncement,
+  });
   const {
     sortedParts,
     selectedPart,
@@ -178,7 +165,6 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     acceptPendingCharacter,
     discardPendingCharacter,
     startFromPackage,
-    startFromProject,
   } = useAppCharacterImportActions({
     project,
     dispatch,
@@ -188,6 +174,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     setCommandStatus,
     setShowGettingStarted,
     characterImportProgress,
+    projectDecision: autosaveRecovery.decision,
   });
   const activeClassroomLesson = classroomLessonById(
     project.metadata.classroomLessonId,
@@ -221,7 +208,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     isPlaying,
     drawMode,
     optimizerBusy,
-    showGettingStarted,
+    showGettingStarted: modalOpen || !!support.surface,
     playbackDurationMs,
     animationSpeed: project.settings.animationSpeed,
     timingProfile: project.settings.timingProfile,
@@ -233,6 +220,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   const { commandHandlers, openClassroomLesson, openSampleProject } =
     useAppProjectCommands({
       project,
+      projectDecision: autosaveRecovery.decision,
       stage,
       canvasViewport,
       setProject,
@@ -241,7 +229,11 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
       redoProjectHistory,
       setStage,
       setFoundry,
-      setAngle,
+      setAngle: next => {
+        const phase = typeof next === 'function' ? next(playbackClock.getPhase()) : next;
+        playbackClock.setPhase(phase);
+        setAngle(phase);
+      },
       setIsPlaying,
       setCanvasViewport,
       setPendingCharacter,
@@ -251,23 +243,20 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
       setCommandStatus,
       openProjectPicker: () => projectInputRef.current?.click(),
       goStage,
+      openFindFeature: () => support.open('search'),
+      openFeedback: () => support.open('feedback'),
+      openWhatsNew: () => support.open('whatsNew'),
     });
-  useAppCommandBindings({ commandHandlers, disabled: modalOpen });
+  useAppCommandBindings({ commandHandlers, disabled: modalOpen || !!support.surface });
   const themeClass =
     project.settings.theme === "dark"
       ? "bg-slate-950 text-slate-100"
       : "bg-slate-50 text-slate-950";
   const editorStage: AppStage = stage;
-  const updateGettingStartedSessionPreference = (hidden: boolean) => {
-    setHideGettingStartedThisSession(hidden);
-    writeGettingStartedHiddenForSession(hidden);
-  };
   const closeGettingStarted = () => {
     setShowGettingStarted(false);
-    setStage("character");
   };
   const openHome = () => {
-    setStage("character");
     setShowGettingStarted(true);
   };
   const {
@@ -281,7 +270,8 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     setAssemblyStepCount,
   } = useWorkspacePlayerDock({
     editorStage,
-    modalOpen,
+    projectHasMotion: project.mechanisms.some(item => item.enabled !== false) || playableMotionPaths(project).length > 0,
+    modalOpen: modalOpen || !!support.surface,
     isPlaying,
     setIsPlaying,
     angle,
@@ -291,7 +281,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     drawMode,
   });
 
-  useModalInertEffect(appShellRef, modalOpen);
+  useModalInertEffect(appShellRef, modalOpen || !!support.surface);
 
   const stageLabel =
     STAGES.find((item) => item.id === editorStage)?.label ?? editorStage;
@@ -311,6 +301,10 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     playerDock,
     playbackClock,
     commandHandlers,
+    projectBackup,
+    recoveryCandidate,
+    workingCamera,
+    onWorkingCameraChange: setWorkingCamera,
     character: {
       characterImportProgress,
       onOpenGettingStarted: () => setShowGettingStarted(true),
@@ -373,6 +367,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   });
 
   return {
+    support,
     themeClass,
     appShellRef,
     projectInputRef,
@@ -385,14 +380,15 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     stageRouterProps,
     workflowStatus,
     commandStatus,
+    booting: startup.booting,
+    recoveryCandidate,
     showGettingStarted,
-    hideGettingStartedThisSession,
+    hideGettingStartedThisSession: startup.hideForSession,
     guidedLessons: ENABLED_GUIDED_LESSONS,
     onLesson: openClassroomLesson,
     onSample: openSampleProject,
     onPackage: startFromPackage,
-    onImport: startFromProject,
-    onHideGettingStartedThisSessionChange: updateGettingStartedSessionPreference,
+    onHideGettingStartedThisSessionChange: startup.setHideForSession,
     onCloseGettingStarted: closeGettingStarted,
     showShortcuts,
     onCloseShortcuts: () => setShowShortcuts(false),

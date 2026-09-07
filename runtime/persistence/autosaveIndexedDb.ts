@@ -281,6 +281,7 @@ export const createBrowserAutosaveAtomicBackend = (): AutosaveAtomicBackend => (
         generation: nextMetadata.currentGeneration,
         retainedGenerations: keepsPrevious ? 2 : 1,
         transactionId: plan.transactionId,
+        committedAt: nextMetadata.committedAt,
       };
     } catch (error) {
       try {

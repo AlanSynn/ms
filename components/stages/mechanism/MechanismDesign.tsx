@@ -12,6 +12,7 @@ import { DesignInspectorPanel } from "./DesignInspectorPanel";
 import { DesignWorkflowPanel } from "./DesignWorkflowPanel";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 import type { MechanismUpdateCallbacks } from "../../../hooks/useAppMechanismActions";
+import type { FoundryCamera } from "../../../utils/foundryCamera";
 
 export const MechanismDesign = ({
   project,
@@ -25,6 +26,8 @@ export const MechanismDesign = ({
   isPlaying,
   angle,
   playbackClock,
+  camera,
+  onCameraChange,
   onOptimize,
   onCancelOptimize,
   onApplyRecommendation,
@@ -49,6 +52,8 @@ export const MechanismDesign = ({
   isPlaying: boolean;
   angle: number;
   playbackClock: PlaybackClock;
+  camera?: FoundryCamera;
+  onCameraChange?: (camera: FoundryCamera) => void;
   onOptimize: () => void;
   onCancelOptimize: () => void;
   onApplyRecommendation: (mechanism: MechanismConfig) => void;
@@ -82,6 +87,8 @@ export const MechanismDesign = ({
           mechanism={selectedMechanism}
           angle={angle}
           playbackClock={playbackClock}
+          camera={camera}
+          onCameraChange={onCameraChange}
           isPlaying={isPlaying}
           showTrace={showTrace}
           dispatch={dispatch}

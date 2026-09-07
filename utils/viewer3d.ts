@@ -46,7 +46,7 @@ export const VIEWER3D_CAMERA_PRESETS: Record<Viewer3DCameraPreset, Viewer3DCamer
 export type Viewer3DLayerKey = 'grid' | 'character' | 'skeleton' | 'mechanisms' | 'paths' | 'forces' | 'velocity' | 'trail';
 export type Viewer3DLayerVisibility = Partial<Record<Viewer3DLayerKey, boolean>>;
 export type Viewer3DLayerState = boolean | 'external' | 'absent';
-export type Viewer3DTabKey = 'character' | 'path' | 'foundry' | 'design' | 'blueprint' | 'assembly';
+export type Viewer3DTabKey = 'project' | 'character' | 'path' | 'foundry' | 'design' | 'blueprint' | 'assembly';
 
 export type Viewer3DContract = {
   version: typeof VIEWER3D_CONTRACT_VERSION;

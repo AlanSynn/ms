@@ -6,6 +6,8 @@ import React, {
   useState,
 } from "react";
 import * as THREE from "three";
+import { registerCanvasCapture } from "../../../utils/canvasCapture";
+import { fitWorkingPreviewCamera, visibleObjectBounds, workingPreviewFrame, type WorkingPreviewFit } from "../../../utils/workingPreviewCamera";
 import type {
   BodyPartLayer,
   MechanismConfig,
@@ -33,7 +35,7 @@ import {
   planetaryGearRadii,
   validateMechanismPreviewReadiness,
 } from "../../../utils/fabrication";
-import { SCENE_PX_PER_MM, SCENE_VIEW } from "../../../utils/coordinates";
+import { SCENE_PX_PER_MM, SCENE_VIEW, boardToScene, sceneBoundsForSheet } from "../../../utils/coordinates";
 import {
   fabricablePartOutlinePoints,
   partLandmarkLocalPoints,
@@ -157,6 +159,8 @@ export type ThreeFoundryPreviewProps = {
   };
   kit: PhysicalKitSettings;
   camera: FoundryCamera;
+  cameraFit?: WorkingPreviewFit;
+  onCameraFit?: (camera: FoundryCamera) => void;
   transientCamera?: TransientValueController<FoundryCamera>;
   transientFrame?: TransientValueController<FoundryPlaybackFrame>;
   rigOpacity: number;
@@ -830,7 +834,7 @@ const renderFoundryAutomataContext = ({
       `foundry-automata-path-${path.id}`,
     ) as THREE.Line | undefined;
     if (!line) return;
-    line.visible = path.visible !== false && path.enabled !== false;
+    line.visible = path.visible !== false;
     line.position.z = baseZ + 0.36;
     line.material = foundryAutomataMaterial(
         path.id === context.selectedPathId ? "#7c3aed" : "#8b5cf6",
@@ -849,6 +853,8 @@ export const ThreeFoundryPreview = ({
   playback,
   kit,
   camera,
+  cameraFit,
+  onCameraFit,
   transientCamera,
   transientFrame,
   rigOpacity,
@@ -894,6 +900,11 @@ export const ThreeFoundryPreview = ({
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const cameraStateRef = useRef(camera);
+  const cameraFitRef = useRef(cameraFit);
+  const completedCameraFitRef = useRef<WorkingPreviewFit | undefined>(undefined);
+  const onCameraFitRef = useRef(onCameraFit);
+  cameraFitRef.current = cameraFit;
+  onCameraFitRef.current = onCameraFit;
   const dynamicBuildCountRef = useRef(0);
   const primitivePoolRef = useRef<FoundryThreeObjectPool | null>(null);
   const automataContextRef = useRef<FoundryAutomataContext | undefined>(automataContext);
@@ -1551,6 +1562,8 @@ export const ThreeFoundryPreview = ({
     if (!scene || !renderer || !cam) return;
     cam.position.copy(foundryCameraPosition(view));
     cam.lookAt(foundryCameraTarget(view));
+    cam.far = Math.max(100, cam.position.distanceTo(foundryCameraTarget(view)) * 3);
+    cam.updateProjectionMatrix();
     renderer.render(scene, cam);
     if (continuous && renderPolicy.preset === "high") {
       highResolutionSessionController.recordSubmission(performance.now());
@@ -1876,6 +1889,10 @@ export const ThreeFoundryPreview = ({
     sceneRef.current = scene;
     rendererRef.current = renderer;
     cameraRef.current = cam;
+    const unregisterCapture = registerCanvasCapture(renderer.domElement, () => {
+      if (renderer.getContext().isContextLost()) throw new Error('Scene unavailable');
+      renderer.render(scene, cam);
+    });
     const resize = () => {
       const width = Math.max(1, host.clientWidth);
       const height = Math.max(1, host.clientHeight);
@@ -1964,6 +1981,7 @@ export const ThreeFoundryPreview = ({
     restartInitialShaderSettlement();
     return () => {
       cancelInitialShaderSettlement();
+      unregisterCapture();
       initialShaderSettlementActiveRef.current = false;
       ro.disconnect();
       unsubscribeAdaptive?.();
@@ -2320,6 +2338,28 @@ export const ThreeFoundryPreview = ({
     });
     pruneFoundryResourceCaches(root);
 
+    const requestedFit = cameraFitRef.current;
+    if (requestedFit && requestedFit !== completedCameraFitRef.current &&
+        includeCanonicalSceneContexts && activeAutomataContext?.showCharacter) {
+      const content = root.getObjectByName("foundry-automata-context");
+      const contentBounds = content ? visibleObjectBounds(content) : new THREE.Box3();
+      const bounds = requestedFit.scope === "scene" || contentBounds.isEmpty()
+        ? visibleObjectBounds(scene) : contentBounds;
+      if (requestedFit.scope === "scene") {
+        const sheet = sceneBoundsForSheet(kit);
+        // The workbench grid can be CSS-backed; use its existing physical-kit
+        // extent even when the retained Three board surface is hidden.
+        [sheet, { x: sheet.x + sheet.width, y: sheet.y + sheet.height },
+          boardToScene(0, 0, kit), boardToScene(kit.boardCells - 1, kit.boardCells - 1, kit)]
+          .forEach(point => bounds.expandByPoint(sceneTo3(point)));
+      }
+      if (!bounds.isEmpty()) {
+        completedCameraFitRef.current = requestedFit;
+        onCameraFitRef.current?.(fitWorkingPreviewCamera(cameraStateRef.current, bounds, cam.aspect,
+          hostRef.current ? workingPreviewFrame(hostRef.current) : undefined));
+      }
+    }
+
     const topologyChanged =
       objectPool.topologyRevision !== topologyRevisionBefore ||
       assemblyTopologyChanged ||
@@ -2372,6 +2412,28 @@ export const ThreeFoundryPreview = ({
       );
       stateRef.current.dataset.threeAutomataContext =
         activeAutomataContext?.showCharacter ? "shown" : "absent";
+      stateRef.current.dataset.threeWorkingPhase = String(simulation.inputAngleRad);
+      const automataRoot = root.getObjectByName("foundry-automata-context");
+      stateRef.current.dataset.threeAutomataPaths = JSON.stringify(
+        automataRoot?.children.filter(object => object.visible && object.name.startsWith("foundry-automata-path-"))
+          .map(object => {
+            const line = object as THREE.Line<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
+            const points = line.geometry.getAttribute("position");
+            return { id: line.name.slice("foundry-automata-path-".length), points: points.count,
+              color: line.material.color.getHexString(), opacity: line.material.opacity };
+          }) ?? [],
+      );
+      stateRef.current.dataset.threeAutomataPartTransforms = JSON.stringify(
+        automataRoot?.children.filter(object => object.visible && object.userData.partId)
+          .map(object => ({ id: object.userData.partId, position: object.position.toArray(),
+            rotation: object.rotation.z, scale: object.scale.toArray() })) ?? [],
+      );
+      stateRef.current.dataset.threeWorkingMechanismTransforms = JSON.stringify(
+        mechanismRoot.children.filter(object => object.visible).slice(0, 24).map(object => ({
+          position: object.position.toArray(), rotation: object.rotation.toArray().slice(0, 3),
+          scale: object.scale.toArray(), vertices: (object as THREE.Mesh).geometry?.getAttribute("position")?.count ?? 0,
+        })),
+      );
       stateRef.current.dataset.partCount = String(visiblePartIds.length);
       stateRef.current.dataset.sceneObjectCount = String(visibleObjectIds.length);
       stateRef.current.dataset.selectedPartId =
@@ -2549,6 +2611,7 @@ export const ThreeFoundryPreview = ({
     rendererStatus,
     deferMechanismTopology,
     transientFrame,
+    cameraFit,
   ]);
 
   const playbackClock = playback?.clock;

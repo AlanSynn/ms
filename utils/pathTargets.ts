@@ -15,6 +15,13 @@ export const pathTargetKind = (path?: ProjectMotionPath): PathTargetKind =>
 export const pathTargetId = (path?: ProjectMotionPath): string | undefined =>
   path?.sceneObjectId || path?.partId || undefined;
 
+/** Authored ownership is exact; limb reachability is only a binding rule. */
+export const pathHasExactOwner = (
+  path: ProjectMotionPath,
+  kind: PathTargetKind,
+  id?: string,
+) => Boolean(id) && pathTargetKind(path) === kind && pathTargetId(path) === id;
+
 const partCanReachJoint = (
   part: BodyPartLayer | undefined,
   jointId: string | undefined,

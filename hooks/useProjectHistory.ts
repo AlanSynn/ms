@@ -19,10 +19,13 @@ type SetProjectOptions = {
   resetHistory?: boolean;
 };
 
-const isUndoableProjectAction = (action: ProjectAction) =>
+export const isUndoableProjectAction = (action: ProjectAction) =>
   ![
     "set_processing",
     "select_part",
+    "select_path",
+    "select_scene_object",
+    "select_mechanism",
     "set_export",
     "set_foundry_export",
   ].includes(action.type);

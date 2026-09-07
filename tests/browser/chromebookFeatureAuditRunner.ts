@@ -1,3 +1,4 @@
+import { dismissStartupAnnouncement } from './startupHarness';
 import {
   expect,
   type Browser,
@@ -106,7 +107,8 @@ export const runChromebookFeatureAudit = async ({
 
   try {
     await setup?.(page);
-    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.goto(process.env.PLAYWRIGHT_BASE_PATH ?? '/', { waitUntil: "domcontentloaded" });
+    await dismissStartupAnnouncement(page);
     await expect(page.locator("#boot-loader")).toHaveCount(0, {
       timeout: 180_000,
     });

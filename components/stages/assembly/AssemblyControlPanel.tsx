@@ -126,6 +126,7 @@ export const AssemblyControlPanel = ({
         <div
           className="mt-4 rounded-2xl bg-white p-3 shadow-sm"
           data-testid="assembly-step-list"
+          data-feature-id="assembly.steps"
         >
           <div className="flex items-center gap-2">
             <div className="section-title">Steps</div>

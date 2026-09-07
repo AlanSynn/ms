@@ -173,6 +173,7 @@ const FoundryMechanismGallery = ({
     <div
       className="mechanism-choice-grid"
       data-testid="foundry-mechanism-gallery"
+      data-feature-id="foundry.templates"
       data-visible-previews={visiblePreviewCount}
     >
       {ENABLED_FOUNDRY_MECHANISM_TYPES.map((type, index) => {
@@ -215,6 +216,7 @@ export const FoundryWorkflowPanel = ({
   foundry,
   foundryPhase,
   targetReady,
+  targetBlocker,
   fitRequired,
   fitState,
   fitBusy = false,
@@ -234,6 +236,7 @@ export const FoundryWorkflowPanel = ({
   foundry: MechanismConfig;
   foundryPhase: number;
   targetReady: boolean;
+  targetBlocker?: string;
   fitRequired?: boolean;
   fitState?: MechanismPathFitState;
   fitError?: number;
@@ -270,6 +273,8 @@ export const FoundryWorkflowPanel = ({
         <button
           type="button"
           data-testid="foundry-fit-path"
+          data-feature-id="foundry.fitPath"
+          data-feature-blocker={!targetReady ? targetBlocker : undefined}
           className="btn-primary flex-1"
           disabled={!targetReady}
           aria-busy={fitBusy}
@@ -285,6 +290,7 @@ export const FoundryWorkflowPanel = ({
       <button
         type="button"
         data-testid="foundry-pick-anchor"
+        data-feature-id="foundry.attach"
         className={`btn-secondary w-full ${isPickingAnchor ? "active" : ""}`}
         onClick={onToggleAnchorPick}
       >
@@ -312,12 +318,14 @@ export const FoundryWorkflowPanel = ({
       <button
         className="btn-primary w-full"
         aria-label="Use this mechanism"
+        data-feature-id="foundry.use"
+        data-feature-blocker={fitBusy ? "Wait for the fit to finish." : !targetReady ? targetBlocker : hardBlocked ? "Fit a buildable motion first." : undefined}
         disabled={hardBlocked || fitBusy}
         onClick={onUseMechanism}
       >
         {reuseMechanismId ? "Use existing mechanism" : "Use this mechanism"}
       </button>
-      {!targetReady && <div className="warning">Draw path first.</div>}
+      {!targetReady && <div className="warning">{targetBlocker ?? "Draw path first"}</div>}
       {fitJobError && <div className="warning">Fit failed. Try again.</div>}
       {fitRequired && targetReady && (!fitState || fitState === "unfitted") && (
         <div className="warning">Fit motion first.</div>

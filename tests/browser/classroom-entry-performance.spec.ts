@@ -1,3 +1,4 @@
+import { dismissStartupAnnouncement } from './startupHarness';
 import {
   expect,
   test,
@@ -179,7 +180,8 @@ const openThrottledPage = async (browser: Browser) => {
   await installChromebookAuditInstrumentation(context);
   const page = await context.newPage();
   const client = await applyChromebookEmulation(page);
-  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.goto(process.env.PLAYWRIGHT_BASE_PATH ?? '/', { waitUntil: "domcontentloaded" });
+  await dismissStartupAnnouncement(page);
   await expect(page.locator("#boot-loader")).toHaveCount(0, {
     timeout: 180_000,
   });

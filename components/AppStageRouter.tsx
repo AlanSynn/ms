@@ -35,6 +35,8 @@ import {
 import { CharacterSelection } from "./stages/character/CharacterSelection";
 import { ProjectStage } from "./stages/project/ProjectStage";
 import type { AppCommandHandlerMap } from "../utils/appCommands";
+import type { FoundryCamera } from "../utils/foundryCamera";
+import type { BrowserRecoveryCandidate, ProjectBackupStatus } from "../runtime/persistence/projectDecisionBoundary";
 
 export type AppStageRouterProps = {
   editorStage: AppStage;
@@ -44,6 +46,10 @@ export type AppStageRouterProps = {
   playerDock: ReactNode;
   playbackClock: PlaybackClock;
   commandHandlers: AppCommandHandlerMap;
+  projectBackup?: ProjectBackupStatus;
+  recoveryCandidate?: BrowserRecoveryCandidate;
+  workingCamera?: FoundryCamera;
+  onWorkingCameraChange?: (camera: FoundryCamera) => void;
 
   characterImportProgress: CharacterImportProgressStore;
   onOpenGettingStarted: () => void;
@@ -77,7 +83,7 @@ export type AppStageRouterProps = {
 
   foundry: MechanismConfig;
   setFoundry: (mechanism: MechanismConfig) => void;
-  onFoundryDraftChange: (mechanism: MechanismConfig) => void;
+  onFoundryDraftChange: (mechanism: MechanismConfig) => boolean | void;
   onFoundryExport: (pkg: FoundryExportPackage) => void;
 
   selectedMechanism?: MechanismConfig;
@@ -154,6 +160,10 @@ export const AppStageRouter = ({
   playerDock,
   playbackClock,
   commandHandlers,
+  projectBackup,
+  recoveryCandidate,
+  workingCamera,
+  onWorkingCameraChange,
   characterImportProgress,
   onOpenGettingStarted,
   onAcceptPendingCharacter,
@@ -222,7 +232,11 @@ export const AppStageRouter = ({
     )}
     <Suspense fallback={mountedStage === null ? null : <StageTransitionFrame />}>
     {mountedStage === "project" && (
-      <ProjectStage project={project} commandHandlers={commandHandlers} goStage={goStage} />
+      <ProjectStage project={project} commandHandlers={commandHandlers} goStage={goStage}
+        angle={angle} isPlaying={isPlaying} playbackClock={playbackClock}
+        viewport={viewport} setViewport={setViewport}
+        camera={workingCamera} onCameraChange={onWorkingCameraChange}
+        backup={projectBackup} recoveryCandidate={recoveryCandidate} />
     )}
     {mountedStage === "character" && (
       <CharacterSelection
@@ -282,6 +296,8 @@ export const AppStageRouter = ({
     {mountedStage === "design" && (
       <MechanismDesign
         project={project}
+        camera={workingCamera}
+        onCameraChange={onWorkingCameraChange}
         selectedPart={selectedPart}
         selectedPath={selectedPath}
         selectedMechanism={selectedMechanism}

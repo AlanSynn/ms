@@ -1,0 +1,39 @@
+name = "motionsmith-feedback"
+main = "index.ts"
+compatibility_date = "2026-07-21"
+workers_dev = true
+
+[vars]
+GITHUB_OWNER = "AlanSynn"
+GITHUB_REPO = "ms"
+GITHUB_REPOSITORY_ID = "1283287676"
+ALLOWED_ORIGINS = "https://alansynn.com"
+
+[observability]
+enabled = false
+
+[[ratelimits]]
+name = "NETWORK_RATE_LIMITER"
+namespace_id = "128328767601"
+simple = { limit = 120, period = 60 }
+
+[[ratelimits]]
+name = "REPORT_RATE_LIMITER"
+namespace_id = "128328767602"
+simple = { limit = 6, period = 60 }
+
+[env.development.vars]
+GITHUB_OWNER = "AlanSynn"
+GITHUB_REPO = "ms"
+GITHUB_REPOSITORY_ID = "1283287676"
+ALLOWED_ORIGINS = "http://localhost:4175,http://127.0.0.1:4175,http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:5177,http://127.0.0.1:5177"
+
+[[env.development.ratelimits]]
+name = "NETWORK_RATE_LIMITER"
+namespace_id = "128328767603"
+simple = { limit = 120, period = 60 }
+
+[[env.development.ratelimits]]
+name = "REPORT_RATE_LIMITER"
+namespace_id = "128328767604"
+simple = { limit = 6, period = 60 }

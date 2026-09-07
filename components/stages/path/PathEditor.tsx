@@ -35,6 +35,8 @@ import { PathInspectorPanel } from "./PathInspectorPanel";
 import { PathWorkflowPanel } from "./PathWorkflowPanel";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 import { createPathGestureDraft } from "../../../runtime/path/pathGestureDraft";
+import { capturePathGestureIdentity, pathGestureIdentityMatches, type PathGestureIdentity } from "../../../runtime/path/pathGestureIdentity";
+import type { PathTargetKind } from "../../../utils/pathTargets";
 
 export const PathEditor = ({
   project,
@@ -84,12 +86,30 @@ export const PathEditor = ({
   const freeDraftRef = useRef<DrawSamplePoint[] | null>(null);
   const pointDragDraftRef = useRef<Point[] | null>(null);
   const pointDragDirtyRef = useRef(false);
+  const gestureIdentityRef = useRef<PathGestureIdentity | undefined>(undefined);
+  const gestureCancelledRef = useRef(false);
   const [dragPoint, setDragPoint] = useState<number | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
   const [isFreeDrawing, setIsFreeDrawing] = useState(false);
   const [clearedPath, setClearedPath] = useState<ProjectMotionPath | null>(null);
   const [pathViewMode, setPathViewMode] = useState<"2d" | "3d">("3d");
   const pathLocked = Boolean(selectedSceneObject?.locked ?? selectedPart?.locked);
+  const targetKind: PathTargetKind = selectedSceneObject ? "scene-object" : "part";
+  const targetId = selectedSceneObject?.id ?? selectedPart?.id;
+  const gestureMatches = () => !gestureCancelledRef.current && pathGestureIdentityMatches(
+    gestureIdentityRef.current, project, targetKind, targetId, selectedPath,
+  );
+  const cancelGesture = (finished = false) => {
+    gestureCancelledRef.current = !finished;
+    if (finished) gestureIdentityRef.current = undefined;
+    freeDraftRef.current = null;
+    pointDragDraftRef.current = null;
+    pointDragDirtyRef.current = false;
+    pathGestureDraft.clear();
+    setIsFreeDrawing(false);
+    setDragPoint(null);
+    setDrawMode(false);
+  };
   const pointCount = selectedPath?.points.length ?? 0;
   const jointOptions = selectedPart
     ? motionAnchorJointIds(project, selectedPart.id)
@@ -121,6 +141,9 @@ export const PathEditor = ({
   const jointLabel = (id?: string) => (id ? id.replaceAll("_", " ") : "none");
   useEffect(() => () => pathGestureDraft.dispose(), [pathGestureDraft]);
   useEffect(() => {
+    if (gestureIdentityRef.current && !gestureMatches()) cancelGesture();
+  }, [project, selectedPath, selectedPart?.id, selectedSceneObject?.id]);
+  useEffect(() => {
     freeDraftRef.current = null;
     pointDragDraftRef.current = null;
     pointDragDirtyRef.current = false;
@@ -137,11 +160,11 @@ export const PathEditor = ({
     selectedPointIndex: number | null,
     force = false,
   ) => {
-    const targetId = selectedSceneObject?.id ?? selectedPart?.id;
-    if (!targetId) return;
+    const identity = gestureIdentityRef.current;
+    if (!identity || !gestureMatches()) return;
     pathGestureDraft.publish(
       {
-        pathId: selectedPath?.id ?? `path-${targetId}`,
+        pathId: identity.path?.id ?? `path-${identity.targetId}`,
         points,
         closed: selectedPath?.closed ?? true,
         selectedPointIndex,
@@ -166,7 +189,11 @@ export const PathEditor = ({
     );
   };
   const onDrawPoint = (point: Point) => {
-    if (!drawMode || pathLocked) return;
+    if (!drawMode || pathLocked || gestureCancelledRef.current) return;
+    if (!gestureIdentityRef.current) {
+      gestureIdentityRef.current = capturePathGestureIdentity(project, targetKind, targetId, selectedPath);
+    }
+    if (!gestureMatches()) return;
     const seed = !freeDraftRef.current?.length;
     if (seed) {
       setIsFreeDrawing(true);
@@ -213,6 +240,7 @@ export const PathEditor = ({
       updates: { bendDirection },
     });
   const movePoint = (point: Point) => {
+    if (!gestureMatches()) return;
     if (isFreeDrawing && !pathLocked) {
       appendFreePoint(point);
       return;
@@ -227,6 +255,9 @@ export const PathEditor = ({
   };
   const pickPathPoint = (pathId: string, pointIndex: number) => {
     if (pathLocked || selectedPath?.id !== pathId) return;
+    gestureCancelledRef.current = false;
+    gestureIdentityRef.current = capturePathGestureIdentity(project, targetKind, targetId, selectedPath);
+    if (!gestureMatches()) return;
     setSelectedPoint(pointIndex);
     setDragPoint(pointIndex);
     pointDragDraftRef.current = [...selectedPath.points];
@@ -234,36 +265,44 @@ export const PathEditor = ({
     publishPathDraft(pointDragDraftRef.current, pointIndex, true);
   };
   const stopPointEdit = () => {
+    const identity = gestureIdentityRef.current;
+    const valid = gestureMatches();
     const points = pointDragDraftRef.current;
     const dirty = pointDragDirtyRef.current;
     pointDragDraftRef.current = null;
     pointDragDirtyRef.current = false;
+    gestureIdentityRef.current = undefined;
+    gestureCancelledRef.current = false;
     setDragPoint(null);
-    if (!dirty || !points || !selectedPath) {
+    if (!valid || !dirty || !points || !identity?.path) {
       pathGestureDraft.clear();
       return;
     }
     pathGestureDraft.flush();
-    setPathPoints(points, selectedPath.source, undefined, selectedPath.id);
+    setPathPoints(points, identity.path.source, undefined, identity.path.id);
   };
   const stopDrawing = () => {
+    const identity = gestureIdentityRef.current;
+    const valid = gestureMatches();
     const freeDraft = freeDraftRef.current;
     const finishedFreeStroke = Boolean(freeDraft?.length);
     setDragPoint(null);
     setIsFreeDrawing(false);
     freeDraftRef.current = null;
-    if (freeDraft?.length) {
+    gestureIdentityRef.current = undefined;
+    gestureCancelledRef.current = false;
+    if (valid && identity && freeDraft?.length) {
       const timed = normalizeDrawTimedPoints(
         freeDraft,
-        selectedPath?.duration ?? project.settings.animationDurationMs,
-        { closed: selectedPath?.closed ?? true },
+        identity.path?.duration ?? identity.project.settings.animationDurationMs,
+        { closed: identity.path?.closed ?? true },
       );
       pathGestureDraft.flush();
       setPathPoints(
         timed.map(({ x, y }) => ({ x, y })),
         "drawn",
         timed,
-        selectedPath?.id,
+        identity.path?.id,
       );
     } else {
       pathGestureDraft.clear();
@@ -302,10 +341,9 @@ export const PathEditor = ({
     setSelectedPoint(null);
     dispatch({ type: "select_path", pathId });
   };
-  const addMotion = () => {
-    const targetId = selectedSceneObject?.id ?? selectedPart?.id;
-    if (!targetId || pathLocked) return;
-    const targetKind = selectedSceneObject ? "scene-object" : "part";
+  const addMotion = (targetKind: PathTargetKind, targetId: string) => {
+    const target = targetKind === "scene-object" ? project.sceneObjects[targetId] : project.parts[targetId];
+    if (!target || target.locked) return;
     const path = createMotionPathForTarget(project, targetKind, targetId);
     if (!path) return;
     if (targetKind === "scene-object") {
@@ -314,6 +352,7 @@ export const PathEditor = ({
       dispatch({ type: "select_part", partId: targetId });
     }
     dispatch({ type: "upsert_path", path });
+    setDrawMode(false);
   };
   const switchPathView = (mode: "2d" | "3d") => {
     setPathViewMode(mode);
@@ -325,16 +364,19 @@ export const PathEditor = ({
   const togglePathDrawing = () => {
     setPathViewMode("2d");
     if (drawMode) stopDrawing();
-    else setSelectedPoint(null);
+    else {
+      setSelectedPoint(null);
+      if (!gestureIdentityRef.current) gestureCancelledRef.current = false;
+    }
     setDrawMode(!drawMode);
   };
   const motionPaths = useMemo(
     () => motionPathsInProjectOrder(project),
-    [project.paths],
+    [project.paths, project.pathOrder],
   );
   const activeMotionPaths = useMemo(
     () => playableMotionPaths(project, motionPaths),
-    [motionPaths, project.parts, project.sceneObjects],
+    [motionPaths, project],
   );
   const playbackDurationMs = sharedMotionPlaybackDurationMs(
     project,
@@ -343,12 +385,12 @@ export const PathEditor = ({
   useEffect(() => {
     playbackClock.setTimelineDuration(playbackDurationMs);
   }, [playbackClock, playbackDurationMs]);
-  const previewAngle = isPlaying ? angle : 0;
+  const previewAngle = angle;
   const pathPreview = activeMotionPaths.length
       ? motionPreviewForPaths(
           project,
           activeMotionPaths,
-          motionTimelineMsForPhase(previewAngle, playbackDurationMs),
+          playbackClock.getTimelineMs() || motionTimelineMsForPhase(previewAngle, playbackDurationMs),
         )
       : undefined;
   return (
@@ -380,7 +422,13 @@ export const PathEditor = ({
             addMotion={addMotion}
             updatePath={updatePath}
             openTracking={openTracking}
-            setIsPlaying={setIsPlaying}
+            setIsPlaying={playing => {
+              if (!playing) {
+                playbackClock.stop();
+                setAngle(playbackClock.getPhase());
+              }
+              setIsPlaying(playing);
+            }}
             setAngle={setAngle}
             deletePoint={deletePoint}
             playablePathCount={activeMotionPaths.length}
@@ -394,6 +442,7 @@ export const PathEditor = ({
             selectedPoint={selectedPoint}
             onDrawPoint={onDrawPoint}
             onDrawEnd={stopDrawing}
+            onGestureCancel={() => cancelGesture(true)}
             onPathPointPick={pickPathPoint}
             onPathPointMove={movePoint}
             onPathPointEnd={stopPointEdit}

@@ -155,7 +155,7 @@ export const CharacterImportReviewDialog = ({
           <CheckCircle2 size={24} />
           <span>Ready</span>
         </div>
-        <div className="character-import-review-title">
+        <div className="character-import-review-title" data-capture-mask>
           {pendingCharacter.project.metadata.name}
         </div>
         <div className="character-import-review-meta">

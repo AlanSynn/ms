@@ -30,6 +30,7 @@ type UseWorkspacePlayerDockOptions = {
   playbackClock: PlaybackClock;
   speed: number;
   drawMode: boolean;
+  projectHasMotion?: boolean;
 };
 
 export const useWorkspacePlayerDock = ({
@@ -42,6 +43,7 @@ export const useWorkspacePlayerDock = ({
   playbackClock,
   speed,
   drawMode,
+  projectHasMotion = true,
 }: UseWorkspacePlayerDockOptions): WorkspacePlayerDockState => {
   const [assemblyPlaying, setAssemblyPlaying] = useState(false);
   const [assemblyStepIndex, setAssemblyStepIndex] = useState(0);
@@ -52,7 +54,12 @@ export const useWorkspacePlayerDock = ({
     setIsPlaying(false);
     setAssemblyPlaying(false);
     playbackClock.stop();
-  }, [editorStage, playbackClock, setIsPlaying]);
+    setAngle(playbackClock.getPhase());
+  }, [editorStage, playbackClock, setIsPlaying, setAngle]);
+
+  useEffect(() => {
+    if (!isPlaying) setAngle(playbackClock.getPhase());
+  }, [isPlaying, playbackClock, setAngle]);
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -81,6 +88,7 @@ export const useWorkspacePlayerDock = ({
   };
   const isAssemblyStage = editorStage === "assembly";
   const showsWorkspacePlayer =
+    (editorStage === "project" && projectHasMotion) ||
     editorStage === "path" ||
     editorStage === "design" ||
     editorStage === "assembly";

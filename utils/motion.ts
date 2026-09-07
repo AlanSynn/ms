@@ -76,16 +76,13 @@ export const motionAngleAtTimelineMs = (timelineMs: number, durationMs: number) 
     (Math.max(0, timelineMs) / Math.max(1, durationMs)) * Math.PI * 2;
 
 export const motionPathsInProjectOrder = (project: ProjectState) =>
-    Object.values(project.paths) as ProjectMotionPath[];
+    [...new Set([...(project.pathOrder ?? []), ...Object.keys(project.paths)])]
+        .map(id => project.paths[id]).filter((path): path is ProjectMotionPath => Boolean(path));
 
 export const playableMotionPaths = (
     project: ProjectState,
     paths: ProjectMotionPath[] = motionPathsInProjectOrder(project),
-) => paths.filter(path =>
-    path.enabled &&
-    path.points.length > 1 &&
-    pathOwnerExists(project, path)
-);
+) => paths.filter(path => motionPathReadiness(project, path).playable);
 
 export const sharedMotionPlaybackDurationMs = (
     project: ProjectState,
@@ -100,15 +97,10 @@ export const sharedMotionPlaybackDurationMs = (
     )
     : Math.max(1, project.settings.animationDurationMs);
 
-export type MotionPathStatus = 'Ready' | 'Draw' | 'Fix' | 'Hidden' | 'Off';
+export type MotionPathStatus = 'Ready' | 'Draw' | 'Fix' | 'Hidden' | 'Off' | 'Conflict';
 
-export const motionPathStatus = (path: ProjectMotionPath): MotionPathStatus => {
-    if (!path.enabled) return 'Off';
-    if (path.points.length < 3) return 'Draw';
-    if (path.warnings.length) return 'Fix';
-    if (!path.visible) return 'Hidden';
-    return 'Ready';
-};
+export const motionPathStatus = (project: ProjectState, path: ProjectMotionPath): MotionPathStatus =>
+    motionPathReadiness(project, path).status;
 
 export const nextMotionPathId = (project: ProjectState, targetId: string) => {
     const baseId = `path-${targetId}`;
@@ -475,6 +467,90 @@ export const describeMotionChain = (project: ProjectState, partId: string | unde
         canFold: true,
         warning: 'Multi-joint chains currently use the distal bend joint as the solver control.'
     };
+};
+
+export interface MotionPathReadiness {
+    status: MotionPathStatus;
+    playable: boolean;
+    reason?: string;
+    conflictPathIds: string[];
+    movingJointIds: string[];
+    targetJointId?: string;
+    fixedRootJointId?: string;
+}
+
+const readinessCache = new WeakMap<ProjectState, Map<string, MotionPathReadiness>>();
+
+const baseMotionPathReadiness = (project: ProjectState, path: ProjectMotionPath): MotionPathReadiness => {
+    const result: MotionPathReadiness = {
+        status: path.visible ? 'Ready' : 'Hidden', playable: true,
+        conflictPathIds: [], movingJointIds: [],
+    };
+    const blocked = (status: MotionPathStatus, reason: string) => ({ ...result, status, playable: false, reason });
+    if (!path.enabled) return blocked('Off', 'Enable path');
+    if (!pathOwnerExists(project, path)) return blocked('Fix', 'Choose a target');
+    if (path.points.length < 3) return blocked('Draw', 'Draw 3 points');
+    if (path.points.some(point => !Number.isFinite(point.x) || !Number.isFinite(point.y)) ||
+        !path.points.some(point => Math.hypot(point.x - path.points[0].x, point.y - path.points[0].y) > 1e-6)) {
+        return blocked('Fix', 'Redraw path');
+    }
+    if (!Number.isFinite(path.duration) || path.duration <= 0) return blocked('Fix', 'Set duration');
+    if (path.warnings.some(warning => !['Path needs at least 3 points', 'Path disabled or empty'].includes(warning))) {
+        return blocked('Fix', 'Check path warning');
+    }
+    if (path.sceneObjectId) return result;
+    const part = project.parts[path.partId];
+    const skeleton = project.skeleton;
+    if (!skeleton?.joints[part.anchorJointId]) return blocked('Fix', 'Add target joints');
+    const allowedTargets = motionAnchorJointIds(project, path.partId);
+    if (path.targetAnchorJointId && !allowedTargets.includes(path.targetAnchorJointId)) return blocked('Fix', 'Choose a handle');
+    const targetJointId = preferredMotionJointId(project, path.partId, path.targetAnchorJointId, {
+        preferDistalWhenRoot: !path.targetAnchorJointId,
+    });
+    if (!targetJointId || !skeleton.joints[targetJointId]) return blocked('Fix', 'Choose a handle');
+    if (path.chainRootJointId && !motionChainRootJointIds(project, path.partId, targetJointId).includes(path.chainRootJointId)) {
+        return blocked('Fix', 'Choose a start joint');
+    }
+    const chain = describeMotionChain(project, path.partId, targetJointId, { rootJointId: path.chainRootJointId });
+    if (chain.kind === 'invalid' || chain.jointIds.some(id => !skeleton.joints[id])) return blocked('Fix', 'Choose a reachable handle');
+    result.targetJointId = targetJointId;
+    result.fixedRootJointId = chain.jointCount > 1 ? chain.rootJointId : undefined;
+    result.movingJointIds = [...new Set([
+        ...chain.jointIds.slice(chain.jointCount > 1 ? 1 : 0),
+        ...descendantJoints(skeleton, targetJointId),
+    ])];
+    return result;
+};
+
+/** Shared by inventory, fitting, and playback. Visibility never disables motion. */
+export const motionPathReadiness = (project: ProjectState, path: ProjectMotionPath): MotionPathReadiness => {
+    let results = readinessCache.get(project);
+    if (!results) {
+        const paths = motionPathsInProjectOrder(project);
+        results = new Map(paths.map(candidate => [candidate.id, baseMotionPathReadiness(project, candidate)]));
+        const eligible = paths.filter(candidate => results!.get(candidate.id)!.playable);
+        eligible.forEach((left, index) => eligible.slice(index + 1).forEach(right => {
+            const a = results!.get(left.id)!;
+            const b = results!.get(right.id)!;
+            const conflicts = left.sceneObjectId && right.sceneObjectId
+                ? left.sceneObjectId === right.sceneObjectId
+                : !left.sceneObjectId && !right.sceneObjectId && (
+                    a.movingJointIds.some(id => b.movingJointIds.includes(id) || b.fixedRootJointId === id) ||
+                    b.movingJointIds.some(id => a.fixedRootJointId === id)
+                );
+            if (!conflicts) return;
+            a.conflictPathIds.push(right.id);
+            b.conflictPathIds.push(left.id);
+        }));
+        results.forEach(result => {
+            if (!result.conflictPathIds.length) return;
+            result.playable = false;
+            result.status = 'Conflict';
+            result.reason = 'Disable an overlapping path';
+        });
+        readinessCache.set(project, results);
+    }
+    return results.get(path.id) ?? baseMotionPathReadiness(project, path);
 };
 
 export const motionChainOptionLabel = (project: ProjectState, partId: string | undefined, jointId: string): string => {
@@ -888,6 +964,12 @@ export const motionPreviewForPaths = (
         sceneObjects: {},
         skeleton: project.skeleton,
     };
+    paths.forEach(path => {
+        const readiness = motionPathReadiness(project, path);
+        if (!readiness.playable && readiness.reason) {
+            preview.warnings = { ...preview.warnings, [path.id]: [readiness.reason] };
+        }
+    });
     playableMotionPaths(project, paths).forEach(path => {
         const pathAngle = motionAngleAtTimelineMs(
             timelineMs,
@@ -903,25 +985,23 @@ export const motionPreviewForPaths = (
             );
             return;
         }
-        const pathMechanism = project.mechanisms.flatMap(mechanism =>
-            resolvedMechanismOutputBindings(project, mechanism)
-                .filter(binding => binding.pathId === path.id)
-                .map(binding => ({ mechanism, binding }))
-        )[0];
-        const targetJointId = preferredMotionJointId(
-            project,
-            path.partId,
-            pathMechanism?.binding.targetAnchorJointId ?? path.targetAnchorJointId,
-            { preferDistalWhenRoot: !path.targetAnchorJointId },
-        );
-        preview = motionPreviewForTarget(
-            project,
-            path.partId,
-            targetJointId,
-            target,
-            preview,
-            { rootJointId: path.chainRootJointId },
-        );
+        const readiness = motionPathReadiness(project, path);
+        // Sample each independent limb against its authored rest pose. Merge only
+        // its moving joints/segments, so a shared fixed root cannot reset a sibling.
+        const sampled = motionPreviewForPath(project, path, pathAngle, readiness.targetJointId);
+        const moving = new Set(readiness.movingJointIds);
+        const jointUpdates = Object.fromEntries(readiness.movingJointIds.flatMap(id => {
+            const joint = sampled.skeleton?.joints[id];
+            return joint ? [[id, joint.position]] : [];
+        }));
+        preview.skeleton = withJointUpdates(preview.skeleton, jointUpdates);
+        Object.entries(sampled.parts).forEach(([id, part]) => {
+            const child = firstChildJointId(project.skeleton, part.anchorJointId);
+            if (moving.has(part.anchorJointId) || (child && moving.has(child))) preview.parts[id] = part;
+        });
+        preview.target = sampled.target;
+        preview.targetJointId = sampled.targetJointId;
+        preview.rootJointId = sampled.rootJointId;
     });
     return preview;
 };

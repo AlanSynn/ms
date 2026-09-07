@@ -101,6 +101,8 @@ export const BlueprintControlPanel = ({
             className="btn-primary"
             aria-label={packageStatus === "running" ? "Cancel Blueprint PDF" : "Download Blueprint PDF"}
             data-testid="blueprint-build-print"
+            data-feature-id="blueprint.pdf"
+            data-feature-blocker={validation.errors.length ? "Fix the Blueprint warnings first." : "Wait for the current download."}
             disabled={
               packageStatus !== "running" &&
               (!!validation.errors.length || stlStatus === "running" || characterTemplateStatus === "running")
@@ -116,6 +118,8 @@ export const BlueprintControlPanel = ({
             <button
               className="btn-secondary justify-start"
               data-testid="blueprint-character-template"
+              data-feature-id="blueprint.customParts"
+              data-feature-blocker={!hasCharacter ? "Show a character part first." : "Wait for the current download."}
               aria-label={characterTemplateStatus === "running" ? "Cancel character output" : "Download Character PDF"}
               aria-busy={characterTemplateStatus === "running"}
               disabled={
