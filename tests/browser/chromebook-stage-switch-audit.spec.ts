@@ -1,3 +1,4 @@
+import { dismissStartupAnnouncement } from './startupHarness';
 import { expect, test, type CDPSession, type Page } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -204,7 +205,8 @@ test.describe("Chromebook stage-switch audit", () => {
     let client: CDPSession | undefined;
 
     try {
-      await page.goto("/", { waitUntil: "domcontentloaded" });
+      await page.goto(process.env.PLAYWRIGHT_BASE_PATH ?? '/', { waitUntil: "domcontentloaded" });
+      await dismissStartupAnnouncement(page);
       await expect(page.locator("#boot-loader")).toHaveCount(0, {
         timeout: 180_000,
       });

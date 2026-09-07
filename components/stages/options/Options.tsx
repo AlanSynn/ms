@@ -130,6 +130,7 @@ export const Options = ({
               <SettingsSection section={optionSection("simulation")}>
                 <MiniNumber
                   label="Animation speed"
+                  featureId="options.animationSpeed"
                   value={project.settings.animationSpeed}
                   min={0.1}
                   max={5}
@@ -258,6 +259,7 @@ export const Options = ({
                     className="field mt-1"
                     aria-label="Assessment key"
                     data-testid="options-assessment-key"
+                    data-capture-mask
                     value={assessmentKeyInput}
                     onChange={(event) =>
                       setAssessmentKeyInput(event.currentTarget.value)

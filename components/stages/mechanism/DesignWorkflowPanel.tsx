@@ -230,6 +230,7 @@ export const DesignWorkflowPanel = ({
         <h4 className="section-title mt-4">Mechanisms</h4>
         <select
           aria-label="Mechanism instance"
+          data-feature-id="design.mechanism"
           className="field"
           value={selectedMechanism?.id ?? ""}
           onChange={(e) =>

@@ -5,12 +5,16 @@ import {
   clearMotionPathGeometry,
   createMotionPathForTarget,
   motionPreviewForPaths,
+  motionPathReadiness,
+  motionPathsInProjectOrder,
+  playableMotionPaths,
   sharedMotionPlaybackDurationMs,
 } from "../utils/motion";
 import {
   applyProjectAction,
   createDefaultMechanism,
   createEmptyProject,
+  validatePath,
 } from "../utils/project";
 import { createPlaybackClock } from "../runtime/playback/externalPlaybackClock";
 
@@ -39,7 +43,7 @@ const path = (
   points,
   timedPoints: points.map((point, index) => ({
     ...point,
-    time: index === 0 ? 0 : duration,
+    time: (index / (points.length - 1)) * duration,
   })),
   duration,
   closed: false,
@@ -55,14 +59,14 @@ const secondObject = sceneObject("object-b", "Cloud");
 const firstPath = path(
   "path-object-a",
   firstObject.id,
-  [{ x: 0, y: 0 }, { x: 100, y: 0 }],
+  [{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 100, y: 0 }],
   1_000,
 );
 const secondPath = {
   ...path(
     "path-object-b",
     secondObject.id,
-    [{ x: 0, y: 0 }, { x: 0, y: 100 }],
+    [{ x: 0, y: 0 }, { x: 0, y: 50 }, { x: 0, y: 100 }],
     2_000,
   ),
   visible: false,
@@ -221,3 +225,116 @@ if (!reopenedSecond) throw new Error('portable Project must retain every motion 
 if (JSON.stringify(reopenedSecond.points) !== JSON.stringify(portableSecond.points)) throw new Error('portable Project must preserve independent motion geometry');
 if (reopenedSecond.duration !== portableSecond.duration || reopenedSecond.closed !== portableSecond.closed) throw new Error('portable Project must preserve independent motion timing and closure');
 if (reopenedSecond.partId !== portableSecond.partId || reopenedSecond.targetAnchorJointId !== portableSecond.targetAnchorJointId) throw new Error('portable Project must preserve motion target bindings');
+
+// Readiness is the same source for inventory, fitting, and combined playback.
+const twoArmsBase = createPortableMotionProject({ includeMechanism: false });
+const armA = Object.values(twoArmsBase.paths)[0];
+const armB: ProjectMotionPath = {
+  ...armA, id: "path-left-arm", partId: "left_arm_lower",
+  targetAnchorJointId: "left_hand", chainRootJointId: "left_shoulder",
+  points: armA.points.map(point => ({ x: -point.x, y: point.y })),
+};
+const twoArms = { ...twoArmsBase, paths: { [armA.id]: armA, [armB.id]: armB }, pathOrder: [armB.id, armA.id] };
+assert.deepEqual(motionPathsInProjectOrder(twoArms).map(path => path.id), [armB.id, armA.id]);
+assert.equal(playableMotionPaths(twoArms).length, 2);
+const authoredArms = JSON.stringify(twoArms);
+const armSamples = [0, 300, 650].map(time => motionPreviewForPaths(twoArms, motionPathsInProjectOrder(twoArms), time));
+for (const partId of ["left_arm_lower", "right_arm_lower"]) {
+  assert(armSamples.every(sample => sample.parts[partId]), `${partId} receives a real body-part pose`);
+  const transforms = armSamples.map(sample => sample.parts[partId].transform);
+  assert(new Set(transforms.map(transform => transform.rotation.toFixed(4))).size > 1, `${partId} rotates across time`);
+  assert(new Set(transforms.map(transform => `${transform.x.toFixed(4)},${transform.y.toFixed(4)}`)).size > 1, `${partId} moves across time`);
+}
+assert.equal(JSON.stringify(twoArms), authoredArms, "combined playback cannot mutate authored transforms or path geometry");
+const duplicate = { ...armA, id: "overlapping-right-arm" };
+const conflicting = { ...twoArms, paths: { ...twoArms.paths, [duplicate.id]: duplicate } };
+assert.equal(motionPathReadiness(conflicting, armA).status, "Conflict");
+assert.equal(motionPathReadiness(conflicting, duplicate).status, "Conflict");
+assert.deepEqual(playableMotionPaths(conflicting).map(path => path.id), [armB.id], "an independent limb still plays while both conflicting paths are excluded");
+const conflictPreview = motionPreviewForPaths(conflicting, Object.values(conflicting.paths), 300);
+assert(conflictPreview.warnings?.[armA.id]);
+assert(conflictPreview.parts.left_arm_lower);
+assert.equal(conflictPreview.parts.right_arm_lower, undefined, "conflicting paths cannot silently choose a winner");
+for (const skipped of [{ ...duplicate, enabled: false }, { ...duplicate, points: duplicate.points.slice(0, 2) }]) {
+  const isolated = { ...twoArms, paths: { ...twoArms.paths, [skipped.id]: skipped } };
+  assert.equal(playableMotionPaths(isolated).length, 2, "disabled or incomplete paths do not block valid independent paths");
+  assert.equal(motionPathReadiness(isolated, skipped).playable, false);
+}
+for (const broken of [
+  { ...armA, partId: "missing" },
+  { ...armA, targetAnchorJointId: "missing" },
+  { ...armA, chainRootJointId: "left_shoulder" },
+  { ...armA, points: armA.points.map(() => ({ x: 0, y: 0 })) },
+]) {
+  const invalid = { ...twoArms, paths: { ...twoArms.paths, [broken.id]: broken } };
+  assert.equal(motionPathReadiness(invalid, broken).status, "Fix");
+  assert.equal(playableMotionPaths(invalid).length, 1);
+}
+const reenabled = validatePath({ ...validatePath({ ...armA, enabled: false }), enabled: true });
+assert.deepEqual(reenabled.warnings, [], "validation removes obsolete derived disabled warnings");
+assert.equal(motionPathReadiness({ ...twoArms, paths: { ...twoArms.paths, [reenabled.id]: reenabled } }, reenabled).playable, true);
+
+// Both chains can share an unmoving root without overwriting sibling transforms.
+const sharedA = { ...armA, partId: "torso", chainRootJointId: "torso" };
+const sharedB = { ...armB, partId: "torso", chainRootJointId: "torso" };
+const sharedRoot = { ...twoArms, paths: { [sharedA.id]: sharedA, [sharedB.id]: sharedB } };
+assert.equal(playableMotionPaths(sharedRoot).length, 2, "a shared fixed root is not a moving-chain conflict");
+const forward = motionPreviewForPaths(sharedRoot, [sharedA, sharedB], 420);
+const reverse = motionPreviewForPaths(sharedRoot, [sharedB, sharedA], 420);
+for (const id of ["left_arm_lower", "right_arm_lower"]) assert.deepEqual(forward.parts[id].transform, reverse.parts[id].transform, "independent shared-root playback is order invariant");
+assert.deepEqual(forward.skeleton?.joints.torso.position, sharedRoot.skeleton?.joints.torso.position);
+
+import { motionPathWithPoints } from "../utils/pathEditing";
+import { pathHasExactOwner, pathBelongsToTarget } from "../utils/pathTargets";
+import { isUndoableProjectAction } from "../hooks/useProjectHistory";
+import { replacedMechanismPathIds, replacePrimaryMechanismOutputBinding, mechanismOwnerForDraft } from "../utils/mechanismBindings";
+assert(pathBelongsToTarget(armA, "part", "torso", twoArms), "mechanism reachability remains supported");
+assert(!pathHasExactOwner(armA, "part", "torso"), "authoring ownership does not inherit mechanism reachability");
+const torsoEdit = motionPathWithPoints(twoArms, "part", "torso", armA.points);
+assert.equal(torsoEdit?.partId, "torso");
+assert.notEqual(torsoEdit?.id, armA.id, "drawing on an ancestor creates its own path");
+assert.equal(motionPathWithPoints(twoArms, "part", "torso", armA.points, "drawn", undefined, armA.id), undefined, "an explicit foreign path edit is rejected");
+const bEdited = motionPathWithPoints(twoArms, "part", armB.partId, armB.points.slice().reverse(), "drawn", undefined, armB.id)!;
+const isolatedB = applyProjectAction(twoArms, { type: "upsert_path", path: bEdited });
+assert.equal(isolatedB.paths[armA.id], armA, "editing B retains A by identity");
+assert.equal(bEdited.targetAnchorJointId, armB.targetAnchorJointId);
+assert.equal(bEdited.chainRootJointId, armB.chainRootJointId);
+for (const action of [{ type: "select_path", pathId: armB.id }, { type: "select_part", partId: armB.partId }, { type: "select_scene_object", objectId: firstObject.id }] as const) {
+  assert.equal(isUndoableProjectAction(action), false, "selection neither consumes edit history nor clears redo");
+}
+assert.equal(isUndoableProjectAction({ type: "upsert_path", path: bEdited }), true);
+const boundA = replacePrimaryMechanismOutputBinding(twoArms, createDefaultMechanism("crank", "single-driver"), armA.id);
+const boundProject = { ...twoArms, mechanisms: [boundA] };
+const boundB = replacePrimaryMechanismOutputBinding(boundProject, boundA, armB.id);
+const previewClone = { ...boundA, id: 'foundry-preview' };
+assert.equal(mechanismOwnerForDraft(boundProject, previewClone)?.id, boundA.id, 'Foundry preview identity still resolves its canonical binding owner');
+assert.equal(mechanismOwnerForDraft({ ...boundProject, mechanisms: [{ ...boundA, outputs: undefined }] }, { ...previewClone, outputs: undefined })?.id, boundA.id, 'legacy preview clones resolve by their original path binding');
+assert.deepEqual(replacedMechanismPathIds(boundProject, boundB), [armA.id], "fitting B identifies the A binding that requires explicit replacement");
+assert.deepEqual(replacedMechanismPathIds(boundProject, { ...boundB, id: mechanismOwnerForDraft(boundProject, previewClone)!.id }), [armA.id]);
+assert.deepEqual(replacedMechanismPathIds(boundProject, boundA), [], "editing the existing fit requires no replacement");
+const replaced = applyProjectAction(boundProject, { type: "upsert_mechanism", mechanism: boundB });
+assert.equal(replaced.mechanisms.length, 1, "confirmed replacement reuses the existing mechanism");
+assert.equal(replaced.paths[armA.id], armA);
+assert.equal(replaced.paths[armB.id], armB);
+console.log("independent body path readiness, identity, and binding contracts ok");
+
+import { createFabricationReadyFourBarProject } from './fixtures/fabricationProject';
+import { fitMechanismToTargetPath } from '../utils/mechanismRecommendations';
+import { loadProjectSnapshot, serializeProject } from '../utils/project';
+const fitSource = createFabricationReadyFourBarProject();
+const fitA = Object.values(fitSource.paths)[0];
+const fitB = { ...fitA, id: 'fit-left-arm', partId: 'left_arm_lower', targetAnchorJointId: 'left_hand', chainRootJointId: 'left_shoulder' };
+const reopenedFitSource = loadProjectSnapshot(JSON.parse(serializeProject({ ...fitSource, paths: { [fitA.id]: fitA, [fitB.id]: fitB } })));
+const beforeCandidateFit = JSON.stringify(reopenedFitSource);
+const candidateB = fitMechanismToTargetPath(reopenedFitSource, {
+  ...reopenedFitSource.mechanisms[0], id: 'foundry-preview', targetPathId: fitB.id,
+  targetPartId: fitB.partId, targetAnchorJointId: fitB.targetAnchorJointId,
+}, fitB.id);
+assert.equal(candidateB.fabricationMetadata?.pathFit?.status, 'fit', 'the same accepted trace remains fabricable when fitting B from a reopened A mechanism');
+assert.equal(candidateB.outputs?.[0].pathId, fitB.id, 'candidate output binding follows requested B before physical fitting');
+assert.equal(candidateB.outputs?.[0].targetPartId, fitB.partId);
+assert.equal(JSON.stringify(reopenedFitSource), beforeCandidateFit, 'computing a successful B candidate keeps canonical A untouched until explicit replacement');
+assert.equal(reopenedFitSource.mechanisms[0].outputs?.[0].pathId, fitA.id);
+const disabledFitPath = { ...fitB, enabled: false };
+const disabledFitProject = { ...reopenedFitSource, paths: { ...reopenedFitSource.paths, [fitB.id]: disabledFitPath } };
+assert.equal(fitMechanismToTargetPath(disabledFitProject, reopenedFitSource.mechanisms[0], fitB.id).fabricationMetadata?.pathFit?.status, 'rejected', 'fitter uses the same disabled-path readiness blocker as inventory and playback');

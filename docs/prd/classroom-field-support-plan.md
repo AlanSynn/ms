@@ -47,7 +47,11 @@ Current pass uses existing ProjectState/command/test seams only; no new dependen
 - `Reset Lesson` restores the active lesson baseline while preserving browser app settings.
 - Foundry `Reset` now clears manual anchor/picking/playback/overlay state and rebuilds a finite preview from the selected mechanism type.
 - Left pane checklist is derived from current `ProjectState`; it never owns separate tutorial state.
-- About/deployment docs state static web, no account, no upload, no image-recognition download, browser autosave, and local downloads.
+- About/deployment docs state static web, no account, no project upload, no image-recognition download, browser autosave, and local downloads.
+
+## Approved student support exception — 2026-09-07
+
+The active exception in `AGENTS.md` permits one Feedback Worker forwarding explicit student submissions to public `AlanSynn/ms` issues and native GitHub attachments. Search, local screenshot preparation, and bundled release notes use no feedback network requests. No project uploads, accounts, hosting bucket, database, or support platform is added. Earlier no-upload statements below describe the ordinary project workflow; explicit Feedback is governed by [Student support](../student-support.md) and [Feedback relay](../feedback-relay.md).
 
 ## Product requirements
 
@@ -57,7 +61,7 @@ MotionSmith must present itself as a static web tool first.
 
 Acceptance:
 
-- `docs/deployment.md` and About copy state: static web, no account, no backend upload, no image-recognition model/runtime, browser autosave, and local downloads.
+- `docs/deployment.md` and About copy state: static web, no account, no project upload, no image-recognition model/runtime, browser autosave, and local downloads.
 - Release checklist covers: version tag, `/ms/` path, image-recognition exclusion, static asset load, no runtime CDN, and no `/api/` calls.
 - App shell must not show sign-in, cloud save, sync, team, or teacher dashboard language.
 
@@ -180,7 +184,7 @@ Done when:
 
 Done when:
 
-- About modal contains local-first/no-account/no-upload summary.
+- About modal contains local-first/no-account/no-project-upload summary.
 - Contract test prevents cloud/auth/server copy from visible UI.
 
 ### Phase 2 — Guided lesson templates

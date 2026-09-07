@@ -1,7 +1,7 @@
 # Workbench Flow + UX Contract
 
 Status: active contract
-Last refreshed: 2026-08-20
+Last refreshed: 2026-09-07
 Scope: tabs, panes, buttons, tooltips, and classroom workflow surfaces.
 
 This is the compact UX contract for the current MotionSmith workbench. It does not replace `AGENTS.md`, `docs/subsystem-governance-and-mechanism-contracts.md`, or mechanism-specific PRDs. It names how those rules show up in the app shell.
@@ -18,18 +18,23 @@ This is the compact UX contract for the current MotionSmith workbench. It does n
 Default classroom path:
 
 ```text
-Getting Started -> Character -> Path -> Foundry -> Design -> Blueprint -> Assembly -> local test / reflect
+Boot -> unseen What's new -> Getting Started (unless suppressed) -> Open Project / new work
+Character -> Path -> Foundry -> Design -> Blueprint -> Assembly
+Save Project file -> next class -> Open Project file -> keep editing
 ```
 
 Rules:
 
-- Start from a working template or explicit import; blank/open exploration stays secondary.
-- Creation/import happens in Character only: local character files, starter rigs, scene objects, and rig/body-part edits. Image recognition is not shipped.
+- Open Project is the normal classroom return. Guide and Starter rig create new work. Browser backups are secondary explicit recovery candidates; discovering one never chooses it or overwrites it with boot defaults.
+- Character owns character/scene-object creation and editing. Full-project Save/Open is available from entry, Project, and shared commands. Image recognition is not shipped.
 - Later tabs select, move, fit, tune, export, or assemble existing project data; they do not create new character/object sources.
 - `ProjectState` is the authoring truth for durable project data. Current snapshots also carry recovery-compatible selected ids and last-result fields; new work must not add more transient UI state there without a documented migration rule.
 - Foundry/fabrication helpers are the mechanism visual/physical truth. Design and Assembly consume that truth.
-- Blueprint owns files. Assembly owns build steps.
+- Project owns portable project Save/Open. Blueprint owns build/print files. Assembly owns build steps.
 - Tooltips must use `utils/contextHelp.ts` + `ContextHelp`; no layout-shifting inline help.
+- Top-bar `Find a feature`, `Feedback`, and `What's new` are compact support surfaces. Search and release-note `Show me` share stable control destinations and reveal actions without executing them. Missing prerequisites preserve the project and show the next action.
+- Feedback prepares the actual visible app screenshot locally before its panel opens. Only Send publishes the message and included image to public `AlanSynn/ms` issues through one Worker/native GitHub attachments. Closing/removing/capturing uploads nothing. Keep drafts on failure/close; clear after confirmed delivery or explicit discard. Uncertain delivery offers status checking.
+- What's new automatically precedes Getting Started for one eligible unseen update. A stable ID is acknowledged only after rendered content is dismissed; it persists outside project/history and Getting Started preferences, with session/memory fallback. Manual reopening returns to the editor. Dialogs never stack or flash beneath the announcement.
 
 ## Pane contract
 
@@ -45,8 +50,9 @@ Rules:
 
 | Stage | Left pane | Center canvas | Right inspector | Primary buttons | Help keys | Current gaps to track |
 |---|---|---|---|---|---|---|
-| Getting Started | Two starter tiles and paired file actions in modal | none; releases to Character | none | Guide, Starter rig; Character file beside Open full project below | none | Keep result-first; do not add videos/manuals here. |
-| Character | Getting Started, Load character file, Add object, Open full project, parts/objects, ownership/reset | character/scene-object workbench and selection handles | selected part/object/skeleton inspector | Getting Started, Load character file, Add object, Open full project | `character.loadCharacterFile`, `character.loadObjectFile` | Character is correct creation owner. Keep rig creation here; remove creation controls from later tabs. |
+| Getting Started | Compact creation tiles, full-width Open Project, secondary character/recovery actions | none | none | Guide, Starter rig, Open Project | none | Session suppression with no chosen work shows Project entry; close retains current work. |
+| Project | Title, Save/Open, secondary recovery and build/edit navigation | shared live working scene; all visible authored paths, selected highlight, distinct fitted trace | counts and source-specific backup status | Open Project when empty; Save Project with work; Edit paths | none | Reuse Design/Foundry for mechanisms and Path preview without one; no edit handles. |
+| Character | Getting Started, Load character file, Add object, Open Project, parts/objects, ownership/reset | character/scene-object workbench and selection handles | selected part/object/skeleton inspector | Getting Started, Load character file, Add object, Open Project | `character.loadCharacterFile`, `character.loadObjectFile` | Character is correct creation owner. Keep rig creation here; remove creation controls from later tabs. |
 | Path | motion target, Draw/Clear, Open/Closed, Smoothness, Trace/Play/Reset in More | path drawing/editing, character/object target preview, 2D/3D view | selected path/target, IK start/handle, bend | Draw, Clear path, Open, Closed, Trace, Reset | `path.draw`, `path.smoothness`, `path.trace` | Path no longer owns rig creation controls; default path topology stays closed unless explicitly changed. |
 | Foundry | target summary, Fit path, Pick anchor, Use mechanism, mechanism templates | Foundry physical preview, user path, mechanism path, camera/layer/play controls | sensemaking first, view controls, opacity/explode, selected mechanism params | Fit path, Pick anchor, Use mechanism | `foundry.fitPath`, `viewer.layers` | Center is dense but acceptable. Mechanism cards must stay front-view Foundry-derived, not separate drawings. |
 | Design | mechanism instance list, Trace, Recommend, Blueprint | one Foundry-backed automata scene: mechanism drives character/object target, target/driven/error layers | selected mechanism binding, visible/enabled, target/path/handle, params, export | Trace, Recommend, Blueprint, SVG/DXF | none yet | Keep `buildAutomataSceneModel` + `ThreeFoundryPreview`; do not reintroduce split Foundry/Puppet layers. |
@@ -59,7 +65,7 @@ Rules:
 
 Facts verified from code and tests on 2026-07-05:
 
-- The compact Getting Started dialog exposes only `Guide` and `Starter rig` as primary tiles. It pairs `Character file` beside `Open full project` as secondary actions below. Recognition starters are not shipped.
+- Getting Started keeps compact `Guide` and `Starter rig` tiles, followed by prominent `Open Project`. `Character file` and a validated `Recover browser backup` candidate are secondary. Recognition starters are not shipped.
 - The three-pane shell is implemented through `EditorStageFrame` surfaces with `stage-left-pane`, `stage-canvas-pane`, and `stage-right-inspector` browser contracts.
 - Character owns source creation: character package load, ordinary scene-object image load, starter entry, rig/body-part edits, and lesson reset.
 - Path owns motion target selection, draw/clear, open/closed topology, smoothing, trace import, path visibility/enabled state, and path point editing; it no longer owns rig creation.
@@ -103,7 +109,7 @@ These are the required end-to-end UX contracts. Items not fully implemented are 
 ### 1. Guided classroom start
 
 1. Student opens Getting Started.
-2. Student picks Guide/starter/image/character file.
+2. Student picks Guide, Starter rig, or a character file to create work; returning students choose Open Project.
 3. App lands on Character.
 4. Student edits visible parts/objects and resets if needed.
 5. Student moves to Path.
@@ -111,7 +117,7 @@ These are the required end-to-end UX contracts. Items not fully implemented are 
 Guardrails:
 
 - Getting Started stays compact.
-- Open full project remains secondary.
+- Open Project remains prominent, independent of recovery availability. File cancellation and failed validation preserve current work and backup.
 - “Keep mechanisms” must not reappear in first-run import UI.
 
 ### 2. Character and scene object ownership
@@ -258,7 +264,7 @@ None known from this audit. This pass is documentation-only; full browser QA was
 | Assembly character no-mechanism fallback | Character art/pin Assembly now uses the Foundry preview when an active mechanism exists, but a blank no-mechanism project can only show a blocker. | `AssemblyThreePreview.tsx`, `ThreeFoundryPreview.tsx`, `AssemblySceneFrame.tsx` | Do not invent a fake mechanism. Keep the blocker honest, or require a lesson/mechanism before 3D build simulation. |
 | Assembly realism | Assembly is now Three-first for mechanism steps, but full Lego-like clarity for character art, fasteners, spacers, board holes, and final motion remains a polish/coverage risk. | `AssemblyCanvasPane.tsx`, `AssemblyInspectorPanel.tsx`, `AssemblySceneFrame.tsx` | Keep enriching `AssemblySceneFrame`; do not reintroduce lower SVG/ghost truth. |
 | Blueprint/Assembly labels | Labels mostly share fabrication helpers, but all mechanism-family label parity is not exhaustively tested. | `fabricationPartDisplayLabel`, `readableFabricationStackSummary`, browser tests. | Add all-mechanism contract parity for recipe labels, cut labels, and assembly labels. |
-| Multi-object workflows | Scene-object path and mechanism support exists, but multi-object/multi-mechanism classroom reload flow is weakly covered. | `ProjectMotionPath.sceneObjectId`, `DesignInspectorPanel`, tests cover limited cases. | Add two-object, two-path, two-mechanism browser flow with autosave reload. |
+| Multiple paths | Independent target paths share one preview timeline; physically independent multiple mechanisms remain outside this classroom mission. | `ProjectMotionPath`, `utils/motion.ts`, path inventory | Verify two targets, conflict reporting, actual arm transforms, explicit binding replacement, and portable file return. |
 | CI/release gate | Release deploy builds only; tests are not enforced there. | `.github/workflows/deploy.yml`, test-engineer audit. | Add release smoke gate before tag deploy or document manual release gate as mandatory. |
 
 ### P2 / medium UX and maintainability risks
@@ -316,3 +322,5 @@ bun run build
 env -u NO_COLOR PLAYWRIGHT_SERVER=preview playwright test
 git diff --check
 ```
+
+The current classroom-return decision and verification record is [classroom-return-ux.md](classroom-return-ux.md). It owns explicit file authority, recovery write gating, Project view continuity, and multiple-path acceptance evidence.

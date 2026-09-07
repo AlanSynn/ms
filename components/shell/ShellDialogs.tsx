@@ -37,7 +37,7 @@ export const AboutDialog = ({ onClose }: { onClose: () => void }) => <div classN
       <div>
         <div className="accent-label">About</div>
         <h3 id="about-title">MotionSmith</h3>
-        <p className="mt-2 text-sm font-bold text-slate-500">Local only.</p>
+        <p className="mt-2 text-sm font-bold text-slate-500">Projects stay local.</p>
       </div>
       <button className="btn-secondary" onClick={onClose}>Close</button>
     </div>
@@ -45,6 +45,7 @@ export const AboutDialog = ({ onClose }: { onClose: () => void }) => <div classN
       <div className="shortcut-help-row"><span>Version</span><kbd>v{APP_VERSION}</kbd></div>
       <div className="shortcut-help-row"><span>Release</span><kbd>classroom static web</kbd></div>
       <div className="shortcut-help-row"><span>Data</span><kbd>browser autosave · files</kbd></div>
+      <div className="shortcut-help-row"><span>Feedback</span><kbd>public · only on Send</kbd></div>
       <div className="shortcut-help-row"><span>Project</span><kbd>MotionSmith</kbd></div>
     </div>
   </section>

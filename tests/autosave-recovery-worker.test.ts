@@ -777,6 +777,82 @@ nearLimitBackend.seed(nearLimitSerialized);
   assert.equal(backend.currentRaw, serializeProjectCompact(newerProject));
 }
 
+for (const readOnly of [true, false]) {
+  const storage = memoryStorage();
+  const legacy = createEmptyProject();
+  storage.values.set(LEGACY_STORAGE_KEYS.autosave, serializeProjectCompact(legacy));
+  const before = [...storage.values];
+  const harness = clientHarness(storage);
+  let completed = 0;
+  let accepted = 0;
+  harness.client.request(createEmptyProject(), {
+    complete: (result) => { assert.equal(result.status, "loaded"); completed += 1; },
+    failed: (error) => assert.fail(error.message),
+  }, () => true, readOnly ? { readOnly: true } : {
+    accept: () => { accepted += 1; return false; },
+  });
+  harness.flushFrame();
+  harness.flushFrame();
+  await settleAsyncRecovery();
+  const request = harness.workers[0].posted[0];
+  const output = runAutosaveRecoveryJob(request.input);
+  assert(output.mutation, "the legacy fixture would migrate during explicit recovery");
+  harness.workers[0].emit({ type: "result", generationId: request.generationId, output });
+  await settleAsyncRecovery();
+  assert.equal(completed, readOnly ? 1 : 0);
+  assert.equal(accepted, readOnly ? 0 : 1);
+  assert.deepEqual([...storage.values], before, "discovery or canceled recovery preserves every legacy journal byte");
+  assert.equal(await harness.backend.readRecoverySnapshot(), null, "no migration writes to IndexedDB");
+  harness.client.dispose();
+}
+
+{
+  const storage = memoryStorage();
+  storage.values.set(LEGACY_STORAGE_KEYS.autosave, serializeProjectCompact(createEmptyProject()));
+  const before = [...storage.values];
+  const backend = new AwaitedMigrationBackend();
+  const harness = clientHarness(storage, backend);
+  let stillChosen = true;
+  let completed = 0;
+  let superseded = 0;
+  let signalSuperseded!: () => void;
+  const supersededDone = new Promise<void>(resolve => { signalSuperseded = resolve; });
+  harness.client.request(createEmptyProject(), {
+    complete: () => { completed += 1; },
+    failed: (error) => assert.fail(error.message),
+    superseded: () => { superseded += 1; signalSuperseded(); },
+  }, () => stillChosen);
+  harness.flushFrame();
+  harness.flushFrame();
+  await settleAsyncRecovery();
+  const request = harness.workers[0].posted[0];
+  harness.workers[0].emit({
+    type: "result", generationId: request.generationId,
+    output: runAutosaveRecoveryJob(request.input),
+  });
+  await backend.migrationStarted;
+  stillChosen = false;
+  backend.releaseMigration();
+  await supersededDone;
+  assert.equal(completed, 0);
+  assert.equal(superseded, 1);
+  assert.deepEqual([...storage.values], before, "a later file decision preserves the legacy backup during migration");
+  assert.equal(await backend.readRecoverySnapshot(), null, "only the stale migration's owned write is rolled back");
+}
+
+{
+  const storage = memoryStorage();
+  const project = createEmptyProject();
+  const write = writeAutosaveSnapshot(project, storage);
+  assert.equal(write.status, "saved");
+  const result = runAutosaveRecoveryJob(recoveryInput(createEmptyProject(), storage)).result;
+  assert.equal(result.status, "loaded");
+  if (result.status === "loaded" && write.status === "saved") {
+    assert.equal(result.backedUpAt, write.committedAt, "candidate time is the journal's actual commit time");
+    assert.equal(typeof result.backedUpAt, "number");
+  }
+}
+
 const controllerSource = readFileSync(
   join(process.cwd(), "hooks/useMotionSmithAppController.ts"),
   "utf8",
@@ -802,9 +878,10 @@ const recoveryClientSource = readFileSync(
   "utf8",
 );
 assert(controllerSource.includes("useProjectHistory(createEmptyProject)"));
-assert(controllerSource.includes("suspended: autosaveRecovery.pending"));
+assert(controllerSource.includes("projectDecision: autosaveRecovery.decision"));
 assert(!controllerSource.includes("readAutosaveProject(initialProject)"));
-assert(recoveryHookSource.includes("latestProjectRef.current === initialProject"));
+assert(recoveryHookSource.includes("readOnly: true"));
+assert(!recoveryHookSource.includes("setProject"));
 assert(recoveryHookSource.includes("client.dispose()"));
 assert(workerSource.includes("await import("));
 assert(autosaveHookSource.includes("prepareIndexedDbAutosaveBase"));

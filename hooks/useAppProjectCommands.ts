@@ -35,6 +35,8 @@ import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT } from "../utils/viewport";
 import { createPortableProjectBlob } from "../runtime/persistence/projectDownloadJob";
 import { createProjectDownloadWorkerClient } from "../runtime/persistence/projectDownloadWorkerClient";
 import { createAutosaveRecoveryWorkerClient } from "../runtime/persistence/autosaveRecoveryWorkerClient";
+import { confirmProjectReplacement } from "../runtime/persistence/projectReplacementSafety";
+import { projectHasStudentWork, type ProjectDecisionBoundary } from "../runtime/persistence/projectDecisionBoundary";
 
 const APP_STAGE_IDS: AppStage[] = [
   "project",
@@ -50,13 +52,6 @@ const APP_STAGE_IDS: AppStage[] = [
 const isAppStage = (value: unknown): value is AppStage =>
   typeof value === "string" && APP_STAGE_IDS.includes(value as AppStage);
 
-const projectHasUserWork = (project: ProjectState) =>
-  project.partOrder.length > 0 ||
-  project.sceneObjectOrder.length > 0 ||
-  Object.keys(project.sceneObjects).length > 0 ||
-  Object.keys(project.paths).length > 0 ||
-  project.mechanisms.length > 0;
-
 type SetProject = (
   update: SetStateAction<ProjectState>,
   options?: { history?: boolean; resetHistory?: boolean },
@@ -64,6 +59,7 @@ type SetProject = (
 
 type UseAppProjectCommandsOptions = {
   project: ProjectState;
+  projectDecision: ProjectDecisionBoundary;
   stage: AppStage;
   canvasViewport: CanvasViewport;
   setProject: SetProject;
@@ -82,6 +78,9 @@ type UseAppProjectCommandsOptions = {
   setCommandStatus: (message: string) => void;
   openProjectPicker: () => void;
   goStage: (stage: AppStage) => void;
+  openFindFeature?: () => void;
+  openFeedback?: () => void;
+  openWhatsNew?: () => void;
 };
 
 export type AppProjectCommands = {
@@ -95,6 +94,7 @@ export type AppProjectCommands = {
 
 export const useAppProjectCommands = ({
   project,
+  projectDecision,
   stage,
   canvasViewport,
   setProject,
@@ -110,6 +110,9 @@ export const useAppProjectCommands = ({
   setShowGettingStarted,
   setShowAbout,
   setShowShortcuts,
+  openFindFeature,
+  openFeedback,
+  openWhatsNew,
   setCommandStatus,
   openProjectPicker,
   goStage,
@@ -163,31 +166,17 @@ export const useAppProjectCommands = ({
     });
   };
 
-  const saveRecoveryCopy = (label: string) => {
+  const confirmReplacement = (label: string, source = latestProjectRef.current) => {
     try {
-      const filename = projectSnapshotFileName(
-        project.metadata.name,
-        `-recovery-${Date.now()}`,
-      );
-      downloadBlob(filename, createPortableProjectBlob(project));
-      setCommandStatus(`${label}: recovery copy saved`);
-      return true;
+      const accepted = confirmProjectReplacement(source, label);
+      if (!accepted) setCommandStatus("Project unchanged");
+      return accepted;
     } catch (error) {
       setCommandStatus(
         `Recovery copy failed: ${error instanceof Error ? error.message : String(error)}`,
       );
       return false;
     }
-  };
-
-  const confirmReplacement = (label: string) => {
-    if (!projectHasUserWork(project)) return true;
-    const motions = Object.keys(project.paths).length;
-    const mechanisms = project.mechanisms.length;
-    if (!window.confirm(
-      `${label}? Current work has ${motions} motion${motions === 1 ? "" : "s"} and ${mechanisms} mechanism${mechanisms === 1 ? "" : "s"}. A recovery copy will be saved first.`,
-    )) return false;
-    return saveRecoveryCopy(label);
   };
 
   const foundryPreviewFromProject = (lessonProject: ProjectState) => {
@@ -200,9 +189,11 @@ export const useAppProjectCommands = ({
   const openLessonProject = (
     lessonProject: ProjectState,
     startStage: AppStage,
+    decisionToken: number,
   ) => {
+    if (!projectDecision.complete(decisionToken)) return;
     setPendingCharacter(null);
-    setProject(lessonProject, { resetHistory: true });
+    setProject((current) => projectDecision.isCurrent(decisionToken) ? lessonProject : current, { resetHistory: true });
     setFoundry(foundryPreviewFromProject(lessonProject));
     setAngle(0);
     setIsPlaying(false);
@@ -211,25 +202,21 @@ export const useAppProjectCommands = ({
     setStage(startStage);
   };
 
-  const saveProject = () => downloadProjectSnapshot("", "Project saved");
+  const saveProject = () => downloadProjectSnapshot("", "Download started");
   const saveProjectAs = () =>
-    downloadProjectSnapshot(`-${Date.now()}`, "Project saved");
+    downloadProjectSnapshot(`-${Date.now()}`, "Download started");
   const exportProjectCopy = () =>
-    downloadProjectSnapshot("-copy", "Project copied");
+    downloadProjectSnapshot("-copy", "Download started");
 
   const newProject = () => {
-    if (
-      projectHasUserWork(project) &&
-      !window.confirm("Start a new project? A recovery copy will be saved first.")
-    ) {
-      setCommandStatus("Cancelled");
-      return;
-    }
-    if (projectHasUserWork(project) && !saveRecoveryCopy("New project")) return;
+    const token = projectDecision.begin();
+    if (!confirmReplacement("Start a new project")) return;
+    if (!projectDecision.complete(token)) return;
     setCommandStatus("New project");
+    const next = createEmptyProject();
     startTransition(() => {
       setPendingCharacter(null);
-      setProject(createEmptyProject(), { resetHistory: true });
+      setProject((current) => projectDecision.isCurrent(token) ? next : current, { resetHistory: true });
       setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
       setShowGettingStarted(false);
       setStage("character");
@@ -240,10 +227,7 @@ export const useAppProjectCommands = ({
     lessonId: string,
     preparedProject?: ProjectState,
   ) => {
-    if (!preparedProject && !confirmReplacement("Open this guide")) {
-      setCommandStatus("Guide unchanged");
-      return;
-    }
+    const token = projectDecision.begin();
     const lesson = classroomLessonById(lessonId);
     if (!lesson || !isMechanismTypeEnabled(lesson.mechanismType)) {
       setCommandStatus("Lesson unavailable");
@@ -257,22 +241,24 @@ export const useAppProjectCommands = ({
         classroomAssessmentKey: project.settings.classroomAssessmentKey,
       },
     };
-    openLessonProject(lessonProject, lesson.startStage);
+    if (!confirmReplacement("Open this guide")) return;
+    openLessonProject(lessonProject, lesson.startStage, token);
     setCommandStatus(`${lesson.outcome ?? lessonProject.metadata.name} ready`);
   };
 
   const openSampleProject = (preparedProject?: ProjectState) => {
-    if (!preparedProject && !confirmReplacement("Open the starter rig")) {
-      setCommandStatus("Project unchanged");
-      return;
-    }
+    const token = projectDecision.begin();
+    const next = preparedProject ?? createSampleProject();
+    if (!confirmReplacement("Open the starter rig")) return;
+    if (!projectDecision.complete(token)) return;
     setPendingCharacter(null);
-    setProject(preparedProject ?? createSampleProject(), { resetHistory: true });
+    setProject((current) => projectDecision.isCurrent(token) ? next : current, { resetHistory: true });
     setShowGettingStarted(false);
     setStage("character");
   };
 
   const resetLesson = () => {
+    const token = projectDecision.begin();
     const lesson = classroomLessonById(project.metadata.classroomLessonId);
     const resetProject = resetProjectToLessonBaseline(project);
     if (!lesson || !resetProject) {
@@ -280,19 +266,20 @@ export const useAppProjectCommands = ({
       return;
     }
     if (!confirmReplacement("Reset this lesson")) {
-      setCommandStatus("Lesson unchanged");
       return;
     }
-    openLessonProject(resetProject, lesson.startStage);
+    openLessonProject(resetProject, lesson.startStage, token);
     setCommandStatus("Lesson reset");
   };
 
   const recoverAutosave = () => {
-    const requestedProject = project;
+    const requestedProject = latestProjectRef.current;
+    const token = projectDecision.begin();
     const shouldApply = () =>
+      projectDecision.isCurrent(token) &&
       latestProjectRef.current === requestedProject &&
       latestProjectRef.current.metadata.id === requestedProject.metadata.id;
-    setCommandStatus("Recovering autosave");
+    setCommandStatus("Checking browser backup…");
     autosaveRecoveryClient.request(requestedProject, {
       complete: (recovered) => {
         if (recovered.status === "rejected") {
@@ -302,28 +289,41 @@ export const useAppProjectCommands = ({
         if (recovered.status === "missing") {
           setCommandStatus(
             recovered.recovery.outcome === "storage-unavailable"
-              ? "Autosave unavailable"
-              : "No autosave found",
+              ? "Browser backup unavailable"
+              : "No browser backup found",
           );
           return;
         }
         const recoveredProject = recovered.project;
         if (
-          !projectHasUserWork(recoveredProject) &&
-          projectHasUserWork(requestedProject)
+          !projectHasStudentWork(recoveredProject) &&
+          projectHasStudentWork(requestedProject)
         ) {
-          setCommandStatus("No autosave found");
+          setCommandStatus("No browser backup found");
           return;
         }
-        setProject(recoveredProject, { resetHistory: true });
-        setCommandStatus("Recovered browser autosave snapshot");
+        if (!shouldApply() || !projectDecision.complete(token)) return;
+        setProject((current) => current === requestedProject && projectDecision.isCurrent(token)
+          ? recoveredProject : current, { resetHistory: true });
+        setPendingCharacter(null);
+        setFoundry(foundryPreviewFromProject(recoveredProject));
+        setShowGettingStarted(false);
+        setCommandStatus("Recovered browser backup");
         setStage("path");
       },
       failed: (error) => setCommandStatus(
-        `Autosave recovery failed: ${error.message}`,
+        `Browser recovery failed: ${error.message}`,
       ),
-      superseded: () => setCommandStatus("Autosave changed. Try again."),
-    }, shouldApply);
+      superseded: () => setCommandStatus("Project or backup changed. Try again."),
+    }, shouldApply, {
+      accept: ({ project: candidate }) => {
+        if (!projectHasStudentWork(candidate) && projectHasStudentWork(requestedProject)) {
+          setCommandStatus("No browser backup found");
+          return false;
+        }
+        return confirmReplacement("Recover browser backup", requestedProject);
+      },
+    });
   };
 
   const saveWorkspaceLayout = () => {
@@ -416,6 +416,9 @@ export const useAppProjectCommands = ({
     goStage,
     openShortcuts: () => setShowShortcuts(true),
     openAbout: () => setShowAbout(true),
+    openFindFeature,
+    openFeedback,
+    openWhatsNew,
   }) satisfies AppCommandHandlerMap;
 
   return { commandHandlers, openClassroomLesson, openSampleProject };

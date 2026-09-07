@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { BOOT_READY_EVENT } from './utils/startupFlow';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -9,7 +10,10 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 const releaseBootLoader = () => {
   document.body.classList.add('app-ready');
-  window.setTimeout(() => document.getElementById('boot-loader')?.remove(), 320);
+  window.setTimeout(() => {
+    document.getElementById('boot-loader')?.remove();
+    window.dispatchEvent(new Event(BOOT_READY_EVENT));
+  }, 320);
 };
 
 void import('./App')

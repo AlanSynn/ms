@@ -199,6 +199,7 @@ export const FoundryPlaybackPanel = ({
   >
     <button
       className={`btn-secondary ${foundryPlaying ? "active" : ""}`}
+      data-feature-id="playback.play"
       onClick={onTogglePlaying}
     >
       {foundryPlaying ? "Pause" : "Play"}
@@ -209,6 +210,7 @@ export const FoundryPlaybackPanel = ({
     <input
       ref={phaseInputRef}
       aria-label="Foundry phase"
+      data-feature-id="playback.scrub"
       type="range"
       min="0"
       max="360"

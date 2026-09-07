@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ProjectState } from "../types";
 import type { AutosaveFailureReason } from "../utils/projectAutosaveFormat";
 import {
@@ -20,6 +20,8 @@ import {
   markIndexedDbAutosaveDirty,
   prepareIndexedDbAutosaveBase,
 } from "../runtime/persistence/autosaveIndexedDb";
+import type { ProjectBackupStatus, ProjectDecisionBoundary } from "../runtime/persistence/projectDecisionBoundary";
+export type { ProjectBackupStatus } from "../runtime/persistence/projectDecisionBoundary";
 
 type ProjectAutosaveTransaction = AutosaveTransaction<
   ProjectState,
@@ -39,6 +41,7 @@ export type AutosaveLifecycleDisposal = {
  */
 export const createAutosaveLifecycleDisposal = (
   scheduleMicrotask: (callback: () => void) => void = queueMicrotask,
+  canFlush: () => boolean = () => true,
 ): AutosaveLifecycleDisposal => {
   let generation = 0;
   const pending = new WeakMap<ProjectAutosaveTransaction, number>();
@@ -47,7 +50,8 @@ export const createAutosaveLifecycleDisposal = (
       pending.delete(transaction);
     },
     cleanup: (transaction) => {
-      transaction.flush();
+      if (canFlush()) transaction.flush();
+      else transaction.cancel();
       const token = ++generation;
       pending.set(transaction, token);
       scheduleMicrotask(() => {
@@ -60,8 +64,8 @@ export const createAutosaveLifecycleDisposal = (
 };
 
 export type ProjectAutosaveOptions = {
+  projectDecision: ProjectDecisionBoundary;
   suspended?: boolean;
-  recoveredBaseline?: ProjectState;
   onFailure?: (status: string) => void;
 };
 
@@ -69,19 +73,28 @@ export const autosaveFailureStatus = (reason: AutosaveFailureReason) => {
   if (reason === "quota") return "Autosave failed: Storage full";
   if (reason === "unavailable") return "Autosave failed: Storage unavailable";
   if (reason === "corruption") return "Autosave failed: Recover snapshot";
-  return "Autosave failed: Download snapshot";
+  return "Browser backup unavailable. Save Project.";
 };
 
 export const useProjectAutosave = (
   project: ProjectState,
-  options: ProjectAutosaveOptions = {},
-) => {
+  options: ProjectAutosaveOptions,
+): ProjectBackupStatus => {
   const latestProjectRef = useRef<ProjectState>(project);
-  const initialProjectRef = useRef<ProjectState>(project);
+  latestProjectRef.current = project;
+  const authorized = options.projectDecision.isAuthorized();
+  const allowed = authorized && !options.suspended && project.settings.autosave;
+  const allowedRef = useRef(allowed);
+  allowedRef.current = allowed;
+  const [backupStatus, setBackupStatus] = useState<ProjectBackupStatus>({ state: "waiting" });
   const failureCallbackRef = useRef(options.onFailure);
   failureCallbackRef.current = options.onFailure;
-  const reportFailure = (reason: AutosaveFailureReason) =>
-    failureCallbackRef.current?.(autosaveFailureStatus(reason));
+  const reportFailure = (reason: AutosaveFailureReason) => {
+    if (!allowedRef.current) return;
+    const message = autosaveFailureStatus(reason);
+    setBackupStatus((previous) => ({ ...previous, state: "failed", message }));
+    failureCallbackRef.current?.(message);
+  };
 
   const transactionRef = useRef<ProjectAutosaveTransaction | null>(null);
   const lifecycleDisposalRef = useRef<AutosaveLifecycleDisposal | null>(null);
@@ -133,46 +146,63 @@ export const useProjectAutosave = (
           preparation.dispose();
         },
       },
-      commit: async (_nextProject, plan) => {
+      commit: async (nextProject, plan) => {
+        if (!allowedRef.current) return false;
         const result = await commitAutosaveStorageSnapshot(
           plan,
           (snapshot) => commitIndexedDbAutosaveSnapshot(snapshot, backend),
         );
         if (result.status === "failed") reportFailure(result.reason);
+        if (result.status === "saved") {
+          const savedAt = result.committedAt;
+          setBackupStatus({
+            state: allowedRef.current
+              ? nextProject === latestProjectRef.current ? "saved" : "saving"
+              : latestProjectRef.current.settings.autosave ? "waiting" : "off",
+            savedAt,
+            candidate: {
+              projectId: nextProject.metadata.id,
+              projectName: nextProject.metadata.name,
+              backedUpAt: savedAt,
+            },
+          });
+        }
         return result.status === "saved";
       },
       markDirty: (nextProject) => {
+        if (!allowedRef.current) return;
         const result = markIndexedDbAutosaveDirty(nextProject);
         if (result.status === "failed") reportFailure(result.reason);
       },
     });
   }
   const transaction = transactionRef.current;
-  lifecycleDisposalRef.current ??= createAutosaveLifecycleDisposal();
+  lifecycleDisposalRef.current ??= createAutosaveLifecycleDisposal(queueMicrotask, () => allowedRef.current);
   const lifecycleDisposal = lifecycleDisposalRef.current;
 
   useEffect(() => {
-    transaction.setSuspended(options.suspended === true);
-  }, [options.suspended, transaction]);
+    transaction.setSuspended(!allowed);
+    if (!allowed) {
+      transaction.cancel();
+      setBackupStatus((previous) => ({
+        ...previous,
+        state: project.settings.autosave ? "waiting" : "off",
+        message: undefined,
+      }));
+    }
+  }, [allowed, project.settings.autosave, transaction]);
 
   useEffect(() => {
-    latestProjectRef.current = project;
-    if (!project.settings.autosave) {
-      transaction.cancel();
-      return;
-    }
-    if (
-      project === initialProjectRef.current ||
-      project === options.recoveredBaseline
-    ) return;
+    if (!allowed) return;
     // Accepted ProjectState updates only enqueue the latest value. Worker
     // preparation and the eventual journal write remain outside the gesture
     // and playback hot path.
     transaction.accept(project);
-  }, [options.recoveredBaseline, project, transaction]);
+    setBackupStatus((previous) => ({ ...previous, state: "saving", message: undefined }));
+  }, [allowed, project, transaction]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !project.settings.autosave) {
+    if (typeof window === "undefined" || !allowed) {
       return;
     }
     const intervalMs = Math.max(
@@ -180,9 +210,12 @@ export const useProjectAutosave = (
       project.settings.autosaveIntervalSeconds * 1000,
     );
     const interval = window.setInterval(() => {
-      transaction.accept(latestProjectRef.current);
+      if (allowedRef.current) transaction.accept(latestProjectRef.current);
     }, intervalMs);
-    const flushAutosave = () => transaction.flush();
+    const flushAutosave = () => {
+      if (allowedRef.current) transaction.flush();
+      else transaction.cancel();
+    };
     window.addEventListener("pagehide", flushAutosave);
     window.addEventListener("beforeunload", flushAutosave);
     return () => {
@@ -190,7 +223,7 @@ export const useProjectAutosave = (
       window.removeEventListener("pagehide", flushAutosave);
       window.removeEventListener("beforeunload", flushAutosave);
     };
-  }, [project.settings.autosave, project.settings.autosaveIntervalSeconds, transaction]);
+  }, [allowed, project.settings.autosaveIntervalSeconds, transaction]);
 
   // A normal editor teardown is another safe lifecycle boundary. Flush first
   // so prepared bytes or a dirty marker survive, then release the Worker after
@@ -199,4 +232,5 @@ export const useProjectAutosave = (
     lifecycleDisposal.setup(transaction);
     return () => lifecycleDisposal.cleanup(transaction);
   }, [lifecycleDisposal, transaction]);
+  return backupStatus;
 };

@@ -1,7 +1,7 @@
 # MotionSmith Project Agents Contract
 
 Status: active
-Last refreshed: 2026-08-20
+Last refreshed: 2026-09-07
 Scope: every implementation, design, test, and documentation change in this repository.
 
 This file is the project-level rulebook for future agents. If older docs or UI copy drift from this contract, update the product to match this file; do not add another explanatory layer.
@@ -11,17 +11,19 @@ This file is the project-level rulebook for future agents. If older docs or UI c
 MotionSmith is a tinkerable workbench, not a reading-heavy tutorial. Users should learn the workflow by touching the character, joints, paths, mechanisms, and playback controls directly.
 
 - Product scope is local-first browser/Tauri. Do not add backend/API server, cloud DB, auth/RBAC, billing, team accounts, realtime collaboration, hosted asset storage, server inference, or server export jobs unless the user explicitly reopens server scope.
-- Classroom web release is the static GitHub Pages app at `https://alansynn.com/ms/` with `VITE_BASE_PATH=/ms/`; do not add accounts, uploads, rosters, dashboards, analytics, or cloud sync language for classroom support.
+- Classroom web release is the static GitHub Pages app at `https://alansynn.com/ms/` with `VITE_BASE_PATH=/ms/`; do not add accounts, project uploads, rosters, dashboards, analytics, or cloud sync language for classroom support.
+- Approved feedback exception: students may explicitly send a problem or idea and an optional locally prepared screenshot through one Cloudflare Worker to public `AlanSynn/ms` issues. GitHub native attachments are the only screenshot destination. This exception permits no project upload/storage, image-hosting route, R2, database, queue, Durable Object, account flow, or general backend. Credentials remain Worker secrets. Searching, capture preparation, bundled release notes, editing, saving, and ordinary navigation make no feedback requests; only Send and explicit status/retry actions do.
+- Support surfaces locate existing controls without executing editing commands. Feedback drafts/receipts and viewed release-note IDs stay outside `ProjectState` and undo history. Show `Posted publicly. Leave out names.` beside Send, preview the screenshot, and allow removal. Unknown delivery stays visible and permits status checking, not blind resubmission.
 - When a full-stack feature gap needs a server, document it as excluded local-first scope instead of building a fake client-only substitute.
 - Local persistence must be named honestly: browser autosave, local snapshot download, portable project copy. Do not label downloads as cloud save/sync.
 - Image recognition is excluded from the classroom and Tauri builds. Use guided starters and explicit local character packages; do not add a local model, remote inference, or mock AI surface unless the user explicitly reopens that scope.
 - Guided classroom lesson templates must create real serializable `ProjectState` data. Blank starters stay mechanism-free; lessons may include paths/mechanisms only when they are editable and exportable.
-- Classroom entry is theme-guided first: guided project templates are the primary classroom start, while blank/import/open exploration stays secondary and always available. Keep this guidance in compact modal/left-pane/library surfaces, never as a center-canvas tutorial.
+- Classroom return is file-first: students Save Project to a portable file, then explicitly Open Project at the next class. Guide and Starter rig are compact creation choices; Open Project is prominent beneath them. Browser backups are explicit secondary recovery candidates, never automatically selected projects. Keep entry in compact modal/left-pane surfaces, never as a center-canvas tutorial.
 - Guided project cards must show the result plus two novice cues only: `Change <editable thing>` and `Build <physical thing>`. Put direct-translation / sensemaking detail in stage context or teacher-pack metadata, not first-run cards.
 - Opening any guided project must land on Character with a compact `Make it yours` ownership cluster for parts, joints, path, mechanism fit, and reset. Guided starters are editable baselines, never locked demos.
 - Repository text and product UI are English-only. Do not add bilingual labels, Korean prose, or mixed-language examples; tests must block non-English Hangul text from returning.
-- First-run startup is one static logo/wordmark/version boot loader that disappears when the editor is ready; after it releases to Character, show the compact Getting Started modal unless the student checked the session-only opt-out.
-- Getting Started can be reopened from the Character/Getting Started action and stays compact/result-first: show only Guide and Starter rig as primary tiles; pair Character file beside Open full project as secondary actions below. Do not ship image-recognition or Boy/Girl recognition starter assets. Avoid process/explanation copy in the modal.
+- Startup is one static logo/wordmark/version boot loader, then one eligible unseen What's new update, then Getting Started unless session-suppressed. Acknowledge the stable update ID only after rendered content is dismissed, independently of project/history and the Getting Started preference. With no chosen project and suppressed entry, show Project with Open Project primary.
+- Getting Started can be reopened without replacing current work. Show compact Guide and Starter rig choices, then a full-width Open Project action using the shared file picker. Character file and Recover browser backup (only a validated candidate, named with its actual known backup time) are secondary; the session preference follows. Do not ship image-recognition or Boy/Girl recognition starter assets.
 - `Reset Lesson` must restore a known-good lesson baseline while preserving app settings; Foundry reset must restore finite mechanism preview state, not just stop playback.
 - Prefer direct manipulation over explanatory prose: draw on the canvas, drag joints, scrub playback, rotate the view, tune sliders, and see the result immediately.
 - Remove or collapse text that does not unlock an action, safety warning, blocker, or fabrication decision.
@@ -38,7 +40,7 @@ Visible runtime copy should be labels, status chips, direct actions, or blockers
 - Remove explanatory paragraphs from visible stage panes. Move rare necessary detail into tooltips, docs, or collapsed diagnostics.
 - Use `utils/contextHelp.ts` and `components/ui/ContextHelp.tsx` for any visible `?` help affordance; keep entries short, locale-ready, and centralized instead of inlining explanations in stages.
 - Warnings must be direct blockers or next actions such as `Fix: ...`, `No path`, or `Unlock part`; do not write theory or tutorial prose.
-- Getting Started shows only starter choices. Character shows parts/joints. Path shows draw/edit controls. Foundry shows template, stack, status, and Use. Design shows target and parameters. Blueprint shows cut sheets/downloads. Assembly shows steps, parts, and board coordinates. Options shows setting names.
+- Getting Started shows creation and file-opening choices. Project owns Save/Open and the live working overview; browser recovery is secondary. Character shows parts/joints. Path shows draw/edit controls. Foundry shows template, stack, status, and Use. Design shows target and parameters. Blueprint shows cut sheets/downloads. Assembly shows steps, parts, and board coordinates. Options shows setting names.
 - Keep all runtime UI English-only and novice-readable; avoid jargon unless it names a physical part the user can see or fabricate.
 - This policy also covers generated UI/export strings from utility modules such as `utils/fabrication.ts`, `utils/assemblyPlayback.ts`, `utils/mechanismTemplates.ts`, and `utils/appCommands.ts`.
 
@@ -61,7 +63,7 @@ The editor follows a Canva/CAD-like shell with one shared scene state.
 - Character import/selection must create editable body parts, skeleton joints, bend directions, and anchors in `ProjectState`.
 - Free path drawing must be canvas-native and continuous; users should not need to type coordinates first.
 - Path Editor must render only character, skeleton, editable path, and path handles; it must not render mechanism geometry, mechanism pins, or mechanism overlays.
-- Mechanism Design is the first workflow tab that overlays character + path + mechanism together, and its mechanism visualization/animation must reuse the same Foundry renderer and fabrication/physics contracts.
+- Project overview and Mechanism Design overlay character + authored paths + mechanism using the shared Foundry scene, playback, fabrication, and physics contracts. Project emphasizes visible paths with inspection controls and no editing handles. Without a mechanism, it uses the existing Path preview pipeline; never invent a mechanism to display incomplete work.
 - IK must visibly support direct joints, two-joint limbs, three-joint limbs, and longer chains when the data permits it.
 - Bend/fold direction must be chosen with visible handles or compact toggles near the affected joint.
 - Mechanism binding must attach real end-effectors to selected body-part anchors; moving mechanisms must move the character preview.

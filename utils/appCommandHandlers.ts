@@ -19,6 +19,9 @@ type CreateAppCommandHandlersOptions = {
   goStage: (stage: AppStage) => void;
   openShortcuts: () => void;
   openAbout: () => void;
+  openFindFeature?: () => void;
+  openFeedback?: () => void;
+  openWhatsNew?: () => void;
 };
 
 export const createAppCommandHandlers = ({
@@ -39,6 +42,9 @@ export const createAppCommandHandlers = ({
   goStage,
   openShortcuts,
   openAbout,
+  openFindFeature = () => undefined,
+  openFeedback = () => undefined,
+  openWhatsNew = () => undefined,
 }: CreateAppCommandHandlersOptions): AppCommandHandlerMap => ({
   "project.new": newProject,
   "project.open": openProject,
@@ -67,4 +73,7 @@ export const createAppCommandHandlers = ({
   "options.preferences": () => goStage("options"),
   "help.shortcuts": openShortcuts,
   "help.about": openAbout,
+  "help.findFeature": openFindFeature,
+  "help.feedback": openFeedback,
+  "help.whatsNew": openWhatsNew,
 });

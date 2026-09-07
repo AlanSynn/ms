@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ContextHelp } from "./ContextHelp";
 import type { ContextHelpId } from "../../utils/contextHelp";
+import type { FeatureId } from "../../utils/featureDestinations";
 
 export const MiniNumber = ({
   label,
@@ -10,6 +11,8 @@ export const MiniNumber = ({
   step = 1,
   disabled = false,
   helpId,
+  featureId,
+  featureBlocker,
   onChange,
 }: {
   label: string;
@@ -19,6 +22,8 @@ export const MiniNumber = ({
   step?: number;
   disabled?: boolean;
   helpId?: ContextHelpId;
+  featureId?: FeatureId;
+  featureBlocker?: string;
   onChange: (v: number) => void;
 }) => {
   const pointerActiveRef = useRef(false);
@@ -72,6 +77,8 @@ export const MiniNumber = ({
       />
       <input
         aria-label={`${label} number`}
+        data-feature-id={featureId}
+        data-feature-blocker={featureBlocker}
         className="field mt-1"
         type="number"
         min={min}

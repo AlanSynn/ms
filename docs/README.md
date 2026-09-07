@@ -12,6 +12,8 @@ For current tab, pane, button, and tooltip UX, use `workbench-flow-ux-contract.m
 - [`../AGENTS.md`](../AGENTS.md) — repo operating contract, architecture discipline, verification gates.
 - [`adr/`](adr/) — architecture decision records (3D physics stack selection); permanent decision provenance.
 - [`workbench-flow-ux-contract.md`](workbench-flow-ux-contract.md) — canonical tab/pane/button/tooltip flow contract and UX drift ledger.
+- [`student-support.md`](student-support.md) — student support maintenance, baseline, and verification evidence; the UX contract remains in the workbench flow contract.
+- [`feedback-relay.md`](feedback-relay.md) — approved one-Worker/native-attachment deployment and recovery limits.
 - [`app-command-shortcuts.md`](app-command-shortcuts.md) — app commands, menu items, keyboard shortcuts.
 - [`mechanism-reference/`](mechanism-reference/) — physical mechanism, spacer, z-stack, schema, and assembly rules.
 - [`mechanism-blueprint-manual.md`](mechanism-blueprint-manual.md) — blueprint/export behavior.

@@ -1,3 +1,4 @@
+import { dismissStartupAnnouncement } from './startupHarness';
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
@@ -77,7 +78,7 @@ test.describe("Chromebook workflow audit", () => {
     const cold = await measureBoot(
       page,
       "cold",
-      () => page.goto("/", { waitUntil: "domcontentloaded" }),
+      () => page.goto(process.env.PLAYWRIGHT_BASE_PATH ?? '/', { waitUntil: "domcontentloaded" }),
       () => network.records.length,
     );
     network.setPhase("warm-boot");
@@ -89,6 +90,7 @@ test.describe("Chromebook workflow audit", () => {
     );
     network.setPhase("workflow");
 
+    await dismissStartupAnnouncement(page);
     const actions: ActionLatency[] = [];
     const dialog = page.getByTestId("getting-started-dialog");
     await expect(dialog).toBeVisible();

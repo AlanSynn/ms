@@ -292,9 +292,15 @@ Each workflow stage must answer exactly one novice question per region:
 #### Getting Started
 
 - Compact modal, not a full-screen stage.
-- Owns starter choices and import entry points.
-- Closing it lands on Character.
+- Owns compact Guide/Starter rig choices, prominent Open Project, and secondary character/recovery entry.
+- One unseen release announcement precedes it; closing/reopening retains current work and stage. Suppressed entry without chosen work shows Project.
 - Must not replace the editor shell.
+
+#### Project
+
+- Owns portable project Save/Open and explicit browser recovery, separate from build/print artifacts.
+- Reuses the Design/Foundry working scene with every visible authored path; path-only and character-only projects use the existing Path preview pipeline.
+- Camera, inspection, playback, and recovery preferences stay outside authored state. No path editing handles, hidden duplicate viewer, or fabricated mechanism.
 
 #### Character
 

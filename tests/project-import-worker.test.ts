@@ -412,17 +412,18 @@ const oversizedMigratedProject = {
     charCfg: {},
   },
 };
-await assert.rejects(
-  runProjectImportJob({
+const largePortableImport = await runProjectImportJob({
     kind: "project",
     file: new File(
       [JSON.stringify(oversizedMigratedProject)],
       "oversized-expanded.motionsmith.json",
       { type: "application/json" },
     ),
-  }),
-  /Project expands beyond the 6 MB browser autosave limit/,
-  "ordinary project import is re-measured after migration",
+  });
+assert.equal(
+  (largePortableImport.project.characterPackage?.partsInfo as { padding: string }).padding.length,
+  7 * 1024 * 1024,
+  "portable file validity is independent of browser backup capacity",
 );
 assert(
   validateImportedProjectPersistence(sample) < AUTOSAVE_SNAPSHOT_MAX_BYTES,

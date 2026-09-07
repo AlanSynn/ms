@@ -1,3 +1,4 @@
+import { dismissStartupAnnouncement } from './startupHarness';
 import { expect, test, type Page } from '@playwright/test';
 
 const openWavingArm = async (page: Page) => {
@@ -44,7 +45,8 @@ test('WebGL unavailable keeps Character and Foundry controls recoverable', async
     });
   });
 
-  await page.goto('/');
+  await page.goto(process.env.PLAYWRIGHT_BASE_PATH ?? '/');
+  await dismissStartupAnnouncement(page);
   await waitForEditor(page);
   await expect(
     page.getByTestId('character-three-puppet'),
@@ -70,7 +72,8 @@ test('WebGL unavailable keeps Character and Foundry controls recoverable', async
 test('Foundry restores the same scene after a WebGL context loss', async ({ page }) => {
   const pageErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
-  await page.goto('/');
+  await page.goto(process.env.PLAYWRIGHT_BASE_PATH ?? '/');
+  await dismissStartupAnnouncement(page);
   await waitForEditor(page);
   await openWavingArm(page);
   await openFoundry(page);

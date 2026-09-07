@@ -26,7 +26,10 @@ export const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, 
   const percent = Math.round(progress * 100);
   const goStep = (next: number) => stepPlayback?.onStepChange(Math.max(0, Math.min(maxStepIndex, next)));
   const togglePlayback = () => {
-    if (!stepPlayback && isPlaying) setAngle(playbackClock.getPhase());
+    if (isPlaying) {
+      playbackClock.stop();
+      if (!stepPlayback) setAngle(playbackClock.getPhase());
+    }
     setIsPlaying(!isPlaying);
   };
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -101,7 +104,7 @@ export const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, 
     </button>
     <div className="player-actions">
       {stepPlayback && <button type="button" data-testid="workspace-player-prev-step" aria-label="Previous assembly step" disabled={stepIndex <= 0} onClick={() => goStep(stepIndex - 1)}>←</button>}
-      <button type="button" aria-label={isPlaying ? 'Pause' : 'Play'} onClick={togglePlayback}>{isPlaying ? 'Ⅱ' : '▶'}</button>
+      <button type="button" data-feature-id="playback.play" aria-label={isPlaying ? 'Pause' : 'Play'} onClick={togglePlayback}>{isPlaying ? 'Ⅱ' : '▶'}</button>
       {stepPlayback && <button type="button" data-testid="workspace-player-next-step" aria-label="Next assembly step" disabled={stepIndex >= maxStepIndex} onClick={() => goStep(stepIndex + 1)}>→</button>}
       <button type="button" aria-label="Start over" onClick={() => {
         if (stepPlayback) goStep(0);
@@ -114,6 +117,7 @@ export const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, 
     </div>
     <input
       aria-label={stepPlayback ? 'Assembly scrubber' : 'Workspace scrubber'}
+      data-feature-id="playback.scrub"
       type="range"
       min={0}
       max={stepPlayback ? maxStepIndex : 100}

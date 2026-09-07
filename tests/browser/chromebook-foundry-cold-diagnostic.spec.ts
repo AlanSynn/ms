@@ -1,3 +1,4 @@
+import { dismissStartupAnnouncement } from './startupHarness';
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -151,7 +152,8 @@ const runColdMount = async ({
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   try {
-    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.goto(process.env.PLAYWRIGHT_BASE_PATH ?? '/', { waitUntil: "domcontentloaded" });
+    await dismissStartupAnnouncement(page);
     await expect(page.locator("#boot-loader")).toHaveCount(0, { timeout: 180_000 });
     await expect(page.locator('script[src*="/@vite/client"]')).toHaveCount(0);
     await openWavingArm(page);

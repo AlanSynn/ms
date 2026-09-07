@@ -3,7 +3,6 @@ import {
   characterPackageReferencedAssetFiles,
   loadCharacterPackage,
 } from "../../utils/packageLoader";
-import { loadProjectSnapshot } from "../../utils/project";
 import {
   validateProjectImportFile,
   validateCharacterPackageFiles,
@@ -12,7 +11,7 @@ import {
 import { autosaveByteLength } from "../../utils/autosaveFingerprint";
 import { AUTOSAVE_SNAPSHOT_MAX_BYTES } from "../../utils/projectAutosaveFormat";
 import { serializeProjectCompact } from "../../utils/projectSerialization";
-import { projectStateFromPortableDocument } from "../../utils/projectSerialization";
+import { readProjectFileCandidate } from "./projectFileCandidate";
 import {
   validateCharacterPackageRasterFiles,
   validateProjectRasterSources,
@@ -137,11 +136,7 @@ export const runProjectImportJob = async (input: ProjectImportInput) => {
   }
   validateProjectImportFile(input.file);
   const document = JSON.parse(await input.file.text());
-  const raw = projectStateFromPortableDocument(document);
-  validateProjectImportShape(raw);
-  const project = loadProjectSnapshot(raw);
-  validateProjectRasterSources(project);
-  validateImportedProjectPersistence(project);
+  const project = readProjectFileCandidate(document);
   return {
     project,
     sourceName: input.file.name,

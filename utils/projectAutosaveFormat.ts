@@ -1,6 +1,5 @@
 import type { ProjectState } from "../types";
-import { validateProjectImportShape } from "../runtime/import/projectImportPolicy";
-import { loadProjectSnapshot } from "./project";
+import { readProjectFileCandidate } from "../runtime/import/projectFileCandidate";
 import {
   autosaveByteLength,
   autosaveFingerprint,
@@ -49,6 +48,7 @@ export type AutosaveWriteResult =
       generation: number;
       retainedGenerations: 1 | 2;
       transactionId: string;
+      committedAt?: number;
     }
   | {
       status: "failed";
@@ -334,10 +334,9 @@ export const loadedSnapshot = (
     if (!raw || typeof raw !== "object" || !("metadata" in raw) || !("settings" in raw)) {
       throw new Error("autosave snapshot is missing project state");
     }
-    validateProjectImportShape(raw);
     return {
       status: "loaded",
-      project: loadProjectSnapshot(raw),
+      project: readProjectFileCandidate(raw),
       sourceVersion: raw && typeof raw === "object" && "version" in raw && raw.version === 2 ? 2 : 1,
     };
   } catch {

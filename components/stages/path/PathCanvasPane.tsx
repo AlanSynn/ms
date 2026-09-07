@@ -13,6 +13,10 @@ import type { MotionPreview } from "../../../utils/motion";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
 import type { PathGestureDraft } from "../../../runtime/path/pathGestureDraft";
 
+const E2E_DIAGNOSTICS = typeof __MOTIONSMITH_E2E_DIAGNOSTICS__ === "boolean"
+  ? __MOTIONSMITH_E2E_DIAGNOSTICS__
+  : false;
+
 interface PathCanvasPaneProps {
   project: ProjectState;
   motionPaths: ProjectMotionPath[];
@@ -20,6 +24,7 @@ interface PathCanvasPaneProps {
   selectedPoint: number | null;
   onDrawPoint: (point: Point) => void;
   onDrawEnd: () => void;
+  onGestureCancel: () => void;
   onPathPointPick: (pathId: string, pointIndex: number) => void;
   onPathPointMove: (point: Point) => void;
   onPathPointEnd: () => void;
@@ -46,6 +51,7 @@ export const PathCanvasPane = ({
   selectedPoint,
   onDrawPoint,
   onDrawEnd,
+  onGestureCancel,
   onPathPointPick,
   onPathPointMove,
   onPathPointEnd,
@@ -69,7 +75,10 @@ export const PathCanvasPane = ({
     [motionPaths],
   );
 
-  return <div className="path-canvas-shell canvas-workspace overflow-hidden p-0">
+  return <div
+    className="path-canvas-shell canvas-workspace overflow-hidden p-0"
+    data-path-held-phase={E2E_DIAGNOSTICS && !isPlaying ? angle : undefined}
+  >
     <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
     <div
       className="path-view-switch"
@@ -109,7 +118,7 @@ export const PathCanvasPane = ({
       angle={angle}
       playback={{
         clock: playbackClock,
-        sample: (phase) => isPlaying ? playbackSample(phase) : undefined,
+        sample: playbackSample,
       }}
       viewport={viewport}
       setViewport={setViewport}
@@ -121,9 +130,11 @@ export const PathCanvasPane = ({
       drawMode={pathViewMode === "2d" && drawMode && !pathLocked}
       onDrawPoint={onDrawPoint}
       onDrawEnd={onDrawEnd}
+      onDrawCancel={onGestureCancel}
       onSelectPathPoint={pathLocked ? undefined : onPathPointPick}
       onMovePathPoint={pathLocked ? undefined : onPathPointMove}
       onEndPathPointEdit={onPathPointEnd}
+      onCancelPathPointEdit={onGestureCancel}
       pathGestureDraft={pathGestureDraft}
       onSelectPart={pathLocked ? undefined : (partId) => dispatch({ type: "select_part", partId })}
       onSelectSceneObject={pathLocked ? undefined : (objectId) =>

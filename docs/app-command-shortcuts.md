@@ -6,23 +6,20 @@ MotionSmith uses `utils/appCommands.ts` as the single source of truth for app-wi
 
 | Group | Commands | Shortcut policy |
 | --- | --- | --- |
-| File | New Project, Load Project, Recover Autosave, Download Snapshot, Download Snapshot As, Portable Copy, Export Blueprint, Reset Lesson | Only stable project/document actions get global shortcuts. |
+| Project | New Project, Save Project, Open Project, Recover browser backup, Reset Lesson | Only stable project/document actions get global shortcuts. |
 | Edit | Undo, Redo | Project-state history only; processing/status/export metadata is not recorded as undoable work. |
 | View | Zoom In, Zoom Out, Zoom to Fit, Reset View, Save/Restore/Reset Layout | Canvas zoom shortcuts are global; layout actions stay menu-only. |
-| Go | Character, Path, Foundry, Design, Blueprint, Assembly | `Alt+1` through `Alt+6` navigate the novice workflow. |
+| Go | Project, Character, Path, Foundry, Design, Blueprint, Assembly | `Alt+1` through `Alt+6` navigate the novice workflow. |
 | Options | Preferences | `Cmd/Ctrl+,` opens the Options tab. |
-| Help | Shortcuts, About MotionSmith | `?` opens the generated shortcut reference. |
+| Help | Find a feature, Feedback, What's new, Shortcuts, About MotionSmith | The three support entries are also visible in the top bar; `?` opens the shortcut reference. |
 
 ## Global shortcuts
 
 | Shortcut | Command |
 | --- | --- |
 | `Cmd/Ctrl+N` | New Project |
-| `Cmd/Ctrl+O` | Load Project |
-| `Cmd/Ctrl+S` | Download Snapshot |
-| `Cmd/Ctrl+Shift+S` | Download Snapshot As |
-| `Cmd/Ctrl+Alt+S` | Portable Copy |
-| `Cmd/Ctrl+E` | Export Blueprint |
+| `Cmd/Ctrl+O` | Open Project |
+| `Cmd/Ctrl+S` | Save Project |
 | `Cmd/Ctrl+Z` | Undo |
 | `Cmd/Ctrl+Shift+Z`, `Cmd/Ctrl+Y` | Redo |
 | `Cmd/Ctrl+=` or `Cmd/Ctrl++` | Zoom In |
@@ -34,6 +31,8 @@ MotionSmith uses `utils/appCommands.ts` as the single source of truth for app-wi
 
 Shortcuts are ignored while focus is inside `input`, `textarea`, `select`, or content-editable controls so direct manipulation and numeric editing are not interrupted. App-wide shortcuts are also suspended while a modal dialog is open; modal-local buttons and focus traps own that interaction until the dialog closes.
 
+Support panels use the same command handlers and suspend underlying shortcuts. Feature search and release-note Show me actions share the explicit reveal mapping in `utils/featureDestinations.ts` and `hooks/useFeatureReveal.ts`: they navigate, open, and focus an existing control without executing its edit or download. Search queries, feedback drafts, receipts, and release-note read preferences stay outside project history and serialization. See [student support maintenance](student-support.md).
+
 Canvas-local controls such as part sliders, path handles, camera orbit/zoom, foundry overlay toggles, and export recipe selectors stay local unless they become repeated app-shell actions. This keeps the novice workbench tinkerable instead of turning every small knob into a global command.
 
 `Reset Lesson` stays menu-only. It restores the current classroom lesson baseline while preserving app settings; if no lesson is active it reports status only.
@@ -44,8 +43,12 @@ The old browser-only menu contained dead placeholders for `Exit` and `Check for 
 
 The old character import panel also exposed `Choose Save Folder…`, but browser exports still write through normal download links. It stays absent until a native file-system writer can make that location real.
 
+Legacy named snapshot, portable copy, and Blueprint handoff command IDs remain hidden compatibility entries without global shortcuts. Student search does not surface them.
+
 ## Enforcement
 
 - `validateAppCommandRegistry()` rejects duplicate IDs, duplicate shortcuts, menu/command mismatches, and orphan commands.
-- `App.tsx` must keep `commandHandlers satisfies Record<AppCommandId, () => void>` so TypeScript fails if a new command is added without a handler.
+- The shared command-handler map in `utils/appCommandHandlers.ts` must satisfy `Record<AppCommandId, () => void>` so TypeScript fails if a new command is added without a handler.
 - `tests/project-contract.test.ts` imports `APP_COMMANDS`/`APP_MENU_GROUPS` to keep the contract executable.
+
+Save Project starts a portable file download; it does not confirm an overwrite or final disk location. Open Project uses the device picker and is the normal next-class return. Recover browser backup is a separate secondary action; boot never chooses that candidate automatically.

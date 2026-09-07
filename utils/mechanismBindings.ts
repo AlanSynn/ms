@@ -8,6 +8,26 @@ import type {
     ProjectState,
 } from '../types';
 
+/** Existing authored bindings that this same mechanism would lose on commit. */
+export const replacedMechanismPathIds = (project: ProjectState, candidate: MechanismConfig): string[] => {
+    const current = project.mechanisms.find(mechanism => mechanism.id === candidate.id);
+    if (!current) return [];
+    const retained = new Set(mechanismOutputBindings(candidate).map(binding => binding.pathId));
+    return [...new Set(mechanismOutputBindings(current)
+        .map(binding => binding.pathId).filter(id => id && !retained.has(id)))];
+};
+
+/** Foundry preview clones keep their binding even when their local ID changes. */
+export const mechanismOwnerForDraft = (project: ProjectState, draft: MechanismConfig): MechanismConfig | undefined => {
+    const exact = project.mechanisms.find(mechanism => mechanism.id === draft.id);
+    if (exact) return exact;
+    const bindingIds = new Set((draft.outputs ?? []).map(binding => binding.id));
+    const pathIds = new Set([draft.targetPathId, ...mechanismOutputBindings(draft).map(binding => binding.pathId)].filter(Boolean));
+    const owners = project.mechanisms.filter(mechanism => mechanismOutputBindings(mechanism)
+        .some(binding => bindingIds.has(binding.id) || pathIds.has(binding.pathId)));
+    return owners.length === 1 ? owners[0] : undefined;
+};
+
 const port = (id: string, label: string, primary = false): MechanismOutputPort & { primary?: boolean } => ({
     id,
     label,

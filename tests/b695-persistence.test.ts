@@ -328,10 +328,11 @@ const projectB = createEmptyProject();
 
 {
   const project = createFabricationReadyFourBarProject();
+  const validPng = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWQAAAABJRU5ErkJggg==", "base64");
   const object = {
     ...createDefaultSceneObject("block", "large-raster-object"),
     textureUrl:
-      `data:image/png;base64,serialization-raster-marker-${"a".repeat(4 * 1024 * 1024)}`,
+      `data:image/png;base64,${Buffer.concat([validPng, Buffer.alloc(3 * 1024 * 1024)]).toString("base64")}`,
   };
   project.sceneObjects = { [object.id]: object };
   project.sceneObjectOrder = [object.id];
@@ -350,7 +351,7 @@ const projectB = createEmptyProject();
     ) as ProjectState;
     assert.equal(parsed.lastExport, undefined, "transient generated files are not persisted");
     assert.equal(
-      serialized.split("serialization-raster-marker-").length - 1,
+      serialized.split(object.textureUrl).length - 1,
       1,
       "the canonical scene raster is serialized exactly once",
     );

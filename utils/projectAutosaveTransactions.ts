@@ -410,6 +410,7 @@ export const commitAutosaveSnapshot = (
         generation: metadata.currentGeneration,
         retainedGenerations: keepsPrevious ? 2 : 1,
         transactionId: plan.transactionId,
+        committedAt: metadata.committedAt,
       };
     };
 

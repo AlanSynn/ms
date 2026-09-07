@@ -67,11 +67,11 @@ export const useAppDerivedState = (project: ProjectState): AppDerivedState => {
     project.mechanisms[0];
   const motionPaths = useMemo(
     () => motionPathsInProjectOrder(project),
-    [project.paths],
+    [project.paths, project.pathOrder],
   );
   const activeMotionPaths = useMemo(
     () => playableMotionPaths(project, motionPaths),
-    [motionPaths, project.parts, project.sceneObjects],
+    [motionPaths, project.parts, project.sceneObjects, project.skeleton],
   );
   const playbackDurationMs = sharedMotionPlaybackDurationMs(
     project,

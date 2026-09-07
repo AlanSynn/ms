@@ -95,6 +95,7 @@ import {
 import { createDefaultMechanism, mechanismWithGeneratedPath, uid } from "../../../utils/project";
 import {
   mechanismPathFitIsUsable,
+  motionPathReadiness,
   preferredMotionJointId,
 } from "../../../utils/motion";
 import { resolveRenderPerformancePolicy } from "../../../utils/renderPerformancePolicy";
@@ -150,7 +151,7 @@ export const MechanismFoundry = ({
   project: ProjectState;
   foundry: MechanismConfig;
   setFoundry: (m: MechanismConfig) => void;
-  onDraftChange: (m: MechanismConfig) => void;
+  onDraftChange: (m: MechanismConfig) => boolean | void;
   selectedPart?: BodyPartLayer;
   selectedSceneObject?: SceneObject;
   selectedPath?: ProjectMotionPath;
@@ -232,11 +233,13 @@ export const MechanismFoundry = ({
   const [pathFitJobError, setPathFitJobError] = useState(false);
   const [boardPlacementWarning, setBoardPlacementWarning] = useState<string | null>(null);
   const pathFitClient = useMemo(() => createMechanismFitWorkerClient(), []);
+  const pathFitProjectRef = useRef(project);
+  pathFitProjectRef.current = project;
   useEffect(() => () => pathFitClient.dispose(), [pathFitClient]);
   useEffect(() => {
     pathFitClient.cancel();
     setPathFitBusy(false);
-  }, [pathFitClient, project.metadata.updatedAt]);
+  }, [pathFitClient, project]);
   const [foundryExplode, setFoundryExplode] = useState(0);
   const [foundryCamera, setFoundryCamera] = useState<FoundryCamera>({
     ...FOUNDRY_VIEW_PRESETS.iso,
@@ -284,12 +287,8 @@ export const MechanismFoundry = ({
     () => () => transientFoundryFrame.dispose(),
     [transientFoundryFrame],
   );
-  const targetReady = Boolean(
-    selectedPath &&
-    selectedPath.enabled &&
-    selectedPath.points.length >= 3 &&
-    (selectedPath.sceneObjectId || project.parts[selectedPath.partId]),
-  );
+  const targetReadiness = selectedPath ? motionPathReadiness(project, selectedPath) : undefined;
+  const targetReady = Boolean(targetReadiness?.playable);
   const targetIkJointId = selectedPath && !selectedPath.sceneObjectId
     ? preferredMotionJointId(
         project,
@@ -814,8 +813,8 @@ export const MechanismFoundry = ({
       return undefined;
     }
     setBoardPlacementWarning(null);
+    if (onDraftChange(fitted) === false) return undefined;
     setFoundry(fitted);
-    onDraftChange(fitted);
     return fitted;
   };
   const applyAnchor = (point: Point) => {
@@ -1250,6 +1249,7 @@ export const MechanismFoundry = ({
       createMechanismFitJobInput(project, candidate, "path", selectedPath.id),
       {
         complete: ({ mechanism: fitted }) => {
+          if (pathFitProjectRef.current !== project) return;
           startTransition(() => {
             setFoundryDraft(fitted);
             setPathFitBusy(false);
@@ -1385,6 +1385,7 @@ export const MechanismFoundry = ({
             foundry={foundry}
             foundryPhase={foundryPhase}
             targetReady={targetReady}
+            targetBlocker={targetReadiness?.reason ?? "Draw path first"}
             fitRequired={fitRequired}
             fitState={foundry.fabricationMetadata?.pathFit?.status}
             fitError={effectivePathFit?.error}

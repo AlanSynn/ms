@@ -22,6 +22,9 @@ import motionSmithIconUrl from "../src-tauri/icons/icon.png?url";
 import type { AppStage, Point, ProjectState } from "../types";
 import type { AppCommandHandlerMap } from "../utils/appCommands";
 import type { WorkflowStatus } from "../utils/workflowStatus";
+import type { StudentSupport } from "../hooks/useStudentSupport";
+import { StudentSupportPanels } from "./support/StudentSupportPanels";
+import type { BrowserRecoveryCandidate } from "../hooks/useColdAutosaveRecovery";
 
 const loadTrackingModal = () => import("./TrackingModal");
 const TrackingModal = lazy(async () => ({
@@ -29,6 +32,7 @@ const TrackingModal = lazy(async () => ({
 }));
 
 export type AppWorkspaceShellProps = {
+  support: StudentSupport;
   themeClass: string;
   appShellRef: RefObject<HTMLDivElement | null>;
   projectInputRef: RefObject<HTMLInputElement | null>;
@@ -41,13 +45,14 @@ export type AppWorkspaceShellProps = {
   stageRouterProps: AppStageRouterProps;
   workflowStatus: WorkflowStatus;
   commandStatus: string;
+  booting: boolean;
+  recoveryCandidate?: BrowserRecoveryCandidate;
   showGettingStarted: boolean;
   hideGettingStartedThisSession: boolean;
   guidedLessons: readonly GuidedLessonTile[];
   onLesson: (lessonId: string, preparedProject?: ProjectState) => void;
   onSample: (preparedProject?: ProjectState) => void;
   onPackage: (files: FileList | File[]) => void | Promise<void>;
-  onImport: (file: File) => void | Promise<void>;
   onHideGettingStartedThisSessionChange: (hidden: boolean) => void;
   onCloseGettingStarted: () => void;
   showShortcuts: boolean;
@@ -59,15 +64,8 @@ export type AppWorkspaceShellProps = {
   onTransferTracking: (path: Point[]) => void;
 };
 
-const importIfPresent = (
-  files: FileList | null,
-  importProject: (file: File) => void | Promise<void>,
-) => {
-  const file = files?.[0];
-  if (file) void importProject(file);
-};
-
 export const AppWorkspaceShell = ({
+  support,
   themeClass,
   appShellRef,
   projectInputRef,
@@ -80,13 +78,14 @@ export const AppWorkspaceShell = ({
   stageRouterProps,
   workflowStatus,
   commandStatus,
+  booting,
+  recoveryCandidate,
   showGettingStarted,
   hideGettingStartedThisSession,
   guidedLessons,
   onLesson,
   onSample,
   onPackage,
-  onImport,
   onHideGettingStartedThisSessionChange,
   onCloseGettingStarted,
   showShortcuts,
@@ -155,7 +154,7 @@ export const AppWorkspaceShell = ({
               <h2 className="current-stage-title">{stageMeta?.label}</h2>
             </button>
             <div className="app-header-actions">
-              <TopCommandBar commandHandlers={commandHandlers} />
+              <TopCommandBar commandHandlers={commandHandlers} menuRequest={support.menuRequest} hasNew={support.notes.hasNew} />
               {project.settings.toolbarVisible && (
                 <div className="quick-toolbar" data-testid="quick-toolbar">
                   <button className="btn-secondary" onClick={commandHandlers["project.open"]}>
@@ -177,21 +176,10 @@ export const AppWorkspaceShell = ({
               )}
             </div>
           </header>
-          <input
-            ref={projectInputRef}
-            data-testid="project-file-input"
-            hidden
-            type="file"
-            accept="application/json,.motionsmith,.motionsmith.json,.json"
-            onChange={(event) =>
-              importIfPresent(event.currentTarget.files, importProject)
-            }
-          />
-
           <AppStageRouter
             {...stageRouterProps}
             playerDock={playerDock}
-            suspendStageContent={showGettingStarted}
+            suspendStageContent={booting || showGettingStarted || support.startupAnnouncement}
           />
           <WorkflowStatusStrip {...workflowStatus} />
           <footer className="status-bar" data-testid="status-bar">
@@ -199,6 +187,18 @@ export const AppWorkspaceShell = ({
           </footer>
         </section>
       </div>
+      <input
+        ref={projectInputRef}
+        data-testid="project-file-input"
+        hidden
+        type="file"
+        accept="application/json,.motionsmith,.motionsmith.json,.json"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          event.currentTarget.value = '';
+          if (file) void importProject(file);
+        }}
+      />
       {showGettingStarted && (
         <GettingStartedDialog
           guidedLessons={guidedLessons}
@@ -206,13 +206,17 @@ export const AppWorkspaceShell = ({
           onLesson={onLesson}
           onSample={onSample}
           onPackage={onPackage}
-          onImport={onImport}
+          onOpenProject={commandHandlers['project.open']}
+          recoveryCandidate={recoveryCandidate}
+          onRecover={commandHandlers['project.recoverAutosave']}
+          status={/^(Opening |Project import failed:|Open cancelled:|Project changed while opening|Checking browser backup|Browser recovery failed:|Browser backup unavailable|No browser backup|Project or backup changed)/.test(commandStatus) ? commandStatus : undefined}
           onHideForSessionChange={onHideGettingStartedThisSessionChange}
           onClose={onCloseGettingStarted}
         />
       )}
       {showShortcuts && <ShortcutHelpDialog onClose={onCloseShortcuts} />}
       {showAbout && <AboutDialog onClose={onCloseAbout} />}
+      <StudentSupportPanels support={support} stage={stage} />
       {showTracking && (
         <Suspense fallback={null}>
           <TrackingModal

@@ -1658,7 +1658,7 @@ export const validatePath = (path: ProjectMotionPath): ProjectMotionPath => {
     return {
         ...normalized,
         warnings: [...new Set([
-            ...normalized.warnings,
+            ...normalized.warnings.filter(warning => !['Path needs at least 3 points', 'Path disabled or empty'].includes(warning)),
             ...(normalized.points.length < 3 ? ['Path needs at least 3 points'] : []),
             ...(normalized.enabled && normalized.points.length > 1 ? [] : ['Path disabled or empty'])
         ])]
