@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createReleaseReadState, RELEASE_READ_KEY } from '../utils/releaseReadState';
-import { RELEASE_NOTES, releaseImageUrl, releaseNoteForVersion } from '../utils/releaseNotes';
+import { RELEASE_NOTES, releaseImageUrl, releaseNoteForVersion, releaseNotesForVersion, type ReleaseNote } from '../utils/releaseNotes';
 import { feedbackEndpointIsValid, postFeedback, screenshotBase64, validFeedbackResponse } from '../utils/feedbackClient';
 import { feedbackPayloadDigest, type FeedbackPayload } from '../shared/feedbackProtocol';
 import { APP_COMMANDS } from '../utils/appCommands';
@@ -41,8 +41,85 @@ assert.doesNotThrow(() => state.read());
 state.markViewed('repaired');
 assert(Array.isArray(JSON.parse(local.getItem(RELEASE_READ_KEY)!)));
 assert.equal(releaseNoteForVersion('not-shipped'), undefined);
+const retainedIds = ['classroom-return-v1', 'student-support-v1'];
+assert.deepEqual(releaseNotesForVersion('0.0.14'), [],
+  'the one-time release metadata correction moves the current notes out of v0.0.14');
+assert.deepEqual(releaseNotesForVersion('0.0.15').map(entry => entry.id),
+  ['release-history-v1', ...retainedIds], 'v0.0.15 adds to the archive instead of replacing it');
+assert.deepEqual(releaseNotesForVersion('0.0.16'), releaseNotesForVersion('0.0.15'),
+  'a version bump without new notes must still show the archive');
+assert.deepEqual(releaseNotesForVersion('0.0.13'), [], 'future updates are not shown in older builds');
+assert.deepEqual(releaseNotesForVersion('invalid'), []);
+const fixture = (id: string, version: string): ReleaseNote => ({
+  id, version, highlights: [{ title: id, text: 'An implemented update.' }],
+});
+const unordered = [fixture('nine', '0.0.9'), fixture('future', '0.1.0'),
+  fixture('ten-a', '0.0.10'), fixture('ten-b', '0.0.10'), fixture('two', '0.0.2')];
+const beforeSort = JSON.stringify(unordered);
+assert.deepEqual(releaseNotesForVersion('0.0.10', unordered).map(entry => entry.id),
+  ['ten-a', 'ten-b', 'nine', 'two'], 'numeric version ordering retains every same-version entry');
+assert.equal(JSON.stringify(unordered), beforeSort, 'history selection does not mutate the catalog');
+const archive = Array.from({ length: 205 }, (_, index) => fixture('retained-' + index, '0.0.' + index));
+assert.equal(releaseNotesForVersion('0.0.999', archive).length, archive.length,
+  'history has no automatic entry-count eviction');
+for (const [id, title, image] of [
+  ['classroom-return-v1', 'Open your project', 'release-notes/project-working-view-v1.png'],
+  ['student-support-v1', 'Find a feature', 'release-notes/find-feature-v1.png'],
+]) {
+  const published = RELEASE_NOTES.find(entry => entry.id === id)!;
+  assert.equal(published.version, '0.0.15');
+  assert.equal(published.highlights[0].title, title);
+  assert(published.highlights.some(highlight => highlight.image?.path === image));
+  assert(readFileSync('public/' + image).byteLength > 0, 'published artwork remains bundled');
+}
+assert(readFileSync('public/release-notes/classroom-return-v1.png').byteLength > 0,
+  'the original classroom-return artwork remains bundled');
+assert.equal(RELEASE_NOTES.find(entry => entry.id === 'release-history-v1')?.highlights[0].text,
+  "Open What's new any time to read earlier updates.");
 assert.equal(RELEASE_NOTES.length, new Set(RELEASE_NOTES.map(entry => entry.id)).size);
-for (const entry of RELEASE_NOTES) assert(entry.highlights.length > 0 && entry.highlights.length <= 3);
+// Owner instruction is required to change this grandfather list: published text-only content stays intact,
+// while every newly added highlight must carry a real bundled screenshot.
+const textOnlyGrandfather = new Set([
+  'release-history-v1::Earlier updates',
+  'classroom-return-v1::Open your project',
+  'classroom-return-v1::Two paths',
+  'student-support-v1::Share a problem or idea',
+]);
+for (const entry of RELEASE_NOTES) {
+  assert(entry.highlights.length > 0 && entry.highlights.length <= 3);
+  for (const highlight of entry.highlights) {
+    assert(highlight.title.length <= 60, `${entry.id} title stays concise`);
+    assert(highlight.text.length <= 180, `${entry.id} text stays concise`);
+    const key = `${entry.id}::${highlight.title}`;
+    assert(highlight.image || textOnlyGrandfather.has(key), `${key} needs a bundled screenshot`);
+    if (!highlight.image) continue;
+    assert(highlight.image.path.startsWith('release-notes/'), `${key} image stays in release-notes/`);
+    assert(highlight.image.alt.trim().length > 0 && highlight.image.alt.length <= 200,
+      `${key} image alt text stays useful and concise`);
+    const imageBytes = readFileSync('public/' + highlight.image.path);
+    assert(imageBytes.byteLength > 0, `${key} image file is not empty`);
+    assert.deepEqual([...imageBytes.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10],
+      `${key} image is a PNG`);
+  }
+}
+const releaseNotePolicy = [
+  'Each highlight must describe one explicit student/user-visible change.',
+  'Use the current format: short title, one concrete sentence, relevant screenshot, and a safe Show me action when a destination exists.',
+  'Each screenshot must show only the relevant UI area for that change.',
+];
+for (const path of ['AGENTS.md', 'docs/student-support.md']) {
+  const source = readFileSync(path, 'utf8');
+  for (const policy of releaseNotePolicy) assert(source.includes(policy), `${path} keeps release-note policy: ${policy}`);
+}
+const whatsNewPanelSource = readFileSync('components/support/WhatsNewPanel.tsx', 'utf8');
+assert(whatsNewPanelSource.includes('{entry.highlights.map(highlight => <article key={highlight.title}>'),
+  'each release entry renders every highlight');
+assert(whatsNewPanelSource.includes('entries.filter(entry => entry.version === version).map(entry =>'),
+  'the release history renders every entry in each version group');
+assert(!whatsNewPanelSource.includes('entry.highlights.slice('),
+  'release highlights are not truncated before rendering');
+assert(!whatsNewPanelSource.includes('entries.slice('),
+  'release entries are not truncated before rendering');
 assert.equal(releaseImageUrl('release-notes/image.png', '/ms/'), '/ms/release-notes/image.png');
 assert.equal(releaseImageUrl('release-notes/image.png', './'), './release-notes/image.png');
 

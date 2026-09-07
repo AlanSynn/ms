@@ -2,13 +2,14 @@ import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 
 export type SupportReturnFocus = { target: HTMLElement | null; restore: boolean };
 
-export const SupportDialog = ({ title, testId, children, onClose, returnFocus, startup = false }: {
+export const SupportDialog = ({ title, testId, children, onClose, returnFocus, startup = false, scrollBody = false }: {
   title: string;
   testId: string;
   children: ReactNode;
   onClose: () => void;
   returnFocus: SupportReturnFocus;
   startup?: boolean;
+  scrollBody?: boolean;
 }) => {
   const panel = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
@@ -25,7 +26,7 @@ export const SupportDialog = ({ title, testId, children, onClose, returnFocus, s
   return <div className={`support-backdrop${startup ? ' support-startup' : ''}`} data-capture-exclude onMouseDown={event => {
     if (event.target === event.currentTarget) onClose();
   }}>
-    <section ref={panel} className="modal-sheet support-panel" role="dialog" aria-modal="true"
+    <section ref={panel} className={'modal-sheet support-panel' + (scrollBody ? ' support-release-panel' : '')} role="dialog" aria-modal="true"
       aria-label={title} data-testid={testId} tabIndex={-1} onKeyDown={event => {
         event.stopPropagation();
         if (event.key === 'Escape') { event.preventDefault(); onClose(); }
