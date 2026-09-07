@@ -1,4 +1,5 @@
 import type { BodyPartLayer, Point, StandardJoint, StandardSkeleton } from '../types';
+import { validatePhysicalOutline } from './shapeEditing';
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -203,6 +204,10 @@ export const isUsableContourPoints = (points: Point[], minArea = 1): boolean => 
 };
 
 const sourceContourPoints = (part: BodyPartLayer): Point[] => {
+    if (part.contourSource === 'user') {
+        const explicit = validatePhysicalOutline(part.contourPoints);
+        return explicit.ok ? explicit.points : [];
+    }
     const points = part.contourPoints?.filter(point => Number.isFinite(point.x) && Number.isFinite(point.y)) ?? [];
     if (points.length < 3) return [];
     const margin = Math.max(18, Math.min(part.bounds.width, part.bounds.height) * 0.25);
@@ -216,6 +221,7 @@ const sourceContourPoints = (part: BodyPartLayer): Point[] => {
 export const fabricablePartOutlinePoints = (part: BodyPartLayer, localJoints: Point[] = []): Point[] => {
     const sourceContour = sourceContourPoints(part);
     if (sourceContour.length >= 3) return sourceContour;
+    if (part.contourSource === 'user') return [];
 
     const cx = part.bounds.x + part.bounds.width / 2;
     const cy = part.bounds.y + part.bounds.height / 2;

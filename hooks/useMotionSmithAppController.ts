@@ -289,7 +289,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     editorStage,
     stageLabel,
     project,
-    selectedPart,
+    selectedSceneObject ?? selectedPart,
     selectedPath,
   );
 

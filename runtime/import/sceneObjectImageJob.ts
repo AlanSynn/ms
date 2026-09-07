@@ -1,7 +1,7 @@
-import type { Point, SceneObject } from "../../types";
+import type { Point, ProjectState, SceneObject } from "../../types";
+import { createPortableProjectBlob } from "../persistence/projectDownloadJob";
 import {
   assertLocalSceneObjectSvg,
-  boundedSceneObjectSvgDataUrl,
   fitSceneObjectImageDimensions,
   rasterImageDimensions,
   SCENE_OBJECT_IMAGE_LIMITS,
@@ -16,6 +16,7 @@ export type SceneObjectImageWorkerRequest = {
   generationId: number;
   file: File;
   objectId: string;
+  project?: ProjectState;
 };
 
 export type SceneObjectImageWorkerResponse =
@@ -79,17 +80,14 @@ const decodeImage = async (
   return { image: bitmap, close: () => bitmap.close() };
 };
 
-const canvasDataUrl = async (canvas: OffscreenCanvas) => {
-  const blob = await canvas.convertToBlob({ type: "image/png" });
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Object image could not be saved locally."));
-    reader.onload = () =>
-      typeof reader.result === "string"
-        ? resolve(reader.result)
-        : reject(new Error("Object image could not be saved locally."));
-    reader.readAsDataURL(blob);
-  });
+/** Preserve validated file bytes; preview/contour resolution never becomes source. */
+const originalImageDataUrl = async (file: File, mimeType: string) => {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 32_768) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 32_768));
+  }
+  return `data:${mimeType};base64,${btoa(binary)}`;
 };
 
 const fallbackContour = (width: number, height: number): Point[] => [
@@ -178,6 +176,7 @@ const buildSceneObject = (
     id: objectId,
     name: file.name.replace(/\.[^.]+$/, "").slice(0, 40) || "Object",
     shape: "block",
+    fabrication: "decoration",
     textureUrl,
     contourPoints: contourPoints ?? fallbackContour(bounds.width, bounds.height),
     contourSource: "imported",
@@ -195,24 +194,33 @@ const buildSceneObject = (
 export const runSceneObjectImageJob = async (
   file: File,
   objectId: string,
+  project?: ProjectState,
 ): Promise<SceneObject> => {
   const mimeType = validateSceneObjectImageFile(file);
+  const finish = (object: SceneObject) => {
+    if (project) {
+      // A preserved original may be larger than a preview. Reuse the Save/Open
+      // byte, aggregate-image and round-trip gates before committing the owner.
+      createPortableProjectBlob({ ...project,
+        sceneObjects: { ...project.sceneObjects, [object.id]: object },
+        sceneObjectOrder: project.sceneObjectOrder.includes(object.id)
+          ? project.sceneObjectOrder : [...project.sceneObjectOrder, object.id],
+      });
+    }
+    return object;
+  };
   if (mimeType === "image/svg+xml") {
     const svgText = await file.text();
     assertLocalSceneObjectSvg(svgText);
     const sourceDimensions = validateSceneObjectImageDimensions(
       sceneObjectSvgDimensions(svgText),
     );
-    const textureDimensions = fitSceneObjectImageDimensions(
-      sourceDimensions,
-      SCENE_OBJECT_IMAGE_LIMITS.textureEdge,
-    );
-    return buildSceneObject(
+    return finish(buildSceneObject(
       file,
       objectId,
       sourceDimensions,
-      boundedSceneObjectSvgDataUrl(svgText, textureDimensions),
-    );
+      await originalImageDataUrl(file, mimeType),
+    ));
   }
   const sourceDimensions = await readDimensions(file, mimeType);
   const textureDimensions = fitSceneObjectImageDimensions(
@@ -220,25 +228,9 @@ export const runSceneObjectImageJob = async (
     SCENE_OBJECT_IMAGE_LIMITS.textureEdge,
   );
   const decoded = await decodeImage(file, mimeType, textureDimensions);
+  let contourCanvas: OffscreenCanvas | undefined;
   try {
-    const textureCanvas = new OffscreenCanvas(
-      textureDimensions.width,
-      textureDimensions.height,
-    );
-    const textureContext = textureCanvas.getContext("2d");
-    if (!textureContext) throw new Error("Object image could not load.");
-    textureContext.clearRect(0, 0, textureCanvas.width, textureCanvas.height);
-    textureContext.drawImage(
-      decoded.image,
-      0,
-      0,
-      textureCanvas.width,
-      textureCanvas.height,
-    );
-    const textureUrl = await canvasDataUrl(textureCanvas);
-    if (!textureUrl.startsWith("data:image/png")) {
-      throw new Error("Object image could not be saved locally.");
-    }
+    const textureUrl = await originalImageDataUrl(file, mimeType);
 
     const size = 118;
     const ratio = sourceDimensions.width / sourceDimensions.height;
@@ -249,7 +241,7 @@ export const runSceneObjectImageJob = async (
       sourceDimensions,
       SCENE_OBJECT_IMAGE_LIMITS.contourEdge,
     );
-    const contourCanvas = new OffscreenCanvas(
+    contourCanvas = new OffscreenCanvas(
       contourDimensions.width,
       contourDimensions.height,
     );
@@ -279,14 +271,15 @@ export const runSceneObjectImageJob = async (
         bounds.height,
       );
     }
-    return buildSceneObject(
+    return finish(buildSceneObject(
       file,
       objectId,
       sourceDimensions,
       textureUrl,
       contourPoints,
-    );
+    ));
   } finally {
     decoded.close();
+    if (contourCanvas) { contourCanvas.width = 0; contourCanvas.height = 0; }
   }
 };

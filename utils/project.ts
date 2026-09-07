@@ -19,10 +19,13 @@ import {
 import { boardToScene, defaultPhysicalKit, localPivotOffsetForScene, SCENE_PX_PER_MM, sceneBoundsForSheet, sceneToBoardRaw } from './coordinates';
 import { FABRICATION_GEAR_SPECS, FABRICATION_RING_GEAR_SPEC } from './fabricationContract';
 import { REFERENCE_DEFAULTS, isReferenceFoundryVisible, normalizeMechanismToFabricationSet, normalizeMechanismToReference, referenceRequiredPartsForMechanism } from './mechanismReference';
+import { describeMotionChain, preferredMotionJointId } from './motionChains';
 import { defaultCamProfileSamples, gearTrainOutputRatio, generateCurvePoints, normalizeCamProfileSamples, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from './kinematics';
 import { generateFoundryPlaybackPointTraces, primaryFoundryPlaybackPath } from './foundryPlayback';
 import { clampNumber, finiteNumber, sanitizeHexColor, sanitizeMechanismType, sanitizePoint } from './sanitize';
 import { isUsableContourPoints } from './partGeometry';
+import { normalizeArtworkDocument } from './artwork';
+import { validatePhysicalOutline } from './shapeEditing';
 import { DEFAULT_CLASSROOM_ASSESSMENT_KEY, normalizeClassroomAssessmentKey } from './classroomContent';
 import { APP_STATE_VERSION, projectStateFromPortableDocument, serializeProject } from './projectSerialization';
 import {
@@ -161,25 +164,40 @@ export const mechanismRequiredParts = (mechanism: Pick<MechanismConfig, 'type'> 
     return referenceRequiredPartsForMechanism(mechanism);
 };
 
-const defaultSkeleton = () => buildSkeleton([
-    joint('root', 0, -70),
-    joint('hip', 0, -70, 'root'),
-    joint('torso', 0, 40, 'hip'),
-    joint('neck', 0, 120, 'torso'),
-    joint('head_top', 0, 170, 'neck'),
-    joint('left_shoulder', -58, 92, 'torso'),
-    joint('left_elbow', -108, 28, 'left_shoulder'),
-    joint('left_hand', -128, -34, 'left_elbow'),
-    joint('right_shoulder', 58, 92, 'torso'),
-    joint('right_elbow', 108, 28, 'right_shoulder'),
-    joint('right_hand', 128, -34, 'right_elbow'),
-    joint('left_hip', -34, -72, 'root'),
-    joint('left_knee', -50, -150, 'left_hip'),
-    joint('left_foot', -72, -218, 'left_knee'),
-    joint('right_hip', 34, -72, 'root'),
-    joint('right_knee', 50, -150, 'right_hip'),
-    joint('right_foot', 72, -218, 'right_knee')
-]);
+const defaultSkeleton = () => {
+    const skeleton = buildSkeleton([
+        joint('root', 0, -70),
+        joint('hip', 0, -70, 'root'),
+        joint('torso', 0, 40, 'hip'),
+        joint('neck', 0, 120, 'torso'),
+        joint('head_top', 0, 170, 'neck'),
+        joint('left_shoulder', -58, 92, 'torso'),
+        joint('left_elbow', -108, 28, 'left_shoulder'),
+        joint('left_hand', -128, -34, 'left_elbow'),
+        joint('right_shoulder', 58, 92, 'torso'),
+        joint('right_elbow', 108, 28, 'right_shoulder'),
+        joint('right_hand', 128, -34, 'right_elbow'),
+        joint('left_hip', -34, -72, 'root'),
+        joint('left_knee', -50, -150, 'left_hip'),
+        joint('left_foot', -72, -218, 'left_knee'),
+        joint('right_hip', 34, -72, 'root'),
+        joint('right_knee', 50, -150, 'right_hip'),
+        joint('right_foot', 72, -218, 'right_knee')
+    ]);
+    // Internal folds start on their authored side. Branch starts remain fixed
+    // anchors, and straight segments keep the existing default direction.
+    Object.values(skeleton.joints).forEach(current => {
+        const parent = current.parentId ? skeleton.joints[current.parentId] : undefined;
+        const children = skeleton.hierarchy[current.id] ?? [];
+        if (!parent || children.length !== 1 || skeleton.hierarchy[parent.id]?.length !== 1) return;
+        const end = skeleton.joints[children[0]].position;
+        const start = parent.position;
+        const side = (end.x - start.x) * (current.position.y - start.y)
+            - (end.y - start.y) * (current.position.x - start.x);
+        if (side) current.bendDirection = Math.sign(side);
+    });
+    return skeleton;
+};
 
 const pointDistance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 
@@ -525,7 +543,7 @@ const reconcileMechanismTargets = (
             return [];
         }
         const requestedPart = binding.targetPartId ? parts[binding.targetPartId] : undefined;
-        const pathTargetJointId = path.targetAnchorJointId ?? parts[path.partId]?.anchorJointId;
+        const pathTargetJointId = preferredMotionJointId({ parts, skeleton: skeleton ?? null }, path.partId, path.targetAnchorJointId);
         const targetPartId = requestedPart && partCanReachJoint(requestedPart, pathTargetJointId, skeleton)
             ? requestedPart.id
             : parts[path.partId] ? path.partId : undefined;
@@ -534,7 +552,7 @@ const reconcileMechanismTargets = (
             ...binding,
             targetPartId,
             targetSceneObjectId: undefined,
-            targetAnchorJointId: binding.targetAnchorJointId ?? path.targetAnchorJointId ?? parts[targetPartId]?.anchorJointId,
+            targetAnchorJointId: preferredMotionJointId({ parts, skeleton: skeleton ?? null }, targetPartId, binding.targetAnchorJointId ?? path.targetAnchorJointId),
         }];
     });
     const standaloneSceneObjectId = mechanism.targetSceneObjectId && sceneObjects[mechanism.targetSceneObjectId]
@@ -1188,9 +1206,10 @@ export const replaceCharacterProject = (next: ProjectState, previous: ProjectSta
         if (path.sceneObjectId) return previous.sceneObjects[path.sceneObjectId] ? [[id, { ...path, warnings: [] }]] : [[id, { ...path, enabled: false, warnings: [...new Set([...path.warnings, 'Choose a scene object after character replacement'])] }]];
         const referencingMechanismTarget = previous.mechanisms.find(mechanism => mechanism.targetPathId === id && mechanism.targetAnchorJointId && next.skeleton?.joints[mechanism.targetAnchorJointId])?.targetAnchorJointId;
         const previousPartRoot = previous.parts[path.partId]?.anchorJointId;
+        const previousTarget = preferredMotionJointId(previous, path.partId, path.targetAnchorJointId);
         const targetJointId = path.targetAnchorJointId && next.skeleton?.joints[path.targetAnchorJointId]
             ? path.targetAnchorJointId
-            : (referencingMechanismTarget ?? (previousPartRoot && next.skeleton?.joints[previousPartRoot] ? previousPartRoot : undefined));
+            : (referencingMechanismTarget ?? (previousTarget && next.skeleton?.joints[previousTarget] ? previousTarget : previousPartRoot && next.skeleton?.joints[previousPartRoot] ? previousPartRoot : undefined));
         const partId = replacementPartId(next, path.partId, targetJointId);
         if (!partId) return [[id, {
             ...path,
@@ -1199,8 +1218,9 @@ export const replaceCharacterProject = (next: ProjectState, previous: ProjectSta
         }]];
         const from = jointScenePoint(previous, targetJointId) ?? jointScenePoint(previous, previous.parts[path.partId]?.anchorJointId) ?? fallbackFrom;
         const to = jointScenePoint(next, targetJointId) ?? jointScenePoint(next, next.parts[partId]?.anchorJointId) ?? fallbackTo;
-        const candidateChainRootJointId = path.chainRootJointId ?? previousPartRoot;
-        const chainRootJointId = candidateChainRootJointId && jointChainIds(next.skeleton, candidateChainRootJointId, targetJointId).length ? candidateChainRootJointId : undefined;
+        const candidateChainRootJointId = path.chainRootJointId;
+        const chainRootJointId = candidateChainRootJointId && jointChainIds(next.skeleton, candidateChainRootJointId, targetJointId).length
+            ? candidateChainRootJointId : describeMotionChain(next, partId, targetJointId).rootJointId;
         return [[id, {
             ...path,
             partId,
@@ -1411,10 +1431,10 @@ export const handoffGate = (project: ProjectState, targetStage: import('../types
     const fail = (message: string, recoveryStage: import('../types').AppStage = 'character') => ({ ok: false as const, message, recoveryStage });
     const mechanisms = project.mechanisms.filter(m => m.visible && m.enabled !== false);
     if (targetStage === 'project' || targetStage === 'character' || targetStage === 'options') return { ok: true as const, message: 'Ready' };
-    if (!project.partOrder.length) return fail('Load a character package before entering this workflow.');
-    if (targetStage === 'path') return project.skeleton || project.metadata.status === 'sample' ? { ok: true as const, message: 'Parts ready' } : fail('Skeleton missing or unreadable.');
-    if (targetStage === 'foundry') return { ok: true as const, message: 'Parts ready for mechanism search' };
-    if (targetStage === 'design') return { ok: true as const, message: mechanisms.length ? 'Mechanisms ready' : 'Parts ready; add a mechanism in Design' };
+    const hasObjects = project.sceneObjectOrder.some(id => project.sceneObjects[id]);
+    if (!project.partOrder.length && !hasObjects) return fail('Load a character package before entering this workflow.');
+    if (targetStage === 'path') return hasObjects || project.skeleton || project.metadata.status === 'sample' ? { ok: true as const, message: 'Ready' } : fail('Skeleton missing or unreadable.');
+    if (targetStage === 'foundry' || targetStage === 'design') return { ok: true as const, message: 'Ready' };
     if (targetStage === 'blueprint' || targetStage === 'assembly') return mechanisms.every(m => m.id && Number.isFinite(m.anchorX) && Number.isFinite(m.anchorY)) ? { ok: true as const, message: 'Fabrication inputs ready' } : fail('Each enabled mechanism needs an id and board anchor before Blueprint.', 'design');
     return { ok: true as const, message: 'Ready' };
 };
@@ -1725,7 +1745,12 @@ const normalizeTransformSnapshot = (value: unknown, fallback: Transform = { x: 0
     };
 };
 
-const normalizeContourPoints = (value: unknown): Point[] | undefined => {
+const normalizeContourPoints = (value: unknown, strict = false): Point[] | undefined => {
+    if (strict) {
+        const result = validatePhysicalOutline(value);
+        if (!result.ok) throw new Error(`Invalid cut outline: ${result.blocker} The original project is unchanged.`);
+        return result.points;
+    }
     const points = Array.isArray(value) ? value.flatMap(point => {
         const raw = Array.isArray(point) ? { x: point[0], y: point[1] } : asRecord(point);
         const x = Number(raw.x);
@@ -1746,20 +1771,9 @@ const safeSceneObjectTextureUrl = (value: unknown): string | undefined => {
             Uint8Array.from(binary, character => character.charCodeAt(0)),
         );
         assertLocalSceneObjectSvg(svgText);
-        const rootAttributes = svgText.match(/<svg\b([^>]*)>/i)?.[1] ?? '';
-        const width = Number(rootAttributes.match(/\bwidth\s*=\s*["']([0-9]+)["']/i)?.[1]);
-        const height = Number(rootAttributes.match(/\bheight\s*=\s*["']([0-9]+)["']/i)?.[1]);
-        if (
-            !Number.isInteger(width) ||
-            !Number.isInteger(height) ||
-            width < 1 ||
-            height < 1 ||
-            width > 512 ||
-            height > 512
-        ) return undefined;
-        return boundedSceneObjectSvgDataUrl(svgText, { width, height }) === value
-            ? value
-            : undefined;
+        if (binary.length > SCENE_OBJECT_IMAGE_LIMITS.svgBytes) return undefined;
+        validateSceneObjectImageDimensions(sceneObjectSvgDimensions(svgText));
+        return value;
     } catch {
         return undefined;
     }
@@ -1815,14 +1829,16 @@ const normalizePartSnapshot = (id: string, value: unknown, skeleton: StandardSke
         width: clampNumber(rawSourceFrame.width, 1, 1, 20000),
         height: clampNumber(rawSourceFrame.height, 1, 1, 20000)
     } : undefined;
-    const contourPoints = normalizeContourPoints(raw.contourPoints ?? raw.contour_points ?? raw.outlinePoints ?? raw.outline_points);
     const rawContourSource = raw.contourSource ?? raw.contour_source;
+    const contourPoints = normalizeContourPoints(raw.contourPoints ?? raw.contour_points ?? raw.outlinePoints ?? raw.outline_points,
+        raw.artwork !== undefined && rawContourSource === 'user');
     const contourSource = rawContourSource === 'onnx-mask' || rawContourSource === 'user' || rawContourSource === 'imported' ? rawContourSource : contourPoints ? 'imported' : undefined;
     return {
         id,
         name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.slice(0, 80) : id,
         textureUrl,
         maskUrl,
+        artwork: normalizeArtworkDocument(raw.artwork, { textureUrl: raw.textureUrl, label: `Part ${id} artwork` }),
         sourceImageFrame,
         contourPoints,
         contourSource,
@@ -1853,14 +1869,17 @@ const normalizeSceneObjectSnapshot = (id: string, value: unknown): SceneObject =
     const shape = pickOne(raw.shape, ['piggy-bank', 'cloud', 'star', 'block'] as const, 'block');
     const rawBounds = asRecord(raw.bounds);
     const textureUrl = safeSceneObjectTextureUrl(raw.textureUrl);
-    const contourPoints = normalizeContourPoints(raw.contourPoints ?? raw.contour_points ?? raw.outlinePoints ?? raw.outline_points);
     const rawContourSource = raw.contourSource ?? raw.contour_source;
+    const contourPoints = normalizeContourPoints(raw.contourPoints ?? raw.contour_points ?? raw.outlinePoints ?? raw.outline_points,
+        raw.fabrication === 'cuttable' || raw.artwork !== undefined && rawContourSource === 'user');
     const contourSource = rawContourSource === 'user' || rawContourSource === 'imported' ? rawContourSource : contourPoints ? 'imported' : undefined;
     return {
         id,
         name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.slice(0, 80) : id,
         shape,
         textureUrl,
+        artwork: normalizeArtworkDocument(raw.artwork, { textureUrl: raw.textureUrl, label: `Scene object ${id} artwork` }),
+        fabrication: raw.fabrication === 'cuttable' || raw.fabrication === 'decoration' ? raw.fabrication : undefined,
         contourPoints,
         contourSource,
         sourceImageName: typeof raw.sourceImageName === 'string' ? raw.sourceImageName.slice(0, 120) : typeof raw.source_image_name === 'string' ? raw.source_image_name.slice(0, 120) : undefined,
@@ -2084,9 +2103,11 @@ export const downloadBlob = (filename: string, blob: Blob) => {
     link.href = url;
     link.download = filename;
     document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    try { link.click(); }
+    finally {
+        link.remove();
+        URL.revokeObjectURL(url);
+    }
 };
 
 export const downloadText = (filename: string, text: string, type = 'application/json') =>
@@ -2109,5 +2130,7 @@ export const projectSelfCheck = () => {
 };
 import {
     assertLocalSceneObjectSvg,
-    boundedSceneObjectSvgDataUrl,
+    SCENE_OBJECT_IMAGE_LIMITS,
+    sceneObjectSvgDimensions,
+    validateSceneObjectImageDimensions,
 } from '../runtime/import/sceneObjectImagePolicy';

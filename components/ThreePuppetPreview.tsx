@@ -43,9 +43,13 @@ import {
   createPartArtMaterial,
   disposePartArtMaterial,
   isInitialSceneMaterialResourcePending,
+  updatePartArtMaterial,
 } from '../runtime/render/partArtMaterial';
+import { artworkSurfaceFrame, artworkSurfaceFrameKey, collectArtworkSurfaceState, mapArtworkSurfaceUvs, retainArtworkGroup } from '../runtime/render/artworkSurface';
 import { disposePuppetObjectGraph } from '../runtime/render/puppetSceneDisposal';
 import { warmPartTopologyPipeline } from '../runtime/render/warmPartTopology';
+import { characterFabricationHoles } from '../utils/characterFabricationHoles';
+import { sceneObjectOutline } from '../utils/artworkTargets';
 import {
   acquireSharedWebGLRenderer,
   cachedThreeResource,
@@ -377,27 +381,7 @@ const shapeFromLocalOutline = (points: Point[]) => {
   return shape;
 };
 
-const sceneObjectShape = (object: SceneObject) => {
-  if (object.contourPoints && object.contourPoints.length >= 3) return shapeFromLocalOutline(object.contourPoints);
-  const width = Math.max(8, object.bounds.width) / VIEW_SCALE;
-  const height = Math.max(8, object.bounds.height) / VIEW_SCALE;
-  if (object.shape === 'star') {
-    const shape = new THREE.Shape();
-    const outer = Math.min(width, height) / 2;
-    const inner = outer * 0.46;
-    for (let i = 0; i < 10; i += 1) {
-      const radius = i % 2 === 0 ? outer : inner;
-      const angle = -Math.PI / 2 + i * Math.PI / 5;
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius;
-      if (i === 0) shape.moveTo(x, y);
-      else shape.lineTo(x, y);
-    }
-    shape.closePath();
-    return shape;
-  }
-  return roundedRect(width, height, object.shape === 'cloud' ? Math.min(width, height) * 0.34 : Math.min(width, height) * 0.2);
-};
+const sceneObjectShape = (object: SceneObject) => shapeFromLocalOutline(sceneObjectOutline(object));
 
 const createSceneObjectMaterial = (object: SceneObject, selected: boolean) => {
   const material = new THREE.MeshStandardMaterial({
@@ -411,42 +395,27 @@ const createSceneObjectMaterial = (object: SceneObject, selected: boolean) => {
   return material;
 };
 
-const createSceneObjectArtMaterial = (object: SceneObject, onLoaded: () => void) => {
-  const material = new THREE.MeshBasicMaterial({
-    color: '#ffffff',
-    transparent: true,
+const sceneObjectArtOptions = (object: SceneObject) => {
+  const outline = sceneObjectOutline(object);
+  return {
+    targetFrame: artworkSurfaceFrame(object, outline),
+    clip: { kind: 'contour' as const, points: outline },
     opacity: Math.max(0, Math.min(1, object.opacity)),
-    depthWrite: false,
-    polygonOffset: true,
-    polygonOffsetFactor: -1
-  });
-  material.userData.ownedBySceneObject = true;
-  material.userData.initialSceneResourcePending = Boolean(object.textureUrl);
-  if (object.textureUrl) {
-    const settle = () => {
-      if (
-        material.userData.sceneObjectDisposed === true ||
-        material.userData.initialSceneResourcePending !== true
-      ) return;
-      material.userData.initialSceneResourcePending = false;
-      onLoaded();
-    };
-    const texture = new THREE.TextureLoader().load(
-      object.textureUrl,
-      settle,
-      undefined,
-      settle,
-    );
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.anisotropy = 4;
-    material.map = texture;
-    material.needsUpdate = true;
-  }
-  return material;
+  };
 };
+const createSceneObjectArtMaterial = (object: SceneObject, onLoaded: () => void) =>
+  createPartArtMaterial(object, onLoaded, sceneObjectArtOptions(object));
+
+const sceneObjectGeometryKey = (object: SceneObject) => [object.shape, object.bounds.width, object.bounds.height,
+  object.contourPoints?.map(point => `${point.x},${point.y}`).join(';') ?? '',
+  artworkSurfaceFrameKey(artworkSurfaceFrame(object, sceneObjectOutline(object))),
+  Boolean(object.textureUrl || object.artwork),
+].join(':');
 
 const createSceneObjectVisual = (object: SceneObject, materials: MaterialKit, selected: boolean, onLoaded: () => void) => {
   const group = new THREE.Group();
+  group.name = `scene-object-${object.id}`;
+  group.userData.geometryKey = sceneObjectGeometryKey(object);
   const shape = sceneObjectShape(object);
   const fill = createSceneObjectMaterial(object, selected);
   const contourKey = object.contourPoints?.map(point => `${geometryKeyNumber(point.x)}:${geometryKeyNumber(point.y)}`).join(';') ?? '';
@@ -456,18 +425,10 @@ const createSceneObjectVisual = (object: SceneObject, materials: MaterialKit, se
   group.traverse(child => {
     child.userData.sceneObjectId = object.id;
   });
-  if (object.textureUrl) {
+  if (object.textureUrl || object.artwork) {
     const artGeometry = new THREE.ShapeGeometry(shape);
-    const positions = artGeometry.getAttribute('position');
-    const uvs: number[] = [];
-    const width = Math.max(1, object.bounds.width);
-    const height = Math.max(1, object.bounds.height);
-    for (let i = 0; i < positions.count; i += 1) {
-      const x = positions.getX(i) * VIEW_SCALE;
-      const y = positions.getY(i) * VIEW_SCALE;
-      uvs.push(x / width + 0.5, y / height + 0.5);
-    }
-    artGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    mapArtworkSurfaceUvs(artGeometry, artworkSurfaceFrame(object, sceneObjectOutline(object)),
+      (x, y) => ({ x: x * VIEW_SCALE, y: y * VIEW_SCALE }));
     const art = new THREE.Mesh(artGeometry, createSceneObjectArtMaterial(object, onLoaded));
     art.name = `scene-object-art-${object.id}`;
     art.position.set(0, 0, 0.15);
@@ -930,11 +891,13 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     .map(id => project?.parts[id])
     .filter((part): part is BodyPartLayer => Boolean(part?.visible)), [project?.partOrder, project?.parts]);
   const geometryParts = topologyParts.length ? topologyParts : parts;
+  const physicalHolesByPart = useMemo(() => project ? characterFabricationHoles(project) : new Map(),
+    [project?.parts, project?.partOrder, project?.skeleton, kit.holeDiameterMm]);
   const preparedPartTopologies = useMemo(
     () => geometryParts.map((part) =>
-      preparePuppetPartTopology(part, canonicalSkeleton, renderPolicy.partTopology),
-    ),
-    [canonicalSkeleton, geometryParts, renderPolicy.partTopology],
+      preparePuppetPartTopology(part, canonicalSkeleton, renderPolicy.partTopology, physicalHolesByPart.get(part.id)),
+    ).filter(topology => topology.outline.length >= 3),
+    [canonicalSkeleton, geometryParts, physicalHolesByPart, renderPolicy.partTopology],
   );
   const sceneObjects = useMemo(() => (project?.sceneObjectOrder ?? [])
     .map(id => animatedSceneObjects[id] ?? project?.sceneObjects[id])
@@ -1060,7 +1023,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     0,
   );
   const partTextureCount = preparedPartTopologies.reduce(
-    (sum, topology) => sum + (topology.part.textureUrl ? 1 : 0),
+    (sum, topology) => sum + (topology.part.textureUrl || topology.part.artwork ? 1 : 0),
     0,
   );
   const partArtCount = preparedPartTopologies.length;
@@ -1224,6 +1187,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
       stateRef.current.dataset.threeRenderTriangles = String(renderer.info.render.triangles);
       stateRef.current.dataset.threeRendererGeometryCount = String(renderer.info.memory.geometries);
       stateRef.current.dataset.threeRendererTextureCount = String(renderer.info.memory.textures);
+      stateRef.current.dataset.threeArtworkSurfaces = JSON.stringify(collectArtworkSurfaceState(scene));
       stateRef.current.dataset.threeSceneObjectScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'object'));
       stateRef.current.dataset.threePartScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'part'));
       stateRef.current.dataset.threePartTransforms = JSON.stringify(Object.fromEntries(
@@ -1532,6 +1496,31 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
       check: completeInitialSceneSettlement,
     };
     initialSceneSettlementCheckRef.current = settlementControl;
+    const partArtOptions = (topology: (typeof preparedPartTopologies)[number]) => ({
+      targetFrame: artworkSurfaceFrame(topology.part, topology.outline),
+      clip: { kind: 'contour' as const, points: topology.outline,
+        holes: topology.localHoles.map(center => ({ center, radius: topology.holeRadius })) },
+    });
+    const partArtGeometry = (topology: (typeof preparedPartTopologies)[number], preparedShape?: THREE.Shape) => {
+      const frame = artworkSurfaceFrame(topology.part, topology.outline);
+      return cachedGeometry(`puppet-part-art:${topology.identity.geometry}:${artworkSurfaceFrameKey(frame)}`, () => {
+        const shape = preparedShape ?? shapeFromLocalOutline(topology.outline);
+        if (!preparedShape) topology.localHoles.forEach(local => {
+          shape.holes.push(holePath(local.x / VIEW_SCALE, local.y / VIEW_SCALE, topology.holeRadius / VIEW_SCALE));
+        });
+        return mapArtworkSurfaceUvs(new THREE.ShapeGeometry(shape), frame,
+          (x, y) => ({ x: x * VIEW_SCALE, y: y * VIEW_SCALE }));
+      });
+    };
+    topologyDiff.updateArt.forEach(topology => {
+      const mesh = partMeshesRef.current.get(topology.part.id);
+      const art = mesh?.getObjectByName(`part-art-decal-${topology.part.id}`) as THREE.Mesh | undefined;
+      if (!art) return;
+      art.geometry = partArtGeometry(topology);
+      updatePartArtMaterial(art.material as THREE.MeshBasicMaterial, topology.part,
+        () => initialSceneSettlementCheckRef.current?.check(), partArtOptions(topology));
+      partTopologyIdentitiesRef.current.set(topology.part.id, topology.identity);
+    });
     const initialTopologyPolicy = puppetInitialTopologyBatchPolicy(
       renderPolicy.preset,
     );
@@ -1578,7 +1567,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
       const partGeometryKey = topology.identity.geometry;
       const shape = shapeFromLocalOutline(outline);
       localHoles.forEach(local => {
-        shape.holes.push(holePath(local.x / VIEW_SCALE, local.y / VIEW_SCALE));
+        shape.holes.push(holePath(local.x / VIEW_SCALE, local.y / VIEW_SCALE, topology.holeRadius / VIEW_SCALE));
       });
       const geometry = cachedGeometry(
         `puppet-part-plate:${partGeometryKey}`,
@@ -1664,30 +1653,10 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
       measurePartPhase(runtime, () => {
         const { topology, mesh, shape } = runtime;
         const base = topology.part;
-        const partGeometryKey = topology.identity.geometry;
-        const artGeometry = cachedGeometry(
-          `puppet-part-art:${partGeometryKey}`,
-          () => {
-            const next = new THREE.ShapeGeometry(shape);
-            const artPositions = next.getAttribute('position');
-            const uvs: number[] = [];
-            const artWidth = Math.max(1, base.bounds.width);
-            const artHeight = Math.max(1, base.bounds.height);
-            for (let i = 0; i < artPositions.count; i += 1) {
-              const x = artPositions.getX(i) * VIEW_SCALE;
-              const y = artPositions.getY(i) * VIEW_SCALE;
-              uvs.push(
-                (x - base.bounds.x) / artWidth,
-                (y - base.bounds.y) / artHeight,
-              );
-            }
-            next.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-            return next;
-          },
-        );
+        const artGeometry = partArtGeometry(topology, shape);
         const art = new THREE.Mesh(artGeometry, createPartArtMaterial(base, () => {
           initialSceneSettlementCheckRef.current?.check();
-        }));
+        }, partArtOptions(topology)));
         art.name = `part-art-decal-${base.id}`;
         art.position.set(0, 0, THICKNESS + 0.018);
         art.userData.partId = base.id;
@@ -1714,8 +1683,8 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
             viewScale: VIEW_SCALE,
             z: THICKNESS + 0.04,
             geometry: cachedGeometry(
-              'cut-hole-ring:0.11:0.014:8:28',
-              () => new THREE.TorusGeometry(0.11, 0.014, 8, 28),
+              `cut-hole-ring:${topology.holeRadius / VIEW_SCALE + 0.014}:0.014:8:28`,
+              () => new THREE.TorusGeometry(topology.holeRadius / VIEW_SCALE + 0.014, 0.014, 8, 28),
             ),
             material: materials.cutRing,
           }));
@@ -1821,10 +1790,13 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     render();
   }, [assemblyExplodeAmount, parts, project?.selectedPartId, rendererStatus]);
 
-  const sceneObjectSignature = useMemo(() => sceneObjects.map(object => [
+  const sceneObjectSignature = useMemo(() => sceneObjects.map(animatedObject => {
+    const object = project?.sceneObjects[animatedObject.id] ?? animatedObject;
+    return [
     object.id,
     object.shape,
     object.textureUrl ?? '',
+    object.artwork?.revision ?? '',
     object.contourSource ?? '',
     object.contourPoints?.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(';') ?? '',
     object.fillColor,
@@ -1833,24 +1805,38 @@ export const ThreePuppetPreview = ({ project, animatedParts = EMPTY_ANIMATED_PAR
     object.visible ? '1' : '0',
     object.bounds.width.toFixed(2),
     object.bounds.height.toFixed(2)
-  ].join(':')).join('|'), [sceneObjects]);
+  ].join(':');
+  }).join('|'), [sceneObjects, project?.sceneObjects]);
   useEffect(() => {
     const roots = rootsRef.current;
     const materials = materialsRef.current;
     if (!roots || !materials || rendererStatus !== 'webgl') return;
     initialSceneSettlementCheckRef.current?.invalidate();
-    clearGroup(roots.objectsLayer);
-    sceneObjectRefs.current.clear();
-    sceneObjects.forEach(object => {
-      const group = createSceneObjectVisual(
-        object,
-        materials,
-        object.id === project?.selectedSceneObjectId,
-        () => {
+    const visibleIds = new Set(sceneObjects.map(object => object.id));
+    sceneObjectRefs.current.forEach((group, id) => {
+      if (visibleIds.has(id)) return;
+      group.removeFromParent();
+      disposePuppetObjectGraph(group);
+      sceneObjectRefs.current.delete(id);
+    });
+    sceneObjects.forEach(animatedObject => {
+      const object = project?.sceneObjects[animatedObject.id] ?? animatedObject;
+      const onLoaded = () => {
           render();
           initialSceneSettlementCheckRef.current?.check();
-        },
+      };
+      let group = retainArtworkGroup(roots.objectsLayer, `scene-object-${object.id}`,
+        sceneObjectGeometryKey(object), disposePuppetObjectGraph);
+      if (!group) group = createSceneObjectVisual(
+        object, materials, object.id === project?.selectedSceneObjectId, onLoaded,
       );
+      else {
+        const fill = (group.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial;
+        fill.color.set(object.id === project?.selectedSceneObjectId ? '#f0abfc' : object.fillColor);
+        fill.opacity = Math.max(0, Math.min(1, object.opacity));
+        const art = group.getObjectByName(`scene-object-art-${object.id}`) as THREE.Mesh | undefined;
+        if (art) updatePartArtMaterial(art.material as THREE.MeshBasicMaterial, object, onLoaded, sceneObjectArtOptions(object));
+      }
       roots.objectsLayer.add(group);
       sceneObjectRefs.current.set(object.id, group);
     });

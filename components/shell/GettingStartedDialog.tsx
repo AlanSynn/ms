@@ -5,6 +5,7 @@ import { BrowserRecoveryAction } from './BrowserRecoveryAction';
 import type { BodyPartLayer, MechanismConfig, Point, ProjectState } from '../../types';
 import { pathFromPoints, sceneToSvg } from '../../utils/coordinates';
 import { gearTrainCenters, gearTrainPitchRadii } from '../../utils/kinematics';
+import { unpaintedStarter } from '../../utils/artworkTargets';
 import { type ClassroomLessonId, createLessonProject, createSampleProject } from '../../utils/project';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlinePathD } from '../../utils/partGeometry';
 
@@ -212,7 +213,7 @@ export const GettingStartedDialog = ({ guidedLessons, hideForSession, onLesson, 
     const packageInputRef = useRef<HTMLInputElement>(null);
     const [showGuided, setShowGuided] = useState(false);
     const [previewProjects, setPreviewProjects] = useState<Record<string, ProjectState | null>>({});
-    const starterRigProject = useMemo(createSampleProject, []);
+    const starterRigProject = useMemo(() => unpaintedStarter(createSampleProject()), []);
     const starterRigPreview = useMemo(
         () => starterRigPreviewProject(starterRigProject),
         [starterRigProject]

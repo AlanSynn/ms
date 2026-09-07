@@ -242,6 +242,8 @@ export const AppStageRouter = ({
       <CharacterSelection
         project={project}
         dispatch={dispatch}
+        commandHandlers={commandHandlers}
+        onPause={() => setIsPlaying(false)}
         characterImportProgress={characterImportProgress}
         onOpenGettingStarted={onOpenGettingStarted}
         onAccept={onAcceptPendingCharacter}

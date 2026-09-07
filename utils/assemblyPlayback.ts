@@ -1,6 +1,6 @@
 import type { BodyPartLayer, FabricationRecipe, MechanismConfig, PhysicalKitSettings, Point, ProjectState } from '../types';
 import { bodyPartPivotScene, sceneToBoardRaw } from './coordinates';
-import { fabricationBoardCoordinateCallout, fabricationPartDisplayLabel } from './fabrication';
+import { fabricationBoardCoordinateCallout, fabricationPartDisplayLabel } from './fabricationContract';
 import { createFabricationRecipe } from './fabricationRecipes';
 import { isBoardFixedCoordRole } from './mechanismReference';
 import { fabricablePartOutlinePoints, partLandmarkJointIds, partLandmarkLocalPoints } from './partGeometry';
@@ -48,9 +48,10 @@ export type CharacterAssemblyPartVisual = {
 export type CharacterAssemblyStep = {
     index: number;
     label: string;
-    phase: 'character-parts' | 'fixed-pins' | 'free-pivots' | 'attach-character' | 'test-character';
+    phase: 'character-parts' | 'fixed-pins' | 'free-pivots' | 'attach-character' | 'test-character' | 'cut-object' | 'place-object';
     action: string;
     pinIds: string[];
+    partIds?: string[];
     instruction: string;
     check?: string;
 };

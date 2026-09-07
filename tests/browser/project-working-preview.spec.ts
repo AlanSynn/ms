@@ -143,6 +143,9 @@ for (const content of ['path-only', 'character-only', 'empty'] as const) {
       await page.getByRole('button', { name: 'Play', exact: true }).click();
       await expect.poll(async () => Number(await state.getAttribute('data-three-playback-timeline-ms'))).toBeGreaterThan(1300);
       await page.getByRole('button', { name: 'Pause', exact: true }).click();
+      // Pause commits the held phase before the queued final render submits.
+      const heldPhase = (await page.getByTestId('project-working-preview').getAttribute('data-working-phase'))!;
+      await expect(state).toHaveAttribute('data-three-playback-phase', heldPhase);
       const heldTime = Number(await state.getAttribute('data-three-playback-timeline-ms'));
       const expected = motionPreviewForPaths(project, playableMotionPaths(project), heldTime);
       const expectArms = async (testId: string) => {

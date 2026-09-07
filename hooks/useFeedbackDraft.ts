@@ -6,7 +6,6 @@ import {
   type FeedbackPayload, type FeedbackResponse,
 } from '../shared/feedbackProtocol';
 import { freezeAppView, type FrozenAppView } from '../utils/appCapture';
-import { postFeedback, screenshotBase64 } from '../utils/feedbackClient';
 
 export type FeedbackDraft = {
   submissionId: string;
@@ -124,6 +123,7 @@ export const useFeedbackDraft = ({ rootRef, stage }: {
     update({ ...current, phase: 'sending', notice: undefined });
     let transportStarted = false;
     try {
+      const { postFeedback, screenshotBase64 } = await import('../utils/feedbackClient');
       const included = current.includeScreenshot && !!current.screenshot;
       const payload: FeedbackPayload = {
         submissionId: current.submissionId, category: current.category, message, context: current.context,
@@ -148,6 +148,7 @@ export const useFeedbackDraft = ({ rootRef, stage }: {
     busy.current = true;
     update({ ...current, phase: 'checking' });
     try {
+      const { postFeedback } = await import('../utils/feedbackClient');
       const reply = await postFeedback(import.meta.env.VITE_FEEDBACK_ENDPOINT ?? '', {
         action: 'status', submissionId: current.submissionId, payloadDigest: current.payloadDigest,
         ...(current.receipt ? { receipt: current.receipt } : {}),

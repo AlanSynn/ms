@@ -1,4 +1,6 @@
 import type { BodyPartLayer, FabricationPackage, ProjectState, SceneObject } from "../../types";
+import { buildPlanSourceDigest } from "../../utils/buildPlan";
+import { projectContentFingerprint } from "../../utils/projectSerialization";
 
 const partWithoutArtwork = (part: BodyPartLayer): BodyPartLayer => {
   const {
@@ -6,13 +8,14 @@ const partWithoutArtwork = (part: BodyPartLayer): BodyPartLayer => {
     maskUrl: _maskUrl,
     originalSvgPath: _originalSvgPath,
     enhancedSvgPath: _enhancedSvgPath,
+    artwork: _artwork,
     ...geometry
   } = part;
   return geometry;
 };
 
 const sceneObjectWithoutArtwork = (sceneObject: SceneObject): SceneObject => {
-  const { textureUrl: _textureUrl, ...geometry } = sceneObject;
+  const { textureUrl: _textureUrl, artwork: _artwork, ...geometry } = sceneObject;
   return geometry;
 };
 
@@ -61,6 +64,8 @@ const restoredPartArtwork = (
   maskUrl: source.maskUrl,
   originalSvgPath: source.originalSvgPath,
   enhancedSvgPath: source.enhancedSvgPath,
+  artwork: source.artwork,
+  sourceImageFrame: source.sourceImageFrame,
 } : part;
 
 const restoredSceneObjectArtwork = (
@@ -69,29 +74,36 @@ const restoredSceneObjectArtwork = (
 ): SceneObject => source ? {
   ...sceneObject,
   textureUrl: source.textureUrl,
+  artwork: source.artwork,
 } : sceneObject;
 
 /** Reattach the canonical main-thread string references after the worker returns. */
 export const restoreBlueprintPackageSceneArtwork = (
   fabricationPackage: FabricationPackage,
   project: ProjectState,
-): FabricationPackage => ({
-  ...fabricationPackage,
-  sceneSnapshot: {
-    ...fabricationPackage.sceneSnapshot,
-    parts: Object.fromEntries(
-      Object.entries(fabricationPackage.sceneSnapshot.parts).map(([id, part]) => [
-        id,
-        restoredPartArtwork(part, project.parts[id]),
-      ]),
-    ),
-    sceneObjects: Object.fromEntries(
-      Object.entries(fabricationPackage.sceneSnapshot.sceneObjects).map(
-        ([id, sceneObject]) => [
+): FabricationPackage => {
+  if (fabricationPackage.sourceProjectFingerprint !== projectContentFingerprint(project) ||
+      fabricationPackage.buildPlanSourceDigest !== buildPlanSourceDigest(project, 'complete', fabricationPackage.buildPlanLane)) {
+    throw new Error('Project changed. Build the current artwork again.');
+  }
+  return {
+    ...fabricationPackage,
+    sceneSnapshot: {
+      ...fabricationPackage.sceneSnapshot,
+      parts: Object.fromEntries(
+        Object.entries(fabricationPackage.sceneSnapshot.parts).map(([id, part]) => [
           id,
-          restoredSceneObjectArtwork(sceneObject, project.sceneObjects[id]),
-        ],
+          restoredPartArtwork(part, project.parts[id]),
+        ]),
       ),
-    ),
-  },
-});
+      sceneObjects: Object.fromEntries(
+        Object.entries(fabricationPackage.sceneSnapshot.sceneObjects).map(
+          ([id, sceneObject]) => [
+            id,
+            restoredSceneObjectArtwork(sceneObject, project.sceneObjects[id]),
+          ],
+        ),
+      ),
+    },
+  };
+};

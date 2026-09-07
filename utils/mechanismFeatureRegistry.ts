@@ -1,6 +1,9 @@
 import type { JointState, MechanismConfig, MechanismOutputPort, MechanismType } from '../types';
-import type { FabricationRenderPlan, FabricationStackLayer } from './fabrication';
-import { fabricationRenderPlanForMechanism, fabricationStackForMechanism, sampleFeasibleRange } from './fabrication';
+import type { FabricationRenderPlan } from './fabricationRenderPlan';
+import type { FabricationStackLayer } from './fabricationStackModel';
+import { fabricationRenderPlanForMechanism } from './fabricationRenderPlan';
+import { fabricationStackForMechanism } from './fabricationStackModel';
+import { sampleFeasibleRange } from './fabricationReadiness';
 import { calculateLinkage } from './kinematics';
 import { ALL_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY } from './mechanismTemplates';
 import { createDefaultMechanism, mechanismRequiredParts } from './project';

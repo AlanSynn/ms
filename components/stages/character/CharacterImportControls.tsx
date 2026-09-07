@@ -1,5 +1,5 @@
 import type { RefObject } from "react";
-import { FileJson, PackagePlus, Sparkles, Upload } from "lucide-react";
+import { FileJson, PackagePlus, Pencil, Sparkles, Upload } from "lucide-react";
 
 import { ContextHelp } from "../../ui/ContextHelp";
 
@@ -9,6 +9,7 @@ export const CharacterImportControls = ({
   importInputRef,
   onOpenGettingStarted,
   onAddSceneObject,
+  onDrawObject,
   sceneObjectDisabled,
   onPackage,
   onImport,
@@ -18,6 +19,7 @@ export const CharacterImportControls = ({
   importInputRef: RefObject<HTMLInputElement | null>;
   onOpenGettingStarted: () => void;
   onAddSceneObject: (file: File) => void;
+  onDrawObject: () => void;
   sceneObjectDisabled?: boolean;
   onPackage: (files: File[]) => void;
   onImport: (file: File) => void;
@@ -44,6 +46,8 @@ export const CharacterImportControls = ({
         </button>
         <ContextHelp helpId="character.loadCharacterFile" />
       </div>
+      <button type="button" className="btn-secondary" data-testid="character-draw-object" data-feature-id="character.drawObject"
+        disabled={sceneObjectDisabled} onClick={onDrawObject}><Pencil size={16} />Draw object</button>
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -54,7 +58,7 @@ export const CharacterImportControls = ({
           disabled={sceneObjectDisabled}
           onClick={() => objectInputRef.current?.click()}
         >
-          <PackagePlus size={16} /> Add object
+          <PackagePlus size={16} /> Import object
         </button>
         <ContextHelp helpId="character.loadObjectFile" />
       </div>

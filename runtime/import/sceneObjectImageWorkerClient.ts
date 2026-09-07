@@ -2,6 +2,7 @@ import type {
   SceneObjectImageWorkerRequest,
   SceneObjectImageWorkerResponse,
 } from "./sceneObjectImageJob";
+import type { ProjectState } from "../../types";
 
 export interface SceneObjectImageWorkerPort {
   onmessage: ((event: MessageEvent<SceneObjectImageWorkerResponse>) => void) | null;
@@ -45,6 +46,7 @@ export const createSceneObjectImageWorkerClient = (
         generationId: number;
         file: File;
         objectId: string;
+        project?: ProjectState;
         firstFrame?: number;
         secondFrame?: number;
         worker?: SceneObjectImageWorkerPort;
@@ -77,10 +79,11 @@ export const createSceneObjectImageWorkerClient = (
       ) => void;
       failed: (error: Error) => void;
     },
+    project?: ProjectState,
   ) => {
     releaseActive();
     const generationId = ++generationSequence;
-    active = { generationId, file, objectId };
+    active = { generationId, file, objectId, project };
 
     const startWorker = () => {
       if (!active || active.generationId !== generationId) return;
@@ -118,6 +121,7 @@ export const createSceneObjectImageWorkerClient = (
           generationId,
           file: active.file,
           objectId: active.objectId,
+          project: active.project ? { ...active.project, lastExport: undefined } : undefined,
         });
       } catch (error) {
         fail(error instanceof Error ? error.message : String(error));

@@ -132,7 +132,13 @@ utils/fabricationContract.ts
   centralized fabrication primitive dimensions derived from fabrication/generate_fabrication_templates.py: linkage widths/holes, gear tooth/radius rules, ring gear, and S10 spacer
 
 utils/fabrication.ts
-  consumes fabricationContract; owns stack, render plan, validation, package generation
+  stable public facade and package generation; re-exports focused fabrication helpers
+
+utils/fabricationValidation.ts
+  pure project/preview/board validation, independent of PDF or package generation
+
+utils/characterPinPlan.ts
+  canonical fixed/free character pin geometry shared by build plans and physical holes; printable labels and stacks belong to buildPlanCharacter
 
 utils/exporter.ts
   SVG/DXF/PDF/STL/metadata exporters from canonical state and fabrication packages

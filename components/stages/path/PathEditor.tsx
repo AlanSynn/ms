@@ -20,13 +20,11 @@ import {
   createMotionPathForTarget,
   describeMotionChain,
   motionAnchorJointIds,
-  motionChainOptionLabel,
   motionChainRootJointIds,
   motionPathsInProjectOrder,
   motionPreviewForPaths,
   motionTimelineMsForPhase,
   playableMotionPaths,
-  preferredMotionJointId,
   sharedMotionPlaybackDurationMs,
 } from "../../../utils/motion";
 import { addDrawSamplePoint, normalizeDrawTimedPoints, type DrawSamplePoint } from "../../../utils/pathDrawing";
@@ -114,31 +112,21 @@ export const PathEditor = ({
   const jointOptions = selectedPart
     ? motionAnchorJointIds(project, selectedPart.id)
     : [];
-  const selectedIkJointId = selectedPart
-    ? preferredMotionJointId(
-        project,
-        selectedPart.id,
-        selectedPath?.targetAnchorJointId,
-        { preferDistalWhenRoot: !selectedPath?.targetAnchorJointId },
-      )
+  const ikDescriptor = selectedPart
+    ? describeMotionChain(project, selectedPart.id, selectedPath?.targetAnchorJointId, {
+        rootJointId: selectedPath?.chainRootJointId,
+      })
     : undefined;
+  const selectedIkJointId = ikDescriptor?.targetJointId;
+  const selectedChainRootId = ikDescriptor?.rootJointId;
   const chainRootOptions = selectedPart
     ? motionChainRootJointIds(project, selectedPart.id, selectedIkJointId)
     : [];
-  const selectedChainRootId =
-    selectedPath?.chainRootJointId &&
-    chainRootOptions.includes(selectedPath.chainRootJointId)
-      ? selectedPath.chainRootJointId
-      : selectedPart?.anchorJointId;
-  const ikDescriptor = selectedPart
-    ? describeMotionChain(project, selectedPart.id, selectedIkJointId, {
-        rootJointId: selectedChainRootId,
-      })
-    : undefined;
-  const bendJoint = ikDescriptor?.foldJointId
+  const bendJoint = ikDescriptor?.canFold && ikDescriptor.foldJointId
     ? project.skeleton?.joints[ikDescriptor.foldJointId]
     : undefined;
-  const jointLabel = (id?: string) => (id ? id.replaceAll("_", " ") : "none");
+  const jointLabel = (id?: string) =>
+    id ? (project.skeleton?.joints[id]?.name || id).replaceAll("_", " ") : "none";
   useEffect(() => () => pathGestureDraft.dispose(), [pathGestureDraft]);
   useEffect(() => {
     if (gestureIdentityRef.current && !gestureMatches()) cancelGesture();
@@ -213,13 +201,21 @@ export const PathEditor = ({
       selectedPart.id,
       targetAnchorJointId,
     );
+    const descriptor = describeMotionChain(project, selectedPart.id, targetAnchorJointId, {
+      rootJointId: selectedPath?.chainRootJointId && roots.includes(selectedPath.chainRootJointId)
+        ? selectedPath.chainRootJointId : undefined,
+    });
     updatePath({
-      targetAnchorJointId,
-      chainRootJointId:
-        selectedPath?.chainRootJointId &&
-        roots.includes(selectedPath.chainRootJointId)
-          ? selectedPath.chainRootJointId
-          : selectedPart.anchorJointId,
+      targetAnchorJointId: descriptor.targetJointId,
+      chainRootJointId: descriptor.rootJointId,
+    });
+  };
+  const resetMotionJoints = () => {
+    if (!selectedPart) return;
+    const descriptor = describeMotionChain(project, selectedPart.id);
+    updatePath({
+      targetAnchorJointId: descriptor.targetJointId,
+      chainRootJointId: descriptor.rootJointId,
     });
   };
   const pickIkJoint = (jointId: string) => {
@@ -234,6 +230,8 @@ export const PathEditor = ({
   };
   const setBendDirection = (bendDirection: number) =>
     bendJoint &&
+    !bendJoint.locked &&
+    !pathLocked &&
     dispatch({
       type: "update_joint",
       jointId: bendJoint.id,
@@ -490,6 +488,8 @@ export const PathEditor = ({
             jointLabel={jointLabel}
             updateChainRoot={updateChainRoot}
             updateIkHandle={updateIkHandle}
+            motionWarning={selectedPath ? pathPreview?.warnings?.[selectedPath.id]?.[0]?.replace("Move target", "Move path") : undefined}
+            resetMotionJoints={resetMotionJoints}
             setBendDirection={setBendDirection}
           />,
         ),

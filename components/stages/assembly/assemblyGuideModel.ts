@@ -46,9 +46,9 @@ const characterAssemblyPlanFromBuildPlan = (
   steps: BuildPlanStepV1[],
 ): CharacterAssemblyPlan => ({
   kind: "character",
-  parts: buildPlan.character.parts.map(
+  parts: [...buildPlan.character.parts.map(
     ({ ref: _ref, sourcePartId: _sourcePartId, ...part }) => part,
-  ),
+  ), ...buildPlan.objects.parts.map(({ ref: _ref, sourceSceneObjectId: _sourceSceneObjectId, ...part }) => part)],
   fixedPins: buildPlan.character.fixedPins.map(({ ref: _ref, ...pin }) => pin),
   freePivots: buildPlan.character.freePivots.map(({ ref: _ref, ...pin }) => pin),
   steps: steps.map((step) => ({
@@ -57,6 +57,7 @@ const characterAssemblyPlanFromBuildPlan = (
     phase: step.phase as CharacterAssemblyStep["phase"],
     action: step.action,
     pinIds: step.pinIds,
+    partIds: buildPlan.parts.filter(part => step.partRefs.includes(part.ref)).flatMap(part => part.sourceSceneObjectId ?? part.sourcePartId ?? []),
     instruction: step.instruction,
     check: step.check,
   })),
@@ -118,7 +119,10 @@ export const prepareAssemblyGuideModel = ({
         (mechanism) => mechanism.sourceMechanismId === selectedRecipe.mechanismId,
       )
     : undefined;
-  const characterBuildSteps = buildPlanSectionSteps(buildPlan, buildPlan.character.id);
+  const characterBuildSteps = [
+    ...buildPlanSectionSteps(buildPlan, buildPlan.character.id),
+    ...buildPlanSectionSteps(buildPlan, buildPlan.objects.id),
+  ].map((step, index) => ({ ...step, index: index + 1 }));
   const characterAssemblyPlan = characterAssemblyPlanFromBuildPlan(
     buildPlan,
     characterBuildSteps,

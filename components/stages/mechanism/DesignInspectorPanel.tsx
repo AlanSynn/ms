@@ -315,8 +315,9 @@ export const DesignInspectorPanel = ({
                 <option key={id} value={id}>
                   {motionChainOptionLabel(
                     project,
-                    selectedMechanism.targetPartId,
+                    effectiveTargetPartId,
                     id,
+                    { rootJointId: effectiveTargetPathId ? project.paths[effectiveTargetPathId]?.chainRootJointId : undefined },
                   )}
                 </option>
               ))}

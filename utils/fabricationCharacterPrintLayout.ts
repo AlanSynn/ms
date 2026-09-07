@@ -1,6 +1,7 @@
 import type { BodyPartLayer, Point, ProjectState } from '../types';
 import { SCENE_PX_PER_MM } from './coordinates';
-import { fabricablePartOutlinePoints, partLandmarkLocalPoints, pointInsideOutline } from './partGeometry';
+import { fabricablePartOutlinePoints, partLandmarkLocalPoints } from './partGeometry';
+import { characterFabricationHoles } from './characterFabricationHoles';
 
 export type CharacterPrintPart = {
     part: BodyPartLayer;
@@ -45,14 +46,15 @@ const printBoundsForPoints = (points: Point[]) => {
 
 export const buildCharacterPrintLayout = (project: ProjectState): CharacterPrintLayout => {
     const kit = project.settings.physicalKit;
+    const fabricationHoles = characterFabricationHoles(project);
     const parts = project.partOrder.map(id => project.parts[id]).filter((part): part is BodyPartLayer => Boolean(part?.visible));
     const source = parts.map(part => {
         const landmarks = partLandmarkLocalPoints(part, project.skeleton);
         const outline = fabricablePartOutlinePoints(part, landmarks);
         if (outline.length < 3) return null;
         const outlineScene = outline.map(point => transformedPartPoint(part, point));
-        const holeScene = landmarks
-            .filter(point => pointInsideOutline(point, outline, 0.5))
+        const holeScene = (fabricationHoles.get(part.id) ?? [])
+            .map(hole => hole.center)
             .map(point => transformedPartPoint(part, point));
         const bounds = printBoundsForPoints(outlineScene);
         return {
@@ -106,6 +108,7 @@ export const buildCharacterPrintLayout = (project: ProjectState): CharacterPrint
         for (const item of rawItems) {
             const itemWidth = item.rawBounds.width * scale + partPaddingMm * 2;
             const itemHeight = item.rawBounds.height * scale + partPaddingMm * 2;
+            if (itemWidth > pageRight - margin || itemHeight > pageBottom - titleBand) return null;
             if (cursorX > margin && cursorX + itemWidth > pageRight) newRow();
             if (cursorY + itemHeight > pageBottom) newPage();
             if (pageIndex >= maxPages) return null;

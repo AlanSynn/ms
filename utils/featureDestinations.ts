@@ -6,6 +6,7 @@ import { handoffGate } from './project';
 
 export type LocalFeatureId =
   | 'character.gettingStarted' | 'character.loadCharacterFile' | 'character.loadObjectFile'
+  | 'character.drawPaint' | 'character.drawObject'
   | 'path.draw' | 'path.target' | 'path.addMotion' | 'path.switchMotion' | 'path.trace' | 'path.smoothness'
   | 'foundry.fitPath' | 'foundry.templates' | 'foundry.attach' | 'foundry.use'
   | 'design.mechanism' | 'blueprint.pdf' | 'blueprint.customParts' | 'assembly.steps'
@@ -80,7 +81,9 @@ type LocalDestination = Omit<FeatureDestination, 'id' | 'targetId' | 'descriptio
 const localDefinitions: LocalDestination[] = [
   { id: 'character.gettingStarted', label: 'Getting Started', stage: 'character', aliases: ['choose a starter', 'guided project', 'starter rig', 'guide', 'start with example'] },
   { id: 'character.loadCharacterFile', label: 'Load character file', helpId: 'character.loadCharacterFile', stage: 'character', aliases: ['import body', 'rigged character', 'character package', 'replace character'] },
-  { id: 'character.loadObjectFile', label: 'Add object', helpId: 'character.loadObjectFile', stage: 'character', aliases: ['add a prop', 'import object', 'object image', 'add sign'] },
+  { id: 'character.loadObjectFile', label: 'Import object', helpId: 'character.loadObjectFile', stage: 'character', aliases: ['import object', 'import a picture', 'object image', 'load a prop image'] },
+  { id: 'character.drawPaint', label: 'Draw & paint', helpId: 'character.drawPaint', stage: 'character', unavailable: 'Choose a part or object to paint.', aliases: ['paint', 'paint a face', 'paint eyes', 'paint clothes', 'paint details', 'brush', 'pencil', 'erase paint', 'erase the middle', 'paint a line', 'filled rectangle', 'filled ellipse', 'base color', 'change shape', 'edit cut outline'] },
+  { id: 'character.drawObject', label: 'Draw object', helpId: 'character.drawObject', stage: 'character', aliases: ['draw a prop', 'make a prop', 'add a prop', 'draw a star', 'draw my own object', 'draw a sign', 'single piece figure'] },
   { id: 'path.draw', label: 'Draw path', helpId: 'path.draw', stage: 'path', aliases: ['draw', 'motion', 'pathway', 'move an arm', 'make the hand move', 'sketch movement', 'draw a curve', 'change movement', 'draw a line', 'make character wave'] },
   { id: 'path.target', label: 'Motion target', description: 'Choose the body part or object to move.', stage: 'path', aliases: ['another arm', 'other arm', 'different body part', 'move a leg', 'choose part', 'switch body part'] },
   { id: 'path.addMotion', label: 'Add path', description: 'Choose a target for another path.', stage: 'path', aliases: ['second path', 'another path', 'two paths', 'both arms', 'second motion', 'new motion', 'extra movement', 'more paths'] },
@@ -92,9 +95,9 @@ const localDefinitions: LocalDestination[] = [
   { id: 'foundry.attach', label: 'Attach to part', stage: 'foundry', aliases: ['connect mechanism', 'attach machine', 'attach to body', 'move attachment'] },
   { id: 'foundry.use', label: 'Use this mechanism', stage: 'foundry', aliases: ['use fitted mechanism', 'keep mechanism', 'assign mechanism', 'finish fit'] },
   { id: 'design.mechanism', label: 'Mechanism instance', description: 'Select a mechanism to adjust.', stage: 'design', aliases: ['edit mechanism', 'choose existing mechanism', 'change machine settings'] },
-  { id: 'blueprint.pdf', label: 'Download Blueprint PDF', description: 'Print the mechanism build files.', stage: 'blueprint', aliases: ['print', 'pdf', 'cut out mechanism', 'print mechanism', 'download build files', 'paper mechanism'] },
-  { id: 'blueprint.customParts', label: 'Download Character PDF', helpId: 'blueprint.customParts', stage: 'blueprint', aliases: ['print', 'pdf', 'body template', 'cut out', 'paper body pieces', 'cut out my person', 'character pdf', 'print body parts', 'character sheet'] },
-  { id: 'assembly.steps', label: 'Assembly steps', helpId: 'assembly.steps', stage: 'assembly', unavailable: 'Add a character or mechanism first.', aliases: ['assemble', 'build steps', 'put it together', 'put the parts together', 'build instructions', 'how to build', 'assemble parts'] },
+  { id: 'blueprint.pdf', label: 'Download Build PDF', description: 'Print painted pieces, mechanism drawings, and build steps.', stage: 'blueprint', aliases: ['print', 'pdf', 'print my painting', 'print my prop', 'print my character', 'cut out mechanism', 'print mechanism', 'download build files', 'paper mechanism', 'blueprint pdf'] },
+  { id: 'blueprint.customParts', label: 'Character outlines PDF', helpId: 'blueprint.customParts', stage: 'blueprint', aliases: ['body template', 'cut out', 'paper body pieces', 'cut out my person', 'character pdf', 'print body parts', 'character sheet', 'clean outlines'] },
+  { id: 'assembly.steps', label: 'Assembly steps', helpId: 'assembly.steps', stage: 'assembly', unavailable: 'Add a character, cuttable object, or mechanism first.', aliases: ['assemble', 'build steps', 'put it together', 'put the parts together', 'build instructions', 'how to build', 'assemble parts', 'place my prop'] },
   { id: 'playback.play', label: 'Play / Pause', description: 'Watch the current motion.', stage: 'playback', aliases: ['play', 'pause', 'watch it move', 'stop animation', 'run motion', 'preview movement'] },
   { id: 'playback.scrub', label: 'Playback scrubber', description: 'Move through the motion or build steps.', stage: 'playback', aliases: ['scrub', 'timeline', 'skip ahead', 'animation position'] },
   { id: 'options.animationSpeed', label: 'Animation speed', description: 'Change playback speed.', stage: 'options', aliases: ['speed', 'make it slower', 'slow down', 'make it faster', 'speed up', 'animation speed'] },
@@ -128,8 +131,8 @@ export const planFeatureReveal = (id: FeatureId, project: ProjectState, currentS
   if (destination.stage) {
     const gate = handoffGate(project, destination.stage);
     if (!gate.ok) {
-      const message = !project.partOrder.length ? 'Load a character first.'
-        : destination.stage === 'path' ? 'Add character joints first.' : 'Fix the mechanism in Design first.';
+      const message = gate.recoveryStage === 'design' ? 'Fix the mechanism in Design first.'
+        : project.partOrder.length ? 'Add character joints first.' : 'Load a character first.';
       return { ok: false as const, message };
     }
   }

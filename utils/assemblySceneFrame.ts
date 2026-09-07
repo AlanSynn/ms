@@ -132,9 +132,9 @@ export const buildCharacterAssemblySceneFrame = ({
     const activeBoardCoords = unique(activePins.map((pin) => pin.boardCoordinate ?? ''));
     const activeScenePoints = activePins.filter(pin => pin.role === 'fixed_pin').map(pin => pin.scene);
     const floatingReferencePoints = activePins.filter(pin => pin.role !== 'fixed_pin').map(pin => pin.scene);
-    const activePartIds = step.phase === 'character-parts'
+    const activePartIds = step.partIds ?? (step.phase === 'character-parts'
         ? plan.parts.map((part) => part.id)
-        : unique(activePins.flatMap((pin) => pin.partIds));
+        : unique(activePins.flatMap((pin) => pin.partIds)));
     const visibleParts = plan.parts.map((part) => ({
         id: part.id,
         label: part.name,
@@ -150,7 +150,7 @@ export const buildCharacterAssemblySceneFrame = ({
         label: step.label,
         motion: motionForCharacterStep(step),
         explodeAxis: step.phase === 'fixed-pins' || step.phase === 'free-pivots' ? 'z' : 'none',
-        boardMode: step.phase === 'character-parts' ? 'hidden' : 'active',
+        boardMode: ['character-parts', 'cut-object', 'place-object'].includes(step.phase) ? 'hidden' : 'active',
         progress,
         instruction: step.instruction,
         check: step.check,

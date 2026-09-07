@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import type { BodyPartLayer, Point, ProjectAction, ProjectState } from "../../../types";
 import {
   fabricablePartOutlinePoints,
-  isUsableContourPoints,
   partLandmarkLocalPoints,
-  scaleContour,
 } from "../../../utils/partGeometry";
+import { artworkForOwner } from '../../../utils/artwork';
+import { characterFabricationHoles } from '../../../utils/characterFabricationHoles';
+import { validatePhysicalOutline } from '../../../utils/shapeEditing';
 import { MiniNumber, Toggle } from "../../ui/InspectorControls";
-import { CutOutlineEditorDialog } from "./CutOutlineEditorDialog";
+import { ShapeEditor } from './ShapeEditor';
 
 const CompactNumber = ({
   label,
@@ -43,12 +44,14 @@ const CompactNumber = ({
 
 export const PartInspector = ({
   part,
+  project,
   skeleton,
   sourceTextureUrl,
   dispatch,
   compact = false,
 }: {
   part: BodyPartLayer;
+  project: ProjectState;
   skeleton?: ProjectState["skeleton"];
   sourceTextureUrl?: string;
   dispatch: (action: ProjectAction) => void;
@@ -70,79 +73,31 @@ export const PartInspector = ({
     () => partLandmarkLocalPoints(part, skeleton),
     [part, skeleton],
   );
-  const autoCutPoints = useMemo(
-    () =>
-      fabricablePartOutlinePoints(
-        { ...part, contourPoints: undefined, contourSource: undefined },
-        landmarks,
-      ),
-    [part, landmarks],
-  );
-  const activeContourPoints =
-    part.contourPoints?.filter(
-      (point) => Number.isFinite(point.x) && Number.isFinite(point.y),
-    ) ?? [];
-  const editableCutPoints = isUsableContourPoints(activeContourPoints)
-    ? activeContourPoints
-    : fabricablePartOutlinePoints(part, landmarks);
-  const [selectedCutPointIndex, setSelectedCutPointIndex] = useState(0);
-  const selectedIndex = editableCutPoints.length
-    ? Math.min(selectedCutPointIndex, editableCutPoints.length - 1)
-    : 0;
-  const [cutEditorOpen, setCutEditorOpen] = useState(false);
+  const editableCutPoints = useMemo(() => fabricablePartOutlinePoints(part, landmarks), [part, landmarks]);
+  const attachments = characterFabricationHoles(project).get(part.id) ?? [];
+  const [shapeSource, setShapeSource] = useState<BodyPartLayer | null>(null);
   useEffect(() => {
-    if (selectedCutPointIndex >= editableCutPoints.length)
-      setSelectedCutPointIndex(Math.max(0, editableCutPoints.length - 1));
-  }, [editableCutPoints.length, selectedCutPointIndex]);
-  const commitCut = (points: Point[]) =>
+    if (shapeSource && shapeSource !== part) setShapeSource(null);
+  }, [part, shapeSource]);
+  const commitShape = (points: Point[]) => {
+    if (part !== shapeSource || part.locked) throw new Error('Part changed. Open Change shape again.');
+    const result = validatePhysicalOutline(points, { attachments });
+    if (!result.ok) throw new Error(result.blocker);
     dispatch({
       type: "update_part",
       partId: part.id,
-      updates: { contourPoints: points, contourSource: "user" },
+      updates: { contourPoints: result.points, contourSource: "user", artwork: artworkForOwner(part) },
     });
-  const updateCutPointAt = (targetIndex: number, updates: Partial<Point>) =>
-    commitCut(
-      editableCutPoints.map((point, index) =>
-        index === targetIndex ? { ...point, ...updates } : point,
-      ),
-    );
-  const replaceCutPoints = (points: Point[], nextSelectedIndex = 0) => {
-    if (!isUsableContourPoints(points)) return;
-    commitCut(points);
-    setSelectedCutPointIndex(
-      Math.max(0, Math.min(nextSelectedIndex, points.length - 1)),
-    );
-  };
-  const openCutEditor = () => {
-    commitCut(editableCutPoints);
-    setCutEditorOpen(true);
-  };
-  const addCutPoint = () => {
-    if (editableCutPoints.length < 2) return;
-    const nextIndex = (selectedIndex + 1) % editableCutPoints.length;
-    const a = editableCutPoints[selectedIndex];
-    const b = editableCutPoints[nextIndex];
-    const point = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-    commitCut([
-      ...editableCutPoints.slice(0, selectedIndex + 1),
-      point,
-      ...editableCutPoints.slice(selectedIndex + 1),
-    ]);
-    setSelectedCutPointIndex(selectedIndex + 1);
-  };
-  const removeCutPoint = () => {
-    if (editableCutPoints.length <= 3) return;
-    commitCut(editableCutPoints.filter((_, index) => index !== selectedIndex));
-    setSelectedCutPointIndex(Math.max(0, selectedIndex - 1));
+    setShapeSource(null);
   };
   const cutSource =
     part.contourSource === "user"
-      ? "user cut"
+      ? "Custom"
       : part.contourSource === "onnx-mask"
-        ? "legacy detected cut"
+        ? "Imported"
         : part.contourSource === "imported"
-          ? "imported cut"
-          : "auto joint cut";
+          ? "Imported"
+          : "Starter";
   return (
     <div className={`${compact ? "mt-3" : "mt-4"} space-y-3`}>
       <div className="grid grid-cols-2 gap-2">
@@ -173,7 +128,7 @@ export const PartInspector = ({
       <div className="part-art-controls" data-testid="part-cut-controls">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <div className="section-title">Cut</div>
+            <div className="section-title">Shape</div>
             <div
               className="mt-1 text-xs font-black uppercase tracking-wider text-slate-500"
               data-testid="part-cut-summary"
@@ -186,28 +141,21 @@ export const PartInspector = ({
             data-testid="part-cut-bake"
             className="btn-secondary"
             disabled={part.locked}
-            onClick={openCutEditor}
+            onClick={() => setShapeSource(part)}
           >
-            Edit cut
+            Change shape
           </button>
         </div>
       </div>
-      {cutEditorOpen && (
-        <CutOutlineEditorDialog
-          part={part}
+      {shapeSource && (
+        <ShapeEditor
+          key={shapeSource.id}
+          owner={shapeSource}
           sourceTextureUrl={sourceTextureUrl}
-          points={editableCutPoints}
-          autoPoints={autoCutPoints}
-          selectedIndex={selectedIndex}
-          setSelectedIndex={setSelectedCutPointIndex}
-          updatePointAt={updateCutPointAt}
-          replacePoints={replaceCutPoints}
-          addPoint={addCutPoint}
-          removePoint={removeCutPoint}
-          onUseAuto={() => commitCut(autoCutPoints)}
-          onExpand={() => commitCut(scaleContour(editableCutPoints, 1.06))}
-          onShrink={() => commitCut(scaleContour(editableCutPoints, 0.94))}
-          onClose={() => setCutEditorOpen(false)}
+          outline={editableCutPoints}
+          attachments={attachments}
+          onCommit={commitShape}
+          onClose={() => setShapeSource(null)}
         />
       )}
       <div className="grid grid-cols-3 gap-2">
@@ -263,7 +211,7 @@ export const PartInspector = ({
             disabled={part.locked}
             onChange={(scale) => updateTransform({ scale })}
           />
-          <MiniNumber
+          {!part.artwork && <><MiniNumber
             label="Art width"
             value={part.bounds.width}
             min={8}
@@ -294,7 +242,7 @@ export const PartInspector = ({
             max={260}
             disabled={part.locked}
             onChange={(y) => updateBounds({ y })}
-          />
+          /></>}
         </div>
       </details>
       <div className="flex gap-2">

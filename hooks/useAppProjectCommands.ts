@@ -1,3 +1,4 @@
+import { unpaintedStarter } from '../utils/artworkTargets';
 import {
   startTransition,
   useEffect,
@@ -248,7 +249,7 @@ export const useAppProjectCommands = ({
 
   const openSampleProject = (preparedProject?: ProjectState) => {
     const token = projectDecision.begin();
-    const next = preparedProject ?? createSampleProject();
+    const next = preparedProject ?? unpaintedStarter(createSampleProject());
     if (!confirmReplacement("Open the starter rig")) return;
     if (!projectDecision.complete(token)) return;
     setPendingCharacter(null);

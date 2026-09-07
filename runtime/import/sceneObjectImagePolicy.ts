@@ -102,39 +102,48 @@ export const assertLocalSceneObjectSvg = (svgText: string) => {
   }
 };
 
-export const boundedSceneObjectSvgDataUrl = (
-  svgText: string,
-  dimensions: ImageDimensions,
-) => {
-  const bounded = svgText.replace(/<svg\b([^>]*)>/i, (_match, attributes: string) => {
-    const retained = attributes
-      .replace(/\swidth\s*=\s*(?:["'][^"']*["']|[^\s>]+)/i, "")
-      .replace(/\sheight\s*=\s*(?:["'][^"']*["']|[^\s>]+)/i, "");
-    return `<svg${retained} width="${dimensions.width}" height="${dimensions.height}">`;
-  });
-  const bytes = new TextEncoder().encode(bounded);
-  let binary = "";
-  for (let offset = 0; offset < bytes.length; offset += 32_768) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + 32_768));
-  }
-  return `data:image/svg+xml;base64,${btoa(binary)}`;
-};
-
 export const sceneObjectSvgDimensions = (svgText: string): ImageDimensions => {
-  const numberAttribute = (name: string) => {
-    const match = svgText.match(new RegExp(`\\b${name}\\s*=\\s*["']\\s*([0-9.]+)`, "i"));
-    return match ? Number(match[1]) : undefined;
+  const fail = (): never => { throw new Error("Use an SVG with fixed width and height or a viewBox."); };
+  const source = svgText.replace(/<!--[\s\S]*?-->/g, "").replace(/<\?[\s\S]*?\?>/g, "");
+  // Read only the outer SVG, including quoted > characters. DTD entities are
+  // unsupported because they can redefine dimensions outside this budget check.
+  const root = source.match(/^\s*(?:<!DOCTYPE[^<>\[\]]*>\s*)?<svg\b((?:"[^"]*"|'[^']*'|[^'">])*)>/i);
+  if (!root) return fail();
+  const attributes = new Map<string, string>();
+  for (const match of root[1].matchAll(/(?:^|\s)([^\s=<>/'"]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g)) {
+    const name = match[1].toLowerCase();
+    if (attributes.has(name)) return fail();
+    if (['width', 'height', 'viewbox'].includes(name) && match[1] !== (name === 'viewbox' ? 'viewBox' : name)) return fail();
+    attributes.set(name, match[2] ?? match[3] ?? match[4]);
+  }
+  // CSS can override presentation dimensions. Keep the image source untouched
+  // and reject contextual/escaped CSS sizing instead of guessing its allocation.
+  const styles = [attributes.get('style') ?? '', ...Array.from(source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi), match => match[1])];
+  if (styles.some(style => /[\\&]|(?:^|[;{])\s*(?:(?:min|max)-)?(?:width|height|inline-size|block-size|aspect-ratio)\s*:/i.test(style.replace(/\/\*[\s\S]*?\*\//g, '')))
+    || /\battributeName\s*=\s*["']\s*(?:width|height|viewBox|style)\s*["']/i.test(source)) return fail();
+  // CSS absolute units: https://www.w3.org/TR/css-values-4/#absolute-lengths
+  const units: Record<string, number> = { '': 1, px: 1, in: 96, cm: 96 / 2.54, mm: 96 / 25.4, q: 96 / 101.6, pt: 96 / 72, pc: 16 };
+  const dimension = (name: string) => {
+    const value = attributes.get(name);
+    if (value === undefined) return undefined;
+    const match = value.trim().match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)\s*(px|in|cm|mm|q|pt|pc)?$/i);
+    if (!match) return fail();
+    const pixels = Number(match[1]) * units[(match[2] ?? '').toLowerCase()];
+    if (!Number.isFinite(pixels) || pixels <= 0) return fail();
+    return pixels;
   };
-  const width = numberAttribute("width");
-  const height = numberAttribute("height");
-  if (width && height) return { width, height };
-  const viewBox = svgText.match(
-    /\bviewBox\s*=\s*["']\s*[-+0-9.e]+[ ,]+[-+0-9.e]+[ ,]+([-+0-9.e]+)[ ,]+([-+0-9.e]+)/i,
-  );
-  return {
-    width: viewBox ? Number(viewBox[1]) : 512,
-    height: viewBox ? Number(viewBox[2]) : 512,
+  const width = dimension('width'), height = dimension('height');
+  const rawViewBox = attributes.get('viewbox');
+  const viewBoxValues = rawViewBox?.trim().split(/[\s,]+/);
+  if (viewBoxValues?.some(value => !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value))) return fail();
+  const viewBox = viewBoxValues?.map(value => Number(value));
+  if (viewBox && (viewBox.length !== 4 || !viewBox.every(Number.isFinite) || viewBox[2] <= 0 || viewBox[3] <= 0)) return fail();
+  if (width !== undefined && height !== undefined) return { width, height };
+  if (viewBox) return {
+    width: width ?? (height !== undefined ? height * viewBox[2] / viewBox[3] : viewBox[2]),
+    height: height ?? (width !== undefined ? width * viewBox[3] / viewBox[2] : viewBox[3]),
   };
+  return { width: width ?? 512, height: height ?? 512 };
 };
 
 const jpegSofMarkers = new Set([

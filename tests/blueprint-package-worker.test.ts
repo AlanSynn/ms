@@ -176,7 +176,7 @@ const client = createBlueprintPackageWorkerClient(() => {
   const worker = new FakeWorker();
   workers.push(worker);
   return worker;
-}, scheduler);
+}, scheduler, async packageWithoutPdf => packageWithoutPdf);
 
 const firstGeneration = client.request(
   { ...project, lastExport: pkg },
@@ -215,6 +215,7 @@ workers[1].onmessage?.({
     fabricationPackage: rasterTransferPackage,
   },
 } as MessageEvent<BlueprintPackageWorkerResponse>);
+await Promise.resolve();
 assert.deepEqual(completions, [rasterPackage.id]);
 assert.equal(
   completedPackages[0].sceneSnapshot.sceneObjects[rasterObject.id].textureUrl,
@@ -286,4 +287,35 @@ assert.deepEqual(characterTemplateCompletions, [characterTemplate.buildPlanSourc
 assert.equal(workers[3].terminated, true, "completed character template work releases its worker");
 
 client.dispose();
+
+const delayed: Array<{ resolve: (pkg: typeof rasterPackage) => void; signal: AbortSignal; pkg: typeof rasterPackage }> = [];
+const delayedWorkers: FakeWorker[] = [];
+const delayedCompletions: string[] = [];
+const delayedClient = createBlueprintPackageWorkerClient(() => {
+  const worker = new FakeWorker();
+  delayedWorkers.push(worker);
+  return worker;
+}, scheduler, (pendingPackage, _source, { signal }) => new Promise(resolve => {
+  delayed.push({ resolve, signal, pkg: pendingPackage });
+}));
+const delayedCallbacks = {
+  complete: (result: Extract<BlueprintPackageWorkerResponse, { type: 'result' }>) => delayedCompletions.push(result.fabricationPackage.sourceProjectFingerprint!),
+  failed: (error: Error) => { throw error; },
+};
+const delayedFirst = delayedClient.request(project, delayedCallbacks);
+flushFrame(); flushFrame();
+delayedWorkers[0].onmessage?.({ data: { type: 'result', generationId: delayedFirst, fabricationPackage: pkg } } as MessageEvent<BlueprintPackageWorkerResponse>);
+assert.equal(delayed.length, 1, 'geometry is ready while image composition remains pending');
+const recoloredProject = { ...project, parts: { ...project.parts, [firstPartId]: { ...project.parts[firstPartId], fillColor: '#c1377e' } } };
+const delayedSecond = delayedClient.request(recoloredProject, delayedCallbacks);
+assert(delayed[0].signal.aborted, 'repainting cancels ownership of the previous async painted result');
+delayed[0].resolve(delayed[0].pkg);
+await Promise.resolve();
+assert.deepEqual(delayedCompletions, [], 'a late old raster cannot win after a newer request');
+flushFrame(); flushFrame();
+delayedWorkers[1].onmessage?.({ data: { type: 'result', generationId: delayedSecond, fabricationPackage: runBlueprintPackageJob(recoloredProject) } } as MessageEvent<BlueprintPackageWorkerResponse>);
+delayed[1].resolve(delayed[1].pkg);
+await Promise.resolve();
+assert.deepEqual(delayedCompletions, [projectContentFingerprint(recoloredProject)], 'only the matching captured artwork source completes');
+delayedClient.dispose();
 console.log("Blueprint package worker contract ok");

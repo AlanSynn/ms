@@ -30,7 +30,7 @@ const ProjectPathPreview = ({ project, angle, isPlaying, playbackClock, viewport
     project.sceneObjectOrder.some(id => project.sceneObjects[id]?.visible) || preview.paths.length > 0;
   if (!hasContent) return <div className="blueprint-empty-state" data-testid="project-working-empty">No visible parts</div>;
   return <section className="canvas-workspace" style={{ height: '100%' }} data-testid="project-working-preview"
-    data-renderer-source="ThreePuppetPreview" data-working-motion-source={pose ? 'authored-paths' : 'character'}>
+    data-renderer-source="ThreePuppetPreview" data-working-phase={angle} data-working-motion-source={pose ? 'authored-paths' : 'character'}>
     <DeferredThreePuppetPreview
       project={project}
       skeleton={pose?.skeleton ?? project.skeleton}

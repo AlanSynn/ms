@@ -3,7 +3,7 @@ import {
   fitMechanismToTargetPath,
   fitRecommendedMechanismToSheet,
 } from '../../utils/mechanismRecommendations';
-import { mechanismBoardPlacementErrors } from '../../utils/fabrication';
+import { mechanismBoardPlacementErrors } from '../../utils/fabricationValidation';
 import { recommendationProjectSnapshot } from '../recommendations/mechanismRecommendationJob';
 
 const MECHANISM_FIT_JOB_VERSION = 1;

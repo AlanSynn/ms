@@ -99,7 +99,7 @@ export const BlueprintControlPanel = ({
         <div className="mt-5 grid gap-2">
           <button
             className="btn-primary"
-            aria-label={packageStatus === "running" ? "Cancel Blueprint PDF" : "Download Blueprint PDF"}
+            aria-label={packageStatus === "running" ? "Cancel Build PDF" : "Download Build PDF"}
             data-testid="blueprint-build-print"
             data-feature-id="blueprint.pdf"
             data-feature-blocker={validation.errors.length ? "Fix the Blueprint warnings first." : "Wait for the current download."}
@@ -111,7 +111,7 @@ export const BlueprintControlPanel = ({
             aria-busy={packageStatus === "running"}
             data-blueprint-package-worker="on-demand"
           >
-            {packageStatus === "running" ? "Cancel" : "Download Blueprint PDF"}
+            {packageStatus === "running" ? "Cancel" : "Download Build PDF"}
           </button>
           {packageError && <div className="error">{packageError}</div>}
           <div className="grid gap-1">
@@ -120,7 +120,7 @@ export const BlueprintControlPanel = ({
               data-testid="blueprint-character-template"
               data-feature-id="blueprint.customParts"
               data-feature-blocker={!hasCharacter ? "Show a character part first." : "Wait for the current download."}
-              aria-label={characterTemplateStatus === "running" ? "Cancel character output" : "Download Character PDF"}
+              aria-label={characterTemplateStatus === "running" ? "Cancel character output" : "Download Character Outlines PDF"}
               aria-busy={characterTemplateStatus === "running"}
               disabled={
                 characterTemplateStatus !== "running" &&
@@ -128,7 +128,7 @@ export const BlueprintControlPanel = ({
               }
               onClick={() => createCharacterTemplate("pdf")}
             >
-              {characterTemplateStatus === "running" ? "Cancel" : "Download Character PDF"}
+              {characterTemplateStatus === "running" ? "Cancel" : "Character outlines PDF"}
             </button>
             <button
               className="btn-secondary justify-start"
@@ -157,6 +157,12 @@ export const BlueprintControlPanel = ({
                   </div>
                 </div>
                 <div data-testid="custom-parts-export-lane">
+                  <button
+                    className="btn-secondary justify-start mb-3"
+                    onClick={() => downloadText(`${pkg.id}-cut-pieces.svg`, pkg.customPartsSvg, 'image/svg+xml')}
+                  >
+                    Cut pieces SVG
+                  </button>
                   <div className="font-bold text-slate-800">3D file</div>
                   <div className="mt-2 grid gap-2">
                     <button
@@ -164,6 +170,7 @@ export const BlueprintControlPanel = ({
                       aria-label="Download character STL"
                       aria-busy={stlStatus === "running"}
                       disabled={
+                        !hasCharacter ||
                         packageStatus === "running" ||
                         characterTemplateStatus === "running" ||
                         (!!validation.errors.length && stlStatus !== "running")

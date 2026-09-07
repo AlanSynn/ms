@@ -38,7 +38,7 @@ import { createMechanismFitWorkerClient } from "../../../runtime/fitting/mechani
 import { designFamilyFitAuthorityChanged } from "../../../runtime/fitting/designFamilyFitAuthority";
 import {
   mechanismBindingForPath,
-  mechanismBindingTargetKey,
+  mechanismBindingsConflict,
   mechanismOutputBindings,
   resolvedMechanismOutputBindings,
 } from "../../../utils/mechanismBindings";
@@ -160,16 +160,12 @@ export const DesignWorkflowPanel = ({
       return;
     }
     const requestedBinding = mechanismBindingForPath(project, base, path.id);
-    const requestedTargetKey = requestedBinding
-      ? mechanismBindingTargetKey(project, requestedBinding)
-      : undefined;
     const pathOrTargetOwned = project.mechanisms.some((mechanism) =>
       resolvedMechanismOutputBindings(project, mechanism).some(
         (binding) =>
           binding.enabled !== false &&
           (binding.pathId === path.id ||
-            (requestedTargetKey !== undefined &&
-              mechanismBindingTargetKey(project, binding) === requestedTargetKey)),
+            (requestedBinding && mechanismBindingsConflict(project, binding, requestedBinding))),
       ),
     );
     if (pathOrTargetOwned) {

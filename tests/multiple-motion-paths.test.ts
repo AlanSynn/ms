@@ -14,9 +14,13 @@ import {
   applyProjectAction,
   createDefaultMechanism,
   createEmptyProject,
+  handoffGate,
   validatePath,
 } from "../utils/project";
 import { createPlaybackClock } from "../runtime/playback/externalPlaybackClock";
+import { createDrawableObject } from '../utils/artworkTargets';
+import { workflowStatusFor } from '../utils/workflowStatus';
+import { planFeatureReveal } from '../utils/featureDestinations';
 
 const sceneObject = (id: string, name: string): SceneObject => ({
   id,
@@ -54,6 +58,40 @@ const path = (
 });
 
 const base = createEmptyProject();
+const singleFigure = createDrawableObject('single-piece-figure');
+const objectOnly = applyProjectAction(base, { type: 'upsert_scene_object', object: singleFigure });
+const objectOnlySnapshot = JSON.stringify(objectOnly);
+for (const stage of ['path', 'foundry', 'design', 'blueprint', 'assembly'] as const) {
+  assert.equal(handoffGate(base, stage).ok, false, 'an empty project keeps its existing navigation prerequisite');
+  assert.equal(handoffGate(objectOnly, stage).ok, true, `${stage} accepts a real single-piece figure without a humanoid rig`);
+  assert.notEqual(workflowStatusFor(stage, stage, objectOnly, singleFigure).blocker, 'No character');
+}
+for (const feature of ['path.draw', 'blueprint.pdf', 'assembly.steps'] as const) {
+  assert.equal(planFeatureReveal(feature, objectOnly, 'character').ok, true, `${feature} can be found in an object-only project`);
+}
+assert.equal(workflowStatusFor('blueprint', 'Blueprint', objectOnly, singleFigure).blocker, 'OK');
+assert.equal(workflowStatusFor('assembly', 'Assembly', objectOnly, singleFigure).nextAction, 'Build');
+assert.equal(workflowStatusFor('path', 'Path', objectOnly, { ...singleFigure, locked: true }).blocker, 'My object locked');
+const missingObject = { ...base, sceneObjectOrder: ['missing'] };
+assert.equal(handoffGate(missingObject, 'path').ok, false, 'an order entry without an actual object is not a target');
+assert.equal(workflowStatusFor('path', 'Path', missingObject).blocker, 'No character');
+const invalidObjectMechanism = { ...objectOnly, mechanisms: [{ ...createDefaultMechanism('crank', 'bad-anchor'), anchorX: NaN }] };
+assert.equal(handoffGate(invalidObjectMechanism, 'blueprint').ok, false, 'real mechanism constraints remain enforced');
+assert.deepEqual(planFeatureReveal('blueprint.pdf', invalidObjectMechanism, 'character'), {
+  ok: false, message: 'Fix the mechanism in Design first.',
+}, 'an object-only mechanism blocker does not demand an unrelated character');
+const objectMotion = motionPathWithPoints(objectOnly, 'scene-object', singleFigure.id, [
+  { x: 0, y: 0 }, { x: 50, y: 0 }, { x: 100, y: 0 },
+])!;
+const animatedFigure = applyProjectAction(objectOnly, { type: 'upsert_path', path: objectMotion });
+assert.equal(motionPathReadiness(animatedFigure, objectMotion).playable, true);
+const objectPreview = motionPreviewForPaths(animatedFigure, [objectMotion], objectMotion.duration / 4);
+assert(objectPreview.sceneObjects?.[singleFigure.id], 'object motion produces a shared-scene transform without skeleton data');
+assert.deepEqual(animatedFigure.parts, {});
+assert.equal(animatedFigure.skeleton, null);
+assert.deepEqual(animatedFigure.mechanisms, []);
+assert.equal(JSON.stringify(objectOnly), objectOnlySnapshot, 'planning navigation, status and motion does not create rig data');
+assert.equal(handoffGate(applyProjectAction(objectOnly, { type: 'delete_scene_object', objectId: singleFigure.id }), 'path').ok, false);
 const firstObject = sceneObject("object-a", "Flag");
 const secondObject = sceneObject("object-b", "Cloud");
 const firstPath = path(

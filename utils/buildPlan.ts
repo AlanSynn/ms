@@ -4,6 +4,8 @@ import { createFabricationRecipe, mechanismTypeLabel } from './fabricationRecipe
 import { buildCharacterBuildSectionV1 } from './buildPlanCharacter';
 import { buildMechanismBuildStepsV1, buildPlanLaneForExportMode } from './buildPlanSteps';
 import { buildMechanismGeometryV1, buildPlanMotionPathsV1 } from './buildPlanGeometry';
+import { buildPlanArtworkSourceDigest } from './buildPlanArtwork';
+import { buildObjectBuildSectionV1 } from './buildPlanObjects';
 import {
     BUILD_PLAN_SCHEMA_V1,
     type BuildPlanLaneV1,
@@ -14,6 +16,7 @@ import {
 } from './buildPlanTypes';
 
 export * from './buildPlanTypes';
+export { buildPlanArtworkSourceDigest } from './buildPlanArtwork';
 export { buildPlanLaneForExportMode } from './buildPlanSteps';
 
 export type BuildPlanOptionsV1 = {
@@ -71,6 +74,9 @@ const buildSourceProjection = (
             maskUrl: _maskUrl,
             originalSvgPath: _originalSvgPath,
             enhancedSvgPath: _enhancedSvgPath,
+            artwork: _artwork,
+            fillColor: _fillColor,
+            sourceImageFrame: _sourceImageFrame,
             ...buildPart
         } = part;
         return [[id, buildPart]];
@@ -79,7 +85,7 @@ const buildSourceProjection = (
         ? Object.fromEntries(project.sceneObjectOrder.flatMap(id => {
             const sceneObject = project.sceneObjects[id];
             if (!sceneObject) return [];
-            const { textureUrl: _textureUrl, ...buildObject } = sceneObject;
+            const { textureUrl: _textureUrl, artwork: _artwork, fillColor: _fillColor, ...buildObject } = sceneObject;
             return [[id, buildObject]];
         }))
         : {};
@@ -145,6 +151,7 @@ export const createBuildPlanV1 = (
     const scope = options.scope ?? 'complete';
     const lane = options.lane ?? buildPlanLaneForExportMode(project.settings.physicalKit.exportMode);
     const characterBuild = buildCharacterBuildSectionV1(project);
+    const objectBuild = buildObjectBuildSectionV1(scope === 'complete' ? project : { ...project, sceneObjectOrder: [] });
     const providedRecipes = [...(options.recipes ?? [])];
     const providedByMechanismId = new Map<string, FabricationRecipe>();
     for (const recipe of providedRecipes) {
@@ -169,8 +176,9 @@ export const createBuildPlanV1 = (
 
     let nextOrder = 1;
     const characterSteps = characterBuild.steps.map(step => ({ ...step, order: nextOrder++ }));
-    const allParts: BuildPlanPartV1[] = [...characterBuild.parts];
-    const allSteps = [...characterSteps];
+    const objectSteps = objectBuild.steps.map(step => ({ ...step, order: nextOrder++ }));
+    const allParts: BuildPlanPartV1[] = [...characterBuild.parts, ...objectBuild.parts];
+    const allSteps = [...characterSteps, ...objectSteps];
     const mechanisms: BuildPlanMechanismV1[] = [];
     const mechanismSections = [] as BuildPlanV1['sections'];
 
@@ -217,6 +225,7 @@ export const createBuildPlanV1 = (
         scope,
         lane,
         sourceDigest: buildPlanSourceDigest(project, scope, lane),
+        artworkSourceDigest: buildPlanArtworkSourceDigest(project, scope),
         source: { projectId: project.metadata.id, projectVersion: project.version },
         projectName: project.metadata.name,
         profile: cloneSerializable(project.settings.physicalKit),
@@ -226,10 +235,12 @@ export const createBuildPlanV1 = (
             ...characterBuild.character,
             stepIds: characterSteps.map(step => step.id)
         },
+        objects: objectBuild.objects,
         motions: scope === 'complete' ? buildPlanMotionPathsV1(project, mechanisms) : [],
         mechanisms,
         sections: [
             { ...characterBuild.section, stepIds: characterSteps.map(step => step.id) },
+            ...(objectBuild.parts.length ? [{ ...objectBuild.section, stepIds: objectSteps.map(step => step.id) }] : []),
             ...mechanismSections
         ],
         steps: allSteps

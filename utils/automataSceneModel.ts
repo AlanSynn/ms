@@ -228,7 +228,7 @@ export const sampleAutomataSceneRuntime = (
         motionSource,
         featureLabel,
         featureIssues,
-        warnings,
+        warnings: fullMotionPreview.warnings ?? warnings,
     };
 };
 

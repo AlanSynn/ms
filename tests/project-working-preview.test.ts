@@ -1,10 +1,13 @@
 import { strict as assert } from 'node:assert';
 import * as THREE from 'three';
-import { createEmptyProject, createSampleProject } from '../utils/project';
+import { createDefaultMechanism, createEmptyProject, createSampleProject } from '../utils/project';
+import { createDrawableObject } from '../utils/artworkTargets';
+import { appendArtworkOperation, createArtworkDocument } from '../utils/artwork';
+import { createAutomataSceneRuntime, sampleAutomataSceneRuntime } from '../utils/automataSceneModel';
 import { createWorkingPathPreview, visibleWorkingProjectPaths, workingProjectMechanism } from '../utils/workingProjectPreview';
 import { fitPuppetViewport, fitWorkingPreviewCamera, visibleObjectBounds } from '../utils/workingPreviewCamera';
 import { foundryCameraPosition, foundryCameraTarget, type FoundryCamera } from '../utils/foundryCamera';
-import { motionPreviewForPaths, playableMotionPaths, motionTimelineMsForPhase } from '../utils/motion';
+import { createMotionPathForTarget, motionPreviewForPaths, playableMotionPaths, motionTimelineMsForPhase } from '../utils/motion';
 import { createFabricationReadyFourBarProject } from './fixtures/fabricationProject';
 
 const project = createFabricationReadyFourBarProject();
@@ -35,6 +38,56 @@ const characterOnly = { ...pathOnly, paths: {}, pathOrder: [], selectedPathId: u
 assert.equal(createWorkingPathPreview(characterOnly).sample(1.8), undefined, 'character-only preview uses its canonical character without synthetic motion');
 assert.equal(createWorkingPathPreview(createEmptyProject()).sample(2), undefined);
 assert.equal(JSON.stringify(project), serialized);
+
+// A drawn object is a complete scene owner without a body rig or mechanism.
+const objectOnly = createEmptyProject();
+const prop = createDrawableObject('painted-prop');
+prop.artwork = appendArtworkOperation(createArtworkDocument({ x: -40, y: -40, width: 80, height: 80 }), {
+  id: 'prop-line', kind: 'line', from: { x: -15, y: 4 }, to: { x: 15, y: 4 }, width: 5, color: '#ef476f',
+});
+objectOnly.sceneObjects[prop.id] = prop;
+objectOnly.sceneObjectOrder = [prop.id];
+objectOnly.selectedSceneObjectId = prop.id;
+assert.equal(createWorkingPathPreview(objectOnly).sample(1), undefined, 'a still object receives no synthetic motion');
+const propPath = createMotionPathForTarget(objectOnly, 'scene-object', prop.id)!;
+propPath.points = [{ x: -70, y: 0 }, { x: 0, y: 65 }, { x: 70, y: 0 }, { x: 0, y: -65 }];
+objectOnly.paths[propPath.id] = propPath;
+objectOnly.pathOrder = [propPath.id];
+const objectBefore = JSON.stringify(objectOnly);
+const propPreview = createWorkingPathPreview(objectOnly);
+assert.equal(workingProjectMechanism(objectOnly), undefined);
+assert.deepEqual(playableMotionPaths(objectOnly).map(path => path.id), [propPath.id]);
+const propPositions = [0, Math.PI / 2, Math.PI].map(phase => {
+  const pose = propPreview.sample(phase)!;
+  assert.deepEqual(pose.parts, {}, 'object motion creates no placeholder body parts');
+  assert.equal(pose.skeleton, null, 'object motion needs no skeleton');
+  const animated = pose.sceneObjects![prop.id];
+  assert.equal(animated.artwork, prop.artwork, 'motion retains the canonical artwork document');
+  assert.equal(animated.contourPoints, prop.contourPoints, 'motion retains the cut geometry');
+  assert.equal(animated.transform.scale, prop.transform.scale);
+  assert.equal(animated.transform.rotation, prop.transform.rotation);
+  return { x: animated.transform.x, y: animated.transform.y };
+});
+assert.equal(new Set(propPositions.map(point => JSON.stringify(point))).size, 3, 'the object moves through its own authored path');
+assert.equal(JSON.stringify(objectOnly), objectBefore, 'preview sampling leaves the object-only project unchanged');
+
+// Design/Foundry use the same object when the user actually adds a mechanism.
+const objectDriver = { ...createDefaultMechanism('4bar', 'prop-driver'), targetSceneObjectId: prop.id, targetPathId: propPath.id };
+const drivenObjectOnly = { ...objectOnly, mechanisms: [objectDriver], selectedMechanismId: objectDriver.id };
+const propRuntime = createAutomataSceneRuntime(drivenObjectOnly, objectDriver);
+const drivenPositions = [0, Math.PI / 2].map(phase => {
+  const frame = sampleAutomataSceneRuntime(propRuntime, phase);
+  assert.equal(frame.mechanisms.length, 1);
+  assert.deepEqual(frame.animatedParts, {});
+  assert.equal(frame.skeleton, null);
+  const animated = frame.animatedSceneObjects[prop.id];
+  assert(animated, 'an explicitly bound mechanism drives an object without a rig');
+  assert.equal(animated.artwork, prop.artwork);
+  assert.equal(animated.contourPoints, prop.contourPoints);
+  return animated.transform;
+});
+assert.notDeepEqual(drivenPositions[0], drivenPositions[1]);
+assert.equal(JSON.stringify(objectOnly), objectBefore);
 
 const scene = new THREE.Group();
 const content = new THREE.Group();

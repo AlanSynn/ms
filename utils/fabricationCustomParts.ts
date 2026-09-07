@@ -2,6 +2,7 @@ import type { Point, ProjectState } from '../types';
 import {
     createCharacterBuildPlanV1,
     type BuildPlanCharacterPartV1,
+    type BuildPlanObjectPartV1,
     type BuildPlanV1
 } from './buildPlan';
 import { SCENE_PX_PER_MM } from './coordinates';
@@ -9,7 +10,9 @@ import { buildCharacterPrintLayout } from './fabricationCharacterPrintLayout';
 import { svgNumber } from './numberFormat';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlineBounds, pointInsideOutline } from './partGeometry';
 import { projectContentFingerprint } from './projectSerialization';
-import { circlePath, makePdfDocument, num, PDF_POINTS_PER_MM, pdfText } from './simplePdf';
+import { characterFabricationHoles } from './characterFabricationHoles';
+import { characterFabricationOutlineIssues } from './fabricationOutlineIssues';
+import { circlePath, hexRgb, LETTER_PDF_PAGE, makePdfDocument, num, PDF_POINTS_PER_MM, pdfText } from './simplePdf';
 
 export const makeCustomPartsSvg = (project: ProjectState) => {
     const kit = project.settings.physicalKit;
@@ -75,6 +78,7 @@ export const makeCustomPartsStl = (project: ProjectState) => {
         rows: number;
     }> = [];
     let totalCells = 0;
+    const fabricationHoles = characterFabricationHoles(project);
     project.partOrder.forEach(partId => {
         const part = project.parts[partId];
         if (!part?.visible) return;
@@ -82,8 +86,9 @@ export const makeCustomPartsStl = (project: ProjectState) => {
         const outline = fabricablePartOutlinePoints(part, landmarks);
         if (outline.length < 3) return;
         const bounds = partOutlineBounds(outline);
-        const widthMm = bounds.width / SCENE_PX_PER_MM;
-        const heightMm = bounds.height / SCENE_PX_PER_MM;
+        const partScale = Math.abs(part.transform.scale || 1);
+        const widthMm = bounds.width * partScale / SCENE_PX_PER_MM;
+        const heightMm = bounds.height * partScale / SCENE_PX_PER_MM;
         const cols = Math.ceil(widthMm / cellMm);
         const rows = Math.ceil(heightMm / cellMm);
         const partCells = cols * rows;
@@ -97,14 +102,13 @@ export const makeCustomPartsStl = (project: ProjectState) => {
         totalCells += partCells;
         plans.push({
             outlineMm: outline.map(p => ({
-                x: (p.x - bounds.minX) / SCENE_PX_PER_MM,
-                y: (p.y - bounds.minY) / SCENE_PX_PER_MM
+                x: (p.x - bounds.minX) * partScale / SCENE_PX_PER_MM,
+                y: (p.y - bounds.minY) * partScale / SCENE_PX_PER_MM
             })),
-            holesMm: landmarks
-                .filter(p => pointInsideOutline(p, outline, 0.5))
-                .map(p => ({
-                    x: (p.x - bounds.minX) / SCENE_PX_PER_MM,
-                    y: (p.y - bounds.minY) / SCENE_PX_PER_MM
+            holesMm: (fabricationHoles.get(part.id) ?? [])
+                .map(hole => ({
+                    x: (hole.center.x - bounds.minX) * partScale / SCENE_PX_PER_MM,
+                    y: (hole.center.y - bounds.minY) * partScale / SCENE_PX_PER_MM
                 })),
             widthMm,
             cols,
@@ -199,11 +203,13 @@ export const makeCustomPartsStl = (project: ProjectState) => {
     return `${header}\n${facets.join('\n')}\n${footer}\n`;
 };
 
-type BuildPlanPrintPart = {
-    part: BuildPlanCharacterPartV1;
+export type BuildPlanPrintPart = {
+    part: BuildPlanCharacterPartV1 | BuildPlanObjectPartV1;
     pageIndex: number;
     outlineMm: Point[];
     holeMm: Point[];
+    /** Scene Y-up -> print millimeters Y-down; packing never rescales geometry. */
+    sceneToPageMm: { scale: number; x: number; y: number };
 };
 
 const buildPlanPrintBounds = (points: Point[]) => {
@@ -219,14 +225,14 @@ const buildPlanPrintBounds = (points: Point[]) => {
     };
 };
 
-const buildPlanCharacterPrintLayout = (plan: BuildPlanV1) => {
+export const buildPlanCharacterPrintLayout = (plan: BuildPlanV1) => {
     const margin = 10;
     const titleBand = 22;
     const footerBand = 10;
     const partPaddingMm = 4;
     const kit = plan.profile;
     const pins = [...plan.character.fixedPins, ...plan.character.freePivots];
-    const rawParts = plan.character.parts.flatMap(part => {
+    const rawParts = [...plan.character.parts, ...(plan.objects?.parts ?? [])].flatMap(part => {
         if (part.outline.length < 3) return [];
         const toRawMm = (point: Point) => ({
             x: point.x / SCENE_PX_PER_MM,
@@ -237,7 +243,7 @@ const buildPlanCharacterPrintLayout = (plan: BuildPlanV1) => {
             part,
             outlineRawMm,
             holeRawMm: pins
-                .filter(pin => pin.partIds.includes(part.sourcePartId))
+                .filter(pin => 'sourcePartId' in part && pin.partIds.includes(part.sourcePartId))
                 .map(pin => toRawMm(pin.scene)),
             bounds: buildPlanPrintBounds(outlineRawMm)
         }];
@@ -288,7 +294,8 @@ const buildPlanCharacterPrintLayout = (plan: BuildPlanV1) => {
                 part: item.part,
                 pageIndex,
                 outlineMm: item.outlineRawMm.map(toPageMm),
-                holeMm: item.holeRawMm.map(toPageMm)
+                holeMm: item.holeRawMm.map(toPageMm),
+                sceneToPageMm: { scale: scale / SCENE_PX_PER_MM, ...origin }
             });
             cursorX += itemWidth;
             rowHeight = Math.max(rowHeight, itemHeight);
@@ -309,7 +316,8 @@ const buildPlanCharacterPrintLayout = (plan: BuildPlanV1) => {
 
 export const makeCharacterTemplatePdfPageContentsFromBuildPlan = (
     plan: BuildPlanV1,
-    sourceProjectFingerprint?: string
+    _sourceProjectFingerprint?: string,
+    options: { painted?: boolean } = {}
 ) => {
     const kit = plan.profile;
     const layout = buildPlanCharacterPrintLayout(plan);
@@ -323,19 +331,21 @@ export const makeCharacterTemplatePdfPageContentsFromBuildPlan = (
         height: (kit.sheetHeightMm - 12) * pageScale
     };
     const pageContents = Array.from({ length: layout.pageCount }, (_, pageIndex) => {
+        const sheetParts = layout.parts.filter(item => item.pageIndex === pageIndex);
+        const holeLabel = sheetParts.some(item => item.holeMm.length) ? ` / ${kit.holeDiameterMm} mm holes` : '';
         const commands: string[] = [
-            `BT /F1 14 Tf ${num(page.margin)} ${num(page.height - 32)} Td (${pdfText('MotionSmith character cut sheet')}) Tj ET`,
-            `BT /F1 8 Tf ${num(page.margin)} ${num(page.height - 48)} Td (${pdfText(`${plan.projectName} / character-sheet-page-count ${layout.pageCount} / page ${pageIndex + 1} of ${layout.pageCount} / ${kit.holeDiameterMm}mm holes / ${layout.partPaddingMm}mm spacing`)}) Tj ET`,
-            `BT /F1 7 Tf ${num(page.margin)} ${num(page.height - 61)} Td (${pdfText(`Character plan ${plan.sourceDigest} / Project ${sourceProjectFingerprint ?? 'not supplied'}`)}) Tj ET`,
+            `BT /F1 14 Tf ${num(page.margin)} ${num(page.height - 32)} Td (${pdfText(options.painted ? 'MotionSmith painted cut sheets' : 'MotionSmith character cut sheet')}) Tj ET`,
+            `BT /F1 8 Tf ${num(page.margin)} ${num(page.height - 48)} Td (${pdfText(plan.projectName)}) Tj ET`,
+            `BT /F1 7 Tf ${num(page.margin)} ${num(page.height - 61)} Td (${pdfText(`Sheet ${pageIndex + 1} of ${layout.pageCount} / Print at 100% scale${holeLabel}`)}) Tj ET`,
             `0.86 0.89 0.94 RG 0.5 w ${num(border.x)} ${num(border.y)} ${num(border.width)} ${num(border.height)} re S`
         ];
-        layout.parts.filter(item => item.pageIndex === pageIndex).forEach(({ part, outlineMm, holeMm }) => {
+        sheetParts.forEach(({ part, outlineMm, holeMm }) => {
         const mapped = outlineMm.map(toPdf);
         if (mapped.length) {
-            commands.push('0.10 0.16 0.28 RG 0.97 0.98 1.00 rg 0.7 w');
-            commands.push(`${num(mapped[0].x)} ${num(mapped[0].y)} m ${mapped.slice(1).map(p => `${num(p.x)} ${num(p.y)} l`).join(' ')} h B`);
-            const label = mapped[0];
-            commands.push(`0.29 0.33 0.43 rg BT /F1 6 Tf ${num(label.x + 5)} ${num(label.y)} Td (${pdfText(part.name)}) Tj ET`);
+            commands.push(`0.10 0.16 0.28 RG ${options.painted ? hexRgb(part.fillColor) : '0.97 0.98 1.00'} rg 0.7 w`);
+            commands.push(`${num(mapped[0].x)} ${num(mapped[0].y)} m ${mapped.slice(1).map(p => `${num(p.x)} ${num(p.y)} l`).join(' ')} h ${options.painted ? 'S' : 'B'}`);
+            const label = { x: Math.min(...mapped.map(point => point.x)), y: Math.min(...mapped.map(point => point.y)) - 7 };
+            commands.push(`0.29 0.33 0.43 rg BT /F1 6 Tf ${num(label.x)} ${num(label.y)} Td (${pdfText(part.name)}) Tj ET`);
         }
         holeMm.forEach(point => {
             const center = toPdf(point);
@@ -354,10 +364,14 @@ export const makeCharacterTemplatePdfFromBuildPlan = (
     plan: BuildPlanV1,
     sourceProjectFingerprint?: string
 ) => makePdfDocument(
-    makeCharacterTemplatePdfPageContentsFromBuildPlan(plan, sourceProjectFingerprint)
+    makeCharacterTemplatePdfPageContentsFromBuildPlan(plan, sourceProjectFingerprint),
+    LETTER_PDF_PAGE,
+    { title: `${plan.projectName} / character outlines`, subject: `Source plan ${plan.sourceDigest}; Project ${sourceProjectFingerprint ?? 'unspecified'}` }
 );
 
 export const makeCustomPartsPdf = (project: ProjectState) => {
+    const outlineIssues = characterFabricationOutlineIssues(project);
+    if (outlineIssues.length) throw new Error(outlineIssues.map(issue => issue.message).join('\n'));
     const plan = createCharacterBuildPlanV1(project);
     return makeCharacterTemplatePdfFromBuildPlan(plan, projectContentFingerprint(project));
 };

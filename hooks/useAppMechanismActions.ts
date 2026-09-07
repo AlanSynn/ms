@@ -12,12 +12,12 @@ import type {
   FoundryExportPackage,
   GlobalConfig,
   MechanismConfig,
+  MechanismOutputBinding,
   ProjectAction,
   ProjectMotionPath,
   SceneObject,
   ProjectState,
 } from "../types";
-import { generateDXF, generateSVG } from "../utils/exporter";
 import { createMechanismOptimizerJobInput } from "../runtime/optimizer/mechanismOptimizerJob";
 import { createMechanismOptimizerWorkerClient } from "../runtime/optimizer/mechanismOptimizerWorkerClient";
 import { createMechanismFitJobInput } from "../runtime/fitting/mechanismFitJob";
@@ -39,6 +39,7 @@ import {
   allocateMechanismOutput,
   assignMechanismOutputBinding,
   mechanismBindingTargetKey,
+  mechanismBindingsConflict,
   mechanismOutputBindings,
   mechanismOwnerForDraft,
   mechanismWithOutputBindings,
@@ -382,7 +383,7 @@ export const useAppMechanismActions = ({
               resolvedMechanismOutputBindings(project, candidateMechanism).some(
                 (binding, index) =>
                   !(candidateMechanism.id === id && index === 0) &&
-                  mechanismBindingTargetKey(project, binding) === directTargetKey,
+                  mechanismBindingsConflict(project, binding, directTargetBinding),
               ),
             )
           : false;
@@ -545,22 +546,32 @@ export const useAppMechanismActions = ({
     setCommandStatus,
   ]);
 
-  const exportMechanismSvg = useCallback(() => {
-    downloadText(
-      `mechanisms-${Date.now()}.svg`,
-      generateSVG(mechanismConfig, angle),
-      "image/svg+xml",
-    );
-    setCommandStatus("Exported mechanism SVG");
+  const exportMechanismSvg = useCallback(async () => {
+    try {
+      const { generateSVG } = await import("../utils/exporter");
+      downloadText(
+        `mechanisms-${Date.now()}.svg`,
+        generateSVG(mechanismConfig, angle),
+        "image/svg+xml",
+      );
+      setCommandStatus("Exported mechanism SVG");
+    } catch (error) {
+      setCommandStatus(`Export failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }, [angle, mechanismConfig, setCommandStatus]);
 
-  const exportMechanismDxf = useCallback(() => {
-    downloadText(
-      `mechanisms-${Date.now()}.dxf`,
-      generateDXF(mechanismConfig, angle),
-      "application/dxf",
-    );
-    setCommandStatus("Exported mechanism DXF");
+  const exportMechanismDxf = useCallback(async () => {
+    try {
+      const { generateDXF } = await import("../utils/exporter");
+      downloadText(
+        `mechanisms-${Date.now()}.dxf`,
+        generateDXF(mechanismConfig, angle),
+        "application/dxf",
+      );
+      setCommandStatus("Exported mechanism DXF");
+    } catch (error) {
+      setCommandStatus(`Export failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }, [angle, mechanismConfig, setCommandStatus]);
 
   const exportFoundryMechanism = useCallback(
@@ -747,18 +758,11 @@ export const useAppMechanismActions = ({
         .find(path => path && !motionPathReadiness(project, path).playable);
       if (blocked) { setCommandStatus(motionPathReadiness(project, blocked).reason ?? "Check path"); return; }
       const candidatePathIds = new Set(candidateBindings.map((binding) => binding.pathId));
-      const candidateTargetKeys = new Set(
-        candidateBindings
-          .map((binding) => mechanismBindingTargetKey(project, binding))
-          .filter((key): key is string => Boolean(key)),
-      );
+      const conflictsWithCandidate = (binding: MechanismOutputBinding) =>
+        candidatePathIds.has(binding.pathId) || candidateBindings.some(candidate => mechanismBindingsConflict(project, binding, candidate));
       const conflictingOwners = project.mechanisms.filter(
         (candidate) => candidate.id !== mechanism.id &&
-          resolvedMechanismOutputBindings(project, candidate).some((binding) => {
-            const targetKey = mechanismBindingTargetKey(project, binding);
-            return candidatePathIds.has(binding.pathId) ||
-              (targetKey !== undefined && candidateTargetKeys.has(targetKey));
-          }),
+          resolvedMechanismOutputBindings(project, candidate).some(conflictsWithCandidate),
       );
       if (conflictingOwners.length > 1) {
         setCommandStatus("Mechanism failed: recommendation conflicts with multiple owners.");
@@ -770,11 +774,7 @@ export const useAppMechanismActions = ({
             { ...mechanism, id: existingOwner.id },
             [
               ...candidateBindings,
-              ...resolvedMechanismOutputBindings(project, existingOwner).filter((binding) => {
-                const targetKey = mechanismBindingTargetKey(project, binding);
-                return !candidatePathIds.has(binding.pathId) &&
-                  (targetKey === undefined || !candidateTargetKeys.has(targetKey));
-              }),
+              ...resolvedMechanismOutputBindings(project, existingOwner).filter(binding => !conflictsWithCandidate(binding)),
             ],
           )
         : mechanism;

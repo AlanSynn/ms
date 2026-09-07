@@ -2,8 +2,9 @@ export const PDF_POINTS_PER_MM = 72 / 25.4;
 export const LETTER_PDF_PAGE = Object.freeze({ width: 612, height: 792 });
 
 export type PdfPageSize = Readonly<{ width: number; height: number }>;
+export type PdfDocumentInfo = Readonly<{ title?: string; subject?: string }>;
 
-export const makePdfDocument = (content: string | string[], pageSize: PdfPageSize = LETTER_PDF_PAGE) => {
+export const makePdfDocument = (content: string | string[], pageSize: PdfPageSize = LETTER_PDF_PAGE, info?: PdfDocumentInfo) => {
     const pages = Array.isArray(content) && content.length ? content : [Array.isArray(content) ? '' : content];
     const fontObject = pages.length * 2 + 3;
     const pageObjects = pages.map((_, index) => 3 + index * 2);
@@ -18,14 +19,15 @@ export const makePdfDocument = (content: string | string[], pageSize: PdfPageSiz
                 `${contentObject} 0 obj << /Length ${pageContent.length} >> stream\n${pageContent}\nendstream endobj`
             ];
         }),
-        `${fontObject} 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj`
+        `${fontObject} 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj`,
+        ...(info ? [`${fontObject + 1} 0 obj << ${info.title ? `/Title (${pdfText(info.title)})` : ''} ${info.subject ? `/Subject (${pdfText(info.subject)})` : ''} >> endobj`] : [])
     ];
     let pdf = '%PDF-1.4\n';
     const offsets = [0];
     objects.forEach(obj => { offsets.push(pdf.length); pdf += `${obj}\n`; });
     const xref = pdf.length;
     pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map(n => String(n).padStart(10, '0') + ' 00000 n ').join('\n')}\n`;
-    pdf += `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+    pdf += `trailer << /Size ${objects.length + 1} /Root 1 0 R${info ? ` /Info ${fontObject + 1} 0 R` : ''} >>\nstartxref\n${xref}\n%%EOF`;
     return pdf;
 };
 

@@ -1,5 +1,9 @@
+import { lazy, Suspense, useState } from "react";
 import type { ProjectAction, SceneObject } from "../../../types";
+import { artworkForOwner } from "../../../utils/artwork";
+import { sceneObjectOutline } from "../../../utils/artworkTargets";
 import { MiniNumber, Toggle } from "../../ui/InspectorControls";
+const ShapeEditor = lazy(async () => ({ default: (await import("./ShapeEditor")).ShapeEditor }));
 
 const SHAPE_LABELS: Record<SceneObject["shape"], string> = {
   "piggy-bank": "Piggy bank",
@@ -16,6 +20,7 @@ export const SceneObjectInspector = ({
   dispatch: (action: ProjectAction) => void;
 }) => {
   const isImageObject = Boolean(object.textureUrl);
+  const [shaping, setShaping] = useState(false);
   const update = (updates: Partial<SceneObject>) =>
     dispatch({ type: "update_scene_object", objectId: object.id, updates });
   const updateTransform = (updates: Partial<SceneObject["transform"]>) =>
@@ -42,7 +47,7 @@ export const SceneObjectInspector = ({
           <div className="rounded-2xl bg-slate-100 p-3 text-sm font-bold text-slate-600">
             Image object{object.sourceImageName ? ` · ${object.sourceImageName}` : ""}
           </div>
-        ) : (
+        ) : !object.contourPoints?.length ? (
           <label className="block text-xs font-black uppercase tracking-wider text-slate-500">
             Type
             <select
@@ -61,7 +66,20 @@ export const SceneObjectInspector = ({
               ))}
             </select>
           </label>
-        )}
+        ) : null}
+        <button type="button" className="btn-secondary w-full" disabled={object.locked} onClick={() => setShaping(true)}>Change shape</button>
+        <label className="block text-xs font-bold">Build
+          <select className="field mt-1" aria-label="Object build use" disabled={object.locked}
+            value={object.fabrication ?? "decoration"} onChange={event => {
+              const fabrication = event.currentTarget.value as "cuttable" | "decoration";
+              update(fabrication === "cuttable" ? { fabrication, contourSource: "user", contourPoints: sceneObjectOutline(object), artwork: artworkForOwner(object) } : { fabrication });
+            }}>
+            <option value="cuttable">Cuttable prop</option><option value="decoration">Scene decoration</option>
+          </select>
+        </label>
+        {shaping && <Suspense fallback={null}><ShapeEditor key={object.id} owner={object} outline={sceneObjectOutline(object)} attachments={[]}
+          onCommit={contourPoints => { update({ contourPoints, contourSource: "user", artwork: artworkForOwner(object) }); setShaping(false); }}
+          onClose={() => setShaping(false)} /></Suspense>}
         <Toggle
           label="Visible"
           checked={object.visible}
@@ -107,7 +125,7 @@ export const SceneObjectInspector = ({
             disabled={object.locked}
             onChange={(rotation) => updateTransform({ rotation })}
           />
-          {isImageObject ? (
+          {isImageObject || object.contourPoints?.length || object.artwork ? (
             <div className="col-span-2 rounded-2xl bg-slate-100 p-3 text-sm font-bold text-slate-600">
               Size · use Scale
             </div>
@@ -133,10 +151,10 @@ export const SceneObjectInspector = ({
           )}
         </div>
         <label className="block text-xs font-black uppercase tracking-wider text-slate-500">
-          Color
+          Base color
           <input
             className="mt-1 h-10 w-full rounded-2xl border border-slate-200 bg-white p-1"
-            aria-label="Object color"
+            aria-label="Object base color"
             type="color"
             disabled={object.locked}
             value={object.fillColor}
