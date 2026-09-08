@@ -13,6 +13,7 @@ import {
   type MechanismFitWorkerPort,
 } from '../runtime/fitting/mechanismFitWorkerClient';
 import { designFamilyFitAuthorityChanged } from '../runtime/fitting/designFamilyFitAuthority';
+import { prepareMechanismTemplateChange } from '../utils/mechanismTemplateChange';
 import {
   applyProjectAction,
   createDefaultMechanism,
@@ -123,15 +124,12 @@ const projectAfterInspectorFit = {
 };
 assert.equal(
   designFamilyFitAuthorityChanged(designProject, projectAfterInspectorFit),
-  false,
-  'a preceding four-bar inspector commit does not cancel an in-flight family fit',
+  true,
+  'an inspector edit cancels a family replacement before it can overwrite newer work',
 );
-const gearCandidate = {
-  ...createDefaultMechanism('gear', 'design-gear-family'),
-  targetPathId: designPath.id,
-  targetPartId: designPath.sceneObjectId ? undefined : designPath.partId,
-  targetSceneObjectId: designPath.sceneObjectId,
-};
+const templateChange = prepareMechanismTemplateChange(projectAfterInspectorFit, 'gear', 'design-gear-family');
+assert(templateChange.ok);
+const gearCandidate = templateChange.mechanism;
 const fittedGear = runMechanismFitJob(createMechanismFitJobInput(
   designProject,
   gearCandidate,
@@ -150,9 +148,9 @@ const projectAfterGearSelection = applyProjectAction(projectAfterInspectorFit, {
 assert.equal(
   projectAfterGearSelection.mechanisms.find(
     (candidate) => candidate.id === designFourBar.id,
-  )?.anchorX,
-  editedFourBar.anchorX,
-  'the additive Gear train selection preserves the completed four-bar edit',
+  )?.type,
+  'gear',
+  'the template choice replaces the existing motion owner without leaving an orphan',
 );
 assert.equal(
   projectAfterGearSelection.mechanisms.find(
@@ -162,6 +160,24 @@ assert.equal(
   'the Gear train becomes the selected fitted family instead of remaining on four-bar',
 );
 assert.equal(projectAfterGearSelection.selectedMechanismId, fittedGear.id);
+assert.equal(fittedGear.id, designFourBar.id);
+assert.equal(projectAfterGearSelection.mechanisms.length, designProject.mechanisms.length);
+assert.equal(fittedGear.targetPathId, designPath.id);
+const inspectedProject = applyProjectAction(projectAfterGearSelection, { type: 'select_mechanism', mechanismId: fittedGear.id });
+assert.equal(inspectedProject.mechanisms, projectAfterGearSelection.mechanisms, 'inspection cannot reconcile or edit mechanism data');
+assert.equal(inspectedProject.revision, projectAfterGearSelection.revision, 'inspection cannot create an authored revision');
+assert.equal(prepareMechanismTemplateChange({ ...designProject, selectedPathId: undefined }, 'gear', 'unused').ok, false);
+const beforeTemplateChecks = JSON.stringify(designProject);
+const sharedOwner = {
+  ...designFourBar,
+  outputs: [
+    { id: 'one', portId: 'C', pathId: designPath.id, enabled: true },
+    { id: 'two', portId: 'B', pathId: 'another-motion', enabled: true },
+  ],
+};
+assert.equal(prepareMechanismTemplateChange({ ...designProject, mechanisms: [sharedOwner] }, 'gear', 'unused').ok, false,
+  'template replacement cannot discard other motions on a shared mechanism');
+assert.equal(JSON.stringify(designProject), beforeTemplateChecks, 'template preparation never mutates the authored project');
 assert.equal(
   designFamilyFitAuthorityChanged(
     projectAfterInspectorFit,

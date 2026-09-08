@@ -31,7 +31,6 @@ import { APP_STATE_VERSION, projectStateFromPortableDocument, serializeProject }
 import {
     mechanismOutputBindings,
     mechanismWithOutputBindings,
-    mechanismWithoutOutputBindings,
 } from './mechanismBindings';
 
 export { APP_STATE_VERSION, serializeProject, serializeProjectCompact } from './projectSerialization';
@@ -524,13 +523,21 @@ const reconcileMechanismTargets = (
     parts: Record<string, BodyPartLayer>,
     paths: Record<string, ProjectMotionPath>,
     sceneObjects: Record<string, SceneObject> = {},
-    options: { preserveGeneratedPath?: boolean; preserveRejectedPathFit?: boolean } = {},
+    options: {
+        preserveGeneratedPath?: boolean;
+        preserveRejectedPathFit?: boolean;
+        bindingOnly?: boolean;
+    } = {},
     skeleton?: StandardSkeleton | null
 ) => {
     const sourceBindings = mechanismOutputBindings(mechanism);
+    let droppedEnabledBinding = false;
     const outputs: MechanismOutputBinding[] = sourceBindings.flatMap((binding): MechanismOutputBinding[] => {
         const path = paths[binding.pathId];
-        if (!path) return [];
+        if (!path) {
+            droppedEnabledBinding ||= binding.enabled !== false;
+            return [];
+        }
         if (path.sceneObjectId) {
             if (sceneObjects[path.sceneObjectId]) {
                 return [{
@@ -540,29 +547,58 @@ const reconcileMechanismTargets = (
                     targetAnchorJointId: undefined,
                 }];
             }
+            droppedEnabledBinding ||= binding.enabled !== false;
             return [];
         }
         const requestedPart = binding.targetPartId ? parts[binding.targetPartId] : undefined;
+        const pathOwner = path.partId ? parts[path.partId] : undefined;
         const pathTargetJointId = preferredMotionJointId({ parts, skeleton: skeleton ?? null }, path.partId, path.targetAnchorJointId);
-        const targetPartId = requestedPart && partCanReachJoint(requestedPart, pathTargetJointId, skeleton)
-            ? requestedPart.id
-            : parts[path.partId] ? path.partId : undefined;
-        if (!targetPartId) return [];
+        const targetPartId = options.bindingOnly && pathOwner
+            ? pathOwner.id
+            : requestedPart && pathTargetJointId && partCanReachJoint(requestedPart, pathTargetJointId, skeleton)
+                ? requestedPart.id
+                : pathOwner?.id;
+        if (!targetPartId) {
+            droppedEnabledBinding ||= binding.enabled !== false;
+            return [];
+        }
+        const targetPart = parts[targetPartId];
+        const targetAnchorJointId = binding.targetAnchorJointId && targetPart && partCanReachJoint(targetPart, binding.targetAnchorJointId, skeleton)
+            ? binding.targetAnchorJointId
+            : path.targetAnchorJointId;
         return [{
             ...binding,
             targetPartId,
             targetSceneObjectId: undefined,
-            targetAnchorJointId: preferredMotionJointId({ parts, skeleton: skeleton ?? null }, targetPartId, binding.targetAnchorJointId ?? path.targetAnchorJointId),
+            targetAnchorJointId: preferredMotionJointId({ parts, skeleton: skeleton ?? null }, targetPartId, targetAnchorJointId),
         }];
     });
-    const standaloneSceneObjectId = mechanism.targetSceneObjectId && sceneObjects[mechanism.targetSceneObjectId]
+    const requestedStandaloneSceneObjectId = mechanism.targetSceneObjectId;
+    const requestedStandalonePartId = mechanism.targetPartId;
+    const standaloneSceneObjectId = requestedStandaloneSceneObjectId && sceneObjects[requestedStandaloneSceneObjectId]
         ? mechanism.targetSceneObjectId
         : undefined;
-    const standalonePartId = !standaloneSceneObjectId && mechanism.targetPartId && parts[mechanism.targetPartId]
+    const standalonePartId = !standaloneSceneObjectId && requestedStandalonePartId && parts[requestedStandalonePartId]
         ? mechanism.targetPartId
         : undefined;
+    const hasResolvedBinding = outputs.some(binding => binding.enabled !== false);
+    const orphanWarnings = droppedEnabledBinding || !hasResolvedBinding
+        ? ['Output detached: choose target + path.']
+        : [];
+    const staleWarning = (warning: string) =>
+        !warning.startsWith('Output detached:');
+    const hasDetachedWarning = (mechanism.warnings ?? []).some(warning => warning.startsWith('Output detached:'));
+    const preserveDetachedWarning = mechanism.enabled === false && hasDetachedWarning;
+    const warnings = hasResolvedBinding && !preserveDetachedWarning
+        ? [...(mechanism.warnings ?? []).filter(staleWarning), ...orphanWarnings]
+        : [...(mechanism.warnings ?? []), ...orphanWarnings.filter(warning => !(mechanism.warnings ?? []).includes(warning))];
+    const disableForOrphan = droppedEnabledBinding || !hasResolvedBinding;
     const reconciled = outputs.length
-        ? mechanismWithOutputBindings(mechanism, outputs)
+        ? {
+            ...mechanismWithOutputBindings(mechanism, outputs),
+            enabled: disableForOrphan ? false : mechanism.enabled,
+            warnings,
+        }
         : {
             ...mechanism,
             ...(mechanism.outputs === undefined ? {} : { outputs: [] }),
@@ -571,8 +607,15 @@ const reconcileMechanismTargets = (
             targetPathId: undefined,
             targetAnchorJointId: standalonePartId ? mechanism.targetAnchorJointId : undefined,
             activeVisualPartIds: standalonePartId ? [standalonePartId] : [],
+            enabled: disableForOrphan ? false : mechanism.enabled,
+            warnings,
         };
-    const normalized = normalizeMechanismToFabricationSet(reconciled);
+    if (options.bindingOnly) return { ...reconciled, warnings };
+    const normalized = normalizeMechanismToFabricationSet(
+        outputs.length
+            ? { ...reconciled, warnings }
+            : reconciled,
+    );
     const targetPathId = normalized.targetPathId;
     const pathFitStatus = normalized.fabricationMetadata?.pathFit?.status;
     const fitReady = Boolean(
@@ -1445,6 +1488,10 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
             return loadProjectSnapshot(action.project);
         case 'set_processing':
             return { ...project, processing: action.processing };
+        case 'select_mechanism':
+            return action.mechanismId && !project.mechanisms.some(mechanism => mechanism.id === action.mechanismId)
+                ? project
+                : { ...project, selectedMechanismId: action.mechanismId };
         case 'select_part': {
             const nextPath = Object.values(project.paths).find(path => !path.sceneObjectId && path.partId === action.partId);
             return { ...project, selectedPartId: action.partId, selectedSceneObjectId: undefined, selectedPathId: nextPath?.id };
@@ -1469,12 +1516,23 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
             if (project.parts[action.partId]?.locked) return project;
             const { [action.partId]: _part, ...parts } = project.parts;
             const paths = Object.fromEntries(Object.entries(project.paths).filter(([, path]) => path.sceneObjectId || path.partId !== action.partId));
-            const mechanisms = project.mechanisms.map(m => mechanismOutputBindings(m).some(binding => binding.targetPartId === action.partId)
-                ? mechanismWithGeneratedPath(
-                    mechanismWithoutOutputBindings(m, binding => binding.targetPartId === action.partId),
-                    { preserveGeneratedPath: preserveGeneratedPathFor(m) }
-                )
-                : m);
+            const mechanisms = project.mechanisms.map(m => {
+                const affected = m.targetPartId === action.partId ||
+                    mechanismOutputBindings(m).some(binding =>
+                        binding.targetPartId === action.partId || !paths[binding.pathId]);
+                return affected
+                    ? reconcileMechanismTargets(
+                        m,
+                        parts,
+                        paths,
+                        project.sceneObjects,
+                        {
+                            preserveGeneratedPath: preserveGeneratedPathFor(m),
+                        },
+                        project.skeleton,
+                    )
+                    : m;
+            });
             const nextPartId = project.partOrder.find(id => id !== action.partId);
             return touch({
                 ...project,
@@ -1520,12 +1578,23 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
             if (project.sceneObjects[action.objectId]?.locked) return project;
             const { [action.objectId]: _object, ...sceneObjects } = project.sceneObjects;
             const paths = Object.fromEntries(Object.entries(project.paths).filter(([, path]) => path.sceneObjectId !== action.objectId));
-            const mechanisms = project.mechanisms.map(m => mechanismOutputBindings(m).some(binding => binding.targetSceneObjectId === action.objectId)
-                ? mechanismWithGeneratedPath(
-                    mechanismWithoutOutputBindings(m, binding => binding.targetSceneObjectId === action.objectId),
-                    { preserveGeneratedPath: preserveGeneratedPathFor(m) }
-                )
-                : m);
+            const mechanisms = project.mechanisms.map(m => {
+                const affected = m.targetSceneObjectId === action.objectId ||
+                    mechanismOutputBindings(m).some(binding =>
+                        binding.targetSceneObjectId === action.objectId || !paths[binding.pathId]);
+                return affected
+                    ? reconcileMechanismTargets(
+                        m,
+                        project.parts,
+                        paths,
+                        sceneObjects,
+                        {
+                            preserveGeneratedPath: preserveGeneratedPathFor(m),
+                        },
+                        project.skeleton,
+                    )
+                    : m;
+            });
             return touch({
                 ...project,
                 sceneObjects,
@@ -1605,16 +1674,20 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
             const current = project.paths[action.pathId];
             if (current && (current.sceneObjectId ? project.sceneObjects[current.sceneObjectId]?.locked : project.parts[current.partId]?.locked)) return project;
             const { [action.pathId]: _removed, ...paths } = project.paths;
-            const mechanisms = project.mechanisms.map(m => mechanismOutputBindings(m).some(binding => binding.pathId === action.pathId)
-                ? reconcileMechanismTargets(
-                    mechanismWithoutOutputBindings(m, binding => binding.pathId === action.pathId),
-                    project.parts,
-                    paths,
-                    project.sceneObjects,
-                    { preserveGeneratedPath: preserveGeneratedPathFor(m) },
-                    project.skeleton
-                )
-                : m);
+            const mechanisms = project.mechanisms.map(m =>
+                mechanismOutputBindings(m).some(binding => binding.pathId === action.pathId)
+                    ? reconcileMechanismTargets(
+                        m,
+                        project.parts,
+                        paths,
+                        project.sceneObjects,
+                        {
+                            preserveGeneratedPath: preserveGeneratedPathFor(m),
+                        },
+                        project.skeleton,
+                    )
+                    : m
+            );
             return touch({
                 ...project,
                 paths,
@@ -2048,7 +2121,20 @@ export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
             ])]
         } : next] as const;
     }));
-    const mechanisms = (Array.isArray(data.mechanisms) ? data.mechanisms : fallback.mechanisms).map(normalizeMechanismSnapshot);
+    const rawMechanisms = Array.isArray(data.mechanisms) ? data.mechanisms : fallback.mechanisms;
+    const mechanisms = rawMechanisms.map(rawMechanism => {
+        const normalized = normalizeMechanismSnapshot(rawMechanism);
+        return reconcileMechanismTargets(
+            normalized,
+            parts,
+            paths,
+            sceneObjects,
+            {
+                bindingOnly: true,
+            },
+            skeleton,
+        );
+    });
     const rawMetadata = asRecord(data.metadata);
     const rawProcessing = asRecord(data.processing);
     const metadata: ProjectState['metadata'] = {

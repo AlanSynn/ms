@@ -35,7 +35,7 @@ export const isUndoableProjectAction = (action: ProjectAction) =>
 export const useProjectHistory = (createInitialProject: () => ProjectState) => {
   const [projectHistory, setProjectHistory] = useState<ProjectHistoryState>(
     () => {
-      projectSelfCheck();
+      if (import.meta.env.DEV) projectSelfCheck();
       return { present: createInitialProject(), past: [], future: [] };
     },
   );

@@ -43,6 +43,7 @@ const UNIT_TEST_FILES = [
   'motion-solver.test.ts',
   'multiple-motion-paths.test.ts',
   'no-image-recognition-runtime.test.ts',
+  'orphan-mechanism-migration.test.ts',
   'painted-build-packet.test.ts',
   'path-gesture-draft.test.ts',
   'project-contract.test.ts',

@@ -8,6 +8,7 @@ import { boardToScene, sceneToBoardRaw, SCENE_PX_PER_MM } from './coordinates';
 import { FABRICATION_DEFAULT_GRID_PITCH_MM, FABRICATION_LINKAGE_SPECS } from './fabricationContract';
 import { validateMechanismPreviewReadiness, validateForFabrication } from './fabricationValidation';
 import { generateMechanismPointTraces } from './kinematics';
+import { replacePrimaryMechanismOutputBinding } from './mechanismBindings';
 import { normalizeMechanismToFabricationSet } from './mechanismReference';
 
 const COARSE_FIT_RESOLUTION = 8;
@@ -93,6 +94,19 @@ const cloneFitResult = (
     : undefined,
   warnings: fitted.warnings ? [...fitted.warnings] : undefined,
 });
+
+const syncPathFitOutputBinding = (
+  project: ProjectState,
+  mechanism: MechanismConfig,
+  pathId: string,
+) => {
+  const fit = mechanism.fabricationMetadata?.pathFit;
+  if (!fit || fit.targetPathId !== pathId || !mechanism.outputs?.length) return mechanism;
+  return replacePrimaryMechanismOutputBinding(project, mechanism, pathId, {
+    outputTraceId: fit.outputTraceId,
+    fit,
+  });
+};
 
 const fabricationErrorsForCandidate = (
   project: ProjectState,
@@ -442,7 +456,7 @@ export const rejectedFourBarPathFit = (
     tolerance: fourBarPathFitTolerance(project),
     kitProfileKey: project.settings.physicalKit.profileKey,
   };
-  return normalizeMechanismToFabricationSet({
+  return syncPathFitOutputBinding(project, normalizeMechanismToFabricationSet({
     ...mechanism,
     targetPartId,
     targetSceneObjectId: path.sceneObjectId,
@@ -463,7 +477,7 @@ export const rejectedFourBarPathFit = (
       ...(mechanism.warnings ?? []).filter(removeFitWarnings),
       'No fabrication-valid path fit.',
     ],
-  });
+  }), path.id);
 };
 
 const boardSweepStaysWithinKit = (
@@ -508,7 +522,9 @@ export const fitFourBarKitMechanismToPath = (
   const cacheKey = fitCacheKey(project, mechanism, path);
   const cached = readCachedFit(cacheKey);
   if (cached) {
-    return cached.value ? cloneFitResult(cached.value, mechanism) : undefined;
+    return cached.value
+      ? syncPathFitOutputBinding(project, cloneFitResult(cached.value, mechanism), path.id)
+      : undefined;
   }
   const targetPoints = resamplePolyline(pathPointsForFit(path), FIT_SAMPLE_COUNT);
   if (targetPoints.length < 3) {
@@ -750,10 +766,16 @@ export const fitFourBarKitMechanismToPath = (
       return [{ mechanism: fitted, score: fit.error + fit.maxError * 0.15 }];
     })
     .sort((a, b) => a.score - b.score);
-  const fitted = refined.find(
+  const synchronized = refined.map((candidate) => ({
+    ...candidate,
+    mechanism: syncPathFitOutputBinding(project, candidate.mechanism, path.id),
+  }));
+  const fitted = synchronized.find(
     (candidate) =>
       !fabricationErrorsForCandidate(validationProject, candidate.mechanism).length,
   )?.mechanism;
   writeCachedFit(cacheKey, fitted ? cloneFitResult(fitted, mechanism) : null);
-  return fitted ? cloneFitResult(fitted, mechanism) : undefined;
+  return fitted
+    ? syncPathFitOutputBinding(project, cloneFitResult(fitted, mechanism), path.id)
+    : undefined;
 };

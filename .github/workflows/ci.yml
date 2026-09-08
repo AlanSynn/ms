@@ -60,3 +60,13 @@ jobs:
           tests/browser/workflow.spec.ts
           --grep
           'Recommendation worker and job stay unloaded|Design Fit runs'
+
+      - name: Verify project restoration and mechanism recovery
+        env:
+          PLAYWRIGHT_SERVER: preview
+          PLAYWRIGHT_WORKERS: 3
+        run: >-
+          env -u NO_COLOR bunx playwright test
+          tests/browser/earlier-versions.spec.ts
+          tests/browser/design-template-hotfix.spec.ts
+          tests/browser/blueprint-recovery.spec.ts

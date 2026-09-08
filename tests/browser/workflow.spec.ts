@@ -5097,18 +5097,21 @@ test('guided classroom lesson opens real baseline and can reset safely', async (
   expectCleanPage(pageErrors, consoleErrors);
 });
 
-test('Detached visible mechanisms block browser blueprint generation', async ({ page }) => {
+test('Detaching a mechanism keeps it off and exposes Blueprint recovery', async ({ page }) => {
   await page.goto(process.env.PLAYWRIGHT_BASE_PATH || '/');
   await dismissStartupAnnouncement(page);
   await openWavingArmTemplate(page);
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await page.getByRole('button', { name: 'Gear linkage', exact: true }).click();
+  await expect(page.getByLabel('Mechanism instance').locator('option:checked')).toContainText('Gear linkage');
+  page.once('dialog', dialog => dialog.accept());
   await page.getByLabel('Mechanism target').selectOption('head');
   await expect(page.getByLabel('Mechanism motion path')).toHaveValue('');
+  await expect.poll(async () => (await readBrowserAutosaveProject(page))?.mechanisms[0]?.enabled).toBe(false);
 
   await clickStage(page, 'Blueprint');
-  await expect(page.getByTestId('blueprint-control-panel').getByText(/choose target \+ path/)).toBeVisible();
-  await expect(page.getByTestId('blueprint-build-print')).toBeDisabled();
+  await expect(page.getByTestId('blueprint-control-panel')).toContainText('Gear linkage · No path · Off');
+  await expect(page.getByTestId('blueprint-control-panel').getByRole('button', { name: 'Connect path for Gear linkage' })).toBeVisible();
 });
 
 test('Unfitted classroom path stays blocked until a fabrication-valid fit exists', async ({ page }) => {

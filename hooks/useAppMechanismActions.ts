@@ -410,6 +410,21 @@ export const useAppMechanismActions = ({
           },
         };
       }
+      const hasPlayableBinding = (candidate: MechanismConfig) =>
+        resolvedMechanismOutputBindings(project, candidate).some(binding => {
+          const path = project.paths[binding.pathId];
+          return binding.enabled !== false && path && motionPathReadiness(project, path).playable;
+        });
+      if (updates.enabled === true && !hasPlayableBinding(bindingAware)) {
+        const error = new Error("Connect a motion path first.");
+        callbacks.failed?.(error);
+        setCommandStatus(error.message);
+        return;
+      }
+      if (changesBindingTarget && updates.enabled !== false &&
+          !hasPlayableBinding(mechanism) && hasPlayableBinding(bindingAware)) {
+        bindingAware = { ...bindingAware, enabled: true };
+      }
       if (!confirmBindingReplacement(bindingAware)) {
         callbacks.failed?.(new Error("Fit kept"));
         return;
@@ -458,7 +473,11 @@ export const useAppMechanismActions = ({
               }
               startTransition(() => {
                 dispatch({ type: "upsert_mechanism", mechanism: fitted });
-                setCommandStatus("Fit ready");
+                const fitStatus = fitted.fabricationMetadata?.pathFit?.status;
+                setCommandStatus(!targetPathId ? "Choose a motion path." :
+                  fitStatus === "rejected" || fitStatus === "closest" || fitStatus === "unfitted"
+                    ? "Path connected. Fit needed."
+                    : "Fit ready");
               });
             },
             failed: (error) => {
