@@ -43,6 +43,7 @@ const UNIT_TEST_FILES = [
   'motion-solver.test.ts',
   'multiple-motion-paths.test.ts',
   'no-image-recognition-runtime.test.ts',
+  'orphan-mechanism-migration.test.ts',
   'painted-build-packet.test.ts',
   'path-gesture-draft.test.ts',
   'project-contract.test.ts',
@@ -58,6 +59,10 @@ const UNIT_TEST_FILES = [
   'three-resource-retention.test.ts',
   'tracking-media-policy.test.ts',
   'transient-value-controller.test.ts',
+  'version-codec.test.ts',
+  'version-policy.test.ts',
+  'version-portable.test.ts',
+  'version-worker.test.ts',
 ];
 
 const discoveredUnitTests = readdirSync(TEST_DIRECTORY)

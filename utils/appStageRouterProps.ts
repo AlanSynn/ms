@@ -10,6 +10,7 @@ type BaseRouterProps = Pick<
   | "playbackClock"
   | "commandHandlers"
   | "projectBackup"
+  | "projectVersions"
   | "recoveryCandidate"
   | "workingCamera"
   | "onWorkingCameraChange"
@@ -103,6 +104,7 @@ export const buildAppStageRouterProps = ({
   playbackClock,
   commandHandlers,
   projectBackup,
+  projectVersions,
   recoveryCandidate,
   workingCamera,
   onWorkingCameraChange,
@@ -122,6 +124,7 @@ export const buildAppStageRouterProps = ({
   playbackClock,
   commandHandlers,
   projectBackup,
+  projectVersions,
   recoveryCandidate,
   workingCamera,
   onWorkingCameraChange,

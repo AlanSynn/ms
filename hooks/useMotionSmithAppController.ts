@@ -31,6 +31,7 @@ import type { FoundryCamera } from "../utils/foundryCamera";
 import { useProjectAutosave } from "./useProjectAutosave";
 import { useColdAutosaveRecovery } from "./useColdAutosaveRecovery";
 import { useProjectHistory } from "./useProjectHistory";
+import { useProjectVersions } from './useProjectVersions';
 import { useWorkspacePlaybackLoop } from "./useWorkspacePlaybackLoop";
 import { useWorkspacePlayerDock } from "./useWorkspacePlayerDock";
 import {
@@ -85,9 +86,27 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   const projectInputRef = useRef<HTMLInputElement>(null);
   const appShellRef = useRef<HTMLDivElement>(null);
   const assessmentQueryApplied = useRef(false);
+  const currentOnlySaveRef = useRef<() => void>(() => undefined);
+  const versions = useProjectVersions({
+    project, decision: autosaveRecovery.decision, setProject, onStatus: setCommandStatus,
+    showProject: () => setStage('project'),
+    saveCurrentOnly: () => currentOnlySaveRef.current(),
+    onRestored: restored => {
+      setIsPlaying(false);
+      playbackClock.setPhase(0);
+      setAngle(0);
+      characterImportProgress.publishPending(null);
+      characterImportProgress.publishProgress(null);
+      setFoundry(restored.mechanisms[0] ? { ...restored.mechanisms[0], id: 'foundry-preview' } : createDefaultMechanism('4bar', 'foundry-preview'));
+    },
+  });
+  useEffect(() => { if (stage !== 'project') versions.view.close(); }, [stage]);
   const projectBackup = useProjectAutosave(project, {
     projectDecision: autosaveRecovery.decision,
     onFailure: setCommandStatus,
+    historyAuthority: versions.authority,
+    onPrepared: versions.prepared,
+    suspended: autosaveRecovery.decision.isAuthorized() && !versions.storageReady,
   });
   const recoveryCandidate = autosaveRecovery.candidate ?? projectBackup.candidate;
 
@@ -166,6 +185,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     discardPendingCharacter,
     startFromPackage,
   } = useAppCharacterImportActions({
+    versions,
     project,
     dispatch,
     setProject,
@@ -208,7 +228,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     isPlaying,
     drawMode,
     optimizerBusy,
-    showGettingStarted: modalOpen || !!support.surface,
+    showGettingStarted: modalOpen || !!support.surface || Boolean(versions.view.preview),
     playbackDurationMs,
     animationSpeed: project.settings.animationSpeed,
     timingProfile: project.settings.timingProfile,
@@ -219,6 +239,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
 
   const { commandHandlers, openClassroomLesson, openSampleProject } =
     useAppProjectCommands({
+      versions,
       project,
       projectDecision: autosaveRecovery.decision,
       stage,
@@ -247,7 +268,8 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
       openFeedback: () => support.open('feedback'),
       openWhatsNew: () => support.open('whatsNew'),
     });
-  useAppCommandBindings({ commandHandlers, disabled: modalOpen || !!support.surface });
+  currentOnlySaveRef.current = commandHandlers['project.saveCurrentOnly'];
+  useAppCommandBindings({ commandHandlers, disabled: modalOpen || !!support.surface || Boolean(versions.view.preview) });
   const themeClass =
     project.settings.theme === "dark"
       ? "bg-slate-950 text-slate-100"
@@ -298,9 +320,10 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     project,
     dispatch,
     goStage,
-    playerDock,
+    playerDock: versions.view.preview ? null : playerDock,
     playbackClock,
     commandHandlers,
+    projectVersions: versions.view,
     projectBackup,
     recoveryCandidate,
     workingCamera,

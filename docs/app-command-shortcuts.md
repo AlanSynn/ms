@@ -6,7 +6,7 @@ MotionSmith uses `utils/appCommands.ts` as the single source of truth for app-wi
 
 | Group | Commands | Shortcut policy |
 | --- | --- | --- |
-| Project | New Project, Save Project, Open Project, Recover browser backup, Reset Lesson | Only stable project/document actions get global shortcuts. |
+| Project | New Project, Save Project, Open Project, Recover browser backup, Earlier versions, Keep version, Reset Lesson | Only stable project/document actions get global shortcuts. |
 | Edit | Undo, Redo | Project-state history only; processing/status/export metadata is not recorded as undoable work. |
 | View | Zoom In, Zoom Out, Zoom to Fit, Reset View, Save/Restore/Reset Layout | Canvas zoom shortcuts are global; layout actions stay menu-only. |
 | Go | Project, Character, Path, Foundry, Design, Blueprint, Assembly | `Alt+1` through `Alt+6` navigate the novice workflow. |
@@ -33,9 +33,13 @@ Shortcuts are ignored while focus is inside `input`, `textarea`, `select`, or co
 
 Support panels use the same command handlers and suspend underlying shortcuts. Feature search and release-note Show me actions share the explicit reveal mapping in `utils/featureDestinations.ts` and `hooks/useFeatureReveal.ts`: they navigate, open, and focus an existing control without executing its edit or download. Search queries, feedback drafts, receipts, and release-note read preferences stay outside project history and serialization. See [student support maintenance](student-support.md).
 
+`Earlier versions` opens the retained project history from the Project area. Selecting a row only loads its read-only preview; `Keep version`, `Restore`, `Rename`, and `Delete` use the history callbacks owned by the current project. `Save current only` is a hidden fallback command for version-storage failures and saves the current project without its history extension.
+
+The collapsed `Browser storage` control lists other local project histories with their latest update, size, and version count. Deleting one removes that browser history only; project files stay unchanged.
+
 Canvas-local controls such as part sliders, path handles, camera orbit/zoom, foundry overlay toggles, and export recipe selectors stay local unless they become repeated app-shell actions. This keeps the novice workbench tinkerable instead of turning every small knob into a global command.
 
-`Reset Lesson` stays menu-only. It restores the current classroom lesson baseline while preserving app settings; if no lesson is active it reports status only.
+`Reset Lesson` stays menu-only. It returns to the lesson’s original starting state while preserving app settings; if no lesson is active it reports status only.
 
 ## Retired placeholder items
 

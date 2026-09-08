@@ -1,3 +1,5 @@
+import { createPortableProjectBlob } from '../runtime/persistence/projectDownloadJob';
+import { confirmProjectReplacement } from '../runtime/persistence/projectReplacementSafety';
 import { unpaintedStarter } from '../utils/artworkTargets';
 import {
   startTransition,
@@ -33,11 +35,10 @@ import {
   writeWorkspaceLayoutSnapshot,
 } from "../utils/projectPersistence";
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT } from "../utils/viewport";
-import { createPortableProjectBlob } from "../runtime/persistence/projectDownloadJob";
 import { createProjectDownloadWorkerClient } from "../runtime/persistence/projectDownloadWorkerClient";
 import { createAutosaveRecoveryWorkerClient } from "../runtime/persistence/autosaveRecoveryWorkerClient";
-import { confirmProjectReplacement } from "../runtime/persistence/projectReplacementSafety";
 import { projectHasStudentWork, type ProjectDecisionBoundary } from "../runtime/persistence/projectDecisionBoundary";
+import type { ProjectVersionsController } from './useProjectVersions';
 
 const APP_STAGE_IDS: AppStage[] = [
   "project",
@@ -59,6 +60,7 @@ type SetProject = (
 ) => void;
 
 type UseAppProjectCommandsOptions = {
+  versions?: ProjectVersionsController;
   project: ProjectState;
   projectDecision: ProjectDecisionBoundary;
   stage: AppStage;
@@ -94,6 +96,7 @@ export type AppProjectCommands = {
 };
 
 export const useAppProjectCommands = ({
+  versions,
   project,
   projectDecision,
   stage,
@@ -135,7 +138,7 @@ export const useAppProjectCommands = ({
     },
     [autosaveRecoveryClient, projectDownloadClient],
   );
-  const downloadProjectSnapshot = (suffix: string, status: string) => {
+  const downloadProjectSnapshot = (suffix: string, status: string, currentOnly = false) => {
     const sourceProject = project;
     const filename = projectSnapshotFileName(sourceProject.metadata.name, suffix);
     const finish = (blob: Blob) => {
@@ -145,6 +148,7 @@ export const useAppProjectCommands = ({
           return;
         }
         downloadBlob(filename, blob);
+        versions?.downloadStarted(blob);
         setCommandStatus(`${status}: ${filename}`);
       } catch (error) {
         setCommandStatus(
@@ -152,6 +156,15 @@ export const useAppProjectCommands = ({
         );
       }
     };
+    if (versions && !currentOnly && (projectHasStudentWork(sourceProject) || versions.view.entries.length > 0)) {
+      void versions.download(sourceProject).then(finish, error => {
+        if (latestProjectRef.current !== sourceProject) return;
+        goStage('project');
+        versions.reportFailure(error, () => downloadProjectSnapshot(suffix, status));
+        setCommandStatus('Versions could not be included. Retry or Save current only.');
+      });
+      return;
+    }
     projectDownloadClient.request(sourceProject, {
       complete: finish,
       unavailable: () => {
@@ -167,12 +180,15 @@ export const useAppProjectCommands = ({
     });
   };
 
-  const confirmReplacement = (label: string, source = latestProjectRef.current) => {
+  const confirmReplacement = async (label: string, retry: () => void, source = latestProjectRef.current, reason: 'before-reset' | 'before-replace' = 'before-replace') => {
     try {
-      const accepted = confirmProjectReplacement(source, label);
+      const accepted = versions ? await versions.protectReplacement(source, label, reason)
+        : confirmProjectReplacement(source, label);
       if (!accepted) setCommandStatus("Project unchanged");
       return accepted;
     } catch (error) {
+      if (latestProjectRef.current !== source) return false;
+      versions?.reportFailure(error, retry);
       setCommandStatus(
         `Recovery copy failed: ${error instanceof Error ? error.message : String(error)}`,
       );
@@ -191,8 +207,10 @@ export const useAppProjectCommands = ({
     lessonProject: ProjectState,
     startStage: AppStage,
     decisionToken: number,
+    keepVersions = false,
   ) => {
     if (!projectDecision.complete(decisionToken)) return;
+    if (!keepVersions) versions?.choose(lessonProject);
     setPendingCharacter(null);
     setProject((current) => projectDecision.isCurrent(decisionToken) ? lessonProject : current, { resetHistory: true });
     setFoundry(foundryPreviewFromProject(lessonProject));
@@ -209,12 +227,13 @@ export const useAppProjectCommands = ({
   const exportProjectCopy = () =>
     downloadProjectSnapshot("-copy", "Download started");
 
-  const newProject = () => {
+  const newProject = async () => {
     const token = projectDecision.begin();
-    if (!confirmReplacement("Start a new project")) return;
+    if (!await confirmReplacement("Start a new project", newProject)) return;
     if (!projectDecision.complete(token)) return;
     setCommandStatus("New project");
     const next = createEmptyProject();
+    versions?.choose(next);
     startTransition(() => {
       setPendingCharacter(null);
       setProject((current) => projectDecision.isCurrent(token) ? next : current, { resetHistory: true });
@@ -224,7 +243,7 @@ export const useAppProjectCommands = ({
     });
   };
 
-  const openClassroomLesson = (
+  const openClassroomLesson = async (
     lessonId: string,
     preparedProject?: ProjectState,
   ) => {
@@ -242,23 +261,24 @@ export const useAppProjectCommands = ({
         classroomAssessmentKey: project.settings.classroomAssessmentKey,
       },
     };
-    if (!confirmReplacement("Open this guide")) return;
+    if (!await confirmReplacement("Open this guide", () => openClassroomLesson(lessonId, preparedProject))) return;
     openLessonProject(lessonProject, lesson.startStage, token);
     setCommandStatus(`${lesson.outcome ?? lessonProject.metadata.name} ready`);
   };
 
-  const openSampleProject = (preparedProject?: ProjectState) => {
+  const openSampleProject = async (preparedProject?: ProjectState) => {
     const token = projectDecision.begin();
     const next = preparedProject ?? unpaintedStarter(createSampleProject());
-    if (!confirmReplacement("Open the starter rig")) return;
+    if (!await confirmReplacement("Open the starter rig", () => openSampleProject(preparedProject))) return;
     if (!projectDecision.complete(token)) return;
+    versions?.choose(next);
     setPendingCharacter(null);
     setProject((current) => projectDecision.isCurrent(token) ? next : current, { resetHistory: true });
     setShowGettingStarted(false);
     setStage("character");
   };
 
-  const resetLesson = () => {
+  const resetLesson = async () => {
     const token = projectDecision.begin();
     const lesson = classroomLessonById(project.metadata.classroomLessonId);
     const resetProject = resetProjectToLessonBaseline(project);
@@ -266,10 +286,10 @@ export const useAppProjectCommands = ({
       setCommandStatus("No lesson");
       return;
     }
-    if (!confirmReplacement("Reset this lesson")) {
+    if (!await confirmReplacement("Reset this lesson to its original start", resetLesson, project, 'before-reset')) {
       return;
     }
-    openLessonProject(resetProject, lesson.startStage, token);
+    openLessonProject({ ...resetProject, metadata: { ...resetProject.metadata, id: project.metadata.id } }, lesson.startStage, token, true);
     setCommandStatus("Lesson reset");
   };
 
@@ -304,6 +324,7 @@ export const useAppProjectCommands = ({
           return;
         }
         if (!shouldApply() || !projectDecision.complete(token)) return;
+        versions?.choose(recoveredProject, { recoveryBranchId: recovered.historyBranchId });
         setProject((current) => current === requestedProject && projectDecision.isCurrent(token)
           ? recoveredProject : current, { resetHistory: true });
         setPendingCharacter(null);
@@ -317,12 +338,13 @@ export const useAppProjectCommands = ({
       ),
       superseded: () => setCommandStatus("Project or backup changed. Try again."),
     }, shouldApply, {
-      accept: ({ project: candidate }) => {
+      accept: async ({ project: candidate, historyBranchId }) => {
         if (!projectHasStudentWork(candidate) && projectHasStudentWork(requestedProject)) {
           setCommandStatus("No browser backup found");
           return false;
         }
-        return confirmReplacement("Recover browser backup", requestedProject);
+        if (historyBranchId && versions) await versions.validateRecovery(historyBranchId, candidate.metadata.id);
+        return confirmReplacement("Recover browser backup", recoverAutosave, requestedProject);
       },
     });
   };
@@ -392,10 +414,12 @@ export const useAppProjectCommands = ({
   };
 
   const undoProject = () => {
+    if (versions?.view.preview) { setCommandStatus('Return to current work to undo.'); return; }
     setCommandStatus(undoProjectHistory() ? "Undo applied" : "Nothing to undo");
   };
 
   const redoProject = () => {
+    if (versions?.view.preview) { setCommandStatus('Return to current work to redo.'); return; }
     setCommandStatus(redoProjectHistory() ? "Redo applied" : "Nothing to redo");
   };
 
@@ -420,6 +444,9 @@ export const useAppProjectCommands = ({
     openFindFeature,
     openFeedback,
     openWhatsNew,
+    openEarlierVersions: () => { goStage('project'); versions?.view.show(); },
+    keepVersion: () => { goStage('project'); versions?.view.keep(); },
+    saveCurrentOnly: () => downloadProjectSnapshot('-current-only', 'Current-state download started', true),
   }) satisfies AppCommandHandlerMap;
 
   return { commandHandlers, openClassroomLesson, openSampleProject };

@@ -24,11 +24,8 @@ import {
   isMechanismTypeEnabled,
   mechanismTemplateLabel,
 } from "../../../utils/mechanismTemplates";
-import {
-  createDefaultMechanism,
-  mechanismWithGeneratedPath,
-  uid,
-} from "../../../utils/project";
+import { uid } from "../../../utils/project";
+import { prepareMechanismTemplateChange } from "../../../utils/mechanismTemplateChange";
 import { MechanismRecommendationSheet } from "../path/MechanismRecommendationSheet";
 import {
   createMechanismRecommendationWorkerClient,
@@ -37,10 +34,7 @@ import { createMechanismFitJobInput } from "../../../runtime/fitting/mechanismFi
 import { createMechanismFitWorkerClient } from "../../../runtime/fitting/mechanismFitWorkerClient";
 import { designFamilyFitAuthorityChanged } from "../../../runtime/fitting/designFamilyFitAuthority";
 import {
-  mechanismBindingForPath,
-  mechanismBindingsConflict,
   mechanismOutputBindings,
-  resolvedMechanismOutputBindings,
 } from "../../../utils/mechanismBindings";
 
 const DesignRecommendationControl = ({
@@ -116,8 +110,10 @@ export const DesignWorkflowPanel = ({
   dispatch,
 }: DesignWorkflowPanelProps) => {
   const [activeFamilyFit, setActiveFamilyFit] = useState<MechanismType>();
-  const [familyFitError, setFamilyFitError] = useState(false);
+  const [familyFitError, setFamilyFitError] = useState<string>();
   const familyFitClient = useMemo(() => createMechanismFitWorkerClient(), []);
+  const latestProjectRef = useRef(project);
+  latestProjectRef.current = project;
   const familyFitAuthorityProjectRef = useRef(project);
   useEffect(() => () => familyFitClient.dispose(), [familyFitClient]);
   useEffect(() => {
@@ -148,53 +144,26 @@ export const DesignWorkflowPanel = ({
       setActiveFamilyFit(undefined);
       return;
     }
-    const base = createDefaultMechanism(type, uid("mech"));
-    const path = project.selectedPathId
-      ? project.paths[project.selectedPathId]
-      : undefined;
-    if (!path || path.points.length < 3) {
-      dispatch({
-        type: "upsert_mechanism",
-        mechanism: mechanismWithGeneratedPath(base),
-      });
+    const change = prepareMechanismTemplateChange(project, type, uid("mech"));
+    if (!change.ok) {
+      setFamilyFitError(change.reason);
       return;
     }
-    const requestedBinding = mechanismBindingForPath(project, base, path.id);
-    const pathOrTargetOwned = project.mechanisms.some((mechanism) =>
-      resolvedMechanismOutputBindings(project, mechanism).some(
-        (binding) =>
-          binding.enabled !== false &&
-          (binding.pathId === path.id ||
-            (requestedBinding && mechanismBindingsConflict(project, binding, requestedBinding))),
-      ),
-    );
-    if (pathOrTargetOwned) {
-      dispatch({
-        type: "upsert_mechanism",
-        mechanism: mechanismWithGeneratedPath(base),
-      });
-      return;
-    }
-    const candidate = {
-      ...base,
-      targetPathId: path.id,
-      targetPartId: path.sceneObjectId ? undefined : path.partId,
-      targetSceneObjectId: path.sceneObjectId,
-    };
-    setFamilyFitError(false);
+    setFamilyFitError(undefined);
     setActiveFamilyFit(type);
     familyFitClient.request(
-      createMechanismFitJobInput(project, candidate, "path", path.id),
+      createMechanismFitJobInput(project, change.mechanism, "path", change.pathId),
       {
         complete: ({ mechanism }) => {
           setActiveFamilyFit(undefined);
+          if (designFamilyFitAuthorityChanged(project, latestProjectRef.current)) return;
           startTransition(() =>
             dispatch({ type: "upsert_mechanism", mechanism }),
           );
         },
         failed: () => {
           setActiveFamilyFit(undefined);
-          setFamilyFitError(true);
+          setFamilyFitError("Fit failed. Try another template.");
         },
       },
     );
@@ -229,13 +198,15 @@ export const DesignWorkflowPanel = ({
           data-feature-id="design.mechanism"
           className="field"
           value={selectedMechanism?.id ?? ""}
-          onChange={(e) =>
+          onChange={(e) => {
+            const mechanism = project.mechanisms.find(candidate => candidate.id === e.target.value);
+            const binding = mechanism && mechanismOutputBindings(mechanism).find(candidate => candidate.enabled !== false);
             dispatch({
-              type: "set_mechanisms",
-              mechanisms: project.mechanisms,
-              selectedMechanismId: e.target.value,
-            })
-          }
+              type: "select_mechanism",
+              mechanismId: e.target.value,
+            });
+            dispatch({ type: "select_path", pathId: binding?.pathId });
+          }}
         >
           {project.mechanisms.map((m) => (
             <option key={m.id} value={m.id}>
@@ -262,7 +233,7 @@ export const DesignWorkflowPanel = ({
             </button>
           ))}
         </div>
-        {familyFitError && <div className="warning">Fit failed. Try again.</div>}
+        {familyFitError && <div className="warning" role="status">{familyFitError}</div>}
         {selectedLibrary && (
           <div
             className="rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-600"

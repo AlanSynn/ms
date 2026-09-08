@@ -903,6 +903,10 @@ export const finalProbes = async (
 ) => {
   await waitForLifecycleBaseline(page, baseline.lifecycle);
   const feature = await collectStableFeatureProbe(page, client);
+  // A due automatic checkpoint can start while memory sampling yields. Let its
+  // normal idle cleanup finish before checking the unchanged ownership limits.
+  await waitForLifecycleBaseline(page, baseline.lifecycle);
+  feature.lifecycle = (await readFeatureRuntimeProbe(page)).lifecycle;
   const visual = await readVisualProbe(page);
   return { feature, visual };
 };

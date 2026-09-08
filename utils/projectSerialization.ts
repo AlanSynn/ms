@@ -125,8 +125,17 @@ export const projectStateFromPortableDocument = (value: unknown): unknown => {
   const integrity = isRecord(value.integrity) ? value.integrity : {};
   const expected = integrity.contentFingerprint;
   const actual = fingerprintText(JSON.stringify(value.project));
-  if (typeof expected !== "string" || expected !== actual) {
+  if (integrity.algorithm !== 'fnv1a32' || typeof expected !== "string" || expected !== actual) {
     throw new Error("Project file integrity check failed. The original project is unchanged.");
+  }
+  const manifest = isRecord(value.manifest) ? value.manifest : {};
+  const metadata = isRecord(value.project.metadata) ? value.project.metadata : {};
+  const paths = isRecord(value.project.paths) ? value.project.paths : {};
+  const mechanisms = Array.isArray(value.project.mechanisms) ? value.project.mechanisms : [];
+  if (manifest.projectId !== metadata.id || manifest.projectName !== metadata.name || manifest.revision !== value.project.revision ||
+    JSON.stringify(manifest.pathIds) !== JSON.stringify(value.project.pathOrder ?? Object.keys(paths)) ||
+    JSON.stringify(manifest.mechanismIds) !== JSON.stringify(mechanisms.map(item => isRecord(item) ? item.id : undefined))) {
+    throw new Error('Project file manifest disagrees with its content.');
   }
   return value.project;
 };

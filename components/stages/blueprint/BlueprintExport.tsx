@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import type { AppStage, FabricationRecipe, ProjectAction, ProjectState } from "../../../types";
+import type { AppStage, FabricationIssue, FabricationRecipe, ProjectAction, ProjectState } from "../../../types";
 import { FinalStudyArtifactGate } from "../../../hooks/useFinalStudyArtifact";
 import {
   buildBlueprintModel,
@@ -15,6 +15,8 @@ import { downloadText } from "../../../utils/project";
 import { downloadPdf } from "../../../utils/pdfDownload";
 import { buildPlanArtworkSourceDigest, buildPlanSourceDigest } from "../../../utils/buildPlan";
 import { projectContentFingerprint } from "../../../utils/projectSerialization";
+import { resolvedMechanismOutputBindings } from "../../../utils/mechanismBindings";
+import { playableMotionPaths } from "../../../utils/motion";
 import {
   EditorStageFrame,
   canvasPane,
@@ -181,6 +183,71 @@ export const BlueprintExport = ({
     });
   };
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
+  const hasUsablePath = playableMotionPaths(project).length > 0;
+  const recoverIssue = (issue: FabricationIssue) => {
+    const mechanism = issue.mechanismId
+      ? project.mechanisms.find((item) => item.id === issue.mechanismId)
+      : undefined;
+    if (mechanism) {
+      dispatch({
+        type: "select_mechanism",
+        mechanismId: issue.mechanismId,
+      });
+      if (
+        mechanism.targetSceneObjectId &&
+        project.sceneObjects[mechanism.targetSceneObjectId]
+      ) {
+        dispatch({
+          type: "select_scene_object",
+          objectId: mechanism.targetSceneObjectId,
+        });
+      }
+    }
+    const targetPartId = issue.partId ?? mechanism?.targetPartId;
+    if (targetPartId && project.parts[targetPartId]) {
+      dispatch({ type: "select_part", partId: targetPartId });
+    }
+    const targetPathId = issue.pathId
+      ?? mechanism?.targetPathId
+      ?? (mechanism
+        ? resolvedMechanismOutputBindings(project, mechanism).find((binding) => binding.enabled !== false)?.pathId
+        : undefined);
+    if (targetPathId && project.paths[targetPathId]) {
+      dispatch({ type: "select_path", pathId: targetPathId });
+    }
+    const stage = issue.recoveryAction === "Choose target + path" && !hasUsablePath
+      ? "path"
+      : issue.recoveryStage;
+    goStage(stage);
+  };
+  const recoverInactiveMechanism = (mechanismId: string) => {
+    const mechanism = project.mechanisms.find((item) => item.id === mechanismId);
+    if (!mechanism) return;
+    dispatch({
+      type: "select_mechanism",
+      mechanismId,
+    });
+    if (
+      mechanism.targetSceneObjectId &&
+      project.sceneObjects[mechanism.targetSceneObjectId]
+    ) {
+      dispatch({
+        type: "select_scene_object",
+        objectId: mechanism.targetSceneObjectId,
+      });
+    }
+    const targetPartId = mechanism.targetPartId
+      ?? resolvedMechanismOutputBindings(project, mechanism).find((binding) => binding.enabled !== false)?.targetPartId;
+    if (targetPartId && project.parts[targetPartId]) {
+      dispatch({ type: "select_part", partId: targetPartId });
+    }
+    const targetPathId = mechanism.targetPathId
+      ?? resolvedMechanismOutputBindings(project, mechanism).find((binding) => project.paths[binding.pathId])?.pathId;
+    if (targetPathId && project.paths[targetPathId]) {
+      dispatch({ type: "select_path", pathId: targetPathId });
+    }
+    goStage(hasUsablePath ? "design" : "path");
+  };
   const selectedRecipe = selectBlueprintRecipe(recipes, selectedRecipeId, project.selectedMechanismId);
   const selectedBuildMechanism = buildPlan.mechanisms.find(
     mechanism => mechanism.sourceMechanismId === selectedRecipe?.mechanismId,
@@ -212,6 +279,8 @@ export const BlueprintExport = ({
             buildPlan={buildPlan}
             selectedRecipe={selectedRecipe}
             onSelectRecipe={setSelectedRecipeId}
+            onRecoverIssue={recoverIssue}
+            onRecoverMechanism={recoverInactiveMechanism}
           />,
         ),
         canvas: canvasPane(

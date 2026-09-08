@@ -2,6 +2,7 @@ import { chromium, expect, test, type Page, type TestInfo } from '@playwright/te
 import { readFile } from 'node:fs/promises';
 import type { ProjectState } from '../../types';
 import { dismissStartupAnnouncement } from './startupHarness';
+import { readPortableProjectBundle } from '../../runtime/versions/versionPortable';
 
 test.use({ trace: 'on' });
 
@@ -35,7 +36,7 @@ const saveFile = async (page: Page, testInfo: TestInfo, label: string) => {
   await expect(page.getByTestId('status-bar')).toContainText('Download started');
   const document = JSON.parse(await readFile(file, 'utf8'));
   expect(document.format).toBe('motionsmith-project');
-  return { file, project: document.project as ProjectState };
+  return { file, project: (await readPortableProjectBundle(document)).project };
 };
 
 const openFile = async (page: Page, file: string) => {

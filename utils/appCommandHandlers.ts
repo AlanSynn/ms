@@ -22,6 +22,9 @@ type CreateAppCommandHandlersOptions = {
   openFindFeature?: () => void;
   openFeedback?: () => void;
   openWhatsNew?: () => void;
+  openEarlierVersions?: () => void;
+  keepVersion?: () => void;
+  saveCurrentOnly?: () => void;
 };
 
 export const createAppCommandHandlers = ({
@@ -45,6 +48,9 @@ export const createAppCommandHandlers = ({
   openFindFeature = () => undefined,
   openFeedback = () => undefined,
   openWhatsNew = () => undefined,
+  openEarlierVersions = () => undefined,
+  keepVersion = () => undefined,
+  saveCurrentOnly = () => undefined,
 }: CreateAppCommandHandlersOptions): AppCommandHandlerMap => ({
   "project.new": newProject,
   "project.open": openProject,
@@ -54,6 +60,9 @@ export const createAppCommandHandlers = ({
   "project.exportCopy": exportProjectCopy,
   "project.exportBlueprint": () => goStage("blueprint"),
   "project.resetLesson": resetLesson,
+  "project.versions": openEarlierVersions,
+  "project.keepVersion": keepVersion,
+  "project.saveCurrentOnly": saveCurrentOnly,
   "edit.undo": undoProject,
   "edit.redo": redoProject,
   "view.zoomIn": () => zoomCanvas(1.2),

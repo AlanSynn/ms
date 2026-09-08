@@ -21,7 +21,10 @@ const APP_COMMAND_DEFINITIONS = [
   { id: 'project.saveAs', menu: 'file', label: 'Download Snapshot As…', description: 'Legacy named snapshot.', menuVisible: false },
   { id: 'project.exportCopy', menu: 'file', label: 'Portable Copy', description: 'Legacy portable copy.', menuVisible: false },
   { id: 'project.exportBlueprint', menu: 'file', label: 'Export Blueprint', description: 'Legacy Blueprint handoff.', menuVisible: false },
-  { id: 'project.resetLesson', menu: 'file', label: 'Reset Lesson', description: 'Restore lesson.', testId: 'command-reset-lesson' },
+  { id: 'project.resetLesson', menu: 'file', label: 'Reset Lesson', description: 'Return to the lesson’s original starting state while preserving app settings.', testId: 'command-reset-lesson' },
+  { id: 'project.versions', menu: 'file', label: 'Earlier versions', description: 'View retained project versions.', testId: 'command-open-earlier-versions' },
+  { id: 'project.keepVersion', menu: 'file', label: 'Keep version', description: 'Keep the current project version.' },
+  { id: 'project.saveCurrentOnly', menu: 'file', label: 'Save current only', description: 'Save the current project without earlier versions.', menuVisible: false },
 
   { id: 'edit.undo', menu: 'edit', label: 'Undo', description: 'Undo.', shortcuts: ['Mod+Z'] },
   { id: 'edit.redo', menu: 'edit', label: 'Redo', description: 'Redo.', shortcuts: ['Mod+Shift+Z', 'Mod+Y'] },
@@ -63,7 +66,7 @@ export type AppMenuGroup = {
 };
 
 export const APP_MENU_GROUPS = [
-  { id: 'file', label: 'Project', commandIds: ['project.new', 'project.save', 'project.open', 'project.recoverAutosave', 'project.resetLesson'] },
+  { id: 'file', label: 'Project', commandIds: ['project.new', 'project.save', 'project.open', 'project.recoverAutosave', 'project.versions', 'project.keepVersion', 'project.resetLesson'] },
   { id: 'edit', label: 'Edit', commandIds: ['edit.undo', 'edit.redo'] },
   { id: 'view', label: 'View', commandIds: ['view.zoomIn', 'view.zoomOut', 'view.fit', 'view.reset', 'workspace.saveLayout', 'workspace.restoreLayout', 'workspace.resetLayout'] },
   { id: 'go', label: 'Go', commandIds: ['stage.project', 'stage.character', 'stage.path', 'stage.foundry', 'stage.design', 'stage.blueprint', 'stage.assembly'] },

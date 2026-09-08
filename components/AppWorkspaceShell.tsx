@@ -23,7 +23,7 @@ import type { AppStage, Point, ProjectState } from "../types";
 import type { AppCommandHandlerMap } from "../utils/appCommands";
 import type { WorkflowStatus } from "../utils/workflowStatus";
 import type { StudentSupport } from "../hooks/useStudentSupport";
-import { StudentSupportPanels } from "./support/StudentSupportPanels";
+const StudentSupportPanels = lazy(async () => ({ default: (await import('./support/StudentSupportPanels')).StudentSupportPanels }));
 import type { BrowserRecoveryCandidate } from "../hooks/useColdAutosaveRecovery";
 
 const loadTrackingModal = () => import("./TrackingModal");
@@ -216,7 +216,9 @@ export const AppWorkspaceShell = ({
       )}
       {showShortcuts && <ShortcutHelpDialog onClose={onCloseShortcuts} />}
       {showAbout && <AboutDialog onClose={onCloseAbout} />}
-      <StudentSupportPanels support={support} stage={stage} />
+      {support.surface && <Suspense fallback={<div role="status" className="sr-only">Opening support…</div>}>
+        <StudentSupportPanels support={support} stage={stage} />
+      </Suspense>}
       {showTracking && (
         <Suspense fallback={null}>
           <TrackingModal

@@ -232,12 +232,38 @@ const createClassroomProject = (): ProjectState => {
     false,
     "the regression fixture starts with an absent outputs property",
   );
-  const blob = createPortableProjectBlob(project);
+  const migrated = loadProjectSnapshot(project);
+  const migratedMechanism = migrated.mechanisms.find(
+    (mechanism) => mechanism.id === unboundMechanism.id,
+  );
+  assert(migratedMechanism, "the legacy mechanism survives migration");
+  assert.equal(
+    migratedMechanism.enabled,
+    false,
+    "legacy unbound mechanisms are quarantined before persistence",
+  );
+  assert.deepEqual(
+    migratedMechanism.generatedPath,
+    unboundMechanism.generatedPath,
+    "quarantine preserves the legacy mechanism geometry",
+  );
+  assert.deepEqual(
+    migratedMechanism.activeVisualPartIds,
+    [],
+    "quarantine removes stale active visual target references",
+  );
+  assert(
+    migratedMechanism.warnings?.some((warning) =>
+      warning.startsWith("Output detached:"),
+    ),
+    "quarantine keeps a visible recovery warning",
+  );
+  const blob = createPortableProjectBlob(migrated);
   const reopened = loadProjectSnapshot(
     JSON.parse(await blob.text()) as PortableProjectDocument,
   );
 
-  assertProjectRoundTrip(project, reopened);
+  assertProjectRoundTrip(migrated, reopened);
   assert.deepEqual(
     reopened.mechanisms.find(
       (mechanism) => mechanism.id === unboundMechanism.id,

@@ -4,7 +4,7 @@ import { APP_COMMANDS, commandById } from '../utils/appCommands';
 import { createEmptyProject, createSampleProject } from '../utils/project';
 import { FEATURE_DESTINATIONS, featureDestinationById, planFeatureReveal, resolveFeatureDestination, validateFeatureDestinations, type FeatureId } from '../utils/featureDestinations';
 import { normalizeFeatureQuery, searchFeatures } from '../utils/featureSearch';
-import { beginFeatureReveal, type FeatureRevealOptions } from '../hooks/useFeatureReveal';
+import { beginFeatureReveal, type FeatureRevealOptions } from '../utils/featureReveal';
 
 // Representative queries are deliberately broader than exact labels/aliases.
 export const FEATURE_QUERY_CASES: readonly [string, readonly FeatureId[]][] = [

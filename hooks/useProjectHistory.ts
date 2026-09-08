@@ -2,6 +2,7 @@ import { useState, type SetStateAction } from "react";
 import type { ProjectAction, ProjectState } from "../types";
 import { applyProjectAction, projectSelfCheck } from "../utils/project";
 import { recordProjectAction } from "../utils/performanceAudit";
+import { AUTHORED_SETTINGS, restoreAuthoredSettings } from '../runtime/versions/versionPolicy';
 import {
   boundProjectHistory,
   createProjectHistoryEntry,
@@ -20,6 +21,7 @@ type SetProjectOptions = {
 };
 
 export const isUndoableProjectAction = (action: ProjectAction) =>
+  (action.type !== 'update_settings' || AUTHORED_SETTINGS.some(key => key in action.settings)) &&
   ![
     "set_processing",
     "select_part",
@@ -33,7 +35,7 @@ export const isUndoableProjectAction = (action: ProjectAction) =>
 export const useProjectHistory = (createInitialProject: () => ProjectState) => {
   const [projectHistory, setProjectHistory] = useState<ProjectHistoryState>(
     () => {
-      projectSelfCheck();
+      if (import.meta.env.DEV) projectSelfCheck();
       return { present: createInitialProject(), past: [], future: [] };
     },
   );
@@ -83,7 +85,7 @@ export const useProjectHistory = (createInitialProject: () => ProjectState) => {
         "future",
       );
       return {
-        present: previous,
+        present: { ...previous, settings: restoreAuthoredSettings(prev.present.settings, previous.settings) },
         past: bounded.past,
         future: bounded.future,
       };
@@ -103,7 +105,7 @@ export const useProjectHistory = (createInitialProject: () => ProjectState) => {
         "past",
       );
       return {
-        present: next,
+        present: { ...next, settings: restoreAuthoredSettings(prev.present.settings, next.settings) },
         past: bounded.past,
         future: bounded.future,
       };

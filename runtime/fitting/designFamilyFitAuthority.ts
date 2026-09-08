@@ -20,15 +20,16 @@ const ownerGeometryChanged = (previous: Record<string, object>, next: Record<str
 };
 
 /**
- * A Design family fit is an additive mechanism upsert. Existing mechanism
- * commits may finish while it is in flight, so they are not cancellation
- * authority. Geometry, binding, project, or fabrication-kit changes are.
+ * A Design family fit can replace a motion's current mechanism. A later edit,
+ * selection, or Undo must invalidate it before it can overwrite that state.
  */
 export const designFamilyFitAuthorityChanged = (
   previous: ProjectState,
   next: ProjectState,
 ) =>
   previous.metadata.id !== next.metadata.id ||
+  previous.mechanisms !== next.mechanisms ||
+  previous.selectedMechanismId !== next.selectedMechanismId ||
   previous.selectedPathId !== next.selectedPathId ||
   previous.paths !== next.paths ||
   ownerGeometryChanged(previous.parts, next.parts) ||

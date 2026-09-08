@@ -132,7 +132,7 @@ export const createAutosaveRecoveryWorkerClient = (
     shouldApply: () => boolean = () => true,
     options: {
       readOnly?: boolean;
-      accept?: (candidate: Extract<AutosaveProjectReadResult, { status: "loaded" }>) => boolean;
+      accept?: (candidate: Extract<AutosaveProjectReadResult, { status: "loaded" }>) => boolean | Promise<boolean>;
     } = {},
   ) => {
     releaseActive();
@@ -270,11 +270,17 @@ export const createAutosaveRecoveryWorkerClient = (
             return;
           }
 
-          if (data.output.result.status === "loaded" && options.accept &&
-            !options.accept(data.output.result)) {
-            active = undefined;
-            releaseWorker(worker);
-            return;
+          if (data.output.result.status === "loaded" && options.accept) {
+            const accepted = await options.accept(data.output.result);
+            if (active !== requestState || !requestState.shouldApply()) { supersede(); return; }
+            if (!accepted) {
+              active = undefined;
+              releaseWorker(worker);
+              return;
+            }
+            const unchanged = indexedDbToken ? await backend.isCurrent(indexedDbToken)
+              : storage ? autosaveRecoveryStorageIsCurrent(snapshot, storage) : false;
+            if (!unchanged || active !== requestState) { supersede(); return; }
           }
           if (!requestState.shouldApply()) {
             supersede();
@@ -352,7 +358,7 @@ export const createAutosaveRecoveryWorkerClient = (
           active = undefined;
           releaseWorker(worker);
           callbacks.complete(result);
-        })();
+        })().catch(error => fail(error instanceof Error ? error.message : String(error)));
       };
       worker.onmessageerror = () =>
         fail("Autosave recovery worker returned unreadable data.");

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ProjectState } from "../types";
+import type { VersionAuthority } from '../runtime/versions/versionTypes';
 import type { AutosaveFailureReason } from "../utils/projectAutosaveFormat";
 import {
   commitAutosaveStorageSnapshot,
@@ -64,6 +65,8 @@ export const createAutosaveLifecycleDisposal = (
 };
 
 export type ProjectAutosaveOptions = {
+  historyAuthority?: VersionAuthority;
+  onPrepared?: (project: ProjectState, snapshot: AutosaveSerializedSnapshot) => void;
   projectDecision: ProjectDecisionBoundary;
   suspended?: boolean;
   onFailure?: (status: string) => void;
@@ -82,6 +85,8 @@ export const useProjectAutosave = (
 ): ProjectBackupStatus => {
   const latestProjectRef = useRef<ProjectState>(project);
   latestProjectRef.current = project;
+  const versionOptionsRef = useRef(options);
+  versionOptionsRef.current = options;
   const authorized = options.projectDecision.isAuthorized();
   const allowed = authorized && !options.suspended && project.settings.autosave;
   const allowedRef = useRef(allowed);
@@ -107,6 +112,7 @@ export const useProjectAutosave = (
       preparation: {
         start: (nextProject, _generation, callbacks) => {
           const baseRequest = ++baseRequestGeneration;
+          const historyAuthority = versionOptionsRef.current.historyAuthority;
           void prepareAutosaveStorageBase(
             nextProject,
             (candidate) => prepareIndexedDbAutosaveBase(candidate, backend),
@@ -118,14 +124,17 @@ export const useProjectAutosave = (
               return;
             }
             preparation.start(nextProject, _generation, {
-              ready: (prepared: AutosaveSerializedSnapshot) =>
-                callbacks.ready(
-                  completeAutosaveStorageSnapshot(
+              ready: (prepared: AutosaveSerializedSnapshot) => {
+                versionOptionsRef.current.onPrepared?.(nextProject, prepared);
+                const complete = completeAutosaveStorageSnapshot(
                     base.plan,
                     prepared.serialized,
                     prepared,
-                  ),
-                ),
+                  );
+                complete.snapshot.historyAuthority = historyAuthority;
+                if (complete.localFallbackSnapshot) complete.localFallbackSnapshot.historyAuthority = historyAuthority;
+                callbacks.ready(complete);
+              },
               failed: (error) => {
                 reportFailure("serialization");
                 callbacks.failed(error);
@@ -148,6 +157,10 @@ export const useProjectAutosave = (
       },
       commit: async (nextProject, plan) => {
         if (!allowedRef.current) return false;
+        const expectedAuthority = versionOptionsRef.current.historyAuthority;
+        if (plan.snapshot.historyAuthority?.ownerId !== expectedAuthority?.ownerId ||
+          plan.snapshot.historyAuthority?.branchId !== expectedAuthority?.branchId ||
+          plan.snapshot.historyAuthority?.lineageId !== expectedAuthority?.lineageId) return false;
         const result = await commitAutosaveStorageSnapshot(
           plan,
           (snapshot) => commitIndexedDbAutosaveSnapshot(snapshot, backend),
@@ -190,7 +203,7 @@ export const useProjectAutosave = (
         message: undefined,
       }));
     }
-  }, [allowed, project.settings.autosave, transaction]);
+  }, [allowed, options.historyAuthority?.ownerId, project.settings.autosave, transaction]);
 
   useEffect(() => {
     if (!allowed) return;
@@ -199,7 +212,7 @@ export const useProjectAutosave = (
     // and playback hot path.
     transaction.accept(project);
     setBackupStatus((previous) => ({ ...previous, state: "saving", message: undefined }));
-  }, [allowed, project, transaction]);
+  }, [allowed, options.historyAuthority?.ownerId, project, transaction]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !allowed) {

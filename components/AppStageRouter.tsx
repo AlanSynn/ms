@@ -1,5 +1,6 @@
 import {
   startTransition,
+  lazy,
   Suspense,
   useEffect,
   useState,
@@ -33,10 +34,11 @@ import {
   useAdjacentClassroomStagePreload,
 } from "./classroomStageModules";
 import { CharacterSelection } from "./stages/character/CharacterSelection";
-import { ProjectStage } from "./stages/project/ProjectStage";
+const ProjectStage = lazy(async () => ({ default: (await import('./stages/project/ProjectStage')).ProjectStage }));
 import type { AppCommandHandlerMap } from "../utils/appCommands";
 import type { FoundryCamera } from "../utils/foundryCamera";
 import type { BrowserRecoveryCandidate, ProjectBackupStatus } from "../runtime/persistence/projectDecisionBoundary";
+import type { ProjectVersionsView } from '../runtime/versions/versionTypes';
 
 export type AppStageRouterProps = {
   editorStage: AppStage;
@@ -47,6 +49,7 @@ export type AppStageRouterProps = {
   playbackClock: PlaybackClock;
   commandHandlers: AppCommandHandlerMap;
   projectBackup?: ProjectBackupStatus;
+  projectVersions?: ProjectVersionsView;
   recoveryCandidate?: BrowserRecoveryCandidate;
   workingCamera?: FoundryCamera;
   onWorkingCameraChange?: (camera: FoundryCamera) => void;
@@ -161,6 +164,7 @@ export const AppStageRouter = ({
   playbackClock,
   commandHandlers,
   projectBackup,
+  projectVersions,
   recoveryCandidate,
   workingCamera,
   onWorkingCameraChange,
@@ -236,7 +240,7 @@ export const AppStageRouter = ({
         angle={angle} isPlaying={isPlaying} playbackClock={playbackClock}
         viewport={viewport} setViewport={setViewport}
         camera={workingCamera} onCameraChange={onWorkingCameraChange}
-        backup={projectBackup} recoveryCandidate={recoveryCandidate} />
+        backup={projectBackup} recoveryCandidate={recoveryCandidate} versions={projectVersions} />
     )}
     {mountedStage === "character" && (
       <CharacterSelection

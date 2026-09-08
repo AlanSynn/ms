@@ -33,6 +33,8 @@ const commandAliases: Partial<Record<AppCommandId, readonly string[]>> = {
   'project.open': ['reopen', 'load my project', 'load file', 'continue my work', 'continue yesterday work', 'open saved file'],
   'project.recoverAutosave': ['lost my work', 'recover autosave', 'restore browser save', 'get work back'],
   'project.new': ['start again', 'blank project', 'new work'],
+  'project.versions': ['go back', 'earlier version', 'earlier versions', 'before my changes', 'history'],
+  'project.keepVersion': ['keep version', 'keep this version', 'mark version'],
   'project.resetLesson': ['reset starter', 'restore lesson', 'reset lesson'],
   'edit.undo': ['go back', 'fix my last change', 'reverse my last change', 'undo mistake', 'take back change'],
   'edit.redo': ['put change back', 'redo change'],
@@ -57,6 +59,10 @@ const stageControlTargets: Partial<Record<AppStage, LocalFeatureId>> = {
   design: 'design.mechanism', blueprint: 'blueprint.pdf', assembly: 'assembly.steps',
 };
 
+const commandHelpIds: Partial<Record<AppCommandId, ContextHelpId>> = {
+  'project.versions': 'project.versions',
+};
+
 const commandDestinations: FeatureDestination[] = APP_COMMANDS
   .filter(command => command.menuVisible !== false && command.id !== 'help.findFeature')
   .map(command => {
@@ -68,6 +74,7 @@ const commandDestinations: FeatureDestination[] = APP_COMMANDS
       label: command.label,
       description: command.description,
       aliases: commandAliases[command.id] ?? [],
+      ...(commandHelpIds[command.id] ? { helpId: commandHelpIds[command.id] } : {}),
       targetId: stageTarget ?? command.id,
       ...(stageTarget ? { stage: command.stageTarget } : { menu: command.menu }),
       ...(surface ? { surface } : {}),

@@ -474,6 +474,7 @@ export type ProjectAction =
     | { type: 'set_processing'; processing: ProcessingStatus }
     | { type: 'select_part'; partId?: string }
     | { type: 'select_path'; pathId?: string }
+    | { type: 'select_mechanism'; mechanismId?: string }
     | { type: 'select_scene_object'; objectId?: string }
     | { type: 'upsert_part'; part: BodyPartLayer }
     | { type: 'delete_part'; partId: string }

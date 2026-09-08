@@ -8,6 +8,9 @@ import type {
 } from "../../../types";
 import { fabricationBoardCoordinateCallout } from "../../../utils/fabrication";
 import { referenceRecipeForType } from "../../../utils/mechanismReference";
+import { mechanismTemplateLabel } from "../../../utils/mechanismTemplates";
+import { resolvedMechanismOutputBindings } from "../../../utils/mechanismBindings";
+import { playableMotionPaths } from "../../../utils/motion";
 import { downloadText } from "../../../utils/project";
 import { StageLeftSummary } from "../stageLayout";
 import { ContextHelp } from "../../ui/ContextHelp";
@@ -37,6 +40,8 @@ export const BlueprintControlPanel = ({
   buildPlan,
   selectedRecipe,
   onSelectRecipe,
+  onRecoverIssue,
+  onRecoverMechanism,
 }: {
   project: ProjectState;
   goStage: (stage: AppStage) => void;
@@ -55,6 +60,8 @@ export const BlueprintControlPanel = ({
   buildPlan: BuildPlanV1;
   selectedRecipe?: FabricationRecipe;
   onSelectRecipe: (mechanismId: string) => void;
+  onRecoverIssue: (issue: FabricationIssue) => void;
+  onRecoverMechanism: (mechanismId: string) => void;
 }) => {
   const recipeTitle = (recipe: FabricationRecipe) =>
     referenceRecipeForType(recipe.type).title;
@@ -64,6 +71,70 @@ export const BlueprintControlPanel = ({
     const part = project.parts[partId];
     return Boolean(part && part.visible !== false);
   });
+  const usablePathIds = new Set(playableMotionPaths(project).map((path) => path.id));
+  const hasUsablePath = usablePathIds.size > 0;
+  const inactiveMechanisms = project.mechanisms.filter((mechanism) => {
+    if (mechanism.visible === false || mechanism.enabled !== false) return false;
+    const bindings = resolvedMechanismOutputBindings(project, mechanism);
+    const hasUsableBinding = bindings.some((binding) =>
+      binding.enabled !== false && usablePathIds.has(binding.pathId),
+    );
+    const hasDetachedWarning = mechanism.warnings?.some((warning) =>
+      warning.startsWith("Output detached:"),
+    ) ?? false;
+    return hasDetachedWarning || !hasUsableBinding;
+  });
+  const recoveryLabel = (issue: FabricationIssue) =>
+    issue.recoveryAction === "Choose target + path"
+      ? hasUsablePath ? "Connect path" : "Draw path"
+      : issue.recoveryAction
+        .replace(/^Rebind mechanism target$/, "Connect target")
+        .replace(/^Rebind target path$/, "Choose target path")
+        .replace(/^Choose existing part$/, "Choose part")
+        .replace(/^Choose existing object$/, "Choose object")
+        .replace(/^Choose valid path$/, "Choose path")
+        .replace(/^Review item$/, "Review")
+        .replace(/\s*\+\s*/g, " and ");
+  const issueMechanismLabel = (issue: FabricationIssue) => {
+    const mechanism = issue.mechanismId
+      ? project.mechanisms.find((item) => item.id === issue.mechanismId)
+      : undefined;
+    return mechanism ? mechanismTemplateLabel(mechanism.type) : undefined;
+  };
+  const issueTargetLabel = (issue: FabricationIssue) => {
+    const path = issue.pathId ? project.paths[issue.pathId] : undefined;
+    const target = issue.partId
+      ? project.parts[issue.partId]?.name
+      : path?.sceneObjectId
+        ? project.sceneObjects[path.sceneObjectId]?.name
+        : path
+          ? project.parts[path.partId]?.name
+          : undefined;
+    return target ? `${target} path` : undefined;
+  };
+  const humanIssueMessage = (issue: FabricationIssue) => {
+    const mechanismLabel = issueMechanismLabel(issue);
+    const prefix = issue.mechanismId ? `${issue.mechanismId}: ` : "";
+    let detail = issue.message.startsWith(prefix)
+      ? issue.message.slice(prefix.length)
+      : issue.message;
+    detail = detail
+      .replace(/^choose target \+ path\.?$/i, "Choose a target and motion path.")
+      .replace(/^missing path [^.]+\.?$/i, "Motion path is missing.")
+      .replace(/^path belongs to [^.]+\.?$/i, "Motion path belongs to another target.")
+      .replace(/^target path [^ ]+ is missing\.?$/i, "Motion path is missing.")
+      .replace(/^target path [^ ]+ belongs to .+$/i, "Motion path belongs to another target.")
+      .replace(/^target part [^ ]+ is missing\.?$/i, "Target part is missing.")
+      .replace(/^target object [^ ]+ is missing\.?$/i, "Target object is missing.");
+    if (!mechanismLabel) return detail;
+    const target = issueTargetLabel(issue);
+    return `${mechanismLabel}: ${detail}${target ? ` · ${target}` : ""}`;
+  };
+  const recoveryAriaLabel = (issue: FabricationIssue) => {
+    const mechanismLabel = issueMechanismLabel(issue);
+    const action = recoveryLabel(issue);
+    return `${action}${mechanismLabel ? ` for ${mechanismLabel}` : ""}`;
+  };
 
   return (
     <div className="stage-pane-stack" data-testid="blueprint-control-panel">
@@ -83,16 +154,45 @@ export const BlueprintControlPanel = ({
               className={issue.severity === "error" ? "error" : "warning"}
               key={`${issue.message}-${index}`}
             >
-              <div>{issue.message}</div>
+              <div>{humanIssueMessage(issue)}</div>
               <button
+                type="button"
                 className="mt-2 underline"
-                onClick={() => goStage(issue.recoveryStage)}
+                data-testid={`blueprint-recovery-${issue.mechanismId ?? issue.pathId ?? index}`}
+                data-fabrication-recovery={issue.mechanismId ?? issue.pathId ?? "issue"}
+                onClick={() => onRecoverIssue(issue)}
+                aria-label={recoveryAriaLabel(issue)}
               >
-                {issue.recoveryAction}
+                {recoveryLabel(issue)}
               </button>
             </div>
           ))}
-          {!validation.errors.length && !validation.warnings.length && (
+          {inactiveMechanisms.map((mechanism) => {
+            const label = mechanismTemplateLabel(mechanism.type);
+            const action = hasUsablePath ? "Connect path" : "Draw path";
+            const bindings = resolvedMechanismOutputBindings(project, mechanism);
+            const hasKnownBindingPath = bindings.some((binding) => Boolean(project.paths[binding.pathId]));
+            const status = hasKnownBindingPath ? "Check paths" : "No path";
+            return (
+              <div
+                className="warning"
+                key={`inactive-${mechanism.id}`}
+                data-blueprint-inactive-mechanism={mechanism.id}
+              >
+                <div>{label} · {status} · Off</div>
+                <button
+                  type="button"
+                  className="mt-2 underline"
+                  data-testid={`blueprint-inactive-recovery-${mechanism.id}`}
+                  onClick={() => onRecoverMechanism(mechanism.id)}
+                  aria-label={`${action} for ${label}`}
+                >
+                  {action}
+                </button>
+              </div>
+            );
+          })}
+          {!validation.errors.length && !validation.warnings.length && !inactiveMechanisms.length && (
             <div className="ok">Ready.</div>
           )}
         </div>

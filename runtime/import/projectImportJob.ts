@@ -12,6 +12,8 @@ import { autosaveByteLength } from "../../utils/autosaveFingerprint";
 import { AUTOSAVE_SNAPSHOT_MAX_BYTES } from "../../utils/projectAutosaveFormat";
 import { serializeProjectCompact } from "../../utils/projectSerialization";
 import { readProjectFileCandidate } from "./projectFileCandidate";
+import { readPortableProjectBundle } from '../versions/versionPortable';
+import type { VersionArchive } from '../versions/versionTypes';
 import {
   validateCharacterPackageRasterFiles,
   validateProjectRasterSources,
@@ -35,6 +37,7 @@ export type ProjectImportWorkerResponse =
       generationId: number;
       project: ProjectState;
       sourceName: string;
+      history?: VersionArchive;
     }
   | { type: "error"; generationId: number; message: string };
 
@@ -134,11 +137,13 @@ export const runProjectImportJob = async (input: ProjectImportInput) => {
       sourceName: "Character package",
     };
   }
-  validateProjectImportFile(input.file);
+  validateProjectImportFile(input.file, { allowHistory: true });
   const document = JSON.parse(await input.file.text());
-  const project = readProjectFileCandidate(document);
+  if (!document?.history && input.file.size > 12 * 1024 * 1024) throw new Error('Project file is larger than the 12 MB current-state limit.');
+  const { project, history } = await readPortableProjectBundle(document);
   return {
     project,
+    history,
     sourceName: input.file.name,
   };
 };

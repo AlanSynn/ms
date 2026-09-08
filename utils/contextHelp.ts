@@ -1,6 +1,7 @@
 export type HelpLocale = "en";
 
 export type ContextHelpId =
+  | "project.versions"
   | "character.loadCharacterFile"
   | "character.loadObjectFile"
   | "character.drawPaint"
@@ -30,6 +31,12 @@ export const CONTEXT_HELP: Record<
   ContextHelpId,
   Record<HelpLocale, ContextHelpEntry>
 > = {
+  "project.versions": {
+    en: {
+      title: "Earlier versions",
+      body: "Preview a retained project state without changing your current work.",
+    },
+  },
   "character.loadCharacterFile": {
     en: {
       title: "Character file",
