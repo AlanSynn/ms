@@ -383,19 +383,20 @@ const auditOptionsHistory = async (
     () => expect(performancePreset).toHaveValue("fast"),
   ));
 
-  const speed = page.getByLabel("Animation speed slider");
-  const nextSpeed = Math.min(5, Number(await speed.inputValue()) + 0.2);
-  actions.push(await finishAction(page, "speed-down", 2, () =>
+  const duration = page.getByLabel("Duration slider");
+  const durationBefore = Number(await duration.inputValue());
+  const nextDuration = Number(Math.min(60, durationBefore + 0.2).toFixed(1));
+  actions.push(await finishAction(page, "duration-down", 2, () =>
     measurePointerEventToNextPaint(page, "pointerdown", () =>
-      speed.dispatchEvent("pointerdown", { pointerId: 1, pointerType: "mouse" })),
+      duration.dispatchEvent("pointerdown", { pointerId: 1, pointerType: "mouse" })),
   ));
-  actions.push(await finishAction(page, "speed-draft", 2, () =>
-    measureRangeUpdate(speed, nextSpeed),
-    () => expect(speed).toHaveValue(String(nextSpeed)),
+  actions.push(await finishAction(page, "duration-draft", 2, () =>
+    measureRangeUpdate(duration, nextDuration),
+    () => expect(duration).toHaveValue(String(nextDuration)),
   ));
-  actions.push(await finishAction(page, "speed-commit", 2, () =>
+  actions.push(await finishAction(page, "duration-commit", 2, () =>
     measurePointerEventToNextPaint(page, "pointerup", () =>
-      speed.dispatchEvent("pointerup", { pointerId: 1, pointerType: "mouse" })),
+      duration.dispatchEvent("pointerup", { pointerId: 1, pointerType: "mouse" })),
   ));
 
   const toolbar = page.getByLabel("Show toolbar");
@@ -410,8 +411,9 @@ const auditOptionsHistory = async (
   actions.push(await finishAction(page, "undo", 4, () =>
     measureClickToNextPaint(undo),
     async () => {
-      await expect(toolbar).toBeChecked();
-      await expect(page.getByTestId("quick-toolbar")).toBeVisible();
+      await expect(duration).toHaveValue(String(durationBefore));
+      await expect(toolbar).not.toBeChecked();
+      await expect(page.getByTestId("quick-toolbar")).toHaveCount(0);
     },
   ));
 
@@ -420,6 +422,7 @@ const auditOptionsHistory = async (
   actions.push(await finishAction(page, "redo", 5, () =>
     measureClickToNextPaint(redo),
     async () => {
+      await expect(duration).toHaveValue(String(nextDuration));
       await expect(toolbar).not.toBeChecked();
       await expect(page.getByTestId("quick-toolbar")).toHaveCount(0);
     },

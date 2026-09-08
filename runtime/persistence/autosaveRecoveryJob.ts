@@ -45,6 +45,7 @@ export type AutosaveProjectReadResult =
   | (Extract<ProjectSnapshotLoadResult, { status: "loaded" }> & {
       recovery: AutosaveRecovery;
       backedUpAt?: number;
+      historyBranchId?: string;
     })
   | (Extract<ProjectSnapshotLoadResult, { status: "rejected" }> & {
       recovery: AutosaveRecovery;
@@ -286,7 +287,7 @@ export const runAutosaveRecoveryJob = ({
               error: previousIssue
                 ? "autosave previous generation is missing or corrupt"
                 : undefined,
-            }), backedUpAt: metadata.committedAt },
+            }), backedUpAt: metadata.committedAt, historyBranchId: metadata.historyBranchId },
           };
         }
       }
@@ -300,7 +301,7 @@ export const runAutosaveRecoveryJob = ({
               source: "previous",
               generation: metadata.currentGeneration,
               error: "current autosave generation is missing or corrupt",
-            }), backedUpAt: metadata.committedAt },
+            }), backedUpAt: metadata.committedAt, historyBranchId: metadata.historyBranchId },
           };
         }
       }
@@ -309,12 +310,12 @@ export const runAutosaveRecoveryJob = ({
         const previous = loadedSnapshot(previousRaw, currentProject);
         if (previous.status === "loaded") {
           return {
-            result: loadedWithRecovery(previous, {
+            result: { ...loadedWithRecovery(previous, {
               outcome: "corrupt-generation",
               source: "previous",
               generation: metadata.previousGeneration ?? undefined,
               error: "current autosave generation is corrupt",
-            }),
+            }), historyBranchId: metadata.previousHistoryBranchId },
           };
         }
       }

@@ -545,7 +545,7 @@ test('Character tab owns separate scene objects and later tabs only render them'
   });
   await page.getByTestId('command-menu-file').click();
   await page.getByRole('button', { name: 'New Project', exact: true }).click();
-  expect(discardMessage).toContain('A recovery copy download will start first');
+  expect(discardMessage).toContain('Current work will be kept in Earlier versions and a recovery copy.');
   await expect(page.getByTestId('status-bar')).toContainText('Project unchanged');
 
   page.once('dialog', async dialog => dialog.accept());
@@ -1332,7 +1332,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
     await dialog.accept();
   });
   await openFabricationReadyFourBar(page);
-  expect(replacementDialogMessage).toContain('A recovery copy download will start first');
+  expect(replacementDialogMessage).toContain('Current work will be kept in Earlier versions and a recovery copy.');
 
   await clickStage(page, 'Foundry');
   await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
@@ -1615,7 +1615,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const exportedPackage = await readBlueprintPackage(page);
   expect(exportedPackage.assemblyGuideHtml).toContain('assembly guide');
   expect(exportedPackage.assemblyGuideHtml).toContain('Right lower arm');
-  expect(exportedPackage.assemblyGuidePdf.slice(0, 5)).toBe('%PDF-');
+  expect(exportedPackage.assemblyGuidePdf).toMatch(/^data:application\/pdf;base64,/);
+  expect(Buffer.from(exportedPackage.assemblyGuidePdf.split(',')[1], 'base64').subarray(0, 5).toString()).toBe('%PDF-');
 
   expect(exportedPackage.customPartsStl, 'ordinary package state does not retain the optional STL').toBe('');
   const [stlDownload] = await Promise.all([
@@ -4833,13 +4834,13 @@ test('Command menu and shared canvas zoom persist across workflow stages', async
   await page.setViewportSize({ width: 1440, height: 900 });
 
   await page.getByTestId('command-menu-file').click();
-  let dialogMessage = '';
-  page.once('dialog', async dialog => {
-    dialogMessage = dialog.message();
+  const dialogMessage = page.waitForEvent('dialog').then(async dialog => {
+    const message = dialog.message();
     await dialog.dismiss();
+    return message;
   });
   await page.getByRole('button', { name: 'New Project', exact: true }).click();
-  expect(dialogMessage).toContain('A recovery copy download will start first');
+  expect(await dialogMessage).toContain('Current work will be kept in Earlier versions and a recovery copy.');
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
   await expect(page.getByTestId('status-bar')).toContainText('Project unchanged');
 
@@ -4848,6 +4849,11 @@ test('Command menu and shared canvas zoom persist across workflow stages', async
 
   await page.getByRole('button', { name: /Options/i }).click();
   await expect(page.getByRole('heading', { name: 'Options' })).toBeVisible();
+  const durationField = page.getByLabel('Duration number', { exact: true });
+  const durationBefore = await durationField.inputValue();
+  const durationAfter = durationBefore === '6' ? '7' : '6';
+  await durationField.fill(durationAfter);
+  await durationField.press('Enter');
   await page.getByLabel('Show toolbar').uncheck();
   await expect(page.getByTestId('quick-toolbar')).toHaveCount(0);
   await page.getByLabel('Show toolbar').check();
@@ -4856,11 +4862,13 @@ test('Command menu and shared canvas zoom persist across workflow stages', async
   await page.getByTestId('top-command-bar').getByText('Edit', { exact: true }).click();
   await page.getByTestId('command-edit-undo').click();
   await expect(page.getByTestId('status-bar')).toContainText('Undo applied');
-  await expect(page.getByLabel('Show toolbar')).not.toBeChecked();
-  await expect(page.getByTestId('quick-toolbar')).toHaveCount(0);
+  await expect(durationField).toHaveValue(durationBefore);
+  await expect(page.getByLabel('Show toolbar')).toBeChecked();
+  await expect(page.getByTestId('quick-toolbar')).toBeVisible();
   await page.getByTestId('top-command-bar').getByText('Edit', { exact: true }).click();
   await page.getByRole('button', { name: 'Redo' }).click();
   await expect(page.getByTestId('status-bar')).toContainText('Redo applied');
+  await expect(durationField).toHaveValue(durationAfter);
   await expect(page.getByLabel('Show toolbar')).toBeChecked();
   await expect(page.getByTestId('quick-toolbar')).toBeVisible();
 
@@ -4948,6 +4956,12 @@ test('Every top menu command is wired to a visible result', async ({ page }) => 
   await run('stage.project');
   await expect(page.getByTestId('project-lifecycle-panel')).toBeVisible();
   await expect(page.getByTestId('project-lifecycle-panel').getByRole('button', { name: 'Save Project', exact: true })).toBeVisible();
+  await run('project.keepVersion');
+  await expect(page.getByTestId('status-bar')).toContainText('Version kept in this browser');
+  await run('project.versions');
+  await expect(page.getByTestId('earlier-versions-panel')).toBeVisible();
+  await expect(page.getByTestId('earlier-versions-list').locator('[data-version-status="committed"]')).toHaveCount(1);
+  await page.getByTestId('earlier-versions-close').click();
   await run('stage.character');
   await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
   await run('stage.path');
@@ -4999,10 +5013,16 @@ test('Every top menu command is wired to a visible result', async ({ page }) => 
   await expect(page.getByTestId('status-bar')).toContainText('Workspace layout reset');
 
   await run('options.preferences');
+  const friction = page.getByLabel('Friction number', { exact: true });
+  const originalFriction = await friction.inputValue();
+  await friction.fill('0.87');
+  await friction.press('Tab');
   await page.getByLabel('Show toolbar').uncheck();
   await run('edit.undo');
-  await expect(page.getByLabel('Show toolbar')).toBeChecked();
+  await expect(friction).toHaveValue(originalFriction);
+  await expect(page.getByLabel('Show toolbar')).not.toBeChecked();
   await run('edit.redo');
+  await expect(friction).toHaveValue('0.87');
   await expect(page.getByLabel('Show toolbar')).not.toBeChecked();
   await page.getByLabel('Show toolbar').check();
 
@@ -5037,7 +5057,7 @@ test('Every top menu command is wired to a visible result', async ({ page }) => 
   await expectProjectCounts(page, 14, 1, 1);
   exercised.add('project.new');
   page.once('dialog', async dialog => {
-    expect(dialog.message()).toContain('A recovery copy download will start first');
+    expect(dialog.message()).toContain('Current work will be kept in Earlier versions and a recovery copy.');
     await dialog.accept();
   });
   await runCommand('project.new');

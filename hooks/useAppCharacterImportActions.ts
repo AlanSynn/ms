@@ -1,3 +1,4 @@
+import { confirmProjectReplacement } from '../runtime/persistence/projectReplacementSafety';
 import {
   startTransition,
   useEffect,
@@ -11,7 +12,6 @@ import {
   downloadText,
   replaceCharacterProject,
 } from "../utils/project";
-import { confirmProjectReplacement } from "../runtime/persistence/projectReplacementSafety";
 import { projectHasStudentWork, type ProjectDecisionBoundary } from "../runtime/persistence/projectDecisionBoundary";
 export { projectHasStudentWork } from "../runtime/persistence/projectDecisionBoundary";
 import {
@@ -19,6 +19,7 @@ import {
   type CharacterImportProgressStore,
 } from "../runtime/import/characterImportProgressStore";
 import { createProjectImportWorkerClient } from "../runtime/import/projectImportWorkerClient";
+import type { ProjectVersionsController } from './useProjectVersions';
 
 type SetProjectOptions = {
   history?: boolean;
@@ -26,6 +27,7 @@ type SetProjectOptions = {
 };
 
 type UseAppCharacterImportActionsParams = {
+  versions?: ProjectVersionsController;
   project: ProjectState;
   dispatch: (action: ProjectAction) => void;
   setProject: (project: SetStateAction<ProjectState>, options?: SetProjectOptions) => void;
@@ -77,6 +79,7 @@ export const projectImportGuardAllows = (
 };
 
 export const useAppCharacterImportActions = ({
+  versions,
   project,
   dispatch,
   setProject,
@@ -155,22 +158,27 @@ export const useAppCharacterImportActions = ({
       projectImportGuardAllows(guard, current);
     setCommandStatus(`Opening ${file.name}…`);
     importClient.requestProject(file, {
-      complete: ({ project: next }) => {
+      complete: async ({ project: next, history }) => {
         if (!isCurrent(latestProjectRef.current)) {
           setCommandStatus("Project changed while opening. Open it again.");
           return;
         }
         try {
-          if (!confirmProjectReplacement(sourceProject, `Open ${file.name}`)) {
+          const accepted = versions ? await versions.protectReplacement(sourceProject, `Open ${file.name}`)
+            : confirmProjectReplacement(sourceProject, `Open ${file.name}`);
+          if (!accepted) {
             setCommandStatus("Project unchanged");
             return;
           }
         } catch (error) {
+          if (!isCurrent(latestProjectRef.current)) return;
+          versions?.reportFailure(error, () => importProject(file));
           setCommandStatus(`Open cancelled: ${error instanceof Error ? error.message : String(error)}`);
           return;
         }
         if (!isCurrent(latestProjectRef.current)) return;
-        projectDecision.complete(decisionToken);
+        if (!projectDecision.complete(decisionToken)) return;
+        versions?.choose(next, { history });
         setProject((current) => isCurrent(current) ? next : current, { resetHistory: true });
         progressStore.publishPending(null);
         progressStore.publishProgress(null);
@@ -210,7 +218,7 @@ export const useAppCharacterImportActions = ({
     setCommandStatus("Saved skeleton config");
   };
 
-  const acceptPendingCharacter = () => {
+  const acceptPendingCharacter = async () => {
     const pendingCharacter = progressStore.getPending();
     if (!pendingCharacter) return;
     const sourceProject = latestProjectRef.current;
@@ -220,15 +228,20 @@ export const useAppCharacterImportActions = ({
       : pendingCharacter.project;
     const decisionToken = projectDecision.begin();
     try {
-      if (!confirmProjectReplacement(sourceProject, `Replace the character and keep ${Object.keys(replacement.paths).length} paths`)) {
+      const label = `Replace the character and keep ${Object.keys(replacement.paths).length} paths`;
+      const accepted = versions ? await versions.protectReplacement(sourceProject, label) : confirmProjectReplacement(sourceProject, label);
+      if (!accepted) {
         setCommandStatus("Character unchanged");
         return;
       }
     } catch (error) {
+      if (latestProjectRef.current !== sourceProject || !projectDecision.isCurrent(decisionToken)) return;
+      versions?.reportFailure(error, () => { void acceptPendingCharacter(); });
       setCommandStatus(`Character unchanged: ${error instanceof Error ? error.message : String(error)}`);
       return;
     }
-    if (!projectDecision.complete(decisionToken)) return;
+    if (progressStore.getPending() !== pendingCharacter || !projectDecision.complete(decisionToken)) return;
+    if (!hasCurrentWork) versions?.choose(replacement);
     startTransition(() => {
       setProject((current) => current === sourceProject && projectDecision.isCurrent(decisionToken)
         ? replacement : current, { resetHistory: true });
@@ -241,6 +254,7 @@ export const useAppCharacterImportActions = ({
   };
 
   const discardPendingCharacter = () => {
+    projectDecision.begin();
     startTransition(() => {
       progressStore.publishPending(null);
       progressStore.publishProgress(null);

@@ -63,12 +63,12 @@ export const useStudentSupport = ({ rootRef, project, stage, goStage, onStatus, 
     setSurface(null);
     if (startupAnnouncement) onDismissStartup();
   };
-  const reveal = (id: FeatureId) => {
+  const reveal = async (id: FeatureId) => {
     if (id === 'help.feedback' || id === 'help.whatsNew') {
       open(id === 'help.feedback' ? 'feedback' : 'whatsNew');
       return;
     }
-    if (!revealFeature(id)) return;
+    if (!await revealFeature(id)) return;
     acknowledgeNotes();
     returnFocus.current.restore = false;
     surfaceRef.current = null;

@@ -77,6 +77,8 @@ export type StoredStorageValue = { value: string | null; fromLegacy: boolean };
 export type PersistenceError = Error & { autosaveReason?: AutosaveFailureReason };
 
 export type AutosaveMetadata = {
+  historyBranchId?: string;
+  previousHistoryBranchId?: string;
   formatVersion: 1;
   currentGeneration: number;
   previousGeneration: number | null;
@@ -222,6 +224,8 @@ export const parseMetadata = (raw: string): AutosaveMetadata => {
     typeof value.writerId !== "string" ||
     value.writerId.length === 0 ||
     !Number.isFinite(value.committedAt)
+    || (value.historyBranchId !== undefined && (typeof value.historyBranchId !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(value.historyBranchId)))
+    || (value.previousHistoryBranchId !== undefined && (typeof value.previousHistoryBranchId !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(value.previousHistoryBranchId)))
   ) {
     throw persistenceError("corruption", "autosave metadata is invalid");
   }

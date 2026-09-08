@@ -1,4 +1,5 @@
 import type { ProjectState } from "../../types";
+import { verifyVersionAuthority } from '../versions/versionAuthority';
 import {
   AUTOSAVE_JOURNAL_MAX_BYTES,
   AUTOSAVE_SNAPSHOT_MAX_BYTES,
@@ -76,6 +77,8 @@ const publicMetadata = (stored: StoredAutosaveMetadata): AutosaveMetadata => ({
   transactionId: stored.transactionId,
   writerId: stored.writerId,
   committedAt: stored.committedAt,
+  ...(stored.historyBranchId ? { historyBranchId: stored.historyBranchId } : {}),
+  ...(stored.previousHistoryBranchId ? { previousHistoryBranchId: stored.previousHistoryBranchId } : {}),
 });
 
 const storedMetadata = (value: unknown): StoredAutosaveMetadata => {
@@ -93,6 +96,8 @@ const storedMetadata = (value: unknown): StoredAutosaveMetadata => {
     transactionId: raw.transactionId,
     writerId: raw.writerId,
     committedAt: raw.committedAt,
+    historyBranchId: raw.historyBranchId,
+    previousHistoryBranchId: raw.previousHistoryBranchId,
   }));
   if (
     raw.recordFormatVersion !== RECORD_FORMAT_VERSION ||
@@ -122,13 +127,13 @@ const sameToken = (
   left.fingerprint === right.fingerprint &&
   left.transactionId === right.transactionId;
 
-const requestResult = <T>(request: IDBRequest<T>) =>
+export const requestResult = <T>(request: IDBRequest<T>) =>
   new Promise<T>((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
   });
 
-const transactionDone = (transaction: IDBTransaction) =>
+export const transactionDone = (transaction: IDBTransaction) =>
   new Promise<void>((resolve, reject) => {
     transaction.oncomplete = () => resolve();
     transaction.onabort = () => reject(
@@ -141,7 +146,7 @@ const transactionDone = (transaction: IDBTransaction) =>
 
 let databasePromise: Promise<IDBDatabase> | undefined;
 
-const openAutosaveDatabase = () => {
+export const openAutosaveDatabase = () => {
   if (typeof indexedDB === "undefined") {
     return Promise.reject(
       persistenceError("unavailable", "IndexedDB unavailable"),
@@ -149,21 +154,27 @@ const openAutosaveDatabase = () => {
   }
   databasePromise ??= new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(AUTOSAVE_INDEXED_DB_NAME, DATABASE_VERSION);
+    let blocked = false;
     request.onupgradeneeded = () => {
       if (!request.result.objectStoreNames.contains(AUTOSAVE_INDEXED_DB_STORE)) {
         request.result.createObjectStore(AUTOSAVE_INDEXED_DB_STORE);
       }
     };
     request.onsuccess = () => {
-      request.result.onversionchange = () => request.result.close();
+      if (blocked) { request.result.close(); return; }
+      request.result.onversionchange = () => {
+        request.result.close();
+        databasePromise = undefined;
+      };
       resolve(request.result);
     };
     request.onerror = () => reject(
       request.error ?? persistenceError("unavailable", "IndexedDB open failed"),
     );
-    request.onblocked = () => reject(
-      persistenceError("unavailable", "IndexedDB upgrade is blocked"),
-    );
+    request.onblocked = () => {
+      blocked = true;
+      reject(persistenceError("unavailable", "IndexedDB upgrade is blocked"));
+    };
   }).catch((error) => {
     databasePromise = undefined;
     throw error;
@@ -228,6 +239,10 @@ export const createBrowserAutosaveAtomicBackend = (): AutosaveAtomicBackend => (
     const done = transactionDone(transaction);
     const store = transaction.objectStore(AUTOSAVE_INDEXED_DB_STORE);
     try {
+      if (plan.historyAuthority) {
+        try { await verifyVersionAuthority(store, plan.historyAuthority); }
+        catch (error) { throw persistenceError('stale-write', errorMessage(error)); }
+      }
       const prior = await readStoredMetadata(store);
       const baseGeneration = prior?.currentGeneration ?? 0;
       const baseFingerprint = prior?.currentFingerprint ?? null;
@@ -258,6 +273,8 @@ export const createBrowserAutosaveAtomicBackend = (): AutosaveAtomicBackend => (
         { bytes: plan.bytes, fingerprint: plan.fingerprint },
         keepsPrevious,
       );
+      if (plan.historyAuthority) nextMetadata.historyBranchId = plan.historyAuthority.branchId;
+      if (keepsPrevious && prior?.historyBranchId) nextMetadata.previousHistoryBranchId = prior.historyBranchId;
       const nextKey = `${SNAPSHOT_KEY_PREFIX}${plan.transactionId}`;
       const nextStored: StoredAutosaveMetadata = {
         ...nextMetadata,

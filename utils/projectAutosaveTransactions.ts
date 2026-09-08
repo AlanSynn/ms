@@ -1,4 +1,5 @@
 import type { ProjectState } from "../types";
+import type { VersionAuthority } from '../runtime/versions/versionTypes';
 import { serializeProjectCompact } from "./projectSerialization";
 import {
   AUTOSAVE_FORMAT_VERSION,
@@ -27,6 +28,7 @@ import {
 } from "./projectAutosaveFormat";
 
 export type PreparedAutosaveSnapshot = {
+  historyAuthority?: VersionAuthority;
   serialized: string;
   bytes: number;
   fingerprint: string;
@@ -370,6 +372,11 @@ export const commitAutosaveSnapshot = (
         { bytes: plan.bytes, fingerprint: plan.fingerprint },
         keepsPrevious,
       );
+      if (plan.historyAuthority) {
+        metadata.historyBranchId = plan.historyAuthority.branchId;
+        metadata.previousHistoryBranchId = keepsPrevious && journal.metadata
+          ? parseMetadata(journal.metadata).historyBranchId : undefined;
+      }
       const dirtyRaw = JSON.stringify(
         dirtyMarker(
           plan.projectId,
@@ -478,6 +485,7 @@ export const commitAutosaveStorageSnapshot = async (
   storage?: AutosaveStorage,
 ): Promise<AutosaveWriteResult> => {
   if (plan.destination === "local-storage") {
+    if (plan.snapshot.historyAuthority) return failedWrite('unavailable', 'Browser storage authority could not be verified. Save Project.', plan.snapshot.transactionId);
     return commitAutosaveSnapshot(plan.snapshot, storage);
   }
   let result: AutosaveWriteResult;
@@ -492,6 +500,7 @@ export const commitAutosaveStorageSnapshot = async (
   }
   if (result.status === "saved") return result;
   if (
+    plan.snapshot.historyAuthority ||
     !supportsLocalAutosaveFallback(result.reason) ||
     !plan.localFallbackSnapshot
   ) return result;

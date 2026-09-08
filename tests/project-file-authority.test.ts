@@ -108,7 +108,7 @@ await assert.rejects(runProjectImportJob({
   kind: "project", file: new File([serializeProject(unsafeArtwork)], "oversized-art.motionsmith"),
 }), /texture limit/);
 assert.equal(JSON.stringify(project), sourceBefore);
-await assert.rejects(runProjectImportJob({ kind: "project", file: new File([" ".repeat(12 * 1024 * 1024 + 1)], "huge.motionsmith") }), /12 MB/);
+await assert.rejects(runProjectImportJob({ kind: "project", file: new File([" ".repeat(12 * 1024 * 1024 + 1), serializeProject(project)], "huge.motionsmith") }), /12 MB/);
 
 const decision = createProjectDecisionBoundary();
 const oldRecovery = decision.begin();

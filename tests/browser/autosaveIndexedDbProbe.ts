@@ -96,7 +96,13 @@ export const clearBrowserAutosave = (page: Page) =>
       open.onsuccess = () => {
         const database = open.result;
         const transaction = database.transaction(identity.storeName, "readwrite");
-        transaction.objectStore(identity.storeName).clear();
+        const store = transaction.objectStore(identity.storeName);
+        const keys = store.getAllKeys();
+        keys.onsuccess = () => {
+          for (const key of keys.result) {
+            if (key === identity.metadataKey || (typeof key === 'string' && key.startsWith('snapshot:'))) store.delete(key);
+          }
+        };
         transaction.onerror = () => reject(
           transaction.error ?? new Error("Autosave clear failed"),
         );

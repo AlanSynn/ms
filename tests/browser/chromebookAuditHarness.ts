@@ -1067,7 +1067,9 @@ export const collectStableFeatureProbe = async (
           memoryError ?? "Authoritative memory sampling did not remain available",
       };
   return {
-    ...probe,
+    // Memory sampling can outlast an idle Worker's lifetime. Measure ownership
+    // at the completed boundary so its later disposal is not reported as a leak.
+    ...await readFeatureRuntimeProbe(page),
     heapBytes: measuredMemory.bytes,
     heapSamplesBytes: authoritativeMemory
       ? authoritativeSamples

@@ -34,9 +34,10 @@ const packageAssetPattern = /\.(?:png|jpe?g|webp|svg)$/i;
 export const isCharacterPackageAsset = (file: Pick<File, "name">) =>
   packageAssetPattern.test(file.name);
 
-export const validateProjectImportFile = (file: Pick<File, "name" | "size">) => {
-  if (file.size > PROJECT_IMPORT_LIMITS.projectBytes) {
-    throw new Error("Project file is larger than the 12 MB classroom limit.");
+export const validateProjectImportFile = (file: Pick<File, "name" | "size">, options: { allowHistory?: boolean } = {}) => {
+  const maximum = options.allowHistory ? 48 * MEBIBYTE : PROJECT_IMPORT_LIMITS.projectBytes;
+  if (file.size > maximum) {
+    throw new Error(options.allowHistory ? 'Project file is larger than the 48 MB portable limit.' : 'Project file is larger than the 12 MB classroom limit.');
   }
 };
 

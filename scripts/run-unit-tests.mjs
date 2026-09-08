@@ -58,6 +58,10 @@ const UNIT_TEST_FILES = [
   'three-resource-retention.test.ts',
   'tracking-media-policy.test.ts',
   'transient-value-controller.test.ts',
+  'version-codec.test.ts',
+  'version-policy.test.ts',
+  'version-portable.test.ts',
+  'version-worker.test.ts',
 ];
 
 const discoveredUnitTests = readdirSync(TEST_DIRECTORY)

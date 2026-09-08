@@ -6,6 +6,7 @@ import { assertProjectRoundTrip } from "../../utils/projectSerialization";
 import { writeAutosaveSnapshot } from "../../utils/projectAutosaveTransactions";
 import { readBrowserAutosaveProbe } from "./autosaveIndexedDbProbe";
 import { dismissStartupAnnouncement } from "./startupHarness";
+import { readPortableProjectBundle } from '../../runtime/versions/versionPortable';
 
 const APP_PATH = process.env.PLAYWRIGHT_BASE_PATH ?? process.env.VITE_BASE_PATH ?? "/";
 const RECOVERY = "motionsmith-autosave-recovery";
@@ -115,7 +116,7 @@ const savedProject = async (page: Page): Promise<ProjectState> => {
   await page.getByTestId("command-download-snapshot").click();
   const file = await (await download).path();
   await expect(page.getByTestId("status-bar")).toContainText("Download started:");
-  return JSON.parse(await readFile(file!, "utf8")).project;
+  return (await readPortableProjectBundle(JSON.parse(await readFile(file!, 'utf8')))).project;
 };
 
 test("an older same-ID file and its edit survive a deliberately late browser recovery", async ({ page }) => {
