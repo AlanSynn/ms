@@ -8,6 +8,7 @@ export type ContextHelpId =
   | "character.drawObject"
   | "character.bodySides"
   | "path.draw"
+  | "path.recommendationScore"
   | "path.smoothness"
   | "path.trace"
   | "foundry.fitPath"
@@ -70,7 +71,13 @@ export const CONTEXT_HELP: Record<
   "path.draw": {
     en: {
       title: "Draw",
-      body: "Sketch the motion directly on the canvas. The selected part follows it.",
+      body: "Draw where the selected part should move, not the shape of the part.",
+    },
+  },
+  "path.recommendationScore": {
+    en: {
+      title: "Recommendation score",
+      body: "Use this number to compare recommendations. It is not a grade or a target to maximize. Choose the motion that best matches what you want to happen.",
     },
   },
   "path.smoothness": {

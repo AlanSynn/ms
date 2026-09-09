@@ -42,12 +42,15 @@ state.markViewed('repaired');
 assert(Array.isArray(JSON.parse(local.getItem(RELEASE_READ_KEY)!)));
 assert.equal(releaseNoteForVersion('not-shipped'), undefined);
 assert.equal(releaseNoteForVersion('0.0.16')?.id, 'paint-and-draw-v1');
+assert.equal(releaseNoteForVersion('0.0.17')?.id, 'classroom-motion-cues-v1');
+assert.deepEqual(releaseNotesForVersion('0.0.17').slice(1), releaseNotesForVersion('0.0.16'),
+  'the motion cue release preserves every published entry');
 const retainedIds = ['classroom-return-v1', 'student-support-v1'];
 assert.deepEqual(releaseNotesForVersion('0.0.14'), [],
   'the one-time release metadata correction moves the current notes out of v0.0.14');
 assert.deepEqual(releaseNotesForVersion('0.0.15').map(entry => entry.id),
   ['release-history-v1', ...retainedIds], 'v0.0.15 adds to the archive instead of replacing it');
-assert.deepEqual(releaseNotesForVersion('0.0.17'), releaseNotesForVersion('0.0.16'),
+assert.deepEqual(releaseNotesForVersion('0.0.18'), releaseNotesForVersion('0.0.17'),
   'a version bump without new notes must still show the archive');
 assert.deepEqual(releaseNotesForVersion('0.0.13'), [], 'future updates are not shown in older builds');
 assert.deepEqual(releaseNotesForVersion('invalid'), []);

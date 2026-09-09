@@ -18,6 +18,25 @@ export type ReleaseNote = {
 // owner explicitly requests removal. Older releases remain bundled and readable.
 // Versions record when an update shipped, not which build may display it.
 export const RELEASE_NOTES: readonly ReleaseNote[] = [{
+  id: 'classroom-motion-cues-v1',
+  version: '0.0.17',
+  highlights: [{
+    title: 'Compare recommendation scores',
+    text: 'Open ? beside Recommendation score to see how to compare motions without treating the number as a grade.',
+    destination: 'stage.design',
+    image: { path: 'release-notes/recommendation-score-v1.png', alt: 'Recommendation score 81 beside its question-mark help control.' },
+  }, {
+    title: 'Draw a motion path',
+    text: 'In Draw mode, a cue reminds you to draw where the selected part should move.',
+    destination: 'path.draw',
+    image: { path: 'release-notes/path-drawing-cue-v1.png', alt: 'The Drawing control with the cue: Draw where the selected part should move, not the shape of the part.' },
+  }, {
+    title: 'Read the motion',
+    text: 'Each recommended mechanism now names its input and output motion directly beneath its name.',
+    destination: 'stage.design',
+    image: { path: 'release-notes/recommendation-motion-v1.png', alt: 'Gear linkage recommendation with Two driven gears -> linked point moves beneath its name.' },
+  }],
+}, {
   id: 'paint-and-draw-v1',
   version: '0.0.16',
   highlights: [{

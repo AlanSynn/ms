@@ -13,6 +13,7 @@ import type {
   SceneObject,
 } from "../../../types";
 import { motionPathReadiness, motionPathStatus } from "../../../utils/motion";
+import { contextHelpFor } from "../../../utils/contextHelp";
 import { PathTargetChooser } from "./PathTargetChooser";
 import {
   pathOwnerLabel,
@@ -212,6 +213,7 @@ export const PathWorkflowPanel = ({
             type="button"
             className={drawMode ? "btn-primary active" : "btn-secondary"}
             aria-label={drawMode ? "Drawing free path" : "Draw free path"}
+            aria-describedby={drawMode ? "path-draw-cue" : undefined}
             data-feature-id="path.draw"
             data-feature-blocker={pathLocked ? "Unlock target first." : undefined}
             disabled={pathLocked}
@@ -220,6 +222,11 @@ export const PathWorkflowPanel = ({
             <Route size={16} />
             {drawMode ? "Drawing" : selectedPath && pointCount ? "Redraw" : "Draw"}
           </button>
+          {drawMode && (
+            <p id="path-draw-cue" data-testid="path-draw-cue" className="text-xs leading-5 text-slate-600" role="status">
+              {contextHelpFor("path.draw").body}
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
