@@ -283,7 +283,7 @@ test('Context help opens compact registry popovers', async ({ page }) => {
   const controls = page.getByTestId('character-import-controls');
   await expect(controls).not.toContainText('Keep mechanisms');
   await expect(controls).toContainText('Getting Started');
-  await expect(controls).toContainText('Add object');
+  await expect(controls).toContainText('Import object');
   // Measure the help overlay after the existing stage entrance has finished.
   await page.getByTestId('character-screen').evaluate(async node => {
     await Promise.all(node.getAnimations().map(animation => animation.finished));

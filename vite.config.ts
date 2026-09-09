@@ -63,6 +63,17 @@ export default defineConfig(() => {
       target: process.env.TAURI_PLATFORM == 'windows' ? 'chrome105' : 'es2022',
       minify: process.env.TAURI_DEBUG ? false : 'esbuild' as const,
       sourcemap: !!process.env.TAURI_DEBUG,
+      // Group startup copy catalogs so shared words compress together.
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [{
+              name: 'app-copy',
+              test: /[\\/]utils[\\/](?:appCommands|classroomContent|contextHelp|releaseNotes)\.ts$/,
+            }],
+          },
+        },
+      },
       // Rapier is intentionally lazy; keep this explicit budget small enough to
       // flag accidental bloat while avoiding false alarms.
       chunkSizeWarningLimit: 2400,

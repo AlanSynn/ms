@@ -7,6 +7,8 @@ import type {
 } from "../../../types";
 import { mechanismWithGeneratedPath, uid } from "../../../utils/project";
 import type { MechanismRecommendation } from "../../../utils/mechanismRecommendations";
+import { MECHANISM_TEMPLATE_LIBRARY } from "../../../utils/mechanismTemplates";
+import { ContextHelp } from "../../ui/ContextHelp";
 import {
   createMechanismRecommendationJobInput,
 } from "../../../runtime/recommendations/mechanismRecommendationJob";
@@ -309,7 +311,7 @@ const OpenMechanismRecommendationSheet = ({
         ...option.mechanism,
         id: uid("mech"),
         presetId: `recommendation-${option.type}`,
-        recommendation: `${option.reason} Score ${option.score}/100.`,
+        recommendation: `${option.reason} Recommendation score ${option.score}.`,
         warnings: option.mechanism.warnings,
       }),
     );
@@ -374,16 +376,17 @@ const OpenMechanismRecommendationSheet = ({
                   className="recommendation-card recommendation-option"
                   data-testid={`recommendation-card-${option.type}`}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="font-bold text-slate-800">
-                        {option.label}
-                      </div>
-                      <div className="text-xs font-black uppercase tracking-wider text-slate-500">
-                        Fit score {option.score}/100
-                      </div>
+                  <div data-testid="recommendation-summary">
+                    <div className="font-bold text-slate-800" data-testid="recommendation-name">
+                      {option.label}
                     </div>
-                    <span className="recommendation-score">{option.score}</span>
+                    <div className="mt-1 text-xs leading-5 text-slate-600" data-testid="recommendation-motion">
+                      {MECHANISM_TEMPLATE_LIBRARY[option.type].classroomSensemaking.directTranslation}
+                    </div>
+                    <div className="mt-2 flex items-center gap-1 text-xs font-bold text-slate-500">
+                      <span data-testid="recommendation-score">Recommendation score {option.score}</span>
+                      <ContextHelp helpId="path.recommendationScore" />
+                    </div>
                   </div>
                   {index < visiblePreviewCount ? (
                     <RecommendationFitPreview
