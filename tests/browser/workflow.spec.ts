@@ -2222,7 +2222,7 @@ test('Options parity updates the full-width settings workspace and blueprint def
   const highPerformanceRig = page.getByTestId('design-shared-foundry-preview').getByTestId('foundry-camera-rig');
   await expect(highPerformanceRig).toHaveAttribute('data-render-performance-preset', 'high');
   await expect(highPerformanceRig).toHaveAttribute('data-render-antialias', 'off');
-  await expect(highPerformanceRig).toHaveAttribute('data-render-overlay-quality', 'balanced');
+  await expect(highPerformanceRig).toHaveAttribute('data-render-overlay-quality', 'full');
   await expect(highPerformanceRig).toHaveAttribute('data-three-animation-commit-ms', '25.0');
   await expect(highPerformanceRig).toHaveAttribute('data-three-pixel-ratio-cap', '2.00');
   await expect(highPerformanceRig).toHaveAttribute('data-three-requested-dpr-cap', '1.00');

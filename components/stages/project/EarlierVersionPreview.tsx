@@ -8,6 +8,7 @@ import { animationDeltaRadians } from '../../../utils/kinematics';
 import { sharedMotionPlaybackDurationMs, motionAngleAtTimelineMs } from '../../../utils/motion';
 import { DEFAULT_CANVAS_VIEWPORT } from '../../../utils/viewport';
 import { FOUNDRY_VIEW_PRESETS, type FoundryCamera } from '../../../utils/foundryCamera';
+import { withSessionPerformance } from '../../../utils/sessionSettings';
 
 const ProjectWorkingPreview = lazy(async () => ({
   default: (await import('./ProjectWorkingPreview')).ProjectWorkingPreview,
@@ -43,7 +44,9 @@ const previewAdvance = (
 )) % TWO_PI;
 
 export const EarlierVersionPreview = ({ preview, onRestore, onBack }: EarlierVersionPreviewProps) => {
-  const project = preview.project;
+  // Archived snapshots carry the preset saved at capture time; the preview
+  // renders with the session's presentation preset instead.
+  const project = withSessionPerformance(preview.project);
   const previewRef = useRef<HTMLElement>(null);
   const playbackClock = useMemo<PlaybackClock>(() => createPlaybackClock(), []);
   const [angle, setAngle] = useState(0);
