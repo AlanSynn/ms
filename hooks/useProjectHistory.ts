@@ -2,6 +2,10 @@ import { useState, type SetStateAction } from "react";
 import type { ProjectAction, ProjectState } from "../types";
 import { applyProjectAction, projectSelfCheck } from "../utils/project";
 import { recordProjectAction } from "../utils/performanceAudit";
+import {
+  rememberSessionPerformance,
+  withSessionPerformance,
+} from "../utils/sessionSettings";
 import { AUTHORED_SETTINGS, restoreAuthoredSettings } from '../runtime/versions/versionPolicy';
 import {
   boundProjectHistory,
@@ -36,7 +40,7 @@ export const useProjectHistory = (createInitialProject: () => ProjectState) => {
   const [projectHistory, setProjectHistory] = useState<ProjectHistoryState>(
     () => {
       if (import.meta.env.DEV) projectSelfCheck();
-      return { present: createInitialProject(), past: [], future: [] };
+      return { present: withSessionPerformance(createInitialProject()), past: [], future: [] };
     },
   );
 
@@ -45,10 +49,11 @@ export const useProjectHistory = (createInitialProject: () => ProjectState) => {
     options: SetProjectOptions = {},
   ) => {
     setProjectHistory((prev) => {
-      const next =
+      const next = withSessionPerformance(
         typeof update === "function"
           ? (update as (previous: ProjectState) => ProjectState)(prev.present)
-          : update;
+          : update,
+      );
       if (next === prev.present) return prev;
       if (options.resetHistory) return { present: next, past: [], future: [] };
       if (options.history) {
@@ -69,6 +74,11 @@ export const useProjectHistory = (createInitialProject: () => ProjectState) => {
 
   const dispatch = (action: ProjectAction) => {
     recordProjectAction(action.type);
+    // A deliberate settings change updates the session preset first so the
+    // setProject overlay treats it as current instead of overwriting it.
+    if (action.type === 'update_settings' && action.settings.performancePreset) {
+      rememberSessionPerformance(action.settings.performancePreset);
+    }
     setProject((prev) => applyProjectAction(prev, action), {
       history: isUndoableProjectAction(action),
     });

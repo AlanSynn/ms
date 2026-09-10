@@ -65,12 +65,12 @@ assert.deepEqual(
     pixelRatioCap: 2,
     antialias: balanced.antialias,
     targetFramesPerSecond: balanced.targetFramesPerSecond,
-    overlayQuality: balanced.overlayQuality,
+    overlayQuality: 'full',
     partTopology: balanced.partTopology,
     interactiveDetail: balanced.interactiveDetail,
     repeatedGeometry: balanced.repeatedGeometry,
   },
-  'High raises resolution without silently increasing cadence, MSAA, scene detail, media, or cache work',
+  'High raises resolution and unlocks the full overlay tier; cadence, MSAA, scene detail, media, and cache budgets stay at balanced levels',
 );
 
 const effectiveRatio = (

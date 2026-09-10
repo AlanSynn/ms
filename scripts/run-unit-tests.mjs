@@ -53,6 +53,7 @@ const UNIT_TEST_FILES = [
   'render-performance-policy.test.ts',
   'renderer-interaction-seams.test.ts',
   'scene-object-image-worker.test.ts',
+  'session-performance-persistence.test.ts',
   'shape-editing.test.ts',
   'startup-flow.test.ts',
   'student-support.test.ts',

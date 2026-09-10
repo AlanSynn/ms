@@ -151,12 +151,13 @@ const RENDER_PERFORMANCE_POLICIES: Readonly<Record<RenderPerformancePreset, Rend
   high: definePolicy({
     preset: 'high',
     pixelRatioCap: 2,
-    // High is deliberately resolution-only. Increasing cadence, MSAA,
-    // topology, media, and cache budgets at the same time makes the setting
-    // unpredictable on classroom hardware and hides the cost of DPR itself.
+    // High raises resolution and unlocks the full overlay tier (ghost
+    // frames, dense recommendation traces) but deliberately leaves cadence,
+    // MSAA, topology, media, and cache budgets at balanced levels so the
+    // setting stays predictable on classroom hardware.
     antialias: false,
     targetFramesPerSecond: 40,
-    overlayQuality: 'balanced',
+    overlayQuality: 'full',
     minOverlayIntervalMs: 1000 / 15,
     partTopology: {
       bevelEnabled: false,

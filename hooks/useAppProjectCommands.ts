@@ -256,9 +256,11 @@ export const useAppProjectCommands = ({
     const lessonProjectBase = preparedProject ?? createLessonProject(lesson.id);
     const lessonProject = {
       ...lessonProjectBase,
+      // Guides open as fresh projects, but session settings the user already
+      // chose (e.g. the performance preset) must survive the swap.
       settings: {
         ...lessonProjectBase.settings,
-        classroomAssessmentKey: project.settings.classroomAssessmentKey,
+        ...project.settings,
       },
     };
     if (!await confirmReplacement("Open this guide", () => openClassroomLesson(lessonId, preparedProject))) return;
