@@ -8,6 +8,8 @@ import {
 import { Download, Upload } from "lucide-react";
 
 import { AppStageRouter, type AppStageRouterProps } from "./AppStageRouter";
+import { AppToast } from "./AppToast";
+import { UpdateBanner } from "./shell/UpdateBanner";
 import {
   AboutDialog,
   GettingStartedDialog,
@@ -23,6 +25,7 @@ import type { AppStage, Point, ProjectState } from "../types";
 import type { AppCommandHandlerMap } from "../utils/appCommands";
 import type { WorkflowStatus } from "../utils/workflowStatus";
 import type { StudentSupport } from "../hooks/useStudentSupport";
+import type { UpdateCheckState } from "../hooks/useUpdateCheck";
 const StudentSupportPanels = lazy(async () => ({ default: (await import('./support/StudentSupportPanels')).StudentSupportPanels }));
 import type { BrowserRecoveryCandidate } from "../hooks/useColdAutosaveRecovery";
 
@@ -45,6 +48,7 @@ export type AppWorkspaceShellProps = {
   stageRouterProps: AppStageRouterProps;
   workflowStatus: WorkflowStatus;
   commandStatus: string;
+  updateCheck: UpdateCheckState | null;
   booting: boolean;
   recoveryCandidate?: BrowserRecoveryCandidate;
   showGettingStarted: boolean;
@@ -78,6 +82,7 @@ export const AppWorkspaceShell = ({
   stageRouterProps,
   workflowStatus,
   commandStatus,
+  updateCheck,
   booting,
   recoveryCandidate,
   showGettingStarted,
@@ -184,6 +189,12 @@ export const AppWorkspaceShell = ({
           <WorkflowStatusStrip {...workflowStatus} />
           <footer className="status-bar" data-testid="status-bar">
             <span>{commandStatus}</span>
+            {updateCheck?.updateAvailable && (
+              <UpdateBanner
+                onReload={updateCheck.reloadWithCacheBust}
+                onDismiss={updateCheck.dismissUpdate}
+              />
+            )}
           </footer>
         </section>
       </div>
@@ -219,6 +230,7 @@ export const AppWorkspaceShell = ({
       {support.surface && <Suspense fallback={<div role="status" className="sr-only">Opening support…</div>}>
         <StudentSupportPanels support={support} stage={stage} />
       </Suspense>}
+      <AppToast />
       {showTracking && (
         <Suspense fallback={null}>
           <TrackingModal

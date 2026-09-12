@@ -330,7 +330,12 @@ export const FoundryWorkflowPanel = ({
       {fitRequired && targetReady && (!fitState || fitState === "unfitted") && (
         <div className="warning">Fit motion first.</div>
       )}
-      {fitRequired && (fitState === "closest" || fitState === "rejected") && (
+      {fitRequired && fitState === "closest" && (
+        <div className="warning" data-testid="foundry-closest-fit">
+          No exact fabrication fit — this is the closest match. You can still use it.
+        </div>
+      )}
+      {fitRequired && fitState === "rejected" && (
         <div className="warning">
           No valid fabrication fit. Try a shorter path or another mechanism.
         </div>

@@ -417,7 +417,8 @@ export const mechanismWithGeneratedPath = (mechanism: MechanismConfig, options: 
         mechanism.type === '4bar' &&
         mechanism.targetPathId &&
         !mechanism.targetSceneObjectId &&
-        mechanism.fabricationMetadata?.pathFit?.status !== 'fit'
+        mechanism.fabricationMetadata?.pathFit?.status !== 'fit' &&
+        mechanism.fabricationMetadata?.pathFit?.status !== 'closest'
         ? undefined
         : options.preserveGeneratedPath && mechanism.generatedPath?.length
             ? mechanism.generatedPath
@@ -621,7 +622,9 @@ const reconcileMechanismTargets = (
     const fitReady = Boolean(
         targetPathId &&
         normalized.fabricationMetadata?.pathFit &&
+        // 'closest' survives dispatches like 'fit' until accepted or refit.
         ((pathFitStatus === 'fit' && options.preserveGeneratedPath) ||
+            (pathFitStatus === 'closest' && options.preserveGeneratedPath) ||
             (pathFitStatus === 'rejected' && options.preserveRejectedPathFit)),
     );
     return mechanismWithGeneratedPath(

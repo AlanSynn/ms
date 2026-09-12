@@ -683,6 +683,58 @@
       </div>
     </div>
     <div id="root"></div>
+    <script>
+      // One-shot boot recovery: a stale cached index.html can reference deleted
+      // hashed assets. Reload once with a cache-busting query, never loop.
+      (function () {
+        var RETRY_KEY = 'motionsmith-boot-retry';
+        // Keep the retry marker separate from _rs. _rs is also used by the
+        // deliberate update-banner reload and must not consume this guard.
+        var RETRY_PARAM = '_ms_boot_retry';
+        var retryMarkerPresent = false;
+        var retried = false;
+        try {
+          var currentUrl = new URL(window.location.href);
+          retryMarkerPresent = currentUrl.searchParams.get(RETRY_PARAM) === '1';
+        } catch (error) {}
+        try { retried = window.sessionStorage.getItem(RETRY_KEY) === '1'; } catch (error) {}
+        retried = retried || retryMarkerPresent;
+        var bust = function () {
+          // The guard covers only the entry-asset load: once the app is ready,
+          // a lazy-chunk failure must not force-reload away in-memory work.
+          if (retried || document.body.classList.contains('app-ready')) return;
+          retried = true;
+          try { window.sessionStorage.setItem(RETRY_KEY, '1'); } catch (error) {}
+          var url = new URL(window.location.href);
+          url.searchParams.set('_rs', Date.now().toString(36));
+          url.searchParams.set(RETRY_PARAM, '1');
+          window.location.replace(url.href);
+        };
+        var disarm = function () {
+          if (!document.body.classList.contains('app-ready')) return;
+          // A successful retry should be able to recover again after a later
+          // manual reload. Keep _rs for cache diagnostics, but remove only the
+          // storage-independent automatic-retry marker.
+          if (retryMarkerPresent) {
+            try {
+              var url = new URL(window.location.href);
+              url.searchParams.delete(RETRY_PARAM);
+              window.history.replaceState(window.history.state, '', url.href);
+            } catch (error) {}
+            retryMarkerPresent = false;
+          }
+          readyObserver.disconnect();
+        };
+        var readyObserver = new MutationObserver(disarm);
+        readyObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+        disarm();
+        window.addEventListener('error', function (event) {
+          var target = event.target;
+          if (target && (target.tagName === 'SCRIPT' || target.tagName === 'LINK')) bust();
+        }, true);
+        window.addEventListener('vite:preloadError', bust);
+      })();
+    </script>
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>

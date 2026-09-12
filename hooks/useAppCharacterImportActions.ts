@@ -7,6 +7,7 @@ import {
   type SetStateAction,
 } from "react";
 import type { AppStage, MechanismConfig, ProjectAction, ProjectState } from "../types";
+import { showAppToast } from "../components/AppToast";
 import {
   createDefaultMechanism,
   downloadText,
@@ -188,6 +189,12 @@ export const useAppCharacterImportActions = ({
             : createDefaultMechanism("4bar", "foundry-preview"),
         );
         setCommandStatus(`Loaded project ${file.name}`);
+        // A file saved with a broken or unaccepted path fit gets a proactive
+        // pointer; the Fit run itself (and its closest-match toast) stays in
+        // the Foundry.
+        if (next.mechanisms.some((mechanism) => mechanism.type === "4bar" && mechanism.targetPathId && !mechanism.targetSceneObjectId && ["rejected", "closest"].includes(mechanism.fabricationMetadata?.pathFit?.status ?? ""))) {
+          showAppToast("This project has a mechanism that doesn't match its motion path. Open the Foundry and run Fit.");
+        }
         setShowGettingStarted(false);
         setStage("path");
       },

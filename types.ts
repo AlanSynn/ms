@@ -39,6 +39,8 @@ export interface MechanismPathFitMetadata {
     maxTangentError?: number;
     tolerance?: number;
     kitProfileKey?: string;
+    /** Set when a student explicitly accepted a 'closest' match whose error exceeds the hard tolerance. */
+    acceptedClosest?: boolean;
 }
 
 export interface MechanismOutputPort {

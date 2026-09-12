@@ -16,6 +16,16 @@ const FIT_RESOLUTION = 32;
 const FIT_SAMPLE_COUNT = 24;
 const OUTPUT_RESOLUTION = 96;
 const TOP_CANDIDATE_COUNT = 64;
+const CLOSEST_CANDIDATE_COUNT = 12;
+
+export type FourBarPathTopology = 'open' | 'closed';
+
+type LinkageSet = {
+  groundLength: number;
+  crankLength: number;
+  couplerLength: number;
+  rockerLength: number;
+};
 const FIT_CACHE_MAX_ENTRIES = 32;
 
 const fitCache = new Map<string, MechanismConfig | null>();
@@ -65,6 +75,16 @@ const fitCacheKey = (
     targetSceneObjectId: mechanism.targetSceneObjectId,
     targetPathId: mechanism.targetPathId,
     targetAnchorJointId: mechanism.targetAnchorJointId,
+    // Output bindings participate in the fit (stale bindings veto candidates,
+    // fresh fits sync back onto them), so two mechanisms with identical
+    // geometry must not share a cache entry across different binding states.
+    outputs: mechanism.outputs?.map((output) => [
+      output.id,
+      output.portId,
+      output.pathId,
+      output.fit?.status,
+      output.fit?.outputTraceId,
+    ]),
   },
   siblings: project.mechanisms
     .filter((candidate) => candidate.id !== mechanism.id && candidate.targetPathId !== path.id)
@@ -173,20 +193,26 @@ const fabricationPlacementErrorsForCandidate = (
   return errors;
 };
 
-const pathPointsForFit = (path: ProjectMotionPath): Point[] => {
-  if (!path.closed || path.points.length < 3) return path.points;
-  const first = path.points[0];
-  const last = path.points.at(-1);
-  if (!last || Math.hypot(first.x - last.x, first.y - last.y) < 0.01)
-    return path.points;
-  return [...path.points, first];
+const pathPointsForFit = (path: ProjectMotionPath): { points: Point[]; topology: FourBarPathTopology } => {
+  if (!path.closed || path.points.length < 3) return { points: path.points, topology: 'open' };
+  return { points: path.points, topology: 'closed' };
 };
 
-const resamplePolyline = (points: Point[], count: number): Point[] => {
+const resamplePolyline = (
+  points: Point[],
+  count: number,
+  topology: FourBarPathTopology = 'open',
+): Point[] => {
+  const closed = topology === 'closed';
   if (points.length <= 1 || count <= 1) return points.slice();
   const lengths = points.slice(1).map((point, index) =>
     Math.hypot(point.x - points[index].x, point.y - points[index].y),
   );
+  if (closed) {
+    const first = points[0];
+    const last = points.at(-1);
+    if (last) lengths.push(Math.hypot(first.x - last.x, first.y - last.y));
+  }
   const total = lengths.reduce((sum, length) => sum + length, 0);
   if (total <= 0.001) return Array.from({ length: count }, () => points[0]);
   const sampleAt = (distance: number) => {
@@ -195,8 +221,8 @@ const resamplePolyline = (points: Point[], count: number): Point[] => {
       const segment = lengths[i];
       if (walked + segment >= distance) {
         const t = segment <= 0 ? 0 : (distance - walked) / segment;
-        const a = points[i];
-        const b = points[i + 1];
+        const a = points[i] ?? points.at(-1)!;
+        const b = points[i + 1] ?? (closed ? points[0] : points.at(-1)!);
         return {
           x: a.x + (b.x - a.x) * t,
           y: a.y + (b.y - a.y) * t,
@@ -204,12 +230,23 @@ const resamplePolyline = (points: Point[], count: number): Point[] => {
       }
       walked += segment;
     }
-    return points.at(-1)!;
+    return closed ? points[0] : points.at(-1)!;
   };
+  // A closed loop is a cycle: its samples must divide the loop into `count`
+  // equal arcs (sample i at i/count of the loop), matching the fitter's
+  // cyclic phase alignment. An open polyline keeps endpoint-inclusive spans.
+  const spans = closed ? count : count - 1;
   return Array.from({ length: count }, (_, index) =>
-    sampleAt((total * index) / Math.max(1, count - 1)),
+    sampleAt((total * index) / Math.max(1, spans)),
   );
 };
+
+/** Uniform arc-length samples for an authored path, preserving its topology. */
+export const resamplePathForFourBarFit = (
+  points: Point[],
+  count: number,
+  topology: FourBarPathTopology,
+) => resamplePolyline(points, count, topology);
 
 const boardAnchorCandidatesForFit = (
   project: ProjectState,
@@ -322,19 +359,16 @@ const polylineTangentAt = (points: Point[], index: number): Point | undefined =>
   return unitVector(before, after);
 };
 
-const targetTangentAt = (points: Point[], index: number): Point | undefined => {
-  if (
-    points.length > 2 &&
-    Math.hypot(
-      points[0].x - points.at(-1)!.x,
-      points[0].y - points.at(-1)!.y,
-    ) < 0.01
-  ) {
-    const ring = points.slice(0, -1);
-    const wrapped = ((index % ring.length) + ring.length) % ring.length;
+export const targetTangentForFourBarFit = (
+  points: Point[],
+  index: number,
+  topology: FourBarPathTopology,
+): Point | undefined => {
+  if (topology === 'closed' && points.length > 2) {
+    const wrapped = ((index % points.length) + points.length) % points.length;
     return unitVector(
-      ring[(wrapped - 1 + ring.length) % ring.length],
-      ring[(wrapped + 1) % ring.length],
+      points[(wrapped - 1 + points.length) % points.length],
+      points[(wrapped + 1) % points.length],
     );
   }
   return polylineTangentAt(points, index);
@@ -356,6 +390,7 @@ const orderedFit = (
   tracePoints: Point[],
   targetPoints: Point[],
   resolution: number,
+  targetTopology: FourBarPathTopology,
 ): OrderedFit => {
   const trace = resampleCyclic(tracePoints, resolution);
   let best: OrderedFit = {
@@ -390,7 +425,7 @@ const orderedFit = (
         maxError = Math.max(maxError, distance);
         const tangentError = tangentAngleDegrees(
           cyclicTangentAt(trace, sourceIndex, direction),
-          targetTangentAt(targetPoints, index),
+          targetTangentForFourBarFit(targetPoints, index, targetTopology),
         );
         if (tangentError !== undefined) {
           tangentSquared += tangentError * tangentError;
@@ -526,7 +561,12 @@ export const fitFourBarKitMechanismToPath = (
       ? syncPathFitOutputBinding(project, cloneFitResult(cached.value, mechanism), path.id)
       : undefined;
   }
-  const targetPoints = resamplePolyline(pathPointsForFit(path), FIT_SAMPLE_COUNT);
+  const targetLoop = pathPointsForFit(path);
+  const targetPoints = resamplePolyline(
+    targetLoop.points,
+    FIT_SAMPLE_COUNT,
+    targetLoop.topology,
+  );
   if (targetPoints.length < 3) {
     writeCachedFit(cacheKey, null);
     return undefined;
@@ -541,9 +581,9 @@ export const fitFourBarKitMechanismToPath = (
       (existing) => existing.id === mechanism.id || existing.targetPathId !== path.id,
     ),
   };
-  // Fixed pivots must remain on board holes. Cardinal directions are the
-  // fabricatable orientations; diagonal angles cannot land on a square grid
-  // with a straight linkage of an integral cell length.
+  // Fixed pivots must remain on board holes. Cardinal directions keep the
+  // search bounded; diagonal (Pythagorean) ground placements exist on the
+  // grid but are deliberately not searched.
   const angles = [0, 90, 180, 270];
   const modes: Array<MechanismConfig['assemblyMode']> = ['open', 'crossed'];
   const tolerance = fourBarPathFitTolerance(project);
@@ -561,12 +601,7 @@ export const fitFourBarKitMechanismToPath = (
     circleViability.set(key, viable);
     return viable;
   };
-  const linkageSets: Array<{
-    groundLength: number;
-    crankLength: number;
-    couplerLength: number;
-    rockerLength: number;
-  }> = [];
+  const linkageSets: LinkageSet[] = [];
   for (const groundLength of kitLengths) {
     for (const crankLength of kitLengths) {
       for (const couplerLength of kitLengths) {
@@ -606,6 +641,87 @@ export const fitFourBarKitMechanismToPath = (
     top.sort((a, b) => a.score - b.score);
     if (top.length > TOP_CANDIDATE_COUNT) top.pop();
   };
+  const buildCandidate = (
+    anchor: Point,
+    { groundLength, crankLength, couplerLength, rockerLength }: LinkageSet,
+    groundAngle: number,
+    assemblyMode: MechanismConfig['assemblyMode'],
+  ) => {
+    const candidateInput: MechanismConfig = {
+      ...mechanism,
+      type: '4bar',
+      anchorX: anchor.x,
+      anchorY: anchor.y,
+      sceneAnchor: anchor,
+      transform: {
+        ...(mechanism.transform ?? {
+          x: anchor.x,
+          y: anchor.y,
+          rotation: groundAngle,
+          scale: 1,
+        }),
+        x: anchor.x,
+        y: anchor.y,
+        rotation: groundAngle,
+      },
+      groundLength,
+      crankLength,
+      couplerLength,
+      rockerLength,
+      groundAngle,
+      assemblyMode,
+      targetPartId,
+      targetSceneObjectId: path.sceneObjectId,
+      targetPathId: path.id,
+      targetAnchorJointId: path.sceneObjectId
+        ? undefined
+        : (mechanism.targetAnchorJointId ?? path.targetAnchorJointId),
+      activeVisualPartIds: targetPartId ? [targetPartId] : [],
+      source: 'optimized',
+      recommendation: 'Fit path',
+      speed1: 1,
+      driverPhaseOffset: 0,
+    };
+    return normalizeMechanismToFabricationSet(
+      project.settings.physicalKit.gridPitchMm === FABRICATION_DEFAULT_GRID_PITCH_MM && !mechanism.fabricationMetadata
+        ? candidateInput
+        : {
+            ...candidateInput,
+            fabricationMetadata: {
+              ...(mechanism.fabricationMetadata ?? {}),
+              gridPitchMm: project.settings.physicalKit.gridPitchMm,
+            },
+          },
+    );
+  };
+  // When no candidate geometry can trace the path within tolerance, the
+  // fallback pool keeps the closest pin-circle candidates ranked by radial
+  // deviation so a 'closest' recommendation survives instead of a bare
+  // rejection. Radial deviation is the cheapest admissible stand-in for the
+  // ordered fit: each pin traces a circle, so a target far from every pin
+  // circle cannot be followed closely by any phase of that candidate.
+  const fallback: Array<{
+    anchor: Point;
+    linkageSet: LinkageSet;
+    groundAngle: number;
+    traceId: string;
+    score: number;
+  }> = [];
+  const rememberFallback = (entry: (typeof fallback)[number]) => {
+    if (fallback.length >= CLOSEST_CANDIDATE_COUNT && entry.score >= fallback.at(-1)!.score) return;
+    fallback.push(entry);
+    fallback.sort((a, b) => a.score - b.score);
+    if (fallback.length > CLOSEST_CANDIDATE_COUNT) fallback.pop();
+  };
+  const radialDeviation = (center: Point, radius: number) =>
+    targetPoints.reduce(
+      (sum, target) => sum + Math.abs(Math.hypot(target.x - center.x, target.y - center.y) - radius),
+      0,
+    ) / targetPoints.length;
+  const pivotStaysOnBoard = (pivot: Point) => {
+    const board = sceneToBoardRaw(pivot, project.settings.physicalKit);
+    return board.valid;
+  };
 
   for (const anchor of anchors) {
     const nearestTargetDistance = targetPoints.reduce(
@@ -613,73 +729,36 @@ export const fitFourBarKitMechanismToPath = (
         Math.min(best, Math.hypot(target.x - anchor.x, target.y - anchor.y)),
       Number.POSITIVE_INFINITY,
     );
-    for (const {
-      groundLength,
-      crankLength,
-      couplerLength,
-      rockerLength,
-    } of linkageSets) {
-      if (nearestTargetDistance > groundLength + rockerLength + tolerance * 2)
+    for (const linkageSet of linkageSets) {
+      if (nearestTargetDistance > linkageSet.groundLength + linkageSet.rockerLength + tolerance * 2)
         continue;
-      const crankTraceCouldFit = traceCircleCouldFit(anchor, crankLength);
+      const crankTraceCouldFit = traceCircleCouldFit(anchor, linkageSet.crankLength);
       for (const groundAngle of angles) {
         const groundAngleRad = (groundAngle * Math.PI) / 180;
         const groundPivot = {
-          x: anchor.x + groundLength * Math.cos(groundAngleRad),
-          y: anchor.y + groundLength * Math.sin(groundAngleRad),
+          x: anchor.x + linkageSet.groundLength * Math.cos(groundAngleRad),
+          y: anchor.y + linkageSet.groundLength * Math.sin(groundAngleRad),
         };
         const rockerTraceCouldFit = traceCircleCouldFit(
           groundPivot,
-          rockerLength,
+          linkageSet.rockerLength,
         );
-        if (!crankTraceCouldFit && !rockerTraceCouldFit) continue;
-        for (const assemblyMode of modes) {
-          const candidateInput: MechanismConfig = {
-            ...mechanism,
-            type: '4bar',
-            anchorX: anchor.x,
-            anchorY: anchor.y,
-            sceneAnchor: anchor,
-            transform: {
-              ...(mechanism.transform ?? {
-                x: anchor.x,
-                y: anchor.y,
-                rotation: groundAngle,
-                scale: 1,
-              }),
-              x: anchor.x,
-              y: anchor.y,
-              rotation: groundAngle,
-            },
-            groundLength,
-            crankLength,
-            couplerLength,
-            rockerLength,
+        if (!crankTraceCouldFit && !rockerTraceCouldFit) {
+          if (!pivotStaysOnBoard(groundPivot)) continue;
+          const crankDeviation = radialDeviation(anchor, linkageSet.crankLength);
+          const rockerDeviation = radialDeviation(groundPivot, linkageSet.rockerLength);
+          const crankWins = crankDeviation <= rockerDeviation;
+          rememberFallback({
+            anchor,
+            linkageSet,
             groundAngle,
-            assemblyMode,
-            targetPartId,
-            targetSceneObjectId: path.sceneObjectId,
-            targetPathId: path.id,
-            targetAnchorJointId: path.sceneObjectId
-              ? undefined
-              : (mechanism.targetAnchorJointId ?? path.targetAnchorJointId),
-            activeVisualPartIds: targetPartId ? [targetPartId] : [],
-            source: 'optimized',
-            recommendation: 'Fit path',
-            speed1: 1,
-            driverPhaseOffset: 0,
-          };
-          const baseCandidate = normalizeMechanismToFabricationSet(
-            project.settings.physicalKit.gridPitchMm === FABRICATION_DEFAULT_GRID_PITCH_MM && !mechanism.fabricationMetadata
-              ? candidateInput
-              : {
-                  ...candidateInput,
-                  fabricationMetadata: {
-                    ...(mechanism.fabricationMetadata ?? {}),
-                    gridPitchMm: project.settings.physicalKit.gridPitchMm,
-                  },
-                },
-          );
+            traceId: crankWins ? 'B' : 'C',
+            score: crankWins ? crankDeviation : rockerDeviation,
+          });
+          continue;
+        }
+        for (const assemblyMode of modes) {
+          const baseCandidate = buildCandidate(anchor, linkageSet, groundAngle, assemblyMode);
           if (fabricationPlacementErrorsForCandidate(project, baseCandidate).length)
             continue;
           const traces = generateMechanismPointTraces(
@@ -699,6 +778,7 @@ export const fitFourBarKitMechanismToPath = (
               trace.points,
               targetPoints,
               COARSE_FIT_RESOLUTION,
+              targetLoop.topology,
             );
             rememberCandidate(
               baseCandidate,
@@ -710,70 +790,130 @@ export const fitFourBarKitMechanismToPath = (
       }
     }
   }
-  const refined = top
-    .flatMap((candidate) => {
-      const traces = generateMechanismPointTraces(
-        candidate.mechanism,
-        FIT_RESOLUTION,
-      );
-      const trace = traces.traces.find((item) => item.id === candidate.traceId);
-      if (!trace) return [];
-      const fit = orderedFit(trace.points, targetPoints, FIT_RESOLUTION);
-      const fittedBase = normalizeMechanismToFabricationSet({
-        ...candidate.mechanism,
-        speed1: fit.direction,
-        driverPhaseOffset: fit.phaseOffset,
-      });
-      const outputTrace = generateMechanismPointTraces(
-        fittedBase,
-        OUTPUT_RESOLUTION,
-      ).traces.find((item) => item.id === candidate.traceId);
-      if (!outputTrace) return [];
-      if (!pathFitPassesHardTolerance(fit, tolerance)) return [];
-      if (!boardSweepStaysWithinKit(project, fittedBase)) return [];
-      const fitted = normalizeMechanismToFabricationSet({
-        ...fittedBase,
-        generatedPath: outputTrace.points,
-        fabricationMetadata: {
-          ...(fittedBase.fabricationMetadata ?? {}),
-          boardCoordinate: sceneToBoardRaw(
-            fittedBase.sceneAnchor ?? {
-              x: fittedBase.anchorX ?? 0,
-              y: fittedBase.anchorY ?? 0,
-            },
-            project.settings.physicalKit,
-          ).label,
-          gridPitchMm: project.settings.physicalKit.gridPitchMm,
-          sceneAnchor: fittedBase.sceneAnchor,
-          targetPathId: path.id,
-          pathFit: {
-            status: 'fit',
-            targetPathId: path.id,
-            outputTraceId: candidate.traceId,
-            phaseOffset: fit.phaseOffset,
-            direction: fit.direction,
-            error: fit.error,
-            maxError: fit.maxError,
-            tangentError: fit.tangentError,
-            maxTangentError: fit.maxTangentError,
-            tolerance,
-            kitProfileKey: project.settings.physicalKit.profileKey,
+  const refineCandidate = (
+    candidate: { mechanism: MechanismConfig; traceId: string },
+    enforceTolerance: boolean,
+  ) => {
+    const traces = generateMechanismPointTraces(
+      candidate.mechanism,
+      FIT_RESOLUTION,
+    );
+    const trace = traces.traces.find((item) => item.id === candidate.traceId);
+    if (!trace) return null;
+    const fit = orderedFit(
+      trace.points,
+      targetPoints,
+      FIT_RESOLUTION,
+      targetLoop.topology,
+    );
+    const fittedBase = normalizeMechanismToFabricationSet({
+      ...candidate.mechanism,
+      speed1: fit.direction,
+      driverPhaseOffset: fit.phaseOffset,
+    });
+    const outputTrace = generateMechanismPointTraces(
+      fittedBase,
+      OUTPUT_RESOLUTION,
+    ).traces.find((item) => item.id === candidate.traceId);
+    if (!outputTrace) return null;
+    if (enforceTolerance && !pathFitPassesHardTolerance(fit, tolerance)) return null;
+    if (!boardSweepStaysWithinKit(project, fittedBase)) return null;
+    const fitted = normalizeMechanismToFabricationSet({
+      ...fittedBase,
+      generatedPath: outputTrace.points,
+      fabricationMetadata: {
+        ...(fittedBase.fabricationMetadata ?? {}),
+        boardCoordinate: sceneToBoardRaw(
+          fittedBase.sceneAnchor ?? {
+            x: fittedBase.anchorX ?? 0,
+            y: fittedBase.anchorY ?? 0,
           },
-          warnings: [],
+          project.settings.physicalKit,
+        ).label,
+        gridPitchMm: project.settings.physicalKit.gridPitchMm,
+        sceneAnchor: fittedBase.sceneAnchor,
+        targetPathId: path.id,
+        pathFit: {
+          status: enforceTolerance ? 'fit' : 'closest',
+          targetPathId: path.id,
+          outputTraceId: candidate.traceId,
+          phaseOffset: fit.phaseOffset,
+          direction: fit.direction,
+          error: fit.error,
+          maxError: fit.maxError,
+          tangentError: fit.tangentError,
+          maxTangentError: fit.maxTangentError,
+          tolerance,
+          kitProfileKey: project.settings.physicalKit.profileKey,
         },
         warnings: [],
-      });
-      return [{ mechanism: fitted, score: fit.error + fit.maxError * 0.15 }];
+      },
+      warnings: enforceTolerance ? [] : ['No fabrication-valid path fit.'],
+    });
+    return { mechanism: fitted, score: fit.error + fit.maxError * 0.15 };
+  };
+  const refined = top
+    .flatMap((candidate) => {
+      const result = refineCandidate(candidate, true);
+      return result ? [result] : [];
     })
     .sort((a, b) => a.score - b.score);
+  // No candidate traced the path within hard tolerance. Fall back to the best
+  // fabrication-valid approximation so students get an explicit closest
+  // recommendation instead of a bare rejection.
+  const closestFallbackFit = () => {
+    const pool: Array<{ mechanism: MechanismConfig; traceId: string }> = [
+      ...top.map((entry) => ({ mechanism: entry.mechanism, traceId: entry.traceId })),
+      ...fallback.flatMap((entry) =>
+        modes.flatMap((assemblyMode) => {
+          const mechanism = buildCandidate(
+            entry.anchor,
+            entry.linkageSet,
+            entry.groundAngle,
+            assemblyMode,
+          );
+          return fabricationPlacementErrorsForCandidate(project, mechanism).length
+            ? []
+            : [{ mechanism, traceId: entry.traceId }];
+        }),
+      ),
+    ];
+    return pool
+      .map((candidate) => refineCandidate(candidate, false))
+      .filter((result): result is NonNullable<ReturnType<typeof refineCandidate>> =>
+        result !== null)
+      .sort((a, b) => a.score - b.score)
+      .find((result) => {
+        // Validate in the accepted form (binding synced) so a stale prior
+        // binding fit can't veto the recommendation it would receive.
+        const accepted = syncPathFitOutputBinding(
+          validationProject,
+          {
+            ...result.mechanism,
+            warnings: [],
+            fabricationMetadata: {
+              ...(result.mechanism.fabricationMetadata ?? {}),
+              pathFit: {
+                ...(result.mechanism.fabricationMetadata?.pathFit ?? {}),
+                status: 'fit' as const,
+                acceptedClosest: true,
+              },
+            },
+          },
+          path.id,
+        );
+        return !fabricationErrorsForCandidate(validationProject, accepted).length;
+      })?.mechanism;
+  };
   const synchronized = refined.map((candidate) => ({
     ...candidate,
     mechanism: syncPathFitOutputBinding(project, candidate.mechanism, path.id),
   }));
-  const fitted = synchronized.find(
-    (candidate) =>
-      !fabricationErrorsForCandidate(validationProject, candidate.mechanism).length,
-  )?.mechanism;
+  const fitted =
+    synchronized.find(
+      (candidate) =>
+        !fabricationErrorsForCandidate(validationProject, candidate.mechanism).length,
+    )?.mechanism ?? closestFallbackFit();
   writeCachedFit(cacheKey, fitted ? cloneFitResult(fitted, mechanism) : null);
   return fitted
     ? syncPathFitOutputBinding(project, cloneFitResult(fitted, mechanism), path.id)

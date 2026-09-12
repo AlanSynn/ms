@@ -17,7 +17,7 @@ assert(vite.includes("studySummaryEnabled && e2eDiagnosticsEnabled"));
 assert.equal(packageJson.scripts["build:e2e"], "MOTIONSMITH_E2E_DIAGNOSTICS=1 bun run build");
 assert.equal(
   packageJson.scripts["test:browser"],
-  "bun run build:e2e && env -u NO_COLOR PLAYWRIGHT_SERVER=preview playwright test",
+  'VITE_FEEDBACK_ENDPOINT="${VITE_FEEDBACK_ENDPOINT:-https://feedback-relay.invalid/feedback}" bun run build:e2e && env -u NO_COLOR PLAYWRIGHT_SERVER=preview playwright test',
 );
 
 assert(foundry.includes("const E2E_DIAGNOSTICS = __MOTIONSMITH_E2E_DIAGNOSTICS__"));

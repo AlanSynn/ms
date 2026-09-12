@@ -13,6 +13,7 @@ import type {
   GlobalConfig,
   MechanismConfig,
   MechanismOutputBinding,
+  MechanismPathFitMetadata,
   ProjectAction,
   ProjectMotionPath,
   SceneObject,
@@ -21,6 +22,7 @@ import type {
 import { createMechanismOptimizerJobInput } from "../runtime/optimizer/mechanismOptimizerJob";
 import { createMechanismOptimizerWorkerClient } from "../runtime/optimizer/mechanismOptimizerWorkerClient";
 import { createMechanismFitJobInput } from "../runtime/fitting/mechanismFitJob";
+import { showAppToast } from "../components/AppToast";
 import {
   createMechanismFitWorkerClient,
   type MechanismFitWorkerClient,
@@ -104,6 +106,49 @@ export type MechanismUpdateCallbacks = {
 
 const hasStoredGeneratedPath = (mechanism: MechanismConfig) =>
   Boolean(mechanism.foundryExport || mechanism.generatedPath?.length);
+
+const NO_FABRICATION_VALID_PATH_FIT_WARNING = "No fabrication-valid path fit.";
+
+const withoutPathFitBlocker = (warnings?: string[]) =>
+  warnings?.filter((warning) => warning !== NO_FABRICATION_VALID_PATH_FIT_WARNING);
+
+const mergeWarnings = (...warningLists: Array<string[] | undefined>) => [
+  ...new Set(warningLists.flatMap((warnings) => warnings ?? [])),
+];
+
+/**
+ * Use is the explicit decision that promotes a closest result.  Keep malformed
+ * closest results unaccepted so the worker/import validation still blocks them.
+ */
+const acceptClosestPathFit = (fit?: MechanismPathFitMetadata) =>
+  fit?.status === "closest" &&
+  Number.isFinite(fit.error) &&
+  Number.isFinite(fit.maxError)
+    ? { ...fit, status: "fit" as const, acceptedClosest: true }
+    : fit;
+
+const isAcceptedClosestPathFit = (fit?: MechanismPathFitMetadata) =>
+  fit?.status === "fit" &&
+  fit.acceptedClosest === true &&
+  Number.isFinite(fit.error) &&
+  Number.isFinite(fit.maxError);
+
+const retirePathFitBlocker = (
+  mechanism: MechanismConfig,
+  fit?: MechanismPathFitMetadata,
+) => {
+  if (!isAcceptedClosestPathFit(fit)) return mechanism;
+  return {
+    ...mechanism,
+    warnings: withoutPathFitBlocker(mechanism.warnings),
+    fabricationMetadata: mechanism.fabricationMetadata
+      ? {
+          ...mechanism.fabricationMetadata,
+          warnings: withoutPathFitBlocker(mechanism.fabricationMetadata.warnings),
+        }
+      : mechanism.fabricationMetadata,
+  };
+};
 
 export const useAppMechanismActions = ({
   project,
@@ -474,6 +519,13 @@ export const useAppMechanismActions = ({
               startTransition(() => {
                 dispatch({ type: "upsert_mechanism", mechanism: fitted });
                 const fitStatus = fitted.fabricationMetadata?.pathFit?.status;
+                if (fitStatus === "closest") {
+                  // Surface the closest-match recommendation as an in-app
+                  // notification instead of burying it in the status strip.
+                  showAppToast(
+                    "No exact fabrication fit — recommending the closest match. Review it in the Foundry.",
+                  );
+                }
                 setCommandStatus(!targetPathId ? "Choose a motion path." :
                   fitStatus === "rejected" || fitStatus === "closest" || fitStatus === "unfitted"
                     ? "Path connected. Fit needed."
@@ -606,26 +658,83 @@ export const useAppMechanismActions = ({
         fittedFoundryParameters.fabricationMetadata?.pathFit ??
         foundry.fabricationMetadata?.pathFit;
       const selectedOutputPortId = pkg.outputPortId ?? packagePathFit?.outputTraceId;
+      // Using a 'closest' recommendation is an explicit student decision: the
+      // above-tolerance match is recorded as accepted and becomes the binding's
+      // fit so playback and fabrication treat it like any other fit.
+      const packagePathFitAccepted = acceptClosestPathFit(packagePathFit);
+      const acceptsClosest = isAcceptedClosestPathFit(packagePathFitAccepted);
+      const fittedFoundryParametersForCommit: Partial<MechanismConfig> =
+        acceptsClosest
+          ? {
+              ...fittedFoundryParameters,
+              warnings: mergeWarnings(
+                withoutPathFitBlocker(foundry.warnings),
+                withoutPathFitBlocker(fittedFoundryParameters.warnings),
+              ),
+              fabricationMetadata: {
+                ...(foundry.fabricationMetadata ?? {}),
+                ...(fittedFoundryParameters.fabricationMetadata ?? {}),
+                pathFit: packagePathFitAccepted,
+                warnings: mergeWarnings(
+                  withoutPathFitBlocker(foundry.fabricationMetadata?.warnings),
+                  withoutPathFitBlocker(
+                    fittedFoundryParameters.fabricationMetadata?.warnings,
+                  ),
+                ),
+              },
+            }
+          : fittedFoundryParameters;
+      // Keep the package envelope aligned with the accepted mechanism.  The
+      // parameters object is a nested mechanism snapshot and can carry its own
+      // warning list in addition to the package-level list.
+      const packageForCommit: FoundryExportPackage = acceptsClosest
+        ? {
+            ...pkg,
+            parameters: fittedFoundryParametersForCommit,
+            warnings: withoutPathFitBlocker(pkg.warnings) ?? [],
+          }
+        : pkg;
       const packageFitCandidate: MechanismConfig = {
         ...foundry,
-        ...fittedFoundryParameters,
+        ...fittedFoundryParametersForCommit,
         targetPartId: pkg.targetPartId,
         targetSceneObjectId: pkg.targetSceneObjectId,
         targetPathId: pkg.targetPathId,
         targetAnchorJointId: pkg.targetAnchorJointId,
       };
+      const packageFitUsable =
+        packagePathFitAccepted &&
+        mechanismPathFitIsUsable(
+          project,
+          pkg.targetPathId && packagePathFitAccepted
+            ? replacePrimaryMechanismOutputBinding(
+                project,
+                {
+                  ...packageFitCandidate,
+                  fabricationMetadata: {
+                    ...(packageFitCandidate.fabricationMetadata ?? {}),
+                    pathFit: packagePathFitAccepted,
+                  },
+                },
+                pkg.targetPathId,
+                {
+                  outputTraceId: selectedOutputPortId,
+                  fit: packagePathFitAccepted,
+                },
+              )
+            : packageFitCandidate,
+        );
       if (
         pkg.mechanismType === "4bar" &&
         pkg.targetPathId &&
-        (packagePathFit?.status !== "fit" ||
-          !mechanismPathFitIsUsable(project, packageFitCandidate))
+        (!packageFitUsable)
       ) {
         setCommandStatus("No fabrication-valid path fit.");
         return;
       }
       const rawCandidate: MechanismConfig = {
           ...foundry,
-          ...fittedFoundryParameters,
+          ...fittedFoundryParametersForCommit,
           id: existingTarget?.id ?? foundryOwnerIdRef.current ?? pkg.mechanismId,
           anchorX: pkg.pivot.x,
           anchorY: pkg.pivot.y,
@@ -637,17 +746,23 @@ export const useAppMechanismActions = ({
           presetId: pkg.metadata.selectedPreset,
           recommendation: pkg.metadata.recommendation,
           source: "foundry",
-          foundryExport: pkg,
-          generatedPath: pkg.generatedPath,
-          warnings: pkg.warnings,
+          foundryExport: packageForCommit,
+          generatedPath: packageForCommit.generatedPath,
+          warnings: packageForCommit.warnings,
           activeVisualPartIds,
         };
+      // Accepting a closest recommendation retires its blocker warning while
+      // preserving every unrelated warning from the foundry package.
+      const acceptedCandidate = retirePathFitBlocker(
+        rawCandidate,
+        packagePathFitAccepted,
+      );
       const boundCandidate = pkg.targetPathId
-        ? replacePrimaryMechanismOutputBinding(project, rawCandidate, pkg.targetPathId, {
+        ? replacePrimaryMechanismOutputBinding(project, acceptedCandidate, pkg.targetPathId, {
             outputTraceId: selectedOutputPortId,
-            fit: packagePathFit,
+            fit: packagePathFitAccepted,
           })
-        : rawCandidate;
+        : acceptedCandidate;
       if (pkg.targetPathId && (!project.paths[pkg.targetPathId] || !motionPathReadiness(project, project.paths[pkg.targetPathId]).playable)) {
         setCommandStatus("Check target path");
         return;
@@ -672,26 +787,50 @@ export const useAppMechanismActions = ({
               fittedMechanism.generatedPath ??
               rawMechanism.generatedPath ??
               pkg.generatedPath;
+            const completedMechanism = acceptsClosest
+              ? retirePathFitBlocker(
+                  {
+                    ...fittedMechanism,
+                    fabricationMetadata: {
+                      ...(fittedMechanism.fabricationMetadata ?? {}),
+                      pathFit: packagePathFitAccepted,
+                    },
+                  },
+                  packagePathFitAccepted,
+                )
+              : fittedMechanism;
+            const completedMechanismWithPackageWarnings: MechanismConfig = {
+              ...completedMechanism,
+              warnings: mergeWarnings(
+                completedMechanism.warnings,
+                fittedFoundryParametersForCommit.warnings,
+              ),
+              fabricationMetadata: {
+                ...(completedMechanism.fabricationMetadata ?? {}),
+                warnings: mergeWarnings(
+                  completedMechanism.fabricationMetadata?.warnings,
+                  fittedFoundryParametersForCommit.fabricationMetadata?.warnings,
+                ),
+              },
+            };
             const mechanism = mechanismWithGeneratedPath(
               {
-                ...fittedMechanism,
+                ...completedMechanismWithPackageWarnings,
                 foundryExport: {
-                  ...pkg,
-                  parameters: { ...fittedMechanism },
+                  ...packageForCommit,
+                  parameters: { ...completedMechanismWithPackageWarnings },
                   pivot: {
-                    x: fittedMechanism.anchorX ?? pkg.pivot.x,
-                    y: fittedMechanism.anchorY ?? pkg.pivot.y,
+                    x: completedMechanismWithPackageWarnings.anchorX ?? pkg.pivot.x,
+                    y: completedMechanismWithPackageWarnings.anchorY ?? pkg.pivot.y,
                   },
-                  outputPoint: generatedPath[0] ?? pkg.outputPoint,
+                  outputPoint: generatedPath[0] ?? packageForCommit.outputPoint,
                   generatedPath,
                 },
                 generatedPath,
-                warnings: [
-                  ...new Set([
-                    ...(fittedMechanism.warnings ?? []),
-                    ...(pkg.warnings ?? []),
-                  ]),
-                ],
+                warnings: mergeWarnings(
+                  completedMechanismWithPackageWarnings.warnings,
+                  packageForCommit.warnings,
+                ),
                 activeVisualPartIds,
               },
               { preserveGeneratedPath: true },
@@ -699,7 +838,7 @@ export const useAppMechanismActions = ({
             const fittedBinding = pkg.targetPathId
               ? replacePrimaryMechanismOutputBinding(project, mechanism, pkg.targetPathId, {
                   outputTraceId: selectedOutputPortId,
-                  fit: packagePathFit,
+                  fit: packagePathFitAccepted,
                 })
               : mechanism;
             const draftOwnerIsTemporary = Boolean(
@@ -729,7 +868,7 @@ export const useAppMechanismActions = ({
               ? allocateMechanismOutput(allocationBase, fittedBinding, pkg.targetPathId, {
                   reuseMechanismId: allocationOptions.reuseMechanismId,
                   portId: selectedOutputPortId,
-                  fit: packagePathFit,
+                  fit: packagePathFitAccepted,
                 })
               : undefined;
             if (allocation && !allocation.ok) {
@@ -737,7 +876,7 @@ export const useAppMechanismActions = ({
               return;
             }
             startTransition(() => {
-              dispatch({ type: "set_foundry_export", foundryExport: pkg });
+              dispatch({ type: "set_foundry_export", foundryExport: packageForCommit });
               if (allocation?.ok) {
                 dispatch({
                   type: "set_mechanisms",

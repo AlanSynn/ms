@@ -137,7 +137,16 @@ export const mechanismPathFitBindingIssues = (
   if (!Number.isFinite(fit.phaseOffset) || ![1, -1].includes(fit.direction ?? 0)) add("Fit phase or direction is missing.");
   const tolerance = fit.tolerance ?? Math.max(12, project.settings.physicalKit.gridPitchMm * SCENE_PX_PER_MM * 0.75);
   if (!Number.isFinite(tolerance) || tolerance <= 0) add("Fit tolerance is missing.");
-  if (!Number.isFinite(fit.error) || !Number.isFinite(fit.maxError) || fit.error! > tolerance || fit.maxError! > tolerance) add("Fit error exceeds tolerance.");
+  // An accepted closest match may waive the hard tolerance, but its required
+  // metrics still have to be real numbers.  Keep the finite check separate so
+  // malformed runtime/imported data cannot become usable by setting the flag.
+  const finiteErrorMetrics = Number.isFinite(fit.error) && Number.isFinite(fit.maxError);
+  const acceptedClosest = fit.acceptedClosest === true;
+  if (
+    !finiteErrorMetrics ||
+    (!acceptedClosest && Number.isFinite(tolerance) && tolerance > 0 &&
+      (fit.error! > tolerance || fit.maxError! > tolerance))
+  ) add("Fit error exceeds tolerance.");
   if (!mechanism.generatedPath || mechanism.generatedPath.length < 3) add("Fit output path is missing.");
   return issues;
 };

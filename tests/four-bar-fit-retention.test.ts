@@ -25,7 +25,10 @@ clearFourBarFitCache();
 const acceptedProject = createFabricationReadyFourBarProject();
 assert.equal(
   hash(acceptedProject.mechanisms[0]),
-  '645b94868d10409da5f7fe75f2bf9457ac6bb0e53c6c8f28a8c0f9f3be48ac7a',
+  // Recomputed after explicit closed target tangents: the i/count resample,
+  // phase/geometry/output trace, and 96-point generated trace remain
+  // unchanged; tangent RMS/max changes 19.7923/90.0251 -> 7.2569/35.3532.
+  'f31926408c6c6aea20516127dbff326bbaff2e12d70084b41846f52e9d8b2df5',
   'radial pruning preserves the accepted fabrication-fit mechanism after platform-stable float normalization',
 );
 
@@ -96,15 +99,18 @@ const refreshedRejected = fitMechanismToTargetPath(
   staleRejectedMechanism,
   rejectedPath.id,
 );
+// path-right-arm on the sample project has a fabrication-valid closest match,
+// so the stale binding no longer vetoes the recommendation: the refit reports
+// 'closest' (never a fabricated 'fit') and syncs the binding to that label.
 assert.equal(
   refreshedRejected.fabricationMetadata?.pathFit?.status,
-  'rejected',
-  'a fresh rejected fit remains rejected after an output was invalidated',
+  'closest',
+  'a stale binding does not hide an available closest recommendation',
 );
 assert.equal(
   refreshedRejected.outputs?.[0]?.fit?.status,
-  'rejected',
-  'a rejected fit synchronizes the selected output binding metadata',
+  'closest',
+  'the refit synchronizes the stale output binding to the fresh fit label',
 );
 
 const project = createSampleProject();
