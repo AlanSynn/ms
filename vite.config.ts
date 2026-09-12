@@ -1,9 +1,20 @@
 import path from 'path';
-import { readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const packageVersion = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version;
+const localGitSha = () => {
+  try {
+    return execSync('git rev-parse --short=8 HEAD').toString().trim();
+  } catch {
+    return '';
+  }
+};
+// A clock-based fallback would make every offline rebuild look like a new
+// release; the package version stays stable so open tabs never nag falsely.
+const buildId = process.env.GITHUB_SHA?.slice(0, 8) || localGitSha() || packageVersion;
 const profileFlag = (name: string) => {
   const value = process.env[name];
   if (value !== undefined && value !== '0' && value !== '1') {
@@ -38,6 +49,8 @@ export default defineConfig(() => {
     envPrefix: ['VITE_', 'TAURI_'],
     define: {
       __APP_VERSION__: JSON.stringify(packageVersion),
+      __BUILD_ID__: JSON.stringify(buildId),
+      __MOTIONSMITH_UPDATE_CHECK_ENABLED__: JSON.stringify(!isTauri),
       __MOTIONSMITH_E2E_DIAGNOSTICS__: JSON.stringify(e2eDiagnosticsEnabled),
       __MOTIONSMITH_STUDY_SUMMARY_ENABLED__: JSON.stringify(studySummaryEnabled),
     },
@@ -45,6 +58,16 @@ export default defineConfig(() => {
       {
         name: 'motionsmith-html-version',
         transformIndexHtml: (html: string) => html.replace(/%APP_VERSION%/g, packageVersion),
+      },
+      {
+        // Emit the cache-bust probe target so open tabs can detect a newer deploy.
+        name: 'motionsmith-version-json',
+        closeBundle: () => {
+          writeFileSync(
+            path.join(__dirname, 'dist', 'version.json'),
+            `${JSON.stringify({ version: packageVersion, buildId, builtAt: new Date().toISOString() }, null, 2)}\n`,
+          );
+        },
       },
       react(),
     ],

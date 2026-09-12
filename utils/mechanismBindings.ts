@@ -267,10 +267,13 @@ export const replacePrimaryMechanismOutputBinding = (
     const prior = current[0];
     const next = mechanismBindingForPath(project, mechanism, pathId, {
         id: prior?.id,
-        portId: options.portId ?? prior?.portId,
-        outputTraceId: options.outputTraceId ?? prior?.outputTraceId,
-        phaseOffset: options.phaseOffset ?? prior?.phaseOffset,
-        direction: options.direction ?? prior?.direction,
+        // A fresh fit describes the current recommendation; it must outrank
+        // the prior binding's sticky port/phase/direction or re-fits would
+        // keep the old trace and phase while claiming the new fit.
+        portId: options.portId ?? options.fit?.outputTraceId ?? prior?.portId,
+        outputTraceId: options.outputTraceId ?? options.fit?.outputTraceId ?? prior?.outputTraceId,
+        phaseOffset: options.phaseOffset ?? options.fit?.phaseOffset ?? prior?.phaseOffset,
+        direction: options.direction ?? options.fit?.direction ?? prior?.direction,
         fit: options.fit ?? (prior?.pathId === pathId ? prior.fit : undefined),
     });
     return next ? mechanismWithOutputBindings(mechanism, [next, ...current.slice(1)]) : mechanism;

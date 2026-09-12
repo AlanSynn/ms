@@ -10,6 +10,8 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 const releaseBootLoader = () => {
   document.body.classList.add('app-ready');
+  // A successful boot re-arms the one-shot stale-asset cache-bust guard.
+  try { sessionStorage.removeItem('motionsmith-boot-retry'); } catch { /* storage unavailable */ }
   window.setTimeout(() => {
     document.getElementById('boot-loader')?.remove();
     window.dispatchEvent(new Event(BOOT_READY_EVENT));

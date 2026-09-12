@@ -10,6 +10,7 @@ import {
     mechanismBindingTargetKey,
     mechanismOutputBindings,
     mechanismWithOutputBindings,
+    replacePrimaryMechanismOutputBinding,
 } from '../utils/mechanismBindings';
 import { createMotionPathForTarget, describeMotionChain, mechanismBindingWarnings, motionPathReadiness, motionPreviewForProject } from '../utils/motion';
 import { buildMechanismRecommendations } from '../utils/mechanismRecommendations';
@@ -228,5 +229,33 @@ const disabledWaveDriver = { ...occupiedWave, mechanisms: occupiedWave.mechanism
 assert(waveRecommendations(disabledWaveDriver).some(candidate => candidate.type === '4bar'), 'a disabled mechanism does not suppress its family');
 const disabledWaveOutput = { ...occupiedWave, mechanisms: occupiedWave.mechanisms.map(mechanism => mechanismWithOutputBindings(mechanism, mechanismOutputBindings(mechanism).map(binding => ({ ...binding, enabled: false })))) };
 assert(waveRecommendations(disabledWaveOutput).some(candidate => candidate.type === '4bar'), 'a disabled output does not suppress its family');
+
+// Re-fitting must refresh the sticky binding: a fresh fit's trace,
+// phase, and direction outrank the prior binding's stale values, so the
+// binding mirror never diverges from the fit it claims to describe.
+{
+    const stickyProject = createLessonProject('waving-arm');
+    const stickyPath = stickyProject.paths['path-right-arm'];
+    const stale = {
+        status: 'fit' as const,
+        targetPathId: stickyPath.id,
+        outputTraceId: 'C' as const,
+        phaseOffset: 0.1963,
+        direction: 1 as const,
+        error: 5,
+        maxError: 8,
+        tolerance: 30,
+        kitProfileKey: stickyProject.settings.physicalKit.profileKey,
+    };
+    const staleMechanism = createDefaultMechanism('4bar', 'sticky-refit');
+    staleMechanism.outputs = [mechanismBindingForPath(stickyProject, staleMechanism, stickyPath.id, { fit: stale })!];
+    const freshFit = { ...stale, outputTraceId: 'B' as const, phaseOffset: 3.1416, direction: -1 as const };
+    const rebound = replacePrimaryMechanismOutputBinding(stickyProject, staleMechanism, stickyPath.id, { fit: freshFit });
+    const binding = mechanismOutputBindings(rebound)[0];
+    assert.equal(binding?.outputTraceId, 'B', 'a fresh fit moves the binding to its own output trace');
+    assert.equal(binding?.phaseOffset, freshFit.phaseOffset, 'a fresh fit refreshes the binding phase');
+    assert.equal(binding?.direction, freshFit.direction, 'a fresh fit refreshes the binding direction');
+    assert.equal(binding?.fit?.outputTraceId, 'B', 'the recorded fit keeps its own output trace');
+}
 
 console.log('mechanism binding contracts ok');

@@ -3,10 +3,15 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 import { createDefaultMechanism, createSampleProject } from '../utils/project';
+import { clearFourBarFitCache } from '../utils/fourBarPathFit';
 import { fitMechanismToTargetPath } from '../utils/mechanismRecommendations';
 
 const sha256 = (value: unknown) =>
   createHash('sha256').update(JSON.stringify(value)).digest('hex');
+
+// Hash pins must be order-independent: no cache entry from another test file
+// may feed this contract when files run in one process.
+clearFourBarFitCache();
 
 const project = createSampleProject();
 const path = project.paths['path-right-arm'];
@@ -30,17 +35,17 @@ const rejected = fitMechanismToTargetPath(
 
 assert.equal(
   sha256(accepted),
-  '7404fb0411d9a2ad25a6f8fbbeac96154b10ae2b6bc3fd3ce2501700e9631d3e',
-  'rejected four-bar output remains byte-stable after hard physical trace fitting',
+  'ba1e7a2e21e626eda76d821d0255b9f36cbce3b47fdc92c94be5d7160f0eccdc',
+  'closest four-bar output remains byte-stable after hard physical trace fitting',
 );
 assert.equal(
   sha256(rejected),
   'ac962d72e51eb1f1add4bceb2d4f2b307f0ea33170d724df76f42e1f5c02486b',
   'short-path four-bar rejection remains byte-stable with b695',
 );
-assert.equal(accepted.fabricationMetadata?.pathFit?.status, 'rejected', 'four-bar fitting rejects a fabrication-valid candidate that misses hard target tolerance');
-assert.equal(accepted.generatedPath, undefined, 'rejected four-bar does not expose a misleading generated target path');
-assert(accepted.warnings?.includes('No fabrication-valid path fit.'), 'rejected four-bar exposes a direct fit blocker');
+assert.equal(accepted.fabricationMetadata?.pathFit?.status, 'closest', 'four-bar fitting keeps the closest fabrication-valid candidate when hard tolerance is missed');
+assert(Array.isArray(accepted.generatedPath) && accepted.generatedPath.length > 8, 'closest four-bar exposes its generated path preview');
+assert(accepted.warnings?.includes('No fabrication-valid path fit.'), 'closest four-bar exposes a direct fit blocker');
 assert.equal(rejected.targetPathId, 'short-fit', 'short-path rejection keeps the selected target path');
 assert.equal(rejected.fabricationMetadata?.pathFit?.status, 'rejected', 'short-path four-bar fitting records an explicit rejection');
 

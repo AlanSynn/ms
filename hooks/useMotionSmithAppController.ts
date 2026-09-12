@@ -25,6 +25,7 @@ import { useAppProjectCommands } from "./useAppProjectCommands";
 import { useModalInertEffect } from "./useModalInertEffect";
 import { useStudentSupport } from "./useStudentSupport";
 import { useReleaseNotes } from "./useReleaseNotes";
+import { useUpdateCheck } from "./useUpdateCheck";
 import { useStartupFlow } from "./useStartupFlow";
 import { playableMotionPaths } from "../utils/motion";
 import type { FoundryCamera } from "../utils/foundryCamera";
@@ -59,6 +60,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   } = useProjectHistory(createEmptyProject);
   const autosaveRecovery = useColdAutosaveRecovery({ project });
   const notes = useReleaseNotes();
+  const updateCheck = useUpdateCheck();
   const startup = useStartupFlow(notes.hasNew);
   const { showGettingStarted, setShowGettingStarted } = startup;
   const [stage, setStage] = useState<AppStage>("project");
@@ -403,6 +405,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     stageRouterProps,
     workflowStatus,
     commandStatus,
+    updateCheck,
     booting: startup.booting,
     recoveryCandidate,
     showGettingStarted,

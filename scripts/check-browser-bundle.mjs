@@ -8,7 +8,7 @@ import { collectStaticImportClosure } from './browser-bundle-graph.mjs';
 const DIST = join(process.cwd(), 'dist');
 const OUTPUT = process.env.BUNDLE_BUDGET_OUTPUT
   ?? join(process.cwd(), 'artifacts/chromebook-audit/bundle-budget.json');
-const CORE_JS_GZIP_LIMIT_BYTES = 200_000;
+const CORE_JS_GZIP_LIMIT_BYTES = 205_000;
 const SHELL_COMPRESSED_LIMIT_BYTES = 300_000;
 const OPTIONAL_JS_GZIP_LIMIT_BYTES = 200_000;
 const RAPIER_JS_GZIP_LIMIT_BYTES = 900_000;

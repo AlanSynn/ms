@@ -900,6 +900,45 @@ const writeUnfittedWavingArmLessonProject = async () => {
   return projectPath;
 };
 
+const writeClosestFitWavingArmLessonProject = async () => {
+  const project = createLessonProject('waving-arm');
+  const path = project.paths['path-right-arm'];
+  project.paths[path.id] = {
+    ...path,
+    points: [
+      { x: -120, y: 60 },
+      { x: -60, y: -60 },
+      { x: 0, y: 60 },
+      { x: 60, y: -60 },
+      { x: 120, y: 60 },
+    ],
+    timedPoints: undefined,
+  };
+  const dir = await mkdtemp(join(tmpdir(), 'motionsmith-closest-lesson-'));
+  const projectPath = join(dir, 'closest-waving-arm.motionsmith.json');
+  await writeFile(projectPath, serializeProject(project), 'utf8');
+  return projectPath;
+};
+
+const writeNonsenseFitLessonProject = async () => {
+  const project = createLessonProject('waving-arm');
+  const path = project.paths['path-right-arm'];
+  project.paths[path.id] = {
+    ...path,
+    // Chaotic scribble no four-bar can trace: the Fit run must still land on
+    // a sane closest recommendation instead of crashing or fabricating.
+    points: Array.from({ length: 400 }, (_, index) => ({
+      x: Math.sin(index * 12.9898) * 140 + Math.sin(index * 4.7) * 20,
+      y: Math.cos(index * 78.233) * 140,
+    })),
+    timedPoints: undefined,
+  };
+  const dir = await mkdtemp(join(tmpdir(), 'motionsmith-nonsense-lesson-'));
+  const projectPath = join(dir, 'nonsense-waving-arm.motionsmith.json');
+  await writeFile(projectPath, serializeProject(project), 'utf8');
+  return projectPath;
+};
+
 const writeHeadBobLessonProject = async () => {
   const dir = await mkdtemp(join(tmpdir(), 'motionsmith-hidden-lesson-'));
   const path = join(dir, 'head-bob.motionsmith.json');
@@ -989,6 +1028,100 @@ const applyFourBarFromFoundry = async (page: Page) => {
   await page.getByRole('button', { name: /Use this mechanism/i }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
 };
+
+const writeBrokenFitLessonProject = async () => {
+  const project = createLessonProject('waving-arm');
+  const mechanism = project.mechanisms[0];
+  const path = project.paths[mechanism.targetPathId!];
+  project.mechanisms = [{
+    ...mechanism,
+    fabricationMetadata: {
+      ...(mechanism.fabricationMetadata ?? {}),
+      pathFit: {
+        status: 'rejected',
+        targetPathId: path.id,
+        outputTraceId: 'B',
+        error: 999,
+        maxError: 999,
+        tolerance: 30,
+        kitProfileKey: project.settings.physicalKit.profileKey,
+      },
+    },
+  }];
+  const dir = await mkdtemp(join(tmpdir(), 'motionsmith-broken-fit-lesson-'));
+  const projectPath = join(dir, 'broken-fit-waving-arm.motionsmith.json');
+  await writeFile(projectPath, serializeProject(project), 'utf8');
+  return projectPath;
+};
+
+test('importing a project with a broken path fit points the student at the Foundry', async ({ page }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  await page.goto(process.env.PLAYWRIGHT_BASE_PATH || '/');
+  await dismissStartupAnnouncement(page);
+  await importProjectFile(page, await writeBrokenFitLessonProject(), 'path');
+  await expect(page.getByTestId('app-toast')).toContainText("doesn't match its motion path");
+  expectCleanPage(pageErrors, consoleErrors);
+});
+
+test('unfollowable path yields a closest match with an in-app toast and explicit acceptance', async ({ page }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  await page.goto(process.env.PLAYWRIGHT_BASE_PATH || '/');
+  await dismissStartupAnnouncement(page);
+  await importProjectFile(page, await writeClosestFitWavingArmLessonProject(), 'path');
+  await page.getByRole('button', { name: /Foundry/i }).click();
+  await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
+  const fitPath = page.getByTestId('foundry-fit-path');
+  await expect(fitPath).toBeEnabled();
+  await fitPath.click();
+  await expect(page.getByTestId('foundry-closest-fit')).toContainText('closest match', { timeout: 30000 });
+  await expect(page.getByTestId('app-toast')).toContainText('closest match');
+  const useMechanism = page.getByRole('button', { name: /Use this mechanism/i });
+  await expect(useMechanism).toBeEnabled();
+  await useMechanism.click();
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+  await clickStage(page, 'Blueprint');
+  await expect(page.getByTestId('blueprint-build-preview')).toHaveAttribute('data-build-plan-digest', /^fnv1a32:/);
+  const buildDetails = page.getByTestId('blueprint-detail-preview');
+  await expect(buildDetails).toContainText('Build spot');
+  await expect(buildDetails).not.toContainText('No fabrication-valid path fit.');
+  expectCleanPage(pageErrors, consoleErrors);
+});
+
+test('an untraceable scribble path still fits to a sane closest match', async ({ page }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  await page.goto(process.env.PLAYWRIGHT_BASE_PATH || '/');
+  await dismissStartupAnnouncement(page);
+  await importProjectFile(page, await writeNonsenseFitLessonProject(), 'path');
+  await page.getByRole('button', { name: /Foundry/i }).click();
+  await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
+  const fitPath = page.getByTestId('foundry-fit-path');
+  await expect(fitPath).toBeEnabled();
+  await fitPath.click();
+  await expect(page.getByTestId('foundry-closest-fit')).toContainText('closest match', { timeout: 30000 });
+  const useMechanism = page.getByRole('button', { name: /Use this mechanism/i });
+  await expect(useMechanism).toBeEnabled();
+  await useMechanism.click();
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+  expectCleanPage(pageErrors, consoleErrors);
+});
 
 const readScenePoint = async (locator: Locator) => locator.evaluate((el: SVGElement) => ({
   x: Number(el.getAttribute('cx')),
@@ -1439,7 +1572,10 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(designRig).toHaveAttribute('data-three-stack-validation-errors', '0');
   await expect(designRig).toHaveAttribute('data-three-physical-validation-errors', '0');
   await expect(designRig).toHaveAttribute('data-three-preview-renderable', 'ready');
-  await expect(designRig).toHaveAttribute('data-three-stack-order', /Input L2 linkage.*Coupler L4 linkage.*Output L[246] linkage/);
+  // The closed-path resample fix retuned the fixture's fit (error 8.08 ->
+  // 0.45px), which selects the more accurate Coupler L8 kit linkage for the
+  // authored path; the L2/L8/L2 stack is the fabrication-valid winner now.
+  await expect(designRig).toHaveAttribute('data-three-stack-order', /Input L2 linkage.*Coupler L8 linkage.*Output L[246] linkage/);
   await expect(designRig).toHaveAttribute('data-three-fourbar-ground-link-plane', 'fabrication-stack-separated');
   await expectFoundryRenderContract(designRig, foundryRenderContract, 'Design consumes the fitted Foundry mechanism contract');
   const designHasWebgl = await designPreview.locator('canvas.foundry-three-canvas').evaluate((canvas: HTMLCanvasElement) => Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl')));
@@ -1548,7 +1684,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const assemblyPartsDetails = page.getByTestId('assembly-guide-preview').locator('details.blueprint-more-exports').first();
   if (!(await assemblyPartsDetails.evaluate((element: HTMLDetailsElement) => element.open))) await assemblyPartsDetails.locator('summary').click();
   await expect(page.getByTestId('assembly-stack-summary')).toContainText(/^Back Clip.*Spacer 10mm OD \/ 4mm hole.*Front Clip/);
-  await expect(page.getByTestId('assembly-stack-summary')).toContainText(/Input 3-hole link.*Coupler 5-hole link.*Output 3-hole link/);
+  await expect(page.getByTestId('assembly-stack-summary')).toContainText(/Input 3-hole link.*Coupler 9-hole link.*Output 3-hole link/);
   await expect(page.getByTestId('stage-right-inspector')).toContainText(/row \d+, column \d+/);
   await expect(page.getByTestId('assembly-stack-summary')).not.toContainText(/Base board/);
   await expect(page.getByTestId('prefab-assembly-steps')).toContainText(/Step \d+/);
@@ -2243,11 +2379,13 @@ test('Options parity updates the full-width settings workspace and blueprint def
   await expect(twelveBoardFoundry).toHaveAttribute('data-fit-board-cells', '12');
   await expect(twelveBoardFoundry).toHaveAttribute('data-fit-anchor-grid', /\S/);
   await expect(twelveBoardFoundry).toHaveAttribute('data-fit-target-path', 'fabrication-fit-path');
-  await expect(page.getByRole('button', { name: /Use this mechanism/i })).toBeDisabled();
-  await expect(page.getByText('No valid fabrication fit. Try a shorter path or another mechanism.', { exact: true })).toBeVisible();
+  // The off-fixture anchor now yields a closest fabrication match (still a
+  // fabrication blocker until explicitly accepted), not a bare rejection.
+  await expect(page.getByTestId('foundry-closest-fit')).toContainText('closest match');
+  await expect(page.getByRole('button', { name: /Use this mechanism/i })).toBeEnabled();
   await clickStage(page, 'Mechanism Design');
   const rejectedDesignPreview = page.getByTestId('design-shared-foundry-preview');
-  await expect(rejectedDesignPreview).toHaveAttribute('data-design-fit-status', 'rejected');
+  await expect(rejectedDesignPreview).toHaveAttribute('data-design-fit-status', 'closest');
   await page.getByLabel('Workspace scrubber').fill('15');
   await expect(rejectedDesignPreview).toHaveAttribute('data-design-motion-source', 'linkage-trace');
   expect(Number(await rejectedDesignPreview.getAttribute('data-design-animated-part-count'))).toBeGreaterThan(0);
@@ -5309,7 +5447,12 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
   await expect(designRig).toHaveAttribute('data-camera-preset', 'front');
   await expect(designPreview).toHaveAttribute('data-design-motion-source', 'linkage-trace');
   await expect(designPreview).toHaveAttribute('data-design-fit-status', 'fit');
-  expect(Number(await designPreview.getAttribute('data-design-generated-path-error'))).toBeLessThan(1);
+  // The fixture's start phase (0) sits beyond the arm's reach, so the solved
+  // hand clamps to the reach boundary (canonical fixture contract: phases
+  // 0/0.37/5.9 unreachable, 1.2/3.14 reachable). The fabrication fit quality
+  // is the fit error; tracking quality is asserted at a reachable phase below.
+  expect(Number(await designPreview.getAttribute('data-design-fit-error'))).toBeLessThan(30);
+  expect(Number(await designPreview.getAttribute('data-design-generated-path-error'))).toBeGreaterThan(1);
   expect(Number(await designPreview.getAttribute('data-design-target-error'))).toBeGreaterThan(1);
   const headTarget = await waitForThreePartTarget(designRig, 'head');
   const torsoTarget = await waitForThreePartTarget(designRig, 'torso');
@@ -5331,7 +5474,11 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
   expect(Number(await designRig.getAttribute('data-three-geometry-cache-size') ?? '0'), 'Design scrub retains its geometry cache').toBe(designGeometryCacheBefore);
   expect(Number(await designRig.getAttribute('data-three-material-cache-size') ?? '0'), 'Design scrub retains its material cache').toBe(designMaterialCacheBefore);
   expect(Number(await designRig.getAttribute('data-three-pool-size') ?? '0'), 'Design scrub retains its object pool').toBe(designPoolBefore);
-  expect(Number(await designPreview.getAttribute('data-design-target-error'))).toBeGreaterThan(1);
+  // Scrubbed to 28% (phase 1.76 rad) — a reachable phase — the physical
+  // output tracks both the generated and authored paths to sub-pixel
+  // distance: the true-fit contract after the closed-path resample fix.
+  expect(Number(await designPreview.getAttribute('data-design-generated-path-error'))).toBeLessThan(1);
+  expect(Number(await designPreview.getAttribute('data-design-target-error'))).toBeLessThan(1);
 
   const expectedMarkers: Record<string, Array<[string, number]>> = {
     '4bar': [['data-three-part-count', 3], ['data-three-hole-count', 4]],

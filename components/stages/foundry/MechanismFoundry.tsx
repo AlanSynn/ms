@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { FoundryCanvasPane } from "./FoundryCanvasPane";
+import { showAppToast } from "../../AppToast";
 import type { FoundryPlaybackFrame as ThreeFoundryPlaybackFrame } from "./ThreeFoundryPreview";
 import { useWorkspacePlaybackLoop } from "../../../hooks/useWorkspacePlaybackLoop";
 import type { PlaybackClock } from "../../../runtime/playback/externalPlaybackClock";
@@ -788,9 +789,13 @@ export const MechanismFoundry = ({
       ? effectiveFitMechanism.fabricationMetadata?.pathFit
       : undefined;
   const pathFitStatus = effectivePathFit?.status;
+  // The draft's own closest recommendation also unlocks "Use this mechanism":
+  // a committed fit elsewhere on this path must not hide the fresh result.
   const pathFitUsable =
-    pathFitStatus === "fit" &&
-    mechanismPathFitIsUsable(project, effectiveFitMechanism);
+    pathFitStatus === "closest" ||
+    foundry.fabricationMetadata?.pathFit?.status === "closest" ||
+    (pathFitStatus === "fit" &&
+      mechanismPathFitIsUsable(project, effectiveFitMechanism));
   const fitRequired = foundry.type === "4bar";
   const hardBlocked =
     !targetReady ||
@@ -1253,6 +1258,13 @@ export const MechanismFoundry = ({
           startTransition(() => {
             setFoundryDraft(fitted);
             setPathFitBusy(false);
+            if (fitted.fabricationMetadata?.pathFit?.status === "closest") {
+              // Surface the closest-match recommendation as an in-app
+              // notification instead of burying it in the status strip.
+              showAppToast(
+                "No exact fabrication fit — recommending the closest match. Review it in the Foundry.",
+              );
+            }
           });
         },
         failed: () => {

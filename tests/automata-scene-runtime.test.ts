@@ -35,31 +35,30 @@ const hash = (value: unknown) =>
 
 type GoldenHash = string | readonly string[];
 
+// Recomputed after the explicit closed-target tangent fix. The existing
+// i/count closed resample, fit phase (0), linkage geometry, and full-cycle
+// generatedPath quality stay unchanged; only wraparound tangent metadata is
+// corrected (RMS/max 19.7923/90.0251 -> 7.2569/35.3532 degrees).
 const expectedHashes = new Map<number, GoldenHash>([
-  [0, [
-    '6e45e44afeafab75a8f98bbc63841e3dc9f2048f2a0c168428cda7599735f3a1',
-    '406fe14aee979a6b10ca793978dc79d5843fcb196af75a8ffab5afb056ef4760',
-  ]],
-  [0.37, '75f02b48908736b03274ba0c57cbf3363eeb8f97c70dd0ae6bba6756634755cb'],
-  [1.2, '9ad33edb96d28798cfe16138e1dc3255f96ad2719796825b52e54175bb639cd3'],
-  [3.14, '8a0618f10c0fe4ea61f71933813b63dcfdc5c85232555e228a84e49b112be2c6'],
-  [5.9, [
-    'cb678ab8d2abe0545796987a156158211b4eedf3b9e2190149f7b65af2b7ed8e',
-    '888b893092640d14eec1887815e492a20736736185ea0f241942babe8fd2dbd1',
-  ]],
+  [0, 'f233cafc81f090568d7068c4ddff6cf5c7a95d028f6a8fee1598f99ecb195102'],
+  [0.37, 'e2bc2736f181a654c550988be159e3f367d1abe3ec1c64799a0f3bf965140c33'],
+  [1.2, '593e59e7491d17f1d5e18913dee6a1b01d454f4db72ee4f15c4afc65073d3ccb'],
+  [3.14, 'bebdeb10fdffd649712f8dc64e9372663de09cc27d1fda6d7222e7734d6cf8ff'],
+  [5.9, '42c6f2c01d5091c37d346f4f27013961db2cc7000f8706a14a47c21796076040'],
 ]);
 
 // Isolated HEAD 00ce602 motion/scene modules reproduce all five prior goldens.
 // The connected-pose change only alters arm transforms, solved joints/targets,
 // target errors, reach warnings and the starter's two corrected fold signs.
-// Retain these independent pre-change hashes
-// for the complete Foundry/physics/fabrication/mechanism/path projection.
+// The fit metadata is also intentionally updated for the explicit closed
+// tangent seam, while the underlying Foundry/physics/fabrication geometry and
+// generated trace remain unchanged.
 const expectedMechanismHashes = new Map<number, string>([
-  [0, '90470f64f8770d7113c4b38b7270d5258d438864ec53a11e414f58f55523e23e'],
-  [0.37, 'c159f8000c1ad3cbe543737ef753e4ad5d3b3c32b70b4030e1bbbed736ec4e17'],
-  [1.2, '42f4589dc8a0b67fc9c2b478f71ac2c956529410f5b9a1e360cf5051a0392148'],
-  [3.14, '07c299fd26c7e8e62cff10e9a186ee9c2c7198c72304509f373b34365743ffcc'],
-  [5.9, '888b893092640d14eec1887815e492a20736736185ea0f241942babe8fd2dbd1'],
+  [0, 'ab914bf31a1ac39858dd97559d0b45f5c01ddf7d7155a906af5ebe688da4ec8b'],
+  [0.37, 'c4cb12f1f3f1887bc4af6c1a8c48747504a40474ce32cc311660934a15e15697'],
+  [1.2, '0895b0b117b18cda6b6743cd13170828fa65517930dd2314b122ca0ad759d0cf'],
+  [3.14, '0a442cc9476277289741196fcb781da926c21369286ab23349afe1d1ac311bfd'],
+  [5.9, '8f61f8383a5852e09e230c7960482317723a73d653adb5dad6c4a44cb98c6e84'],
 ]);
 const mechanismProjection = (model: AutomataSceneModel) => {
   const { animatedParts: _parts, skeleton: _skeleton, target: _target, targetError: _targetError,
