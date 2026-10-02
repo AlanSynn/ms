@@ -27,6 +27,7 @@ const UNIT_TEST_FILES = [
   'chromebook-audit-contract.test.ts',
   'classroom-persistence.test.ts',
   'closest-fit-fallback.test.ts',
+  'cloudflare-site.test.ts',
   'fabrication-validation.test.ts',
   'feature-search.test.ts',
   'feedback-worker.test.ts',

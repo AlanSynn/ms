@@ -1,0 +1,17 @@
+{
+  "trigger_name": "motionsmith-site main",
+  "build_command": "bun --no-env-file scripts/build-cloudflare-site.mjs",
+  "deploy_command": "bunx wrangler@4.112.0 deploy --config deploy/cloudflare/wrangler.jsonc --strict",
+  "root_directory": "/",
+  "branch_includes": ["main"],
+  "branch_excludes": [],
+  "path_includes": ["*"],
+  "path_excludes": [],
+  "build_caching_enabled": true,
+  "environment_variables": {
+    "BUN_VERSION": { "value": "1.3.14", "is_secret": false },
+    "SKIP_DEPENDENCY_INSTALL": { "value": "1", "is_secret": false },
+    "VITE_BASE_PATH": { "value": "/", "is_secret": false },
+    "VITE_FEEDBACK_ENDPOINT": { "value": "https://motionsmith-feedback.alansynn.workers.dev/feedback", "is_secret": false }
+  }
+}

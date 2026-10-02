@@ -7,6 +7,7 @@ import type { PlaybackClock } from '../../../runtime/playback/externalPlaybackCl
 import type { BrowserRecoveryCandidate, ProjectBackupStatus } from '../../../runtime/persistence/projectDecisionBoundary';
 import type { ProjectVersionsView } from '../../../runtime/versions/versionTypes';
 import { BrowserRecoveryAction } from '../../shell/BrowserRecoveryAction';
+import { ContextHelp } from '../../ui/ContextHelp';
 import { EditorStageFrame, canvasPane, inspectorPane, workflowPane } from '../stageLayout';
 const EarlierVersionPreview = lazy(async () => ({ default: (await import('./EarlierVersionPreview')).EarlierVersionPreview }));
 const EarlierVersionsPanel = lazy(async () => ({ default: (await import('./EarlierVersionsPanel')).EarlierVersionsPanel }));
@@ -124,7 +125,7 @@ export const ProjectStage = ({ project, commandHandlers, goStage, angle, isPlayi
             Browser backup: {BACKUP_LABELS[backup.state]}
           </div>
           {backup.state === 'failed' && <div className="text-xs">Use Save Project</div>}
-          <div className="text-xs font-bold text-slate-500">Project file: .motionsmith</div>
+          <div className="text-xs font-bold text-slate-500">Project file: .motionsmith <ContextHelp helpId="project.moveBetweenSites" /></div>
         </section>,
       ),
     }}

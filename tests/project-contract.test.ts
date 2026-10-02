@@ -857,7 +857,7 @@ assert.equal(tauriConfig.build.beforeBuildCommand, 'bun run build:tauri-frontend
 assert(deploymentDocs.includes('bun install --frozen-lockfile') && !deploymentDocs.includes('npm '), 'deployment docs use Bun commands');
 assert(deploymentDocs.includes('Classroom release checklist') && deploymentDocs.includes('v<package.json version>') && deploymentDocs.includes('VITE_BASE_PATH=/ms/'), 'deployment docs include the tag-gated /ms classroom release checklist');
 assert(deploymentDocs.includes('GitHub Pages release deploy') && deploymentDocs.includes('https://alansynn.com/ms/'), 'deployment docs identify GitHub Pages as the classroom release path');
-assert(deploymentDocs.includes('one Cloudflare Worker') && deploymentDocs.includes('Other required-server features remain excluded') && !deploymentDocs.includes('motionsmith.org'), 'the one-Worker feedback exception does not create a second frontend release path or reopen other server scope');
+assert(deploymentDocs.includes('one Cloudflare Worker') && deploymentDocs.includes('Other required-server features remain excluded') && deploymentDocs.includes('independent additional `motionsmith.org` site uses Cloudflare-native Git builds from `main`'), 'the additional static frontend preserves the one-Worker feedback boundary and excluded server scope');
 assert(deploymentDocs.includes('no `/api/` requests') && deploymentDocs.includes('Teacher pack workflow') && deploymentDocs.includes('no account, no project upload') && deploymentDocs.includes('Only explicit Feedback Send/status/retry'), 'deployment docs lock classroom release to static local-first teacher-pack flow');
 assert(macosDocs.includes('bun run build:exe') && !macosDocs.includes('npm '), 'macOS distribution docs use Bun commands');
 assert(agentsContract.includes('three` + Rapier WASM'), 'AGENTS.md records the selected high-performance 3D physics stack');
@@ -865,8 +865,9 @@ assert(agentsContract.includes('Viser-style transform tree'), 'AGENTS.md records
 assert(agentsContract.includes('preserve coverage while optimizing wall time'), 'AGENTS.md requires test speedups to preserve test quality');
 assert(agentsContract.includes('bounded Playwright parallel workers'), 'AGENTS.md requires bounded browser test parallelism');
 assert(agentsContract.includes('bun run test') && agentsContract.includes('bun run build') && !agentsContract.includes('npm test'), 'AGENTS.md verification gates use Bun commands');
-assert(agentsContract.includes('GitHub Pages is the only hosted web release path') && agentsContract.includes('https://alansynn.com/ms/'), 'AGENTS.md locks the single GitHub Pages classroom path');
-assert(agentsContract.includes('Deploy only from version tags') && agentsContract.includes('v<package.json version>') && agentsContract.includes('Do not re-enable `main` branch deployment'), 'AGENTS.md locks tag-only GitHub Pages deployment');
+assert(agentsContract.includes('GitHub Pages remains the classroom release') && agentsContract.includes('https://alansynn.com/ms/'), 'AGENTS.md retains the existing GitHub Pages classroom path');
+assert(agentsContract.includes('Deploy GitHub Pages only from version tags') && agentsContract.includes('v<package.json version>') && agentsContract.includes('Do not re-enable `main` branch deployment'), 'AGENTS.md locks tag-only GitHub Pages deployment');
+assert(agentsContract.includes('https://motionsmith.org/') && agentsContract.includes('Cloudflare-native Git integration from `main`') && agentsContract.includes('verified zero additional cost'), 'additional root site uses an independent free Cloudflare Git deployment');
 assert(agentsContract.includes('package.json') && agentsContract.includes('src-tauri/Cargo.toml') && agentsContract.includes('src-tauri/tauri.conf.json'), 'AGENTS.md requires browser and Tauri version alignment before release');
 assert(agentsContract.includes('local-first browser/Tauri'), 'AGENTS.md excludes server scope and locks the app as local-first');
 assert(agentsContract.includes('Do not add backend/API server'), 'AGENTS.md explicitly excludes backend/API/auth/cloud work unless reopened');

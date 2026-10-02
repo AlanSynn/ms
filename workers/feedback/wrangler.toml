@@ -7,7 +7,7 @@ workers_dev = true
 GITHUB_OWNER = "AlanSynn"
 GITHUB_REPO = "ms"
 GITHUB_REPOSITORY_ID = "1283287676"
-ALLOWED_ORIGINS = "https://alansynn.com"
+ALLOWED_ORIGINS = "https://alansynn.com,https://motionsmith.org"
 
 [observability]
 enabled = false
