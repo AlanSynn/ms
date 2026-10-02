@@ -3943,17 +3943,20 @@ test('Every visible path-fit trigger owns and releases the shared fit worker', a
   expect(await requestedFits(), 'Use validates the fabrication sheet before committing').toEqual(['fit', 'fit']);
 
   await page.getByTestId('design-add-gear_linkage').click();
-  await expectProjectCounts(page, 14, 1, 2);
+  await expect(page.getByLabel('Mechanism instance').locator('option:checked')).toContainText('Gear linkage');
+  await expectProjectCounts(page, 14, 1, 1);
+  await expect(page.getByLabel('Mechanism instance')).toHaveValue(pathOwnerMechanismId);
+  await expect(page.getByLabel('Mechanism motion path')).toHaveValue('fabrication-fit-path');
   await waitForLifecycleBaseline(page, designBaseline.lifecycle);
   const afterFamilyFit = await readFeatureRuntimeProbe(page);
   const familyAcquiredDelta = afterFamilyFit.lifecycle.workers.acquired - designBaseline.lifecycle.workers.acquired;
   const familyReleasedDelta = afterFamilyFit.lifecycle.workers.released - designBaseline.lifecycle.workers.released;
+  expect(familyAcquiredDelta, 'changing the owned template requests a real fit worker').toBeGreaterThan(0);
   expect(familyAcquiredDelta).toBe(familyReleasedDelta);
   expect(afterFamilyFit.lifecycle.workers.active).toBeLessThanOrEqual(
     designBaseline.lifecycle.workers.active,
   );
-  await expect(page.getByLabel('Mechanism motion path')).toHaveValue('');
-  expect(await requestedFits(), 'an owned target leaves the additional kit unbound without another fit').toEqual(['fit', 'fit']);
+  expect(await requestedFits(), 'changing the template refits its existing path owner').toEqual(['fit', 'fit', 'fit']);
 
   await page.getByLabel('Mechanism instance').selectOption(pathOwnerMechanismId);
   await expect(page.getByLabel('Mechanism motion path')).toHaveValue('fabrication-fit-path');
@@ -3964,7 +3967,7 @@ test('Every visible path-fit trigger owns and releases the shared fit worker', a
   await page.getByLabel('Mechanism target').selectOption('head');
   await expect.poll(requestedFits, {
     message: 'the accepted unbound target requests a fabrication board fit',
-  }).toEqual(['fit', 'fit', 'fit']);
+  }).toEqual(['fit', 'fit', 'fit', 'fit']);
   await expect(page.getByLabel('Mechanism motion path')).toHaveValue('');
   await expect.poll(async () => (await readFeatureRuntimeProbe(page)).lifecycle.workers.active, {
     message: 'fit worker releases before the next lifecycle baseline is captured',
@@ -3973,7 +3976,7 @@ test('Every visible path-fit trigger owns and releases the shared fit worker', a
   await page.getByLabel('Mechanism target').selectOption('right_arm_lower');
   await expect.poll(requestedFits, {
     message: 'reattaching the arm requests its path fit',
-  }).toEqual(['fit', 'fit', 'fit', 'fit']);
+  }).toEqual(['fit', 'fit', 'fit', 'fit', 'fit']);
   await expect(page.getByLabel('Mechanism motion path')).toHaveValue(/\S+/);
   await expect(page.getByTestId('status-bar')).toContainText('Fit ready');
   await waitForLifecycleBaseline(page, targetBaseline.lifecycle);
@@ -3985,7 +3988,7 @@ test('Every visible path-fit trigger owns and releases the shared fit worker', a
     targetBaseline.lifecycle.workers.released,
   );
 
-  expect(await requestedFits(), 'reattaching the arm requests its path fit').toEqual(['fit', 'fit', 'fit', 'fit']);
+  expect(await requestedFits(), 'reattaching the arm requests its path fit').toEqual(['fit', 'fit', 'fit', 'fit', 'fit']);
 });
 
 test('Classroom playback is opt-in and pauses across stage or hidden-tab boundaries', async ({ page }) => {

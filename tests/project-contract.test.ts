@@ -3929,9 +3929,11 @@ assert(
 assert(
   mechanismRecommendationsText.includes('const acceptedFourBarFit = mechanism.type === "4bar"') &&
     mechanismRecommendationsText.includes('if (acceptedFourBarFit) return acceptedFourBarFit;') &&
-    b695FitTestText.includes('closest four-bar output remains byte-stable after hard physical trace fitting') &&
+    b695FitTestText.includes("'closest four-bar golden'") &&
+    b695FitTestText.includes('assertFourBarFitMechanism(accepted') &&
+    b695FitTestText.includes('tied pool cutoff is independent of insertion order') &&
     b695FitTestText.includes('short-path four-bar rejection remains byte-stable with b695'),
-  'Fit returns explicit hard-tolerance rejections before generic fallback construction and keeps b695 outputs stable',
+  'Fit returns before generic fallback construction and locks stable closest geometry with bounded numeric drift and exact short-path rejection',
 );
 assert(
   blueprintModelRuntimeText.includes('const modelCache = new WeakMap<ProjectState, BlueprintModel>()') &&
