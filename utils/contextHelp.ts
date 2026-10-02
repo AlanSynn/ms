@@ -1,6 +1,7 @@
 export type HelpLocale = "en";
 
 export type ContextHelpId =
+  | "project.moveBetweenSites"
   | "project.versions"
   | "character.loadCharacterFile"
   | "character.loadObjectFile"
@@ -32,6 +33,12 @@ export const CONTEXT_HELP: Record<
   ContextHelpId,
   Record<HelpLocale, ContextHelpEntry>
 > = {
+  "project.moveBetweenSites": {
+    en: {
+      title: "Move between sites",
+      body: "Autosave is separate for each site. To move your work, save a project file from the original site and open it on the other site.",
+    },
+  },
   "project.versions": {
     en: {
       title: "Earlier versions",

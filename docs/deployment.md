@@ -15,7 +15,7 @@ The build runs `scripts/check-no-image-recognition.mjs` before and after Vite. I
 
 ## GitHub Pages release deploy
 
-Deployment is intentionally version-gated. Pushing to `main` does not deploy; only a tag that matches `package.json` deploys.
+GitHub Pages deployment is intentionally version-gated. Pushing to `main` does not deploy GitHub Pages; only a tag that matches `package.json` deploys there. The independent additional `motionsmith.org` site uses Cloudflare-native Git builds from `main`; see [Independent MotionSmith site](cloudflare-site.md) for its cost gate, validation, setup status and rollback.
 
 ```bash
 # after committing the release

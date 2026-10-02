@@ -1,7 +1,7 @@
 # MotionSmith Project Agents Contract
 
 Status: active
-Last refreshed: 2026-09-07
+Last refreshed: 2026-10-01
 Scope: every implementation, design, test, and documentation change in this repository.
 
 This file is the project-level rulebook for future agents. If older docs or UI copy drift from this contract, update the product to match this file; do not add another explanatory layer.
@@ -177,8 +177,8 @@ Before claiming completion, run the smallest checks that prove the changed contr
 
 ## 10. Release and deployment contract
 
-- GitHub Pages is the only hosted web release path for now: publish the static app at `https://alansynn.com/ms/` with `VITE_BASE_PATH=/ms/`.
-- Deploy only from version tags matching `v<package.json version>`; do not restore branch-push or manual workflow deploys.
+- GitHub Pages remains the classroom release at `https://alansynn.com/ms/` with `VITE_BASE_PATH=/ms/`. The independent additional static site at `https://motionsmith.org/` uses `VITE_BASE_PATH=/` and Cloudflare-native Git integration from `main`, subject to verified zero additional cost. Keep its resource, DNS, build configuration, and deployment independent.
+- Deploy GitHub Pages only from version tags matching `v<package.json version>`; do not restore branch-push or manual workflow deploys or add Cloudflare deployment jobs to GitHub Actions.
 - Keep release versions aligned across `package.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json` before tagging.
 - The `github-pages` environment must allow `v*.*.*` tags only. Do not re-enable `main` branch deployment unless the release policy is explicitly changed.
 - Do not add a Pages `CNAME` file for this project page; the repo lives under the already-routed `/ms/` path.

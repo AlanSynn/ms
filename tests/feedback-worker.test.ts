@@ -166,6 +166,28 @@ await check('CORS, paths and methods cannot expose a generic GitHub proxy', asyn
   assert.equal(options.status, 204); assert.equal(options.headers.get('Access-Control-Allow-Headers'), 'Content-Type');
   assert.equal(upstream.state.calls.length, 0);
 });
+await check('both site origins have exact CORS without widening the allowlist', async () => {
+  const settings = { ...env(), ALLOWED_ORIGINS: 'https://alansynn.com,https://motionsmith.org' };
+  for (const allowed of ['https://alansynn.com', 'https://motionsmith.org']) {
+    const upstream = github();
+    const response = await handleFeedback(new Request('https://relay.example/feedback', {
+      method: 'OPTIONS', headers: { Origin: allowed },
+    }), settings, upstream.fetcher, now);
+    assert.equal(response.status, 204);
+    assert.equal(response.headers.get('Access-Control-Allow-Origin'), allowed);
+    assert.equal(upstream.state.calls.length, 0, 'preflight creates no real issues or upstream calls');
+  }
+  for (const denied of ['https://www.motionsmith.org', 'http://motionsmith.org',
+    'https://motionsmith.org.evil.example', 'https://evil.example']) {
+    const upstream = github();
+    const response = await handleFeedback(new Request('https://relay.example/feedback', {
+      method: 'OPTIONS', headers: { Origin: denied },
+    }), settings, upstream.fetcher, now);
+    assert.equal(response.status, 403);
+    assert.equal(response.headers.get('Access-Control-Allow-Origin'), null);
+    assert.equal(upstream.state.calls.length, 0);
+  }
+});
 await check('missing/unsupported credentials and wrong configured repository fail closed', async () => {
   for (const changed of [{ GITHUB_FEEDBACK_TOKEN: '' }, { GITHUB_FEEDBACK_TOKEN: 'ghs_app_installation' },
     { FEEDBACK_RECEIPT_SECRET: '' }, { GITHUB_REPO: 'other' }, { GITHUB_REPOSITORY_ID: '1' }]) {
