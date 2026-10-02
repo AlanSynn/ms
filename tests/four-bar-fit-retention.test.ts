@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert';
-import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
 import {
   clearFourBarFitCache,
@@ -12,25 +12,56 @@ import {
 } from '../utils/mechanismBindings';
 import { fitMechanismToTargetPath } from '../utils/mechanismRecommendations';
 import { createDefaultMechanism, createSampleProject } from '../utils/project';
+import type { MechanismOutputBinding, ProjectMotionPath } from '../types';
 import { createFabricationReadyFourBarProject } from './fixtures/fabricationProject';
-
-const hash = (value: unknown) =>
-  createHash('sha256').update(JSON.stringify(value, (_key, item) =>
-    typeof item === 'number' && Number.isFinite(item)
-      ? Number(item.toFixed(12))
-      : item
-  )).digest('hex');
+import { assertFourBarFitMechanism, FOUR_BAR_GOLDEN_EPSILON } from './fixtures/fourBarFitAssertions';
 
 clearFourBarFitCache();
 const acceptedProject = createFabricationReadyFourBarProject();
-assert.equal(
-  hash(acceptedProject.mechanisms[0]),
-  // Recomputed after explicit closed target tangents: the i/count resample,
-  // phase/geometry/output trace, and 96-point generated trace remain
-  // unchanged; tangent RMS/max changes 19.7923/90.0251 -> 7.2569/35.3532.
-  'f31926408c6c6aea20516127dbff326bbaff2e12d70084b41846f52e9d8b2df5',
-  'radial pruning preserves the accepted fabrication-fit mechanism after platform-stable float normalization',
-);
+// This complete mechanism is captured before the ranking fix (b5998cd).
+// Keep geometry, bindings, phase, keys and trace order exact; tolerate only
+// measured numeric drift in trace coordinates and diagnostic errors.
+const fabricationGolden = JSON.parse(readFileSync(
+  new URL('./fixtures/fourBarFabricationFit.json', import.meta.url), 'utf8',
+));
+assertFourBarFitMechanism(acceptedProject.mechanisms[0], fabricationGolden, 'accepted fabrication fit golden');
+
+// Exercise the assertion itself: rounding noise must pass, while geometry,
+// missing trace points, changed topology and nonfinite diagnostics must fail.
+const goldenMutation = (change: (copy: typeof fabricationGolden) => void) => {
+  const copy = structuredClone(fabricationGolden);
+  change(copy);
+  return copy;
+};
+assertFourBarFitMechanism(goldenMutation((copy) => {
+  copy.generatedPath[1].x += FOUR_BAR_GOLDEN_EPSILON / 2;
+  copy.fabricationMetadata.pathFit.tangentError += FOUR_BAR_GOLDEN_EPSILON / 2;
+}), fabricationGolden, 'continuous rounding noise');
+const forbiddenMutations = [
+  (copy: typeof fabricationGolden) => { copy.generatedPath[1].x += FOUR_BAR_GOLDEN_EPSILON * 2; },
+  (copy: typeof fabricationGolden) => { copy.fabricationMetadata.pathFit.maxError += FOUR_BAR_GOLDEN_EPSILON * 2; },
+  (copy: typeof fabricationGolden) => { copy.generatedPath[1].y = NaN; },
+  (copy: typeof fabricationGolden) => { copy.fabricationMetadata.pathFit.error = Infinity; },
+  (copy: typeof fabricationGolden) => { copy.generatedPath.pop(); },
+  (copy: typeof fabricationGolden) => { copy.generatedPath.reverse(); },
+  (copy: typeof fabricationGolden) => { delete copy.fabricationMetadata.pathFit.direction; },
+  (copy: typeof fabricationGolden) => { copy.outputs = []; },
+  (copy: typeof fabricationGolden) => { copy.crankLength += FOUR_BAR_GOLDEN_EPSILON / 2; },
+  (copy: typeof fabricationGolden) => { copy.anchorX += FOUR_BAR_GOLDEN_EPSILON / 2; },
+  (copy: typeof fabricationGolden) => { copy.transform.rotation += FOUR_BAR_GOLDEN_EPSILON / 2; },
+  (copy: typeof fabricationGolden) => { copy.sceneAnchor.y += FOUR_BAR_GOLDEN_EPSILON / 2; },
+  (copy: typeof fabricationGolden) => { copy.fabricationMetadata.gridPitchMm += FOUR_BAR_GOLDEN_EPSILON / 2; },
+  (copy: typeof fabricationGolden) => { copy.fabricationMetadata.pathFit.tolerance += FOUR_BAR_GOLDEN_EPSILON / 2; },
+  (copy: typeof fabricationGolden) => { copy.fabricationMetadata.pathFit.phaseOffset += FOUR_BAR_GOLDEN_EPSILON / 2; },
+  (copy: typeof fabricationGolden) => { copy.fabricationMetadata.pathFit.direction = -1; },
+  (copy: typeof fabricationGolden) => { copy.fabricationMetadata.pathFit.outputTraceId = 'B'; },
+  (copy: typeof fabricationGolden) => { copy.fabricationMetadata.pathFit.status = 'closest'; },
+];
+for (const change of forbiddenMutations) {
+  assert.throws(() => assertFourBarFitMechanism(
+    goldenMutation(change), fabricationGolden, 'intentional contract violation',
+  ), 'the complete golden rejects changes outside its numeric allowance');
+}
 
 const acceptedPath = acceptedProject.paths['fabrication-fit-path'];
 const acceptedMechanism = acceptedProject.mechanisms[0];
@@ -68,6 +99,26 @@ assert.equal(
   'fit',
   'an accepted fit synchronizes the selected output binding metadata',
 );
+const assertSynchronizedOutput = (
+  mechanism: typeof refreshedAccepted, requestedPath: ProjectMotionPath,
+  priorBinding: MechanismOutputBinding,
+) => {
+  const fit = mechanism.fabricationMetadata?.pathFit;
+  const output = mechanism.outputs?.[0];
+  assert(fit && output?.fit, 'refit retains explicit output fit metadata');
+  assert.deepEqual(output.fit, fit, 'binding and mechanism keep all fit fields synchronized');
+  assert.equal(output.id, priorBinding.id, 'refit preserves the binding identity');
+  assert.equal(output.enabled, true);
+  assert.equal(output.pathId, requestedPath.id);
+  assert.equal(mechanism.targetPathId, requestedPath.id);
+  assert.equal(output.targetPartId, requestedPath.partId);
+  assert.equal(output.targetAnchorJointId, requestedPath.targetAnchorJointId);
+  assert.equal(output.portId, fit.outputTraceId);
+  assert.equal(output.outputTraceId, fit.outputTraceId);
+  assert.equal(output.phaseOffset, fit.phaseOffset);
+  assert.equal(output.direction, fit.direction);
+};
+assertSynchronizedOutput(refreshedAccepted, acceptedPath, staleAcceptedBinding);
 
 const rejectedProject = createSampleProject();
 const rejectedPath = rejectedProject.paths['path-right-arm'];
@@ -112,6 +163,7 @@ assert.equal(
   'closest',
   'the refit synchronizes the stale output binding to the fresh fit label',
 );
+assertSynchronizedOutput(refreshedRejected, rejectedPath, staleRejectedBinding);
 
 const project = createSampleProject();
 const sourcePath = project.paths['path-right-arm'];

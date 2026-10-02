@@ -10,6 +10,7 @@ import { validateMechanismPreviewReadiness, validateForFabrication } from './fab
 import { generateMechanismPointTraces } from './kinematics';
 import { replacePrimaryMechanismOutputBinding } from './mechanismBindings';
 import { normalizeMechanismToFabricationSet } from './mechanismReference';
+import { compareFourBarFitRanks, compareFourBarFitScores, retainFourBarFitCandidate } from './fourBarFitRanking';
 
 const COARSE_FIT_RESOLUTION = 8;
 const FIT_RESOLUTION = 32;
@@ -386,7 +387,7 @@ const cyclicTangentAt = (
   return unitVector(before, after);
 };
 
-const orderedFit = (
+export const orderedFourBarPathFit = (
   tracePoints: Point[],
   targetPoints: Point[],
   resolution: number,
@@ -442,7 +443,7 @@ const orderedFit = (
         maxError * 0.15 +
         tangentError * 0.25 +
         maxTangentError * 0.1;
-      if (score < bestScore) {
+      if (compareFourBarFitScores(score, bestScore) < 0) {
         bestScore = score;
         best = {
           error,
@@ -627,7 +628,18 @@ export const fitFourBarKitMechanismToPath = (
     mechanism: MechanismConfig;
     traceId: string;
     score: number;
+    geometryOrder: readonly number[];
   }> = [];
+  // Match the canonical search order using authored/snapped geometry only;
+  // derived fit errors and trigonometric pivot coordinates are not tie keys.
+  const geometryOrder = (candidate: MechanismConfig, traceId: string) => [
+    candidate.anchorX ?? 0, candidate.anchorY ?? 0,
+    candidate.groundLength, candidate.crankLength,
+    candidate.couplerLength, candidate.rockerLength,
+    candidate.groundAngle ?? 0,
+    candidate.assemblyMode === 'crossed' ? 1 : 0,
+    traceId === 'B' ? 0 : 1,
+  ];
   const targetPartId = path.sceneObjectId
     ? undefined
     : (mechanism.targetPartId ?? path.partId);
@@ -636,10 +648,10 @@ export const fitFourBarKitMechanismToPath = (
     traceId: string,
     score: number,
   ) => {
-    if (top.length >= TOP_CANDIDATE_COUNT && score >= top.at(-1)!.score) return;
-    top.push({ mechanism: mechanismCandidate, traceId, score });
-    top.sort((a, b) => a.score - b.score);
-    if (top.length > TOP_CANDIDATE_COUNT) top.pop();
+    retainFourBarFitCandidate(top, {
+      mechanism: mechanismCandidate, traceId, score,
+      geometryOrder: geometryOrder(mechanismCandidate, traceId),
+    }, TOP_CANDIDATE_COUNT);
   };
   const buildCandidate = (
     anchor: Point,
@@ -706,12 +718,10 @@ export const fitFourBarKitMechanismToPath = (
     groundAngle: number;
     traceId: string;
     score: number;
+    geometryOrder: readonly number[];
   }> = [];
   const rememberFallback = (entry: (typeof fallback)[number]) => {
-    if (fallback.length >= CLOSEST_CANDIDATE_COUNT && entry.score >= fallback.at(-1)!.score) return;
-    fallback.push(entry);
-    fallback.sort((a, b) => a.score - b.score);
-    if (fallback.length > CLOSEST_CANDIDATE_COUNT) fallback.pop();
+    retainFourBarFitCandidate(fallback, entry, CLOSEST_CANDIDATE_COUNT);
   };
   const radialDeviation = (center: Point, radius: number) =>
     targetPoints.reduce(
@@ -747,13 +757,16 @@ export const fitFourBarKitMechanismToPath = (
           if (!pivotStaysOnBoard(groundPivot)) continue;
           const crankDeviation = radialDeviation(anchor, linkageSet.crankLength);
           const rockerDeviation = radialDeviation(groundPivot, linkageSet.rockerLength);
-          const crankWins = crankDeviation <= rockerDeviation;
+          const crankWins = compareFourBarFitScores(crankDeviation, rockerDeviation) <= 0;
           rememberFallback({
             anchor,
             linkageSet,
             groundAngle,
             traceId: crankWins ? 'B' : 'C',
             score: crankWins ? crankDeviation : rockerDeviation,
+            geometryOrder: [anchor.x, anchor.y, linkageSet.groundLength,
+              linkageSet.crankLength, linkageSet.couplerLength,
+              linkageSet.rockerLength, groundAngle, crankWins ? 0 : 1],
           });
           continue;
         }
@@ -774,7 +787,7 @@ export const fitFourBarKitMechanismToPath = (
             (trace.id === 'C' && rockerTraceCouldFit),
           );
           for (const trace of movingTraces) {
-            const fit = orderedFit(
+            const fit = orderedFourBarPathFit(
               trace.points,
               targetPoints,
               COARSE_FIT_RESOLUTION,
@@ -800,7 +813,7 @@ export const fitFourBarKitMechanismToPath = (
     );
     const trace = traces.traces.find((item) => item.id === candidate.traceId);
     if (!trace) return null;
-    const fit = orderedFit(
+    const fit = orderedFourBarPathFit(
       trace.points,
       targetPoints,
       FIT_RESOLUTION,
@@ -850,14 +863,17 @@ export const fitFourBarKitMechanismToPath = (
       },
       warnings: enforceTolerance ? [] : ['No fabrication-valid path fit.'],
     });
-    return { mechanism: fitted, score: fit.error + fit.maxError * 0.15 };
+    return {
+      mechanism: fitted, score: fit.error + fit.maxError * 0.15,
+      geometryOrder: geometryOrder(fitted, candidate.traceId),
+    };
   };
   const refined = top
     .flatMap((candidate) => {
       const result = refineCandidate(candidate, true);
       return result ? [result] : [];
     })
-    .sort((a, b) => a.score - b.score);
+    .sort(compareFourBarFitRanks);
   // No candidate traced the path within hard tolerance. Fall back to the best
   // fabrication-valid approximation so students get an explicit closest
   // recommendation instead of a bare rejection.
@@ -882,7 +898,7 @@ export const fitFourBarKitMechanismToPath = (
       .map((candidate) => refineCandidate(candidate, false))
       .filter((result): result is NonNullable<ReturnType<typeof refineCandidate>> =>
         result !== null)
-      .sort((a, b) => a.score - b.score)
+      .sort(compareFourBarFitRanks)
       .find((result) => {
         // Validate in the accepted form (binding synced) so a stale prior
         // binding fit can't veto the recommendation it would receive.
