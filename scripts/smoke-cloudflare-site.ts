@@ -92,6 +92,7 @@ try {
   }
   const main = responses.find(response => response.path === '/');
   assert(main && /no-cache/.test(main.cache));
+  assert.match(main.cache, /no-transform/, 'Cloudflare must serve authored HTML without automatic beacon injection');
   assert(responses.some(response => /projectImportWorker-[^/]+\.js/.test(response.path)));
   await page.screenshot({ path: `${output}/app.png` });
   const report = { passed: true, url: url.href, version, responses, errors, retainedVersions: saved.history?.entries.length,

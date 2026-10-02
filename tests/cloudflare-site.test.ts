@@ -28,6 +28,11 @@ const workflow = readFileSync('.github/workflows/deploy.yml', 'utf8');
 assert.match(workflow, /tags:\s*\n\s*- "v\*\.\*\.\*"/);
 assert.match(workflow, /VITE_BASE_PATH: \/ms\//);
 assert.doesNotMatch(workflow, /cloudflare|wrangler|branches:/i);
+const headers = readFileSync('deploy/cloudflare/headers', 'utf8');
+for (const route of ['/', '/index.html']) {
+  assert.ok(headers.includes(`${route}\n  Cache-Control: public, no-cache, no-transform`),
+    'HTML stays fresh and prevents Cloudflare automatic beacon injection');
+}
 const build = readFileSync('scripts/build-cloudflare-site.mjs', 'utf8');
 assert.match(build, /assertStaticSiteConfig\(JSON\.parse/, 'native build checks the same dedicated static target');
 assert.match(build, /VITE_BASE_PATH: '\/'/);
@@ -160,8 +165,8 @@ const feedbackApi = async (path: string, method = 'GET', body?: FormData) => {
   const settings = JSON.parse(String(body.get('settings')));
   assert.deepEqual(settings.bindings.filter((binding: any) => binding.name !== 'ALLOWED_ORIGINS'),
     feedbackSettings.bindings.filter((binding: any) => binding.name !== 'ALLOWED_ORIGINS')
-      .map((binding: any) => ({ name: binding.name, type: 'inherit', version_id: 'reviewed-version' })),
-    'retain secrets, variables and limiters from the reviewed deployed version without sending their values');
+      .map((binding: any) => ({ name: binding.name, type: 'inherit', version_id: 'latest' })),
+    'settings API accepts only latest; verify it is the sole deployed version before preserving other bindings');
   assert.equal(settings.annotations['workers/message'], 'Retain this message');
   assert.equal(settings.annotations['workers/triggered_by'], undefined);
   assert.deepEqual(Object.keys(settings).sort(), ['annotations', 'bindings'], 'no source, usage or other settings updates');

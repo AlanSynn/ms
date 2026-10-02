@@ -30,7 +30,8 @@ const deployedVersion = async (api, base) => {
 };
 
 // Patch metadata only. All other bindings, including unreadable secrets, are
-// inherited from the reviewed deployed version rather than rewritten locally.
+// inherited from latest after proving it is the sole deployed version. This
+// settings API supports only the literal "latest", not a version UUID.
 export const appendFeedbackOrigin = async api => {
   const base = `accounts/${SITE.account}/workers/scripts/${FEEDBACK.name}`;
   const path = `${base}/settings`;
@@ -47,7 +48,7 @@ export const appendFeedbackOrigin = async api => {
   const reviewed = await deployedVersion(api, base);
   const text = `${allowed.text},${FEEDBACK.origin}`;
   const settings = { bindings: before.bindings.map(binding => binding.name === allowed.name
-    ? { name: allowed.name, type: 'plain_text', text } : { name: binding.name, type: 'inherit', version_id: reviewed.id }),
+    ? { name: allowed.name, type: 'plain_text', text } : { name: binding.name, type: 'inherit', version_id: 'latest' }),
   annotations: comparableSettings(before).annotations };
   const form = new FormData();
   form.set('settings', JSON.stringify(settings));
