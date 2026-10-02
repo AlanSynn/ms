@@ -43,10 +43,11 @@ export const assertStaticSiteConfig = config => {
 };
 
 export const cloudflareApi = token => async function request(path, method = 'GET', body) {
+  const multipart = body instanceof FormData;
   const response = await fetch(`https://api.cloudflare.com/client/v4/${path}`, {
     method,
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    headers: { Authorization: `Bearer ${token}`, ...(multipart ? {} : { 'Content-Type': 'application/json' }) },
+    ...(body === undefined ? {} : { body: multipart ? body : JSON.stringify(body) }),
   });
   const envelope = await response.json();
   if (!response.ok || !envelope.success) {

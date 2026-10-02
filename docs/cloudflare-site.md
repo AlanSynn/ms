@@ -45,7 +45,7 @@ The GitHub workflows, GitHub Pages DNS/settings, custom domain, tag policy, `/ms
 Changed files:
 
 - Deployment: `deploy/cloudflare/wrangler.jsonc`, `deploy/cloudflare/headers`, `deploy/cloudflare/builds.json`.
-- Operations: `scripts/build-cloudflare-site.mjs`, `scripts/cloudflare-site-account.mjs`, `scripts/cloudflare-site.mjs`, `scripts/connect-cloudflare-site-builds.mjs`.
+- Operations: `scripts/build-cloudflare-site.mjs`, `scripts/cloudflare-site-account.mjs`, `scripts/cloudflare-site.mjs`, `scripts/connect-cloudflare-site-builds.mjs`, `scripts/cloudflare-feedback-origin.mjs`.
 - Validation: `scripts/prepare-site-validation.mjs`, `scripts/site-portability-fixture.ts`, `scripts/validate-site-portability.ts`, `scripts/smoke-cloudflare-site.ts`.
 - Help and relay: `components/stages/project/ProjectStage.tsx`, `utils/contextHelp.ts`, `workers/feedback/wrangler.toml`.
 - Tests: `tests/cloudflare-site.test.ts`, `tests/feedback-worker.test.ts`, `tests/project-contract.test.ts`, `scripts/run-unit-tests.mjs`.
@@ -123,6 +123,7 @@ bun scripts/smoke-cloudflare-site.ts https://motionsmith-site.alansynn.workers.d
 bun scripts/connect-cloudflare-site-builds.mjs register-token
 bun scripts/connect-cloudflare-site-builds.mjs
 bun scripts/cloudflare-site.mjs connect-domain
+bun scripts/cloudflare-feedback-origin.mjs
 bun scripts/smoke-cloudflare-site.ts https://motionsmith.org/
 bun scripts/cloudflare-site.mjs status
 ```
@@ -131,7 +132,7 @@ Native Builds uses `deploy/cloudflare/builds.json`: Bun 1.3.14, explicit frozen-
 
 Local deployment, native build and Git connection share the same static configuration check: exact account/name/output, workers.dev preview, disabled preview URLs/logs, no HTML fallback and no server/binding configuration. The Git connector applies it to the actual `main` configuration before creating its trigger. Routes remain absent from Wrangler configuration so domain attachment stays behind the verified preview/DNS checks. The installed Wrangler 4.112.0 only invokes its Custom Domain publisher when configured domain routes are present; actual domain retention still requires the first live Git deployment check.
 
-Deploy the reviewed feedback allowlist addition separately with `wrangler deploy --config workers/feedback/wrangler.toml` only after checking that the remote allowlist still matches the retained origins. Verify OPTIONS from both exact origins and a denied origin; never submit a test issue. The frontend build specification uses the existing public feedback endpoint.
+Apply the feedback exception with `bun scripts/cloudflare-feedback-origin.mjs` after the free-plan checks. It verifies the original relay's immutable tag and requires the latest version to be its sole 100% deployed version. It reads current settings, appends only `https://motionsmith.org`, and uses the documented multipart settings PATCH with every other binding pinned by `inherit` to that reviewed version, including secrets and rate limiters. It retains human annotations, rechecks settings and version immediately before PATCH, and verifies other settings and the script-content ETag afterward. Secret values cannot be reread; their preservation relies on the documented pinned inheritance. Cloudflare documents no atomic conditional PATCH here, so avoid concurrent relay edits during setup. It uploads no Worker source, retains every existing origin, skips repeat mutations, and verifies OPTIONS for both sites and a denied origin without creating issues. This remote patch has not run. [Settings PATCH](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/script_and_version_settings/methods/edit/), [latest versions](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/versions/methods/list/), [active deployment](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/deployments/methods/list/), [script-content fingerprint](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/versions/methods/get/).
 
 Connecting the domain checks existing apex address records and managed domains and requires a passing workers.dev smoke report for the deployed artifact. Cloudflare supplies DNS/TLS for the dedicated Custom Domain. Do not add or change records for `alansynn.com`. [Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/).
 

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { SITE, assertSiteEnvironment, assertStaticSiteConfig, cloudflareApi, inspectSite, readToken, requireFreeSite, selectBuildToken } from '../scripts/cloudflare-site-account.mjs';
 import { contextHelpFor } from '../utils/contextHelp';
+import { appendFeedbackOrigin } from '../scripts/cloudflare-feedback-origin.mjs';
 
 const config = JSON.parse(readFileSync(SITE.config, 'utf8'));
 assert.doesNotThrow(() => assertStaticSiteConfig(config));
@@ -102,6 +103,14 @@ try {
   globalThis.fetch = (async () => Response.json({ success: false,
     errors: [{ code: 12006, message: 'Invalid token' }] }, { status: 401 })) as typeof fetch;
   await assert.rejects(() => cloudflareApi('synthetic-account-token')(`accounts/${SITE.account}/builds/account/limits`), /user-scoped token/);
+  const form = new FormData(); form.set('settings', '{}');
+  globalThis.fetch = (async (_input: any, init: any) => {
+    assert.equal(init.method, 'PATCH');
+    assert.equal(init.body, form);
+    assert.equal(init.headers['Content-Type'], undefined, 'fetch must choose the multipart boundary');
+    return Response.json({ success: true, result: {} });
+  }) as typeof fetch;
+  await cloudflareApi('synthetic-token')(`accounts/${SITE.account}/workers/scripts/motionsmith-feedback/settings`, 'PATCH', form);
 } finally { globalThis.fetch = originalFetch; }
 const registered: any[] = [];
 let registrations = 0;
@@ -127,4 +136,83 @@ await assert.rejects(() => selectBuildToken(async (path: string) => path.include
 await assert.rejects(() => selectBuildToken(async (path: string) => path.includes('tokens?')
   ? [{ build_token_name: 'motionsmith-site deployment', cloudflare_token_id: 'other', owner_type: 'user' }]
   : { id: 'a'.repeat(32), status: 'active' }, 'synthetic'), /do not create duplicates/);
+
+let feedbackSettings: any = { compatibility_date: '2026-07-21', usage_model: 'standard',
+  annotations: { 'workers/message': 'Retain this message', 'workers/triggered_by': 'upload' }, bindings: [
+    { name: 'ALLOWED_ORIGINS', type: 'plain_text', text: 'https://alansynn.com,https://existing.example' },
+    { name: 'GITHUB_FEEDBACK_TOKEN', type: 'secret_text' },
+    { name: 'FEEDBACK_RECEIPT_SECRET', type: 'secret_text' },
+    { name: 'GITHUB_REPO', type: 'plain_text', text: 'ms' },
+    { name: 'REPORT_RATE_LIMITER', type: 'ratelimit', namespace_id: 'existing', simple: { limit: 6, period: 60 } },
+  ] };
+let feedbackPatches = 0;
+const feedbackBase = `accounts/${SITE.account}/workers/scripts/motionsmith-feedback`;
+const feedbackApi = async (path: string, method = 'GET', body?: FormData) => {
+  const id = feedbackPatches ? 'updated-version' : 'reviewed-version';
+  if (path === `${feedbackBase}/versions?page=1&per_page=1`) return { items: [{ id }] };
+  if (path === `${feedbackBase}/deployments?page=1&per_page=1`) return { deployments: [
+    { id: `${id}-deployment`, versions: [{ version_id: id, percentage: 100 }] },
+  ] };
+  if (path === `${feedbackBase}/versions/${id}`) return { id, resources: { script: { etag: 'same-script-content' } } };
+  assert.equal(path, `${feedbackBase}/settings`);
+  if (method === 'GET') return structuredClone(feedbackSettings);
+  assert.equal(method, 'PATCH'); assert.ok(body instanceof FormData);
+  const settings = JSON.parse(String(body.get('settings')));
+  assert.deepEqual(settings.bindings.filter((binding: any) => binding.name !== 'ALLOWED_ORIGINS'),
+    feedbackSettings.bindings.filter((binding: any) => binding.name !== 'ALLOWED_ORIGINS')
+      .map((binding: any) => ({ name: binding.name, type: 'inherit', version_id: 'reviewed-version' })),
+    'retain secrets, variables and limiters from the reviewed deployed version without sending their values');
+  assert.equal(settings.annotations['workers/message'], 'Retain this message');
+  assert.equal(settings.annotations['workers/triggered_by'], undefined);
+  assert.deepEqual(Object.keys(settings).sort(), ['annotations', 'bindings'], 'no source, usage or other settings updates');
+  feedbackPatches++;
+  feedbackSettings.bindings[0] = settings.bindings.find((binding: any) => binding.name === 'ALLOWED_ORIGINS');
+  feedbackSettings.annotations['workers/triggered_by'] = 'settings';
+  return structuredClone(feedbackSettings);
+};
+assert.equal((await appendFeedbackOrigin(feedbackApi)).changed, true);
+assert.equal(feedbackSettings.bindings[0].text, 'https://alansynn.com,https://existing.example,https://motionsmith.org');
+assert.equal((await appendFeedbackOrigin(feedbackApi)).changed, false);
+assert.equal(feedbackPatches, 1, 'repeat setup makes no extra relay mutation');
+await assert.rejects(() => appendFeedbackOrigin(async () => ({ bindings: [] })), /existing plain-text/);
+await assert.rejects(() => appendFeedbackOrigin(async () => ({ bindings: [
+  { name: 'ALLOWED_ORIGINS', type: 'plain_text', text: '*' },
+] })), /Inspect the existing/);
+
+const reviewApi = (options: { split?: boolean; inactive?: boolean; race?: boolean; codeChange?: boolean; bindingChange?: boolean }) => {
+  let reads = 0; let patched = false;
+  const original = { bindings: [
+    { name: 'ALLOWED_ORIGINS', type: 'plain_text', text: 'https://alansynn.com' },
+    { name: 'PRIVATE_SETTING', type: 'plain_text', text: 'synthetic-value-never-rendered' },
+  ] };
+  return async (path: string, method = 'GET', body?: FormData) => {
+    const id = patched ? 'new' : 'old';
+    if (path.endsWith('/versions?page=1&per_page=1')) return { items: [{ id: options.inactive ? 'inactive' : id }] };
+    if (path.endsWith('/deployments?page=1&per_page=1')) return { deployments: [{ id: `${id}-deployment`, versions:
+      options.split ? [{ version_id: id, percentage: 90 }, { version_id: 'other', percentage: 10 }]
+        : [{ version_id: id, percentage: 100 }] }] };
+    if (path.includes('/versions/')) return { id, resources: { script: { etag: patched && options.codeChange ? 'changed' : 'unchanged' } } };
+    assert.ok(path.endsWith('/settings'));
+    if (method === 'PATCH') {
+      patched = true;
+      original.bindings[0] = JSON.parse(String(body?.get('settings'))).bindings[0];
+      if (options.bindingChange) original.bindings[1].text = 'another-private-value';
+      return original;
+    }
+    reads++;
+    if (reads === 2 && options.race) return { ...structuredClone(original), compatibility_date: '2026-07-22' };
+    return structuredClone(original);
+  };
+};
+await assert.rejects(() => appendFeedbackOrigin(reviewApi({ split: true })), /sole fully deployed/);
+await assert.rejects(() => appendFeedbackOrigin(reviewApi({ inactive: true })), /sole fully deployed/);
+await assert.rejects(() => appendFeedbackOrigin(reviewApi({ race: true })), /changed during preflight/);
+for (const options of [{ codeChange: true }, { bindingChange: true }]) {
+  await assert.rejects(() => appendFeedbackOrigin(reviewApi(options)), (error: Error) => {
+    assert.match(error.message, /preserved settings or script fingerprint differs/);
+    assert.doesNotMatch(String(error), /synthetic-value|another-private/);
+    assert.equal((error as any).actual, undefined, 'failed preservation checks do not render binding values');
+    return true;
+  });
+}
 console.log('Independent static site target, free-plan gates and preserved Pages contracts passed.');
